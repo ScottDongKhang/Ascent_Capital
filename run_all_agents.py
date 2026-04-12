@@ -20,7 +20,9 @@ from ascent.data.store.parquet import has_data, load_parquet
 from ascent.portfolio.optimizer import SectorDataError
 
 
-SECTOR_OVERRIDE_LOG = Path("logs/sector_override.jsonl")
+SECTOR_OVERRIDE_LOG  = Path("logs/sector_override.jsonl")
+HALT_STATE_PATH     = Path("execution/halt_state.json")
+HALT_OVERRIDE_PATH  = Path("execution/halt_override.json")
 
 
 def validate_sector_data(symbols: list, skip: bool = False) -> None:
@@ -73,6 +75,51 @@ def validate_sector_data(symbols: list, skip: bool = False) -> None:
         )
 
     print(f"[Startup] Sector data valid — coverage {coverage:.1%} ({len(known)} symbols in profiles)")
+
+
+def check_halt_state(today=None) -> bool:
+    """
+    Returns True if execution may proceed, False if halted.
+
+    Halt is cleared only when a valid halt_override.json is present with
+    override_date >= halt_date. Both files are deleted on successful clear.
+    Agents and orchestrator still run during a halt — only execution is blocked.
+    """
+    from datetime import date as _date
+    today = today or _date.today()
+
+    if not HALT_STATE_PATH.exists():
+        return True
+
+    halt = json.loads(HALT_STATE_PATH.read_text())
+
+    if not halt.get("requires_override", True):
+        HALT_STATE_PATH.unlink(missing_ok=True)
+        return True
+
+    if not HALT_OVERRIDE_PATH.exists():
+        print(
+            f"[HALT] System halted since {halt['halt_date']}: {halt.get('reason', '')}\n"
+            f"[HALT] Create execution/halt_override.json to resume trading.\n"
+            f"[HALT] See verdict: {halt.get('verdict_path', 'outputs/debate_log/')}"
+        )
+        return False
+
+    override = json.loads(HALT_OVERRIDE_PATH.read_text())
+
+    if override.get("override_date", "") < halt.get("halt_date", ""):
+        print(
+            f"[HALT] Override date {override['override_date']} predates "
+            f"halt date {halt['halt_date']} — invalid override. Recreate the file."
+        )
+        return False
+
+    # Valid override — clear both files
+    print(f"[HALT] Override accepted by {override.get('override_by', 'unknown')} — halt cleared. "
+          "NOTE: today's debate may still issue a new halt.")
+    HALT_STATE_PATH.unlink(missing_ok=True)
+    HALT_OVERRIDE_PATH.unlink(missing_ok=True)
+    return True
 
 
 def main():
@@ -214,6 +261,13 @@ def main():
     # ── Non-rebalance day: stop here ──────────────────────────────────────────
     if not is_rebalance:
         print("[Runner] Non-rebalance day — weights updated, no debate, no execution.")
+        _log_run(today, merged_weights, agent_outputs, dry_run)
+        return
+
+    # ── Rebalance day: check for active halt before debating ─────────────────
+    if not check_halt_state(today=today):
+        print("[Runner] Halted — agents ran, weights updated, execution skipped.")
+        print("[Runner] Create execution/halt_override.json to resume.")
         _log_run(today, merged_weights, agent_outputs, dry_run)
         return
 

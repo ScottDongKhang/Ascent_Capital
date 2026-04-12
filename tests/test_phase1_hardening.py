@@ -252,3 +252,106 @@ def test_debate_runner_does_not_write_halt_state_on_proceed(tmp_path):
         debate_runner.run_debate(portfolio_state, run_date=date(2026, 4, 15))
 
     assert not halt_path.exists(), "halt_state.json should NOT be written for proceed verdict"
+
+
+def test_check_halt_state_returns_true_when_no_halt_file(tmp_path):
+    """check_halt_state() returns True (proceed) when halt_state.json does not exist."""
+    import run_all_agents
+    from datetime import date
+
+    halt_path = tmp_path / "halt_state.json"
+    override_path = tmp_path / "halt_override.json"
+
+    with patch.object(run_all_agents, "HALT_STATE_PATH", halt_path), \
+         patch.object(run_all_agents, "HALT_OVERRIDE_PATH", override_path):
+        result = run_all_agents.check_halt_state(today=date.today())
+
+    assert result is True
+
+
+def test_check_halt_state_returns_false_when_halted_no_override(tmp_path):
+    """check_halt_state() returns False when halted without override."""
+    import json, run_all_agents
+    from datetime import date
+
+    halt_path = tmp_path / "halt_state.json"
+    override_path = tmp_path / "halt_override.json"
+    halt_path.write_text(json.dumps({
+        "halted": True,
+        "halt_date": "2026-04-15",
+        "reason": "Too much energy exposure",
+        "key_risks": ["Energy at 38%"],
+        "verdict_path": "outputs/debate_log/verdict_2026-04-15.json",
+        "requires_override": True,
+        "created_at": "2026-04-15T13:47:22",
+    }))
+
+    with patch.object(run_all_agents, "HALT_STATE_PATH", halt_path), \
+         patch.object(run_all_agents, "HALT_OVERRIDE_PATH", override_path):
+        result = run_all_agents.check_halt_state(today=date(2026, 4, 16))
+
+    assert result is False
+
+
+def test_check_halt_state_clears_files_on_valid_override(tmp_path):
+    """check_halt_state() returns True and deletes both files when override is valid."""
+    import json, run_all_agents
+    from datetime import date
+
+    halt_path = tmp_path / "halt_state.json"
+    override_path = tmp_path / "halt_override.json"
+
+    halt_path.write_text(json.dumps({
+        "halted": True,
+        "halt_date": "2026-04-15",
+        "reason": "Too much energy",
+        "key_risks": [],
+        "verdict_path": "outputs/debate_log/verdict_2026-04-15.json",
+        "requires_override": True,
+        "created_at": "2026-04-15T13:47:22",
+    }))
+    override_path.write_text(json.dumps({
+        "override_date": "2026-04-16",
+        "override_by": "scott",
+        "reason": "Reviewed — acceptable",
+        "acknowledged_risks": [],
+    }))
+
+    with patch.object(run_all_agents, "HALT_STATE_PATH", halt_path), \
+         patch.object(run_all_agents, "HALT_OVERRIDE_PATH", override_path):
+        result = run_all_agents.check_halt_state(today=date(2026, 4, 16))
+
+    assert result is True
+    assert not halt_path.exists(), "halt_state.json should be deleted after valid override"
+    assert not override_path.exists(), "halt_override.json should be deleted after valid override"
+
+
+def test_check_halt_state_blocks_override_predating_halt(tmp_path):
+    """check_halt_state() returns False when override_date < halt_date."""
+    import json, run_all_agents
+    from datetime import date
+
+    halt_path = tmp_path / "halt_state.json"
+    override_path = tmp_path / "halt_override.json"
+
+    halt_path.write_text(json.dumps({
+        "halted": True,
+        "halt_date": "2026-04-15",
+        "reason": "energy",
+        "key_risks": [],
+        "verdict_path": "x",
+        "requires_override": True,
+        "created_at": "2026-04-15T13:47:22",
+    }))
+    override_path.write_text(json.dumps({
+        "override_date": "2026-04-14",   # predates halt
+        "override_by": "scott",
+        "reason": "Stale override",
+        "acknowledged_risks": [],
+    }))
+
+    with patch.object(run_all_agents, "HALT_STATE_PATH", halt_path), \
+         patch.object(run_all_agents, "HALT_OVERRIDE_PATH", override_path):
+        result = run_all_agents.check_halt_state(today=date(2026, 4, 16))
+
+    assert result is False
