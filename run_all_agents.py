@@ -16,35 +16,149 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime
 from pathlib import Path
 
-from agents.us_equities_agent import run_us_equities_agent
-from agents.macro_agent import run_macro_agent
-from orchestrator.central_intelligence import run_orchestrator
-from ascent.monitoring.skill_tracker import export_skill_scores
-from ascent.monitoring.forward_pnl_tracker import run_forward_pnl_cycle
-from ascent.monitoring.pre_rebalance_checklist import run_checklist
+from ascent.data.store.parquet import has_data, load_parquet
+from ascent.portfolio.optimizer import SectorDataError
 
-try:
-    from agents.international_agent import run_international_agent
-    _HAS_INTERNATIONAL = True
-except ImportError:
-    _HAS_INTERNATIONAL = False
 
-try:
-    from agents.alternatives_agent import run_alternatives_agent
-    _HAS_ALTERNATIVES = True
-except ImportError:
-    _HAS_ALTERNATIVES = False
+SECTOR_OVERRIDE_LOG  = Path("logs/sector_override.jsonl")
+HALT_STATE_PATH     = Path("execution/halt_state.json")
+HALT_OVERRIDE_PATH  = Path("execution/halt_override.json")
+
+
+def validate_sector_data(symbols: list, skip: bool = False) -> None:
+    """
+    Validates profiles.parquet exists and covers >= 80% of the US equities universe.
+    Called once at startup before agents are spawned.
+    Raises SectorDataError if coverage is insufficient.
+    Pass skip=True (--skip-sector-check flag) to bypass with audit log entry.
+    """
+    import pandas as pd
+
+    if skip:
+        entry = {
+            "timestamp": datetime.now().isoformat(),
+            "action": "sector_check_skipped",
+            "required_reason": "see CLI flag --skip-sector-check",
+        }
+        SECTOR_OVERRIDE_LOG.parent.mkdir(parents=True, exist_ok=True)
+        with open(SECTOR_OVERRIDE_LOG, "a") as f:
+            f.write(json.dumps(entry) + "\n")
+        print("[Startup] Sector check SKIPPED — override logged to logs/sector_override.jsonl")
+        return
+
+    if not has_data("profiles"):
+        raise SectorDataError(
+            "profiles.parquet missing. Regenerate with:\n"
+            "  .venv/bin/python -m ascent.data.ingest.profiles\n"
+            "Or bypass with --skip-sector-check (override is logged)."
+        )
+
+    profiles = load_parquet("profiles")
+    known = set(profiles["symbol"].dropna())
+
+    unknown_sectors = profiles[
+        profiles["sector"].isna() | profiles["sector"].isin(["Unknown", "unknown", ""])
+    ]["symbol"].tolist()
+
+    missing_from_profiles = [s for s in symbols if s not in known]
+    total_unknown = len(set(missing_from_profiles + unknown_sectors))
+    coverage = 1.0 - total_unknown / len(symbols) if symbols else 1.0
+
+    if coverage < 0.80:
+        raise SectorDataError(
+            f"Sector coverage {coverage:.1%} < 80% threshold.\n"
+            f"Missing from profiles: {missing_from_profiles[:20]}"
+            f"{'...' if len(missing_from_profiles) > 20 else ''}\n"
+            f"Unknown sectors: {unknown_sectors[:10]}"
+            f"{'...' if len(unknown_sectors) > 10 else ''}\n"
+            "Regenerate profiles.parquet or use --skip-sector-check (override is logged)."
+        )
+
+    print(f"[Startup] Sector data valid — coverage {coverage:.1%} ({len(known)} symbols in profiles)")
+
+
+def check_halt_state(today=None) -> bool:
+    """
+    Returns True if execution may proceed, False if halted.
+
+    Halt is cleared only when a valid halt_override.json is present with
+    override_date >= halt_date. Both files are deleted on successful clear.
+    Agents and orchestrator still run during a halt — only execution is blocked.
+    """
+    from datetime import date as _date
+    today = today or _date.today()
+
+    if not HALT_STATE_PATH.exists():
+        return True
+
+    halt = json.loads(HALT_STATE_PATH.read_text())
+
+    if not halt.get("requires_override", True):
+        HALT_STATE_PATH.unlink(missing_ok=True)
+        return True
+
+    if not HALT_OVERRIDE_PATH.exists():
+        print(
+            f"[HALT] System halted since {halt['halt_date']}: {halt.get('reason', '')}\n"
+            f"[HALT] Create execution/halt_override.json to resume trading.\n"
+            f"[HALT] See verdict: {halt.get('verdict_path', 'outputs/debate_log/')}"
+        )
+        return False
+
+    override = json.loads(HALT_OVERRIDE_PATH.read_text())
+
+    if override.get("override_date", "") < halt.get("halt_date", ""):
+        print(
+            f"[HALT] Override date {override['override_date']} predates "
+            f"halt date {halt['halt_date']} — invalid override. Recreate the file."
+        )
+        return False
+
+    # Valid override — clear both files
+    print(f"[HALT] Override accepted by {override.get('override_by', 'unknown')} — halt cleared. "
+          "NOTE: today's debate may still issue a new halt.")
+    HALT_STATE_PATH.unlink(missing_ok=True)
+    HALT_OVERRIDE_PATH.unlink(missing_ok=True)
+    return True
 
 
 def main():
-    dry_run = "--dry-run" in sys.argv
-    today   = date.today()
+    dry_run             = "--dry-run" in sys.argv
+    skip_sector_check   = "--skip-sector-check" in sys.argv
+    today               = date.today()
+
+    # ── Startup validation: sector data must be present before agents spawn ───
+    from ascent.config.settings import UniverseConfig
+    us_symbols = UniverseConfig().symbols
+    validate_sector_data(us_symbols, skip=skip_sector_check)
 
     print(f"\n{'#'*60}")
     print(f"# ASCENT CAPITAL — Multi-Agent Daily Run")
     print(f"# Date:  {today}")
     print(f"# Mode:  {'DRY RUN' if dry_run else 'LIVE'}")
     print(f"{'#'*60}\n")
+
+    # ── Import agents (lazy, after startup validation) ───────────────────────
+    from agents.us_equities_agent import run_us_equities_agent
+    from agents.macro_agent import run_macro_agent
+    from orchestrator.central_intelligence import run_orchestrator
+    from ascent.monitoring.skill_tracker import export_skill_scores
+    from ascent.monitoring.forward_pnl_tracker import run_forward_pnl_cycle
+    from ascent.monitoring.pre_rebalance_checklist import run_checklist
+
+    _HAS_INTERNATIONAL = False
+    _HAS_ALTERNATIVES = False
+    try:
+        from agents.international_agent import run_international_agent
+        _HAS_INTERNATIONAL = True
+    except ImportError:
+        pass
+
+    try:
+        from agents.alternatives_agent import run_alternatives_agent
+        _HAS_ALTERNATIVES = True
+    except ImportError:
+        pass
 
     # ── Step 1: Run all agents in parallel ───────────────────────────────────
     agent_tasks = [
@@ -147,6 +261,13 @@ def main():
     # ── Non-rebalance day: stop here ──────────────────────────────────────────
     if not is_rebalance:
         print("[Runner] Non-rebalance day — weights updated, no debate, no execution.")
+        _log_run(today, merged_weights, agent_outputs, dry_run)
+        return
+
+    # ── Rebalance day: check for active halt before debating ─────────────────
+    if not check_halt_state(today=today):
+        print("[Runner] Halted — agents ran, weights updated, execution skipped.")
+        print("[Runner] Create execution/halt_override.json to resume.")
         _log_run(today, merged_weights, agent_outputs, dry_run)
         return
 
