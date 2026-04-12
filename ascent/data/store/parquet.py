@@ -1,61 +1,132 @@
 """
-Ascent Capital — Data Storage
-Parquet-based storage with schema validation and point-in-time metadata.
+Ascent Capital — Parquet Store
+Handles saving and loading DataFrames to/from the data_cache directory.
 """
 from __future__ import annotations
+
+import logging
+import os
 from pathlib import Path
 from typing import Optional, List
+
 import pandas as pd
-import pyarrow as pa
-import pyarrow.parquet as pq
-from ascent.config.settings import get_config
 
+log = logging.getLogger(__name__)
 
-PRICE_SCHEMA_COLS = ["symbol", "date", "open", "high", "low", "close", "volume", "vwap",
-                     "event_time", "known_time", "source"]
-
-MACRO_SCHEMA_COLS = ["series_id", "date", "value", "event_time", "known_time", "source"]
+_ROOT    = Path(__file__).resolve().parents[3]
+DATA_DIR = _ROOT / "data_cache"
 
 
 def _cache_path(name: str) -> Path:
-    cfg = get_config()
-    return cfg.data_dir / f"{name}.parquet"
+    return DATA_DIR / f"{name}.parquet"
 
 
-def save_parquet(df: pd.DataFrame, name: str, partition_cols: Optional[List[str]] = None) -> Path:
-    """Save DataFrame to Parquet. Append-safe: existing data preserved."""
-    path = _cache_path(name)
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-    if path.exists():
-        existing = pd.read_parquet(path)
-        df = pd.concat([existing, df], ignore_index=True).drop_duplicates(
-            subset=[c for c in df.columns if c not in ("known_time", "source")],
-            keep="last"
-        )
-
-    df.to_parquet(path, index=False, engine="pyarrow")
-    return path
-
-
-def load_parquet(name: str) -> Optional[pd.DataFrame]:
-    """Load Parquet file. Returns None if doesn't exist."""
-    path = _cache_path(name)
-    if not path.exists():
-        return None
-    return pd.read_parquet(path, engine="pyarrow")
+def _force_refresh() -> bool:
+    val = os.environ.get("ASCENT_FORCE_REFRESH", "0").strip().lower()
+    return val in ("1", "true", "yes")
 
 
 def has_data(name: str) -> bool:
+    if _force_refresh():
+        log.info("[cache] ASCENT_FORCE_REFRESH active — treating %s as missing", name)
+        return False
     return _cache_path(name).exists()
 
 
-def validate_price_schema(df: pd.DataFrame) -> bool:
-    """Check that price DataFrame has required columns."""
-    required = {"symbol", "date", "open", "high", "low", "close", "volume"}
-    return required.issubset(set(df.columns))
+def save_parquet(df: pd.DataFrame, name: str) -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    path = _cache_path(name)
+    if path.exists():
+        old = pd.read_parquet(path)
+        # FIX #3: include series_id in preferred id columns alongside symbol.
+        # Before: only "series" was checked, which doesn't exist in either
+        # simulated.py or fred.py output — those both write "series_id".
+        # This meant macro deduplication never matched on the right column,
+        # so every save appended duplicate rows instead of replacing them.
+        id_cols = [
+            c for c in ["symbol", "date", "series_id", "series"]
+            if c in old.columns
+        ]
+        if not id_cols:
+            id_cols = [c for c in old.columns if c not in ("known_time", "source")]
+        df = pd.concat([old, df], ignore_index=True).drop_duplicates(
+            subset=id_cols, keep="last"
+        )
+    df.to_parquet(path, index=False)
+    log.info("[cache] saved %s  rows=%d", name, len(df))
 
 
-def validate_macro_schema(df: pd.DataFrame) -> bool:
-    required = {"series_id", "date", "value"}
-    return required.issubset(set(df.columns))
+def load_parquet(name: str) -> pd.DataFrame:
+    path = _cache_path(name)
+    if not path.exists():
+        raise FileNotFoundError(f"Cache file not found: {path}")
+    return pd.read_parquet(path)
+
+
+def validate_cache(
+    name: str,
+    required_start: Optional[str] = None,
+    required_end: Optional[str] = None,
+    required_symbols: Optional[List[str]] = None,
+    stale_days: int = 3,
+    date_col: str = "date",
+    symbol_col: str = "symbol",
+) -> tuple[bool, str]:
+    if _force_refresh():
+        return False, "ASCENT_FORCE_REFRESH is active"
+
+    path = _cache_path(name)
+    if not path.exists():
+        return False, f"cache file missing: {path}"
+
+    try:
+        df = pd.read_parquet(path)
+    except Exception as exc:
+        return False, f"cache unreadable: {exc}"
+
+    if date_col not in df.columns:
+        return True, ""
+
+    dates       = pd.to_datetime(df[date_col], errors="coerce").dropna()
+    if dates.empty:
+        return False, "cache has no valid dates"
+
+    cache_start = dates.min().normalize().tz_localize(None)
+    cache_end   = dates.max().normalize().tz_localize(None)
+
+    if required_start is not None:
+        req_s = pd.Timestamp(required_start).normalize()
+        if cache_start > req_s:
+            return False, (
+                f"cache starts {cache_start.date()} but "
+                f"required_start={req_s.date()}"
+            )
+
+    if required_end is not None:
+        req_e = pd.Timestamp(required_end).normalize()
+        if cache_end < req_e:
+            return False, (
+                f"cache ends {cache_end.date()} but "
+                f"required_end={req_e.date()}"
+            )
+
+    if stale_days > 0:
+        today = pd.Timestamp.today().normalize()
+        lag   = (today - cache_end).days
+        if lag > stale_days:
+            return False, (
+                f"cache latest date {cache_end.date()} is "
+                f"{lag} calendar days old (limit={stale_days})"
+            )
+
+    if required_symbols and symbol_col in df.columns:
+        cached_syms = set(df[symbol_col].unique())
+        missing     = set(required_symbols) - cached_syms
+        if missing:
+            sample = sorted(missing)[:5]
+            return False, (
+                f"{len(missing)} required symbols missing from cache "
+                f"(sample: {sample})"
+            )
+
+    return True, ""

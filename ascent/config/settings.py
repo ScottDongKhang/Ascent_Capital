@@ -26,7 +26,6 @@ class APIKeys:
 
     @classmethod
     def from_env(cls) -> "APIKeys":
-        """Load keys from environment; fall back to dataclass defaults if env not set."""
         fields = cls.__dataclass_fields__
 
         def _get(name: str, env_key: str) -> str:
@@ -50,28 +49,109 @@ class APIKeys:
 @dataclass
 class UniverseConfig:
     symbols: List[str] = field(default_factory=lambda: [
-        "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA",
-        "JPM", "V", "UNH", "XOM", "JNJ", "PG", "MA", "HD",
-        "ABBV", "MRK", "KO", "PEP", "COST", "AVGO", "LLY",
-        "WMT", "TMO", "CRM", "ACN", "MCD", "LIN", "ADBE", "NFLX",
+        # Technology
+        "AAPL", "MSFT", "NVDA", "AVGO", "CRM", "ACN", "ADBE",
+        "INTC", "AMD", "QCOM", "TXN", "NOW", "INTU", "ANET", "PANW",
+        # Communication Services
+        "GOOGL", "META", "NFLX", "DIS", "CMCSA", "T",
+        # Consumer Cyclical
+        "AMZN", "TSLA", "HD", "MCD", "NKE", "SBUX", "LOW",
+        "TJX", "BKNG", "ORLY",
+        # Consumer Defensive
+        "PG", "KO", "PEP", "COST", "WMT", "CL", "MDLZ", "KHC",
+        # Financial Services
+        "JPM", "V", "MA", "BAC", "GS", "MS", "BLK", "SCHW", "AXP", "CB",
+        # Healthcare
+        "UNH", "JNJ", "ABBV", "MRK", "LLY", "TMO", "PFE",
+        "ABT", "DHR", "BMY", "AMGN", "ISRG",
+        # Energy
+        "XOM", "CVX", "COP", "SLB", "EOG", "MPC",
+        # Industrials
+        "CAT", "HON", "UNP", "RTX", "DE", "GE", "LMT", "MMM", "FDX", "WM",
+        # Basic Materials
+        "LIN", "APD", "ECL", "NEM",
+        # Real Estate
+        "PLD", "AMT", "EQIX", "SPG",
+        # Utilities
+        "NEE", "DUK", "SO", "D",
+        # Mid-cap quality additions — strong factor characteristics
+        "DECK", "AXON", "FICO", "WST", "POOL", "TRGP", "ELV", "HUM",
+        "MPWR", "IDXX", "FANG", "CASY", "ROP", "ODFL", "FAST",
+        # Removed/delisted — included for survivorship bias reduction
+        # universe.py excludes these after their removal dates in walk-forward
+        "XRX", "HP", "NOV", "TIF", "FLIR", "XLNX", "PBCT", "CERN",
+        "CTXS", "TWTR", "DRE", "FBHS", "IPGP", "SIVB", "FRC", "ATVI",
+        "DISH", "SJM", "BIO", "SEDG", "HAS", "AAL", "XRAY", "BEN",
+        "PARA", "WBA", "INTC", "UA", "LUMN", "VNO", "ALK", "IVZ",
     ])
     benchmark: str = "SPY"
+
+    # Macro agent universe — rate-sensitive ETFs and commodities
+    macro_symbols: List[str] = field(default_factory=lambda: [
+        "TLT",   # 20+ year treasury bonds
+        "IEF",   # 7-10 year treasury bonds
+        "UUP",   # US dollar index
+        "GLD",   # gold
+        "PDBC",  # broad commodities
+        "HYG",   # high-yield corporate bonds (credit risk proxy)
+        "LQD",   # investment-grade corporate bonds
+        "TIP",   # TIPS (inflation-linked)
+        "SGOV",  # ultra-short treasury / cash proxy
+        "BIL",   # T-bills (0-3 month)
+        "DBB",   # base metals (copper/aluminum/zinc — different from broad PDBC)
+        "KMLM",  # managed futures trend (diversifying macro signal)
+    ])
+    macro_benchmark: str = "SPY"
+
+    # International/EM agent universe
+    international_symbols: List[str] = field(default_factory=lambda: [
+        # Broad EM
+        "EEM", "VWO", "AAXJ",
+        # Asia
+        "EWT",   # Taiwan
+        "EWY",   # South Korea
+        "EWJ",   # Japan
+        "INDA",  # India
+        # Latin America
+        "EWZ",   # Brazil
+        "EWC",   # Canada (developed, low correlation to US)
+        # Europe
+        "EWG",   # Germany
+        "EWU",   # UK
+        # Developed markets broad
+        "EFA",   # MSCI EAFE (developed ex-US)
+    ])
+
+    # Alternatives agent universe
+    alternatives_symbols: List[str] = field(default_factory=lambda: [
+        "VNQ",   # US REITs
+        "GLD",   # gold
+        "IAU",   # gold (alternative, lower expense ratio)
+        "PDBC",  # broad commodities
+        "DBA",   # agriculture
+        "IFRA",  # US infrastructure
+        "PAVE",  # US infrastructure (domestic focus)
+        "WOOD",  # timber / forestry
+        "BIL",   # T-bills (cash-like, crisis allocation)
+        "VIXY",  # long volatility (crisis hedge)
+        # Note: SVXY (short vol) removed — dangerous in paper trading context
+    ])
 
 
 @dataclass
 class BacktestConfig:
     initial_capital: float = 1_000_000.0
-    start_date: str = "2020-01-01"
+    start_date: str = "2020-01-02"
     end_date: str = ""
-    top_n: int = 8
-    max_weight: float = 0.15
+    top_n: int = 15
+    max_weight: float = 0.10
     min_weight: float = 0.02
-    rebalance_freq_days: int = 21  # monthly
-    execution_delay_days: int = 1  # signal at close t, execute at open t+1
-    spread_bps: float = 5.0       # half-spread cost per side in bps
-    impact_bps: float = 5.0       # market impact estimate in bps
+    rebalance_freq_days: int = 10
+    execution_delay_days: int = 1
+    spread_bps: float = 5.0
+    impact_bps: float = 5.0
     commission_per_share: float = 0.0
-    slippage_vol_mult: float = 0.1  # slippage = mult * vol * sqrt(participation)
+    slippage_vol_mult: float = 0.1
 
 
 @dataclass
@@ -91,6 +171,85 @@ class WalkForwardConfig:
     min_train_days: int = 126
 
 
+# ── NEW: Regime config ────────────────────────────────────────────────────
+@dataclass
+class RegimeConfig:
+    # Feature layer
+    spy_ticker: str = "SPY"
+    vix_ticker: str = "^VIX"
+    feature_lookbacks: List[int] = field(default_factory=lambda: [5, 21, 63])
+
+    # Model selection
+    n_candidates: List[int] = field(default_factory=lambda: [2, 3, 4])
+    training_min_days: int = 252
+    refit_every_days: int = 21
+
+    # Walk-forward validation
+    wf_train_days: int = 252
+    wf_test_days: int = 63
+    wf_step_days: int = 63
+
+    # Hysteresis
+    enter_threshold: float = 0.55
+    exit_threshold: float = 0.35
+    min_dwell_days: int = 3
+    entropy_uncertain_threshold: float = 0.90
+
+    # Gross exposure multipliers per regime
+    risk_multiplier: dict = field(default_factory=lambda: {
+        "calm_bull": 1.00,
+        "euphoric":  0.85,
+        "stressed":  0.65,
+        "crisis":    0.40,
+        "uncertain": 0.75,
+    })
+
+    # Sleeve weight adjustments per regime
+    sleeve_adjustments: dict = field(default_factory=lambda: {
+        "calm_bull": {"trend": 0.00, "statarb": 0.00, "meanrev": 0.00, "volatility": 0.00},
+        "euphoric":  {"trend": 0.00, "statarb": 0.00, "meanrev": 0.00, "volatility": 0.00},
+        "stressed":  {"trend": 0.00, "statarb": 0.00, "meanrev": 0.00, "volatility": 0.00},
+        "crisis":    {"trend": 0.00, "statarb": 0.00, "meanrev": 0.00, "volatility": 0.00},
+        "uncertain": {"trend": 0.00, "statarb": 0.00, "meanrev": 0.00, "volatility": 0.00},
+    })
+
+    # Per-name max weight by regime
+    max_weight_overrides: dict = field(default_factory=lambda: {
+        "calm_bull": 0.15,
+        "euphoric":  0.12,
+        "stressed":  0.10,
+        "crisis":    0.08,
+        "uncertain": 0.12,
+    })
+
+    # Structural break detection
+    break_min_size: int = 63
+    break_penalty_multiplier: float = 2.0
+
+    def to_engine_dict(self) -> dict:
+        """Convert to the flat dict that RegimeEngine expects."""
+        return {
+            "regime_spy_ticker": self.spy_ticker,
+            "regime_vix_ticker": self.vix_ticker,
+            "regime_feature_lookbacks": self.feature_lookbacks,
+            "regime_n_candidates": self.n_candidates,
+            "regime_training_min_days": self.training_min_days,
+            "regime_refit_every_days": self.refit_every_days,
+            "regime_wf_train_days": self.wf_train_days,
+            "regime_wf_test_days": self.wf_test_days,
+            "regime_wf_step_days": self.wf_step_days,
+            "regime_enter_threshold": self.enter_threshold,
+            "regime_exit_threshold": self.exit_threshold,
+            "regime_min_dwell_days": self.min_dwell_days,
+            "regime_entropy_uncertain_threshold": self.entropy_uncertain_threshold,
+            "regime_risk_multiplier": self.risk_multiplier,
+            "regime_sleeve_adjustments": self.sleeve_adjustments,
+            "regime_max_weight_overrides": self.max_weight_overrides,
+            "regime_break_min_size": self.break_min_size,
+            "regime_break_penalty_multiplier": self.break_penalty_multiplier,
+        }
+
+
 @dataclass
 class Config:
     keys: APIKeys = field(default_factory=APIKeys.from_env)
@@ -98,6 +257,7 @@ class Config:
     backtest: BacktestConfig = field(default_factory=BacktestConfig)
     features: FeatureConfig = field(default_factory=FeatureConfig)
     walk_forward: WalkForwardConfig = field(default_factory=WalkForwardConfig)
+    regime: RegimeConfig = field(default_factory=RegimeConfig)  # ← NEW
     data_dir: Path = DATA_DIR
     runs_dir: Path = RUNS_DIR
 

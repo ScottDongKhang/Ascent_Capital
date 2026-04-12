@@ -1,83 +1,155 @@
 """
-Ascent Capital — Alpha Stack
+Ascent Capital - Alpha Stack
 Combines multiple alpha signals into a composite score.
-The stack determines the final ranking used for portfolio construction.
 """
 from __future__ import annotations
-import pandas as pd
+import logging
 import numpy as np
+import pandas as pd
 from ascent.alpha.trend import trend_alpha
 from ascent.alpha.meanrev import meanrev_alpha
+from ascent.alpha.statarb import statarb_alpha
+from ascent.alpha.ml_sleeve import build_ml_alpha
 
+log = logging.getLogger(__name__)
 
-def build_alpha_stack(
-    features: dict[str, pd.DataFrame],
-    alpha_weights: dict[str, float] | None = None,
-) -> pd.DataFrame:
-    """
-    Build composite alpha by combining individual alpha signals.
+DEFAULT_ALPHA_WEIGHTS = {
+    "trend":      0.70,
+    "meanrev":    0.05,
+    "volatility": 0.00,
+    "statarb":    0.15,
+    "ml":         0.10,
+}
 
-    Args:
-        features: Dict of feature DataFrames (dates × symbols)
-        alpha_weights: Optional override for alpha signal weights
+def _load_sector_map():
+    try:
+        from ascent.data.store.parquet import load_parquet, has_data
+        if not has_data("profiles"):
+            return {}
+        profiles = load_parquet("profiles")
+        if "symbol" not in profiles.columns or "sector" not in profiles.columns:
+            return {}
+        return dict(zip(profiles["symbol"], profiles["sector"]))
+    except Exception as exc:
+        log.debug("profiles.parquet not available: %s", exc)
+        return {}
 
-    Returns:
-        DataFrame(dates × symbols) with composite alpha scores
-    """
-    if alpha_weights is None:
-        alpha_weights = {
-            "trend": 0.60,
-            "meanrev": 0.25,
-            "volatility": 0.15,
-        }
-
-    alphas = {}
-
-    # Trend alpha
-    trend = trend_alpha(features)
-    if not trend.empty:
-        alphas["trend"] = trend
-
-    # Mean reversion alpha
-    mr = meanrev_alpha(features)
-    if not mr.empty:
-        alphas["meanrev"] = mr
-
-    # Volatility alpha: prefer lower volatility (risk-adjusted quality)
-    if "vol_21d" in features:
-        vol_alpha = -_cs_normalize(features["vol_21d"].copy())  # prefer low vol
-        alphas["volatility"] = vol_alpha
-
-    if not alphas:
-        raise ValueError("No alpha signals could be computed")
-
-    # Weight and combine
-    total_w = sum(alpha_weights.get(k, 0) for k in alphas)
-    if total_w == 0:
-        total_w = 1.0
-
-    composite = None
-    for name, alpha_df in alphas.items():
-        w = alpha_weights.get(name, 0) / total_w
-        if composite is None:
-            composite = alpha_df * w
-        else:
-            # Align indexes
-            common_idx = composite.index.intersection(alpha_df.index)
-            common_cols = composite.columns.intersection(alpha_df.columns)
-            composite = composite.reindex(index=common_idx, columns=common_cols)
-            alpha_df = alpha_df.reindex(index=common_idx, columns=common_cols)
-            composite = composite + alpha_df * w
-
-    return composite
-
-
-def alpha_to_ranks(alpha: pd.DataFrame) -> pd.DataFrame:
-    """Convert alpha scores to cross-sectional ranks (0 to 1)."""
-    return alpha.rank(axis=1, pct=True)
-
-
-def _cs_normalize(df: pd.DataFrame) -> pd.DataFrame:
+def _cs_normalize(df):
     mean = df.mean(axis=1)
     std = df.std(axis=1).replace(0, np.nan)
     return df.sub(mean, axis=0).div(std, axis=0).clip(-3, 3).fillna(0)
+
+def build_alpha_stack(features, alpha_weights=None, regime_signal=None, agent_id: str = "us_equities"):
+    """
+    Build composite alpha from all enabled sleeves.
+
+    Args:
+        features:       Dict of feature DataFrames
+        alpha_weights:  Optional override for sleeve mixing weights
+        regime_signal:  Optional regime signal for regime-aware weight adjustment
+        agent_id:       Agent identifier passed to ML sleeve for model cache key.
+                        Each specialist agent maintains its own trained XGBoost model.
+                        Defaults to "us_equities" for the current single-agent setup.
+    """
+    if alpha_weights is None:
+        alpha_weights = DEFAULT_ALPHA_WEIGHTS.copy()
+    if regime_signal is not None:
+        try:
+            from ascent.regime import regime_adjust_sleeve_weights
+            alpha_weights = regime_adjust_sleeve_weights(
+                base_sleeve_weights=alpha_weights, signal=regime_signal)
+            log.info("alpha_stack: regime=%s", regime_signal.label.value)
+        except Exception as exc:
+            log.warning("regime adjustment failed: %s", exc)
+    alphas = {}
+    try:
+        trend = trend_alpha(features)
+        if not trend.empty:
+            alphas["trend"] = trend
+            log.info("trend alpha loaded shape=%s", trend.shape)
+    except Exception as exc:
+        log.error("trend alpha failed: %s", exc)
+    try:
+        mr = meanrev_alpha(features)
+        if not mr.empty:
+            alphas["meanrev"] = mr
+            log.info("meanrev alpha loaded shape=%s", mr.shape)
+    except Exception as exc:
+        log.error("meanrev alpha failed: %s", exc)
+    if "vol_21d" in features:
+        try:
+            vol_alpha = -_cs_normalize(features["vol_21d"].copy())
+            alphas["volatility"] = vol_alpha
+            log.info("volatility alpha loaded shape=%s", vol_alpha.shape)
+        except Exception as exc:
+            log.error("volatility alpha failed: %s", exc)
+    try:
+        sector_map = _load_sector_map()
+        sa = statarb_alpha(features, sector_map=sector_map)
+        if not sa.empty:
+            alphas["statarb"] = sa
+            log.info("statarb alpha loaded shape=%s", sa.shape)
+    except Exception as exc:
+        log.error("statarb alpha failed: %s", exc)
+    try:
+        if "targets" in features:
+            targets_df = features["targets"]
+            dates = sorted(alphas[list(alphas.keys())[0]].index)
+            n_total = len(dates)
+            # OOS split: train on first 80%, predict only on last 20%.
+            # Never predict on training dates — that was in-sample bias.
+            n_train = int(n_total * 0.80)
+            if n_train >= 63 and (n_total - n_train) >= 10:
+                train_end     = str(dates[n_train - 1])[:10]
+                predict_start = str(dates[n_train])[:10]
+                predict_end   = str(dates[-1])[:10]
+                ml = build_ml_alpha(
+                    features=features,
+                    targets=targets_df,
+                    train_end=train_end,
+                    predict_start=predict_start,
+                    predict_end=predict_end,
+                    agent_id=agent_id,
+                )
+                if not ml.empty:
+                    alphas["ml"] = ml
+                    log.info("ML sleeve loaded shape=%s (OOS: %s → %s)",
+                             ml.shape, predict_start, predict_end)
+                else:
+                    log.warning("ML sleeve returned empty")
+            else:
+                log.warning(
+                    "ML sleeve skipped — insufficient data for OOS split "
+                    "(need ≥63 train + ≥10 predict, have %d total)", n_total
+                )
+        else:
+            log.warning("ML sleeve skipped - targets not in features dict")
+    except Exception as exc:
+        log.warning("ML sleeve failed: %s", exc)
+    loaded = list(alphas.keys())
+    skipped = [k for k in alpha_weights if k not in loaded]
+    print(f"[alpha_stack] loaded={loaded}  skipped={skipped}")
+    if not alphas:
+        raise ValueError("No alpha signals could be computed")
+    total_w = sum(alpha_weights.get(k, 0.0) for k in alphas)
+    if total_w == 0:
+        total_w = 1.0
+    composite = None
+    for name, alpha_df in alphas.items():
+        w = alpha_weights.get(name, 0.0) / total_w
+        # Normalize every sleeve to the same cross-sectional z-score scale before
+        # blending. Without this, percentile-ranked sleeves (0-1) and z-scored
+        # sleeves mix at different scales and the blend is not a true weighted average.
+        normed = _cs_normalize(alpha_df)
+        if composite is None:
+            composite = normed * w
+        else:
+            union_idx  = composite.index.union(normed.index)
+            union_cols = composite.columns.union(normed.columns)
+            composite  = composite.reindex(index=union_idx, columns=union_cols).fillna(0.0)
+            normed_r   = normed.reindex(index=union_idx, columns=union_cols).fillna(0.0)
+            composite  = composite + normed_r * w
+    return composite
+
+def alpha_to_ranks(alpha):
+    return alpha.rank(axis=1, pct=True)

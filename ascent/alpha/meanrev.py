@@ -48,7 +48,7 @@ def meanrev_alpha(features: dict[str, pd.DataFrame]) -> pd.DataFrame:
 
     total_w = sum(weights)
     alpha = sum(c * (w / total_w) for c, w in zip(components, weights))
-    return alpha
+    return _cs_normalize(alpha)
 
 
 def _cs_normalize(df: pd.DataFrame) -> pd.DataFrame:

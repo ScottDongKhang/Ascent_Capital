@@ -151,15 +151,8 @@ def run_supplementary_ingest():
         save_parquet(profiles, "profiles")
         print("  Saved %d profiles" % len(profiles))
 
-    # 2. Earnings dates
-    print("\n[2/3] Fetching earnings dates...")
-    earnings = fetch_earnings_dates(symbols)
-    if not earnings.empty:
-        save_parquet(earnings, "earnings_dates")
-        print("  Saved %d earnings dates" % len(earnings))
-
-    # 3. Extra FRED series
-    print("\n[3/3] Fetching additional FRED macro series...")
+    # 2. Extra FRED series
+    print("\n[2/2] Fetching additional FRED macro series...")
     extra_macro = fetch_extra_fred(
         start_date=cfg.backtest.start_date,
         end_date=cfg.backtest.end_date,
@@ -174,8 +167,6 @@ def run_supplementary_ingest():
 
     # Summary
     print("\n  Profiles: %d stocks with sector/mcap/fundamentals" % len(profiles))
-    if not earnings.empty:
-        print("  Earnings: %d dates across %d stocks" % (len(earnings), earnings["symbol"].nunique()))
     if not extra_macro.empty:
         print("  Macro:    %d extra series" % extra_macro["name"].nunique())
     print()

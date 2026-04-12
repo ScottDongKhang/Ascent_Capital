@@ -2,12 +2,6 @@
 Ascent Capital - Walk-Forward Runner
 Computes alpha using only past data for each test window.
 Stitches out-of-sample weights into a single timeline for backtesting.
-
-Usage:
-    python3 ascent/research/walk_forward_runner.py
-    
-Or import and call from main.py:
-    from ascent.research.walk_forward_runner import walk_forward_pipeline
 """
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -25,117 +19,203 @@ from ascent.portfolio.optimizer import sector_constrained_weighted
 from ascent.research.splits import walk_forward_splits
 from ascent.research.evaluation import sharpe_ratio, annualized_return, max_drawdown
 from ascent.backtest.engine import BacktestEngine
-from ascent.backtest.reports import print_report
+from ascent.research.evaluation import format_metrics
+from ascent.data.universe import build_historical_universe, get_universe_on_date
+
+TARGET_HORIZON = 21
+
+
+def _pit_macro(macro_df: pd.DataFrame, as_of_date: pd.Timestamp):
+    if macro_df is None:
+        return None
+    if "known_time" in macro_df.columns:
+        return macro_df[macro_df["known_time"] <= as_of_date].copy()
+    return macro_df[macro_df["date"] <= as_of_date].copy()
 
 
 def walk_forward_pipeline(
-    train_days=252,
-    purge_days=5,
-    top_n=10,
-    max_weight=0.15,
+    train_days=None,
+    purge_days=None,
+    top_n=None,
+    max_weight=None,
     max_per_sector=1,
+    regime_engine=None,      # FIX #1: accepted but ignored — see below
+    spy_prices=None,
+    univ_prices=None,
+    vix_prices=None,
+    price_df=None,           # FIX #5: caller can pass data directly
+    macro_df=None,           # FIX #5: caller can pass data directly
+    prices_cache_name=None,  # FIX #5: override cache name if needed
 ):
-    """
-    Run the full pipeline with daily walk-forward evaluation.
-
-    For each market day:
-      1. Compute features using only historical data up to that day
-      2. Generate alpha using only historical data up to that day
-      3. Build portfolio weights for that single day
-
-    Uses expanding history for early dates so weights exist for all dates.
-    """
-    t0 = time.time()
+    t0  = time.time()
     cfg = get_config()
-    if not cfg.backtest.end_date:
-        from datetime import date
-        cfg.backtest.end_date = date.today().strftime("%Y-%m-%d")
 
-    if not has_data("prices_live"):
-        print("[Data] No cached data, fetching...")
-        from ascent.main import run_pipeline
-        run_pipeline(live=True)
+    if train_days is None: train_days = cfg.walk_forward.train_days
+    if purge_days is None: purge_days = cfg.walk_forward.purge_days
+    if top_n      is None: top_n      = cfg.backtest.top_n
+    if max_weight is None: max_weight = cfg.backtest.max_weight
 
-    # ── Load data ──
+    if purge_days < TARGET_HORIZON:
+        print(
+            f"[WF] WARNING: purge_days={purge_days} < TARGET_HORIZON={TARGET_HORIZON}. "
+            f"Forcing purge_days={TARGET_HORIZON} to prevent label leakage."
+        )
+        purge_days = TARGET_HORIZON
+
+    # FIX #1: the regime_engine passed in from run_pipeline() was fitted on the
+    # full sample — using it here to adjust weights is look-ahead leakage. A
+    # 2026 regime label would scale 2020 weights.
+    # FIX: ignore the passed-in engine entirely. Inside the loop we fit a fresh
+    # regime engine on each fold's training slice only, so the regime signal is
+    # always causal. If regime fitting is too slow, pass disable_regime=True.
+    if regime_engine is not None:
+        print(
+            "[WF] NOTE: full-sample regime_engine ignored to prevent look-ahead. "
+            "A fresh regime engine is fitted per fold on training data only."
+        )
+
     print("=" * 70)
     print("  WALK-FORWARD PIPELINE")
     print("=" * 70)
 
-    if not has_data("prices_live"):
-        print("ERROR: No cached data. Run 'python -m ascent.main --live' first.")
-        return
+    # FIX #5: use caller-supplied data if provided, otherwise load from cache.
+    # Before this fix, the runner always loaded from prices_live/macro_live
+    # regardless of what the main pipeline had used (e.g. simulated fallback).
+    # This created inconsistency: main pipeline ran on simulated data but
+    # walk-forward evaluated on live data (or failed if live cache was missing).
+    if price_df is None:
+        cache_name = prices_cache_name or "prices_live"
+        if not has_data(cache_name):
+            print(f"ERROR: No cached data ({cache_name}). Run main pipeline first.")
+            return
+        price_df = load_parquet(cache_name)
+        print(f"[WF] Loaded prices from cache: {cache_name}")
+    else:
+        print("[WF] Using caller-supplied price data.")
 
-    price_df = load_parquet("prices_live")
-    # Strip timezone from dates to avoid comparison errors
     if price_df["date"].dt.tz is not None:
         price_df["date"] = price_df["date"].dt.tz_localize(None)
-    macro_df = load_parquet("macro_live") if has_data("macro_live") else None
+
+    if macro_df is None:
+        macro_cache = "macro_live" if has_data("macro_live") else "macro_simulated"
+        macro_df = load_parquet(macro_cache) if has_data(macro_cache) else None
+        if macro_df is not None:
+            print(f"[WF] Loaded macro from cache: {macro_cache}")
+    else:
+        print("[WF] Using caller-supplied macro data.")
+
     if macro_df is not None and "date" in macro_df.columns:
         if macro_df["date"].dt.tz is not None:
             macro_df["date"] = macro_df["date"].dt.tz_localize(None)
+        if "known_time" in macro_df.columns:
+            macro_df["known_time"] = pd.to_datetime(macro_df["known_time"])
+            if macro_df["known_time"].dt.tz is not None:
+                macro_df["known_time"] = macro_df["known_time"].dt.tz_localize(None)
 
-    # Load sector map
     sector_map = {}
     if has_data("profiles"):
-        profiles = load_parquet("profiles")
+        profiles   = load_parquet("profiles")
         sector_map = dict(zip(profiles["symbol"], profiles["sector"]))
 
-    # Full feature builder for price pivots
     full_builder = FeatureBuilder(price_df, macro_df)
-    close_full = full_builder.close
-    open_full = full_builder.open
-    all_dates = close_full.index
+    close_full   = full_builder.close
+    open_full    = full_builder.open
+    all_dates    = close_full.index
+
+    historical_universe_df = build_historical_universe(strict=True)  # Bug 14 fix: exclude symbols with unknown addition dates
+
+    # FIX #4: walk-forward generates weights on the rebalance schedule, not daily.
+    # Before: weights were generated for every market day, which is inconsistent
+    # with how live/full mode actually trades (rebalance_freq_days cadence).
+    # Fix: only generate a weight vector on scheduled rebalance dates.
+    rebal_freq  = cfg.backtest.rebalance_freq_days
+    rebal_dates_set = set()
+    for idx, dt in enumerate(all_dates):
+        if idx % rebal_freq == 0:
+            rebal_dates_set.add(dt)
 
     print("[Data] %d dates, %d symbols" % (len(all_dates), len(close_full.columns)))
     print("[Data] Range: %s to %s" % (all_dates[0].date(), all_dates[-1].date()))
-    print("[Setup] Train: up to %d days, Test: 1 day, Purge: %d days" % (
-        train_days, purge_days))
+    print("[Setup] Train: up to %d days, Purge: %d days, Rebal freq: %d days" % (
+        train_days, purge_days, rebal_freq))
 
-    # ── Daily walk-forward loop ──
     print("")
     print("-" * 70)
-    all_oos_weights = []
-    fold_results = []
+    all_oos_weights    = []
+    fold_results       = []
+    folds_skipped_thin = []  # (date, n_symbols) — folds skipped due to thin universe
+    universe_sizes     = []  # tradeable symbol count per non-skipped fold
 
-    for i in range(len(all_dates)):
-        test_date = all_dates[i]
+    for i, test_date in enumerate(all_dates):
+        # FIX #4: skip non-rebalance dates entirely
+        if test_date not in rebal_dates_set:
+            continue
 
-        # Use as much history as exists, up to train_days
         train_end_idx = i - purge_days - 1
 
-        # If there is not enough room for purge, relax naturally to no usable history
-        if train_end_idx < 0:
-            hist_prices = price_df.loc[price_df["date"] <= test_date].copy()
-            hist_macro = None
-            if macro_df is not None:
-                hist_macro = macro_df.loc[macro_df["date"] <= test_date].copy()
+        tradeable_symbols = get_universe_on_date(test_date, historical_universe_df)
+        tradeable_symbols = [s for s in tradeable_symbols if s in close_full.columns]
 
-            # For earliest dates, if feature builder / alpha stack cannot compute,
-            # fall back to zero weights for that day.
+        if len(tradeable_symbols) < 5:
+            print(
+                f"[WF] WARNING: {test_date.date()} — thin universe "
+                f"({len(tradeable_symbols)} symbols < 5), skipping fold"
+            )
+            folds_skipped_thin.append((test_date, len(tradeable_symbols)))
+            fold_results.append({
+                "date":      test_date.strftime("%Y-%m-%d"),
+                "train":     "n/a",
+                "test_days": 0,
+                "daily_ret": float("nan"),
+                "status":    f"SKIPPED_THIN_UNIVERSE: {len(tradeable_symbols)} symbols",
+            })
+            continue
+
+        universe_sizes.append(len(tradeable_symbols))
+        # Include benchmark in price filter so FeatureBuilder gets SPY for macro features
+        tradeable_set = set(tradeable_symbols) | {cfg.universe.benchmark}
+
+        if train_end_idx < 0:
+            hist_prices = price_df.loc[
+                (price_df["date"] <= test_date) &
+                (price_df["symbol"].isin(tradeable_set))
+            ].copy()
+            hist_macro  = _pit_macro(macro_df, test_date)
+
             try:
-                hist_builder = FeatureBuilder(hist_prices, hist_macro)
+                hist_builder  = FeatureBuilder(hist_prices, hist_macro)
                 hist_features = hist_builder.compute_features()
-                hist_alpha = -build_alpha_stack(hist_features)
+                try:
+                    hist_targets = hist_builder.compute_targets(horizons=[TARGET_HORIZON])
+                    key = f"fwd_ret_{TARGET_HORIZON}d"
+                    if key in hist_targets:
+                        hist_features["targets"] = hist_targets[key]
+                except Exception:
+                    pass
+                hist_alpha = build_alpha_stack(hist_features,
+        agent_id="us_equities")
 
                 if test_date in hist_alpha.index:
-                    test_alpha = hist_alpha.loc[[test_date]]
-                    test_weights = sector_constrained_weighted(
+                    tradeable_cols = [c for c in tradeable_symbols if c in hist_alpha.columns]
+                    test_alpha     = hist_alpha.loc[[test_date], tradeable_cols]
+                    test_weights   = sector_constrained_weighted(
                         test_alpha,
                         n=top_n,
                         max_weight=max_weight,
                         max_per_sector=max_per_sector,
                         sector_map=sector_map,
+                        regime_signal=None,  # FIX #1: no regime in early dates
                     )
                 else:
                     test_weights = pd.DataFrame(
                         [0.0] * len(close_full.columns),
-                        index=close_full.columns
+                        index=close_full.columns,
                     ).T
                     test_weights.index = [test_date]
             except Exception:
                 test_weights = pd.DataFrame(
                     [0.0] * len(close_full.columns),
-                    index=close_full.columns
+                    index=close_full.columns,
                 ).T
                 test_weights.index = [test_date]
 
@@ -145,69 +225,125 @@ def walk_forward_pipeline(
             daily_ret = np.nan
             if i + 1 < len(all_dates):
                 next_date = all_dates[i + 1]
-                day_ret = close_full.loc[next_date] / close_full.loc[test_date] - 1.0
-                daily_ret = (test_weights.iloc[0] * day_ret.reindex(test_weights.columns).fillna(0)).sum()
+                day_ret   = close_full.loc[next_date] / close_full.loc[test_date] - 1.0
+                daily_ret = (
+                    test_weights.iloc[0] * day_ret.reindex(test_weights.columns).fillna(0)
+                ).sum()
 
             fold_results.append({
-                "date": test_date.strftime("%Y-%m-%d"),
-                "train": "partial history",
+                "date":      test_date.strftime("%Y-%m-%d"),
+                "train":     "partial history",
                 "test_days": len(test_weights),
                 "daily_ret": daily_ret,
             })
-
-            print("  Date %s | Train: partial history | Positions: %2d" % (
+            print("  Date %s | Train: partial history | Tradeable: %2d | Positions: %2d" % (
                 test_date.strftime("%Y-%m-%d"),
+                len(tradeable_symbols),
                 int((test_weights.iloc[0] != 0).sum()),
             ))
             continue
 
         train_start_idx = max(0, train_end_idx - train_days + 1)
-        train_start = all_dates[train_start_idx]
-        train_end = all_dates[train_end_idx]
+        train_start     = all_dates[train_start_idx]
+        train_end       = all_dates[train_end_idx]
 
-        # Use historical data from train_start through test_date
-        hist_mask = (price_df["date"] >= train_start) & (price_df["date"] <= test_date)
-        hist_prices = price_df.loc[hist_mask].copy()
+        train_prices = price_df.loc[
+            (price_df["date"] >= train_start) &
+            (price_df["date"] <= train_end) &
+            (price_df["symbol"].isin(tradeable_set))
+        ].copy()
 
-        hist_macro = None
-        if macro_df is not None:
-            hist_macro_mask = (macro_df["date"] >= train_start) & (macro_df["date"] <= test_date)
-            hist_macro = macro_df.loc[hist_macro_mask].copy()
+        train_macro = _pit_macro(macro_df, train_end)
+        if train_macro is not None:
+            train_macro = train_macro[train_macro["date"] >= train_start].copy()
 
-        # Build features using only historical data
+        pred_prices = price_df.loc[
+            (price_df["date"] >= train_start) &
+            (price_df["date"] <= test_date) &
+            (price_df["symbol"].isin(tradeable_set))
+        ].copy()
+
+        pred_macro = _pit_macro(macro_df, test_date)
+        if pred_macro is not None:
+            pred_macro = pred_macro[pred_macro["date"] >= train_start].copy()
+
         try:
-            hist_builder = FeatureBuilder(hist_prices, hist_macro)
-            hist_features = hist_builder.compute_features()
+            pred_builder  = FeatureBuilder(pred_prices, pred_macro)
+            hist_features = pred_builder.compute_features()
         except Exception as e:
             print("  Date %s: SKIP (feature error: %s)" % (test_date.strftime("%Y-%m-%d"), e))
             zero_weights = pd.DataFrame(
                 [0.0] * len(close_full.columns),
-                index=close_full.columns
+                index=close_full.columns,
             ).T
             zero_weights.index = [test_date]
-            zero_weights = zero_weights.reindex(columns=close_full.columns, fill_value=0.0)
-            all_oos_weights.append(zero_weights)
+            all_oos_weights.append(
+                zero_weights.reindex(columns=close_full.columns, fill_value=0.0)
+            )
             continue
 
-        # Build alpha using only historical data
-        hist_alpha = -build_alpha_stack(hist_features)
+        try:
+            train_builder = FeatureBuilder(train_prices, train_macro)
+            train_targets = train_builder.compute_targets(horizons=[TARGET_HORIZON])
+            key = f"fwd_ret_{TARGET_HORIZON}d"
+            if key in train_targets:
+                hist_features["targets"] = train_targets[key]
+                valid_rows = train_targets[key].notna().any(axis=1).sum()
+                print("[WF] targets injected, shape: %s, valid rows: %d" % (
+                    str(train_targets[key].shape), valid_rows))
+        except Exception as e:
+            print(f"[WF] targets error: {e}")
+
+        hist_alpha = build_alpha_stack(hist_features,
+        agent_id="us_equities")
 
         if test_date not in hist_alpha.index:
             zero_weights = pd.DataFrame(
                 [0.0] * len(close_full.columns),
-                index=close_full.columns
+                index=close_full.columns,
             ).T
             zero_weights.index = [test_date]
-            zero_weights = zero_weights.reindex(columns=close_full.columns, fill_value=0.0)
-            all_oos_weights.append(zero_weights)
-
+            all_oos_weights.append(
+                zero_weights.reindex(columns=close_full.columns, fill_value=0.0)
+            )
             print("  Date %s: no alpha for date -> zero weights" % test_date.strftime("%Y-%m-%d"))
             continue
 
-        # Extract only the single test day alpha
-        test_alpha = hist_alpha.loc[[test_date]]
+        tradeable_cols = [c for c in tradeable_symbols if c in hist_alpha.columns]
+        test_alpha     = hist_alpha.loc[[test_date], tradeable_cols]
 
-        # Build portfolio weights for that single day
+        # FIX #1: fit a fresh regime engine on this fold's training data only.
+        # The full-sample engine passed in from run_pipeline() is intentionally
+        # ignored because it contains future information relative to test_date.
+        fold_regime_signal = None
+        try:
+            from ascent.regime import RegimeEngine
+            spy_train = price_df.loc[
+                (price_df["date"] >= train_start) &
+                (price_df["date"] <= train_end) &
+                (price_df["symbol"] == cfg.universe.benchmark)
+            ].set_index("date")["close"].sort_index()
+
+            univ_train = price_df.loc[
+                (price_df["date"] >= train_start) &
+                (price_df["date"] <= train_end) &
+                (price_df["symbol"].isin(tradeable_symbols))
+            ].pivot_table(index="date", columns="symbol", values="close").sort_index()
+
+            if len(spy_train) >= 252:
+                fold_engine = RegimeEngine(config=cfg.regime.to_engine_dict())
+                fold_engine.fit(
+                    spy_prices=spy_train,
+                    universe_prices=univ_train,
+                    vix_prices=None,
+                    macro_df=None,
+                    run_model_selection=False,  # skip selection for speed
+                )
+                fold_regime_signal = fold_engine.get_signal(test_date)
+        except Exception as _re:
+            # Bug 7 fix: log the failure so we know regime was unavailable for this fold
+            print(f"[WF] fold {test_date.date()}: regime fit failed ({type(_re).__name__}: {_re}) — proceeding without regime signal")
+
         try:
             test_weights = sector_constrained_weighted(
                 test_alpha,
@@ -215,77 +351,127 @@ def walk_forward_pipeline(
                 max_weight=max_weight,
                 max_per_sector=max_per_sector,
                 sector_map=sector_map,
+                regime_signal=fold_regime_signal,  # FIX #1: fold-local signal
             )
-        except Exception:
+        except Exception as _oe:
+            # Bug 8 fix: don't silently zero out — log what failed and record it
+            print(
+                f"[WF] fold {test_date.date()}: optimizer failed ({type(_oe).__name__}: {_oe}) "
+                "— recording failed fold, using zero weights. Check fold_diagnostics."
+            )
+            fold_results.append({
+                "date":      test_date.strftime("%Y-%m-%d"),
+                "train":     "%s to %s" % (train_start.date(), train_end.date()),
+                "test_days": 0,
+                "daily_ret": float("nan"),
+                "status":    f"FAILED_OPTIMIZER: {type(_oe).__name__}: {_oe}",
+            })
             test_weights = pd.DataFrame(
                 [0.0] * len(close_full.columns),
-                index=close_full.columns
+                index=close_full.columns,
             ).T
             test_weights.index = [test_date]
 
         test_weights = test_weights.reindex(columns=close_full.columns, fill_value=0.0)
         all_oos_weights.append(test_weights)
 
-        # Quick daily metrics
+        daily_ret = np.nan
         if i + 1 < len(all_dates):
             next_date = all_dates[i + 1]
-            day_ret = close_full.loc[next_date] / close_full.loc[test_date] - 1.0
-            daily_ret = (test_weights.iloc[0] * day_ret.reindex(test_weights.columns).fillna(0)).sum()
-        else:
-            daily_ret = np.nan
+            day_ret   = close_full.loc[next_date] / close_full.loc[test_date] - 1.0
+            daily_ret = (
+                test_weights.iloc[0] * day_ret.reindex(test_weights.columns).fillna(0)
+            ).sum()
 
         fold_results.append({
-            "date": test_date.strftime("%Y-%m-%d"),
-            "train": "%s to %s" % (train_start.date(), train_end.date()),
+            "date":      test_date.strftime("%Y-%m-%d"),
+            "train":     "%s to %s" % (train_start.date(), train_end.date()),
             "test_days": len(test_weights),
             "daily_ret": daily_ret,
         })
 
-        print("  Date %s | Train: %s to %s | Positions: %2d" % (
+        print("  Date %s | Train: %s to %s | Tradeable: %2d | Positions: %2d | Regime: %s" % (
             test_date.strftime("%Y-%m-%d"),
             train_start.strftime("%Y-%m-%d"),
             train_end.strftime("%Y-%m-%d"),
+            len(tradeable_symbols),
             int((test_weights.iloc[0] != 0).sum()),
+            fold_regime_signal.label.value if fold_regime_signal else "none",
         ))
 
     print("-" * 70)
+
+    # A4 + Bug 8: print fold diagnostics summary — failures and thin-universe skips are never silent
+    failed_folds    = [f for f in fold_results if f.get("status", "").startswith("FAILED")]
+    skipped_folds   = [f for f in fold_results if f.get("status", "").startswith("SKIPPED")]
+    succeeded_count = len(fold_results) - len(failed_folds) - len(skipped_folds)
+    avg_universe    = round(sum(universe_sizes) / len(universe_sizes), 1) if universe_sizes else 0.0
+
+    print(f"\n[WF] FOLD SUMMARY:")
+    print(f"  Total folds:             {len(fold_results)}")
+    print(f"  Succeeded:               {succeeded_count}")
+    print(f"  Skipped (thin universe): {len(skipped_folds)}")
+    print(f"  Failed:                  {len(failed_folds)}")
+    print(f"  Avg universe size:       {avg_universe} symbols")
+    if skipped_folds:
+        for f in skipped_folds:
+            print(f"  SKIPPED {f['date']} — {f.get('status', 'unknown')}")
+    if failed_folds:
+        for f in failed_folds:
+            print(f"  FAILED  {f['date']} — {f.get('status', 'unknown')}")
 
     if not all_oos_weights:
         print("ERROR: No valid folds produced weights.")
         return
 
-    # ── Stitch all OOS weights ──
     combined_weights = pd.concat(all_oos_weights)
     combined_weights = combined_weights[~combined_weights.index.duplicated(keep="first")]
     combined_weights = combined_weights.sort_index()
     combined_weights = combined_weights.fillna(0)
+    combined_weights = combined_weights.reindex(columns=close_full.columns, fill_value=0)
 
-    # Reindex to match close prices
-    combined_weights = combined_weights.reindex(
-        columns=close_full.columns, fill_value=0
+    # Forward-fill weights to every trading day so the backtest engine simulates
+    # all ~1,575 days, holding positions between rebalances. Without this,
+    # engine.run() intersects target_weights.index with close_prices.index and
+    # only sees 164 dates — each spanning ~10 actual trading days — causing
+    # CAGR and Sharpe to be annualised as if only 0.65 years passed instead of 6.5.
+    all_trading_days = close_full.index[
+        (close_full.index >= combined_weights.index[0]) &
+        (close_full.index <= combined_weights.index[-1])
+    ]
+    combined_weights = (
+        combined_weights
+        .reindex(all_trading_days)
+        .ffill()
+        .fillna(0)
     )
 
+    n_rebal = combined_weights.index.isin(pd.concat(all_oos_weights).index).sum()
     print("")
-    print("[Walk-Forward] Combined OOS weights: %d dates" % len(combined_weights))
+    print("[Walk-Forward] Combined OOS weights: %d rebalance dates → %d daily rows (ffilled)" % (
+        n_rebal, len(combined_weights)))
     print("[Walk-Forward] OOS period: %s to %s" % (
         combined_weights.index[0].date(), combined_weights.index[-1].date()))
 
-    # ── Run backtest on OOS weights ──
     print("")
     print("=" * 70)
     print("  OUT-OF-SAMPLE BACKTEST")
     print("=" * 70)
 
-    # Get benchmark
-    bm_sym = cfg.universe.benchmark
+    bm_sym  = cfg.universe.benchmark
     bm_data = price_df[price_df["symbol"] == bm_sym].set_index("date")["close"].sort_index()
     bm_data = bm_data[~bm_data.index.duplicated(keep="last")]
 
+    # FIX #4: use the same rebalance cadence as live/full mode.
+    # Before: rebalance_freq_days=1 caused daily rebalancing, inconsistent
+    # with how the strategy actually runs. Now the OOS backtest uses the same
+    # rebalance_freq_days as everything else, and walk-forward only generates
+    # weights on those same scheduled dates.
     engine = BacktestEngine(
         initial_capital=cfg.backtest.initial_capital,
         spread_bps=cfg.backtest.spread_bps,
         impact_bps=cfg.backtest.impact_bps,
-        rebalance_freq_days=cfg.backtest.rebalance_freq_days,
+        rebalance_freq_days=cfg.backtest.rebalance_freq_days,  # FIX #4
         execution_delay=cfg.backtest.execution_delay_days,
     )
 
@@ -296,42 +482,38 @@ def walk_forward_pipeline(
         benchmark_prices=bm_data,
     )
 
-    print_report(result, title="ASCENT CAPITAL - WALK-FORWARD OOS BACKTEST")
-        # ── Exact engine ledgers ──
+    print("\n" + format_metrics(result.summary()))
+    from ascent.dashboard.export_dashboard_data import export_to_dashboard
+    try:
+        export_to_dashboard(result, regime_engine=None)
+        print('[Dashboard] Export complete')
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        print(f'[Dashboard] Export failed: {e}')
+
     if result.daily_ledger is not None:
         result.daily_ledger.to_csv("ascent_daily_ledger.csv")
-        print("")
-        print("=" * 70)
-        print("  DAILY PORTFOLIO LEDGER (LAST 20 DAYS)")
-        print("=" * 70)
-        print(result.daily_ledger.tail(20).to_string(float_format=lambda x: f"{x:,.4f}"))
         print("\n[Saved] ascent_daily_ledger.csv")
 
     if result.holdings_ledger is not None:
         result.holdings_ledger.to_csv("ascent_holdings_ledger.csv", index=False)
-        print("")
-        print("=" * 70)
-        print("  HOLDINGS CONTRIBUTION LEDGER (LAST 20 ROWS)")
-        print("=" * 70)
-        print(result.holdings_ledger.tail(20).to_string(index=False, float_format=lambda x: f"{x:,.4f}"))
-        print("\n[Saved] ascent_holdings_ledger.csv")
+        print("[Saved] ascent_holdings_ledger.csv")
+
     print("")
     print("=" * 70)
     print("  DAILY SUMMARY")
     print("=" * 70)
-    print("  Total dates with weights: %d" % len(combined_weights))
+    print("  Total rebalance dates: %d" % len(combined_weights))
 
     daily_rets = [fr["daily_ret"] for fr in fold_results if not pd.isna(fr["daily_ret"])]
     if daily_rets:
         daily_rets = np.array(daily_rets)
-        print("  Avg daily return: %.4f%%" % (np.mean(daily_rets) * 100))
-        print("  Daily std:        %.4f%%" % (np.std(daily_rets) * 100))
-        print("  Positive days:    %.1f%%" % (100 * np.mean(daily_rets > 0)))
+        print("  Avg rebal-day return: %.4f%%" % (np.mean(daily_rets) * 100))
+        print("  Rebal-day std:        %.4f%%" % (np.std(daily_rets) * 100))
+        print("  Positive days:        %.1f%%" % (100 * np.mean(daily_rets > 0)))
 
     elapsed = time.time() - t0
-    print("")
-    print("  Walk-forward pipeline completed in %.1fs" % elapsed)
-    print("")
+    print("\n  Walk-forward pipeline completed in %.1fs\n" % elapsed)
 
 
 if __name__ == "__main__":
