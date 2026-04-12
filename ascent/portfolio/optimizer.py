@@ -11,6 +11,11 @@ import numpy as np
 from typing import Optional
 
 
+class SectorDataError(RuntimeError):
+    """Raised when sector coverage is below the 80% threshold required for safe portfolio construction."""
+    pass
+
+
 def top_n_equal_weight(
     alpha: pd.DataFrame,
     n: int = 10,
@@ -141,6 +146,19 @@ def sector_constrained_weighted(alpha, n=10, max_weight=0.15, max_per_sector=1, 
         if len(row) < n:
             continue
         ranked = row.sort_values(ascending=False)
+
+        # Check sector coverage: how many of the candidate symbols have known sectors
+        known_sectors = sum(1 for sym in ranked.index if sym in sector_map)
+        coverage = known_sectors / len(ranked) if len(ranked) > 0 else 0.0
+
+        # Hard fail if coverage is below 80%
+        if coverage < 0.80:
+            raise SectorDataError(
+                f"sector_constrained_weighted(): sector coverage {coverage:.0%} < 80% "
+                f"on {dt.date()}. This should have been caught by validate_sector_data() "
+                f"at startup. Regenerate profiles.parquet or pass --skip-sector-check."
+            )
+
         selected = []
         sector_count = {}
         for sym in ranked.index:

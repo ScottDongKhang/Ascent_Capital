@@ -79,3 +79,25 @@ def test_orchestrator_accepts_yesterday_scores_on_monday(tmp_path):
         result = ci._load_skill_scores()
 
     assert result == {"us_equities": 0.80}
+
+
+def test_sector_constrained_raises_on_low_coverage_at_construction_time():
+    """
+    sector_constrained_weighted() must raise SectorDataError (not silently degrade)
+    when sector coverage of the candidate pool is below 80%.
+    """
+    import pandas as pd
+    from ascent.portfolio.optimizer import sector_constrained_weighted, SectorDataError
+
+    dates = pd.date_range("2026-01-01", periods=3, freq="B")
+    syms = ["A", "B", "C", "D", "E"]
+    alpha = pd.DataFrame(
+        [[0.5, 0.4, 0.3, 0.2, 0.1]] * 3,
+        index=dates,
+        columns=syms,
+    )
+    # Only 3 of 5 symbols have known sectors = 60% coverage < 80% threshold
+    sector_map = {"A": "Tech", "B": "Health", "C": "Energy"}
+
+    with pytest.raises(SectorDataError):
+        sector_constrained_weighted(alpha, n=5, sector_map=sector_map)
