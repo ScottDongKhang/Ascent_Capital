@@ -21,6 +21,7 @@ from datetime import date
 from pathlib import Path
 from typing import Dict, List, Optional
 
+import pandas as pd
 from ascent.config.types import AgentOutput
 
 SKILL_SCORES_PATH = Path("dashboard/agent_skill_scores.json")
@@ -150,7 +151,6 @@ def _load_skill_scores() -> Dict[str, Optional[float]]:
 
         as_of = data.get("skill_score_as_of", "")
         if as_of:
-            import pandas as pd
             today_str = date.today().isoformat()
             staleness_days = (pd.Timestamp(today_str) - pd.Timestamp(as_of)).days
             if staleness_days > 1:
