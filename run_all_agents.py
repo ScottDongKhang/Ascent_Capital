@@ -16,35 +16,102 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime
 from pathlib import Path
 
-from agents.us_equities_agent import run_us_equities_agent
-from agents.macro_agent import run_macro_agent
-from orchestrator.central_intelligence import run_orchestrator
-from ascent.monitoring.skill_tracker import export_skill_scores
-from ascent.monitoring.forward_pnl_tracker import run_forward_pnl_cycle
-from ascent.monitoring.pre_rebalance_checklist import run_checklist
+from ascent.data.store.parquet import has_data, load_parquet
+from ascent.portfolio.optimizer import SectorDataError
 
-try:
-    from agents.international_agent import run_international_agent
-    _HAS_INTERNATIONAL = True
-except ImportError:
-    _HAS_INTERNATIONAL = False
 
-try:
-    from agents.alternatives_agent import run_alternatives_agent
-    _HAS_ALTERNATIVES = True
-except ImportError:
-    _HAS_ALTERNATIVES = False
+SECTOR_OVERRIDE_LOG = Path("logs/sector_override.jsonl")
+
+
+def validate_sector_data(symbols: list, skip: bool = False) -> None:
+    """
+    Validates profiles.parquet exists and covers >= 80% of the US equities universe.
+    Called once at startup before agents are spawned.
+    Raises SectorDataError if coverage is insufficient.
+    Pass skip=True (--skip-sector-check flag) to bypass with audit log entry.
+    """
+    import pandas as pd
+
+    if skip:
+        entry = {
+            "timestamp": datetime.now().isoformat(),
+            "action": "sector_check_skipped",
+            "required_reason": "see CLI flag --skip-sector-check",
+        }
+        SECTOR_OVERRIDE_LOG.parent.mkdir(parents=True, exist_ok=True)
+        with open(SECTOR_OVERRIDE_LOG, "a") as f:
+            f.write(json.dumps(entry) + "\n")
+        print("[Startup] Sector check SKIPPED — override logged to logs/sector_override.jsonl")
+        return
+
+    if not has_data("profiles"):
+        raise SectorDataError(
+            "profiles.parquet missing. Regenerate with:\n"
+            "  .venv/bin/python -m ascent.data.ingest.profiles\n"
+            "Or bypass with --skip-sector-check (override is logged)."
+        )
+
+    profiles = load_parquet("profiles")
+    known = set(profiles["symbol"].dropna())
+
+    unknown_sectors = profiles[
+        profiles["sector"].isna() | profiles["sector"].isin(["Unknown", "unknown", ""])
+    ]["symbol"].tolist()
+
+    missing_from_profiles = [s for s in symbols if s not in known]
+    total_unknown = len(set(missing_from_profiles + unknown_sectors))
+    coverage = 1.0 - total_unknown / len(symbols) if symbols else 1.0
+
+    if coverage < 0.80:
+        raise SectorDataError(
+            f"Sector coverage {coverage:.1%} < 80% threshold.\n"
+            f"Missing from profiles: {missing_from_profiles[:20]}"
+            f"{'...' if len(missing_from_profiles) > 20 else ''}\n"
+            f"Unknown sectors: {unknown_sectors[:10]}"
+            f"{'...' if len(unknown_sectors) > 10 else ''}\n"
+            "Regenerate profiles.parquet or use --skip-sector-check (override is logged)."
+        )
+
+    print(f"[Startup] Sector data valid — coverage {coverage:.1%} ({len(known)} symbols in profiles)")
 
 
 def main():
-    dry_run = "--dry-run" in sys.argv
-    today   = date.today()
+    dry_run             = "--dry-run" in sys.argv
+    skip_sector_check   = "--skip-sector-check" in sys.argv
+    today               = date.today()
+
+    # ── Startup validation: sector data must be present before agents spawn ───
+    from ascent.config.settings import UniverseConfig
+    us_symbols = UniverseConfig().symbols
+    validate_sector_data(us_symbols, skip=skip_sector_check)
 
     print(f"\n{'#'*60}")
     print(f"# ASCENT CAPITAL — Multi-Agent Daily Run")
     print(f"# Date:  {today}")
     print(f"# Mode:  {'DRY RUN' if dry_run else 'LIVE'}")
     print(f"{'#'*60}\n")
+
+    # ── Import agents (lazy, after startup validation) ───────────────────────
+    from agents.us_equities_agent import run_us_equities_agent
+    from agents.macro_agent import run_macro_agent
+    from orchestrator.central_intelligence import run_orchestrator
+    from ascent.monitoring.skill_tracker import export_skill_scores
+    from ascent.monitoring.forward_pnl_tracker import run_forward_pnl_cycle
+    from ascent.monitoring.pre_rebalance_checklist import run_checklist
+
+    _HAS_INTERNATIONAL = False
+    _HAS_ALTERNATIVES = False
+    try:
+        from agents.international_agent import run_international_agent
+        _HAS_INTERNATIONAL = True
+    except ImportError:
+        pass
+
+    try:
+        from agents.alternatives_agent import run_alternatives_agent
+        _HAS_ALTERNATIVES = True
+    except ImportError:
+        pass
 
     # ── Step 1: Run all agents in parallel ───────────────────────────────────
     agent_tasks = [

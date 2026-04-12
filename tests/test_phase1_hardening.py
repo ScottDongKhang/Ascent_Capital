@@ -101,3 +101,65 @@ def test_sector_constrained_raises_on_low_coverage_at_construction_time():
 
     with pytest.raises(SectorDataError):
         sector_constrained_weighted(alpha, n=5, sector_map=sector_map)
+
+
+def test_validate_sector_data_raises_when_profiles_missing():
+    """validate_sector_data() must raise SectorDataError when profiles.parquet is absent."""
+    import run_all_agents
+    from ascent.portfolio.optimizer import SectorDataError
+
+    symbols = ["AAPL", "MSFT", "GOOGL"]
+    with patch("run_all_agents.has_data", return_value=False):
+        with pytest.raises(SectorDataError, match="profiles.parquet missing"):
+            run_all_agents.validate_sector_data(symbols)
+
+
+def test_validate_sector_data_raises_on_low_coverage():
+    """validate_sector_data() must raise when sector coverage < 80%."""
+    import pandas as pd
+    import run_all_agents
+    from ascent.portfolio.optimizer import SectorDataError
+
+    symbols = ["AAPL", "MSFT", "GOOGL", "AMZN", "META"]
+    profiles_df = pd.DataFrame({
+        "symbol": ["AAPL", "MSFT", "GOOGL", "AMZN", "META"],
+        "sector": ["Tech", "Tech", None, None, None],
+    })
+
+    with patch("run_all_agents.has_data", return_value=True), \
+         patch("run_all_agents.load_parquet", return_value=profiles_df):
+        with pytest.raises(SectorDataError, match="Sector coverage"):
+            run_all_agents.validate_sector_data(symbols)
+
+
+def test_validate_sector_data_passes_on_good_coverage():
+    """validate_sector_data() must not raise when coverage >= 80%."""
+    import pandas as pd
+    import run_all_agents
+
+    symbols = ["AAPL", "MSFT", "GOOGL", "AMZN", "META"]
+    profiles_df = pd.DataFrame({
+        "symbol": ["AAPL", "MSFT", "GOOGL", "AMZN", "META"],
+        "sector": ["Tech", "Tech", "Tech", "Consumer", "Tech"],
+    })
+
+    with patch("run_all_agents.has_data", return_value=True), \
+         patch("run_all_agents.load_parquet", return_value=profiles_df):
+        # Should not raise
+        run_all_agents.validate_sector_data(symbols)
+
+
+def test_validate_sector_data_skip_flag_logs_and_returns(tmp_path):
+    """validate_sector_data(skip=True) must log override and return without checking."""
+    import run_all_agents
+
+    log_path = tmp_path / "sector_override.jsonl"
+    with patch.object(run_all_agents, "SECTOR_OVERRIDE_LOG", log_path), \
+         patch("run_all_agents.has_data") as mock_has_data:
+        run_all_agents.validate_sector_data(symbols=["AAPL"], skip=True)
+
+    mock_has_data.assert_not_called()
+    assert log_path.exists()
+    import json
+    entry = json.loads(log_path.read_text().strip())
+    assert entry["action"] == "sector_check_skipped"
