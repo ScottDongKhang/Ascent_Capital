@@ -163,3 +163,92 @@ def test_validate_sector_data_skip_flag_logs_and_returns(tmp_path):
     import json
     entry = json.loads(log_path.read_text().strip())
     assert entry["action"] == "sector_check_skipped"
+
+
+def test_debate_runner_writes_halt_state_on_halt_verdict(tmp_path):
+    """
+    run_debate() must write execution/halt_state.json when verdict is halt_and_review.
+    File must contain: halted=True, halt_date, reason, key_risks, verdict_path, requires_override.
+    """
+    import json
+    from debate import debate_runner
+    from datetime import date
+
+    halt_path = tmp_path / "halt_state.json"
+    verdict = {
+        "recommendation": "halt_and_review",
+        "confidence": 0.85,
+        "key_risks": ["Energy concentration at 38%", "Oil shock risk"],
+        "reasoning": "Too much energy exposure in volatile macro environment",
+    }
+    portfolio_state = {
+        "date": "2026-04-15",
+        "us_regime": "stressed",
+        "macro_regime": "unknown",
+        "n_positions": 12,
+        "allocation": {},
+        "weights": {"XLE": 0.20, "MPC": 0.18},
+    }
+
+    with patch.object(debate_runner, "HALT_STATE_PATH", halt_path), \
+         patch("debate.debate_runner.score_pending_verdicts", return_value=0), \
+         patch("debate.debate_runner.run_pending_debriefs", return_value=0), \
+         patch("debate.debate_runner.detect_blind_spots"), \
+         patch("debate.debate_runner.load_blind_spot_context", return_value=""), \
+         patch("debate.debate_runner.run_all_scenarios", return_value=[]), \
+         patch("debate.debate_runner.run_bull_agent", return_value="bull arg"), \
+         patch("debate.debate_runner.run_bear_agent", return_value="bear arg"), \
+         patch("debate.debate_runner.run_devils_advocate", return_value="devil arg"), \
+         patch("debate.debate_runner.run_regime_specialist", return_value="regime arg"), \
+         patch("debate.debate_runner.run_quant_sanity_check", return_value="quant ok"), \
+         patch("debate.debate_runner.run_judge", return_value=verdict), \
+         patch("debate.debate_runner.DEBATE_LOG_DIR", tmp_path):
+        result = debate_runner.run_debate(portfolio_state, run_date=date(2026, 4, 15))
+
+    assert halt_path.exists(), "halt_state.json was not written"
+    state = json.loads(halt_path.read_text())
+    assert state["halted"] is True
+    assert state["halt_date"] == "2026-04-15"
+    assert state["requires_override"] is True
+    assert "key_risks" in state
+    assert len(state["key_risks"]) == 2
+
+
+def test_debate_runner_does_not_write_halt_state_on_proceed(tmp_path):
+    """run_debate() must NOT write halt_state.json when verdict is proceed."""
+    import json
+    from debate import debate_runner
+    from datetime import date
+
+    halt_path = tmp_path / "halt_state.json"
+    verdict = {
+        "recommendation": "proceed",
+        "confidence": 0.70,
+        "key_risks": [],
+        "reasoning": "Portfolio looks fine",
+    }
+    portfolio_state = {
+        "date": "2026-04-15",
+        "us_regime": "calm_bull",
+        "macro_regime": "unknown",
+        "n_positions": 10,
+        "allocation": {},
+        "weights": {"AAPL": 0.10},
+    }
+
+    with patch.object(debate_runner, "HALT_STATE_PATH", halt_path), \
+         patch("debate.debate_runner.score_pending_verdicts", return_value=0), \
+         patch("debate.debate_runner.run_pending_debriefs", return_value=0), \
+         patch("debate.debate_runner.detect_blind_spots"), \
+         patch("debate.debate_runner.load_blind_spot_context", return_value=""), \
+         patch("debate.debate_runner.run_all_scenarios", return_value=[]), \
+         patch("debate.debate_runner.run_bull_agent", return_value="bull arg"), \
+         patch("debate.debate_runner.run_bear_agent", return_value="bear arg"), \
+         patch("debate.debate_runner.run_devils_advocate", return_value="devil arg"), \
+         patch("debate.debate_runner.run_regime_specialist", return_value="regime arg"), \
+         patch("debate.debate_runner.run_quant_sanity_check", return_value="quant ok"), \
+         patch("debate.debate_runner.run_judge", return_value=verdict), \
+         patch("debate.debate_runner.DEBATE_LOG_DIR", tmp_path):
+        debate_runner.run_debate(portfolio_state, run_date=date(2026, 4, 15))
+
+    assert not halt_path.exists(), "halt_state.json should NOT be written for proceed verdict"
