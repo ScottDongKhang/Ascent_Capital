@@ -1,0 +1,2 @@
+{"sessionId": "42322a", "timestamp": 1772255233912, "location": "main.py:load_or_fetch_prices", "message": "Live fetch returned empty df", "data": {"df_empty": true, "df_columns": [], "polygon_key_placeholder": true}, "hypothesisId": "H1"}
+{"sessionId": "42322a", "timestamp": 1772255249587, "location": "main.py:before_normalize", "message": "Before normalize_prices", "data": {"df_empty": false, "df_columns": ["symbol", "date", "open", "high", "low", "close", "volume", "vwap", "event_time", "known_time", "source"]}, "hypothesisId": "H1"}

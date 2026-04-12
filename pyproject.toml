@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=65.0"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "ascent-capital"
+version = "0.1.0"
+description = "AI-driven systematic quant research and trading platform"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+
+[tool.setuptools.packages.find]
+include = ["ascent*"]
