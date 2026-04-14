@@ -20,12 +20,17 @@ import os
 from datetime import date, datetime
 from pathlib import Path
 
-from debate.agents import run_bull_agent, run_bear_agent, run_devils_advocate, run_regime_specialist, run_quant_sanity_check
+from debate.agents import (
+    run_bull_agent, run_bear_agent, run_devils_advocate, run_regime_specialist, run_quant_sanity_check,
+    run_bull_rebuttal, run_bear_rebuttal, run_devils_advocate_rebuttal, run_regime_specialist_rebuttal,
+)
 from debate.judge import run_judge
 from debate.outcome_tracker import score_pending_verdicts
 from simulation.scenario_simulator import run_all_scenarios
 from ascent.reporting.debrief import run_pending_debriefs, load_debrief_context
 from ascent.reporting.blind_spot_detector import detect_blind_spots, load_blind_spot_context
+from ascent.reporting.catalyst_scanner import scan_catalysts
+from memory.r2r_interface import query_memory, ingest_verdict, format_memory_context
 
 DEBATE_LOG_DIR   = Path("outputs/debate_log")
 MULTI_AGENT_LOG  = Path("logs/multi_agent_run.jsonl")
@@ -128,6 +133,23 @@ def run_debate(portfolio_state: dict = None, run_date: date = None, as_of_date=N
         portfolio_state["blind_spot_context"] = blind_spot_context
         print(f"[Debate] Blind spot context injected into debate")
 
+    # Query memory for similar past situations
+    print("[Debate] Querying memory for similar past situations...")
+    try:
+        regime = portfolio_state.get("us_regime", "")
+        top_symbols = sorted(portfolio_state.get("weights", {}).items(), key=lambda x: -x[1])
+        symbol_query = " ".join(sym for sym, _ in top_symbols[:5])
+        memory_query = f"{regime} {symbol_query}"
+        memory_results = query_memory(memory_query, n=3)
+        portfolio_state["memory_context"] = memory_results
+        if memory_results:
+            print(f"[Debate] Memory: found {len(memory_results)} relevant past situation(s)")
+        else:
+            print("[Debate] Memory: no relevant past situations found")
+    except Exception as e:
+        portfolio_state["memory_context"] = []
+        print(f"[Debate] Memory query failed (non-fatal): {e}")
+
     # Run scenario sim before agents so devil's advocate has numbers
     print("[Debate] Running scenario simulation...")
     try:
@@ -150,6 +172,20 @@ def run_debate(portfolio_state: dict = None, run_date: date = None, as_of_date=N
         portfolio_state["scenario_summary"] = ""
         portfolio_state["scenario_results"] = []
         print(f"[Debate] Scenario sim failed (non-fatal): {e}")
+
+    # Scan for upcoming catalysts (earnings, ex-div, FOMC)
+    print("[Debate] Scanning for upcoming catalysts...")
+    try:
+        symbols = list(portfolio_state.get("weights", {}).keys())
+        catalyst_result = scan_catalysts(symbols)
+        portfolio_state["catalyst_context"] = catalyst_result
+        if catalyst_result["upcoming_events"]:
+            print(f"[Debate] Catalysts: {catalyst_result['catalyst_text'][:200]}")
+        else:
+            print("[Debate] No upcoming catalysts in scan window")
+    except Exception as e:
+        portfolio_state["catalyst_context"] = {"upcoming_events": [], "catalyst_text": ""}
+        print(f"[Debate] Catalyst scan failed (non-fatal): {e}")
 
     # Bull agent
     print("[Debate] Bull agent arguing...")
@@ -196,9 +232,50 @@ def run_debate(portfolio_state: dict = None, run_date: date = None, as_of_date=N
         quant_check = f"Quant sanity check failed: {e}"
         print(f"[Debate] Quant FAILED: {e}")
 
-    # Judge synthesizes — now with memory
+    # ── Round 2: Agents rebut each other ──────────────────────────────────────
+    round1_args = {
+        "bull": bull,
+        "bear": bear,
+        "devils_advocate": devil,
+        "regime_specialist": regime_arg,
+    }
+
+    print("[Debate] Round 2 — agents rebut each other...")
+
+    try:
+        bull_r2 = run_bull_rebuttal(portfolio_state, round1_args)
+        print(f"[Debate] Bull R2: {bull_r2[:80]}...")
+    except Exception as e:
+        bull_r2 = f"Bull rebuttal failed: {e}"
+
+    try:
+        bear_r2 = run_bear_rebuttal(portfolio_state, round1_args)
+        print(f"[Debate] Bear R2: {bear_r2[:80]}...")
+    except Exception as e:
+        bear_r2 = f"Bear rebuttal failed: {e}"
+
+    try:
+        devil_r2 = run_devils_advocate_rebuttal(portfolio_state, round1_args)
+        print(f"[Debate] Devil R2: {devil_r2[:80]}...")
+    except Exception as e:
+        devil_r2 = f"Devil's advocate rebuttal failed: {e}"
+
+    try:
+        regime_r2 = run_regime_specialist_rebuttal(portfolio_state, round1_args)
+        print(f"[Debate] Regime R2: {regime_r2[:80]}...")
+    except Exception as e:
+        regime_r2 = f"Regime specialist rebuttal failed: {e}"
+
+    round2_args = {
+        "bull_rebuttal": bull_r2,
+        "bear_rebuttal": bear_r2,
+        "devils_advocate_rebuttal": devil_r2,
+        "regime_specialist_rebuttal": regime_r2,
+    }
+
+    # Judge synthesizes all rounds
     print("[Debate] Judge synthesizing verdict...")
-    verdict = run_judge(bull, bear, devil, portfolio_state, regime_arg=regime_arg, quant_check=quant_check)
+    verdict = run_judge(bull, bear, devil, portfolio_state, regime_arg=regime_arg, quant_check=quant_check, round2_args=round2_args)
 
     print(f"\n[Debate] VERDICT: {verdict['recommendation'].upper()} "
           f"(confidence: {verdict.get('confidence', '?')})")
@@ -214,11 +291,15 @@ def run_debate(portfolio_state: dict = None, run_date: date = None, as_of_date=N
         "timestamp":       datetime.now().isoformat(),
         "portfolio_state": portfolio_state,
         "arguments": {
-            "bull":             bull,
-            "bear":             bear,
-            "devils_advocate":  devil,
-            "regime_specialist": regime_arg,
-            "quant_sanity":     quant_check,
+            "bull":                       bull,
+            "bear":                       bear,
+            "devils_advocate":            devil,
+            "regime_specialist":          regime_arg,
+            "quant_sanity":               quant_check,
+            "bull_rebuttal":              bull_r2,
+            "bear_rebuttal":              bear_r2,
+            "devils_advocate_rebuttal":   devil_r2,
+            "regime_specialist_rebuttal": regime_r2,
         },
         "verdict":         verdict,
         "outcome_scored":  False,  # will be updated by outcome_tracker in a future run
@@ -230,6 +311,12 @@ def run_debate(portfolio_state: dict = None, run_date: date = None, as_of_date=N
         json.dump(record, f, indent=2, default=str)
 
     print(f"[Debate] Full record written to {out_path}")
+
+    # Ingest this verdict into memory so future debates can learn from it
+    try:
+        ingest_verdict(out_path)
+    except Exception as e:
+        print(f"[Debate] Memory ingest failed (non-fatal): {e}")
 
     # Write persistent halt state if verdict requires human override
     if verdict.get("recommendation") == "halt_and_review":
