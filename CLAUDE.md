@@ -557,3 +557,18 @@ Keep entries terse. This is a changelog, not prose. If a session changes the sys
 - Files: `ascent/reporting/catalyst_scanner.py` (new), `memory/__init__.py` (new), `memory/r2r_interface.py` (new), `scripts/ingest_verdict_history.py` (new), `debate/agents.py`, `debate/judge.py`, `debate/debate_runner.py`, `tests/test_catalyst_scanner.py` (new), `tests/test_multi_turn_debate.py` (new), `tests/test_memory_interface.py` (new)
 - Open: Phase 4 hedge overlay (blocked until Phases 1-3 live 30+ days — earliest ~May 13); self-improve Phase D real evaluator
 
+### 2026-04-14 (Tony Ngo demo — planned, not yet built)
+
+- Context: Tony Ngo (Stanford, Morgan Stanley, Bridger Capital, 20in20 Partners co-founder) met Scott Apr 11 to discuss college list + Ascent Capital; wants to *interact* with the system, not watch a demo; no follow-up sent yet
+- Decision: build interactive Streamlit demo (`demo_app.py`) as follow-up artifact — this IS the follow-up
+- Planned architecture for `demo_app.py`:
+  - Sidebar: regime picker, VIX slider, SPY momentum, portfolio preset, neuroplasticity toggle (ON/OFF), run button
+  - Main panel: portfolio snapshot, neuroplasticity card (sleeve weights before/after regime adjustment with real numbers), debate transcript (5 agents + Round 2 rebuttals appearing progressively), judge verdict card
+  - Real LLM calls using actual `debate/agents.py` functions with synthetic `portfolio_state` built from UI inputs
+  - Demo mode fallback (scenario-aware pre-written arguments if API unavailable)
+  - Deploy: `streamlit run demo_app.py` locally; push to Streamlit Community Cloud for shareable link
+  - Dark/gold aesthetic matching Ascent Capital brand
+- R2R semantic memory: decision to skip for now — only 4 verdicts exist; revisit mid-May when 30+ verdicts accumulated
+- Files: nothing written yet — full build is next session
+- Open: build `demo_app.py` and send link to Tony
+
