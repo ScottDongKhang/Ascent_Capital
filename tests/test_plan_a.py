@@ -50,3 +50,9 @@ def test_holdings_log_has_benchmark(tmp_path, monkeypatch):
     assert "spy_return" in entry, "holdings_log must have spy_return"
     assert "alpha_vs_spy" in entry, "holdings_log must have alpha_vs_spy"
     assert abs(entry["spy_return"] - 0.005) < 0.001
+
+def test_us_equities_pnl_has_own_log():
+    """US equities PnL must go to us_equities_pnl.jsonl, not eod_log.jsonl."""
+    from ascent.monitoring.forward_pnl_tracker import PNL_LOGS
+    assert str(PNL_LOGS["us_equities"]) == "logs/us_equities_pnl.jsonl", \
+        "us_equities must use its own PnL log, not eod_log.jsonl"

@@ -16,7 +16,7 @@ Called by run_all_agents.py after agents run, before skill scores update.
 
 Snapshot files: logs/snapshots/{agent_id}_weights_{YYYY-MM-DD}.json
 PnL logs:
-    us_equities → logs/eod_log.jsonl (already exists, appended)
+    us_equities → logs/us_equities_pnl.jsonl
     macro       → logs/macro_pnl.jsonl
     international → logs/international_pnl.jsonl
     alternatives  → logs/alternatives_pnl.jsonl
@@ -29,7 +29,7 @@ from typing import Dict, List, Optional
 
 SNAPSHOT_DIR = Path("logs/snapshots")
 PNL_LOGS = {
-    "us_equities":   Path("logs/eod_log.jsonl"),
+    "us_equities":   Path("logs/us_equities_pnl.jsonl"),
     "macro":         Path("logs/macro_pnl.jsonl"),
     "international": Path("logs/international_pnl.jsonl"),
     "alternatives":  Path("logs/alternatives_pnl.jsonl"),
