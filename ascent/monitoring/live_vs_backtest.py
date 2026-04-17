@@ -1,0 +1,227 @@
+"""
+ascent/monitoring/live_vs_backtest.py
+Compares live paper trading performance against walk-forward backtest expectations.
+
+Reads:
+    - ascent_daily_ledger.csv  (walk-forward OOS backtest results)
+    - logs/eod_log.jsonl       (live EOD execution logs with portfolio values)
+
+Exports:
+    - dashboard/live_vs_backtest.json
+
+Run standalone:
+    python3 -m ascent.monitoring.live_vs_backtest
+"""
+
+import json
+import os
+import numpy as np
+import pandas as pd
+from pathlib import Path
+from datetime import datetime
+
+
+LEDGER_PATH = Path("ascent_daily_ledger.csv")
+EOD_LOG_PATH = Path("logs/eod_log.jsonl")
+OUTPUT_PATH = Path("dashboard/live_vs_backtest.json")
+
+
+# ── Data loaders ──────────────────────────────────────────────────────────────
+
+def load_backtest_returns() -> pd.Series:
+    """
+    Load daily returns from the walk-forward backtest ledger.
+    Returns a Series indexed by date.
+
+    The ledger may have a 'daily_return' column directly, or an 'equity'
+    column from which returns are computed. Checks both.
+    """
+    if not LEDGER_PATH.exists():
+        print(f"[Monitor] {LEDGER_PATH} not found")
+        return pd.Series(dtype=float)
+
+    try:
+        df = pd.read_csv(LEDGER_PATH, parse_dates=["date"])
+        df = df.set_index("date").sort_index()
+
+        if "daily_return" in df.columns:
+            returns = df["daily_return"].dropna()
+        elif "net_return" in df.columns:
+            returns = df["net_return"].dropna()
+        elif "return" in df.columns:
+            returns = df["return"].dropna()
+        elif "equity" in df.columns:
+            returns = df["equity"].pct_change().dropna()
+        elif "portfolio_value" in df.columns:
+            returns = df["portfolio_value"].pct_change().dropna()
+        else:
+            print(f"[Monitor] Cannot find return/equity column in ledger. Columns: {df.columns.tolist()}")
+            return pd.Series(dtype=float)
+
+        print(f"[Monitor] Loaded {len(returns)} backtest return rows ({returns.index[0].date()} to {returns.index[-1].date()})")
+        return returns
+
+    except Exception as e:
+        print(f"[Monitor] Failed to load backtest ledger ({e})")
+        return pd.Series(dtype=float)
+
+
+def load_live_portfolio_values() -> pd.Series:
+    """
+    Load daily portfolio NAV from EOD execution logs.
+    Returns a Series indexed by date.
+
+    Looks for 'portfolio_value' or 'nav' field in each JSONL entry,
+    and 'date' or 'run_date' for the date key.
+    """
+    if not EOD_LOG_PATH.exists():
+        print(f"[Monitor] {EOD_LOG_PATH} not found")
+        return pd.Series(dtype=float)
+
+    records = []
+    with open(EOD_LOG_PATH) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+                d   = entry.get("date") or entry.get("run_date")
+                nav = entry.get("portfolio_value") or entry.get("nav")
+                if d and nav:
+                    records.append({"date": pd.Timestamp(d), "nav": float(nav)})
+            except (json.JSONDecodeError, ValueError, KeyError):
+                continue
+
+    if not records:
+        print("[Monitor] No valid NAV entries found in EOD log")
+        return pd.Series(dtype=float)
+
+    df = pd.DataFrame(records).set_index("date").sort_index()
+    # Deduplicate — keep last entry per date (most recent run wins)
+    df = df[~df.index.duplicated(keep="last")]
+
+    nav_series = df["nav"]
+    print(f"[Monitor] Loaded {len(nav_series)} live NAV entries ({nav_series.index[0].date()} to {nav_series.index[-1].date()})")
+    return nav_series
+
+
+# ── Analysis ──────────────────────────────────────────────────────────────────
+
+def compute_live_returns(nav_series: pd.Series) -> pd.Series:
+    """Convert NAV series to daily returns."""
+    return nav_series.pct_change().dropna()
+
+
+def rolling_sharpe(returns: pd.Series, window: int = 63) -> pd.Series:
+    """63-day rolling annualized Sharpe ratio."""
+    roll_mean = returns.rolling(window).mean() * 252
+    roll_std  = returns.rolling(window).std() * np.sqrt(252)
+    sharpe    = (roll_mean / roll_std).replace([np.inf, -np.inf], np.nan)
+    return sharpe
+
+
+def build_comparison(
+    backtest_returns: pd.Series,
+    live_returns: pd.Series,
+) -> dict:
+    """
+    Build the full comparison payload for dashboard consumption.
+
+    Returns a dict with:
+        backtest_cumulative:      list of {date, value}
+        live_cumulative:          list of {date, value}
+        backtest_rolling_sharpe:  list of {date, value}
+        live_rolling_sharpe:      list of {date, value}
+        overlap_start:            first date both series have data
+        overlap_end:              last date both series have data
+        overlap_days:             int
+        summary:                  aggregate stats for the overlap period
+    """
+    def series_to_records(s: pd.Series):
+        return [
+            {"date": d.isoformat(), "value": round(float(v), 6)}
+            for d, v in s.dropna().items()
+        ]
+
+    bt_cum   = (1 + backtest_returns).cumprod()
+    live_cum = (1 + live_returns).cumprod()
+
+    bt_sharpe   = rolling_sharpe(backtest_returns)
+    live_sharpe = rolling_sharpe(live_returns)
+
+    overlap = backtest_returns.index.intersection(live_returns.index)
+
+    payload = {
+        "generated_at":            datetime.now().isoformat(),
+        "backtest_cumulative":      series_to_records(bt_cum),
+        "live_cumulative":          series_to_records(live_cum),
+        "backtest_rolling_sharpe":  series_to_records(bt_sharpe),
+        "live_rolling_sharpe":      series_to_records(live_sharpe),
+        "overlap_start":            overlap.min().isoformat() if len(overlap) > 0 else None,
+        "overlap_end":              overlap.max().isoformat() if len(overlap) > 0 else None,
+        "overlap_days":             len(overlap),
+    }
+
+    # Summary stats computed only on the overlapping period
+    if len(overlap) >= 5:
+        bt_ov   = backtest_returns.loc[overlap]
+        live_ov = live_returns.loc[overlap]
+
+        bt_cum_ov   = bt_cum.reindex(overlap)
+        live_cum_ov = live_cum.reindex(overlap)
+
+        def ann_sharpe(r):
+            if r.std() == 0:
+                return 0.0
+            return float(r.mean() / r.std() * np.sqrt(252))
+
+        payload["summary"] = {
+            "backtest_total_return":  round(float(bt_cum_ov.iloc[-1] / bt_cum_ov.iloc[0] - 1), 4),
+            "live_total_return":      round(float(live_cum_ov.iloc[-1] / live_cum_ov.iloc[0] - 1), 4),
+            "backtest_ann_sharpe":    round(ann_sharpe(bt_ov), 3),
+            "live_ann_sharpe":        round(ann_sharpe(live_ov), 3),
+            "tracking_error_ann":     round(float((bt_ov - live_ov).std() * np.sqrt(252)), 4),
+            "overlap_days":           len(overlap),
+        }
+
+    return payload
+
+
+# ── Main entry point ──────────────────────────────────────────────────────────
+
+def export_live_vs_backtest() -> dict:
+    """
+    Load both data sources, compute comparison, write JSON to dashboard/.
+    Returns the payload dict (also useful for testing / import).
+    """
+    bt_returns = load_backtest_returns()
+    live_nav   = load_live_portfolio_values()
+
+    if bt_returns.empty:
+        print("[Monitor] No backtest data — cannot build comparison")
+        return {}
+    if live_nav.empty:
+        print("[Monitor] No live data — cannot build comparison")
+        return {}
+
+    live_returns = compute_live_returns(live_nav)
+    if live_returns.empty:
+        print("[Monitor] Live returns empty after pct_change — need at least 2 NAV entries")
+        return {}
+
+    payload = build_comparison(bt_returns, live_returns)
+
+    os.makedirs(OUTPUT_PATH.parent, exist_ok=True)
+    with open(OUTPUT_PATH, "w") as f:
+        json.dump(payload, f, indent=2)
+
+    print(
+        f"[Monitor] Exported live vs backtest to {OUTPUT_PATH} "
+        f"({payload.get('overlap_days', 0)} overlap days)"
+    )
+    return payload
+
+
+if __name__ == "__main__":
+    export_live_vs_backtest()
