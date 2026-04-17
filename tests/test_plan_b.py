@@ -53,7 +53,7 @@ def test_reduce_size_enforces_actual_reduction():
     unchanged = dict(original)
     enforced = _enforce_reduce_size(original, unchanged)
 
-    reduced_count = sum(1 for s, w in enforced.items() if w < original.get(s, 0) - 0.005)
+    reduced_count = sum(1 for s, w in enforced.items() if w < original.get(s, 0) - 0.01)
     assert reduced_count >= 3, f"Expected >=3 positions reduced, got {reduced_count}"
     assert abs(sum(enforced.values()) - 1.0) < 0.001
 
@@ -68,3 +68,12 @@ def test_reduce_size_passes_through_genuine_reduction():
     result = _enforce_reduce_size(original, adjusted)
     assert abs(result["AAPL"] - 0.08) < 0.001
     assert abs(result["MSFT"] - 0.06) < 0.001
+
+
+def test_reduce_size_empty_haiku_returns_original():
+    """If haiku returns empty weights, fall back to original."""
+    from ascent.execution.eod_runner import _enforce_reduce_size
+
+    original = {"AAPL": 0.50, "MSFT": 0.50}
+    result = _enforce_reduce_size(original, {})
+    assert result == original

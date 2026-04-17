@@ -448,6 +448,11 @@ def _enforce_reduce_size(
     Returns:
         Dict of {symbol: weight} that guarantees measurable reduction
     """
+    # Guard: empty haiku_weights
+    if not haiku_weights:
+        print("[EodRunner] reduce_size: haiku_weights is empty — returning original weights")
+        return dict(original_weights)
+
     # Count how many positions Haiku genuinely reduced
     reduced_count = sum(
         1 for s, w in haiku_weights.items()
@@ -467,17 +472,31 @@ def _enforce_reduce_size(
     top_n = min(5, len(sorted_syms))
     trim_per = 0.02
     total_freed = 0.0
+    trimmed_syms = set(sorted_syms[:top_n])
 
     for sym in sorted_syms[:top_n]:
         actual_trim = min(trim_per, weights[sym])  # don't go negative
         weights[sym] -= actual_trim
         total_freed += actual_trim
 
-    # Redistribute freed weight proportionally to all positions
-    total = sum(weights.values())
-    if total > 0 and total_freed > 0:
+    # Guard: no weight freed
+    if total_freed == 0:
+        print("[EodRunner] reduce_size: no weight freed during trim (all positions at 0?) — weights unchanged")
+        return dict(haiku_weights)
+
+    # Redistribute freed weight only to NON-trimmed positions
+    non_trimmed_total = sum(weights[s] for s in weights if s not in trimmed_syms)
+
+    if non_trimmed_total > 0 and total_freed > 0:
         for sym in weights:
-            weights[sym] += total_freed * (weights[sym] / total)
+            if sym not in trimmed_syms:
+                weights[sym] += total_freed * (weights[sym] / non_trimmed_total)
+    elif total_freed > 0:
+        # All positions were trimmed (very small portfolio) — distribute to all
+        total = sum(weights.values())
+        if total > 0:
+            for sym in weights:
+                weights[sym] += total_freed * (weights[sym] / total)
 
     # Renorm to exactly 1.0
     final_total = sum(weights.values())
