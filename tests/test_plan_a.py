@@ -56,3 +56,38 @@ def test_us_equities_pnl_has_own_log():
     from ascent.monitoring.forward_pnl_tracker import PNL_LOGS
     assert str(PNL_LOGS["us_equities"]) == "logs/us_equities_pnl.jsonl", \
         "us_equities must use its own PnL log, not eod_log.jsonl"
+
+def test_attribution_produces_report(tmp_path, monkeypatch):
+    """attribution report must return top contributors, drags, and alpha vs SPY."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "logs").mkdir()
+
+    from unittest.mock import patch
+    import pandas as pd
+    from datetime import date
+
+    positions = [
+        {"symbol": "MPWR", "weight": 0.064, "market_value": 6222.0, "current_price": 1402.0, "qty": 4.4},
+        {"symbol": "EWY",  "weight": 0.112, "market_value": 10968.0, "current_price": 147.0, "qty": 74.4},
+        {"symbol": "MRK",  "weight": 0.024, "market_value": 2385.0,  "current_price": 115.0, "qty": 20.6},
+    ]
+    mock_returns = {"MPWR": 0.037, "EWY": 0.018, "MRK": -0.021, "SPY": 0.003}
+
+    with patch("yfinance.download") as mock_dl:
+        dates = pd.date_range("2026-04-14", periods=2, freq="B")
+        price_data = {s: [100.0, 100.0*(1+r)] for s, r in mock_returns.items()}
+        df = pd.DataFrame(price_data, index=dates)
+        mock_dl.return_value = pd.concat({"Close": df}, axis=1)
+
+        from ascent.monitoring.attribution import run_attribution
+        report = run_attribution(positions, date(2026, 4, 16))
+
+    assert "portfolio_return" in report
+    assert "spy_return" in report
+    assert "alpha_vs_spy" in report
+    assert "top_contributors" in report
+    assert "top_drags" in report
+    assert len(report["top_contributors"]) >= 1
+    assert len(report["top_drags"]) >= 1
+    assert report["top_contributors"][0]["symbol"] == "MPWR"
+    assert report["top_drags"][0]["symbol"] == "MRK"

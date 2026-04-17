@@ -434,6 +434,14 @@ def _log_holdings(today):
         sign = "+" if day_ret >= spy_ret else "-"
         print(f"[Runner] Holdings logged — equity ${equity:,.2f} | "
               f"portfolio {day_ret:+.2%} vs SPY {spy_ret:+.2%} ({sign})")
+
+        # Run attribution report
+        if positions:
+            try:
+                from ascent.monitoring.attribution import run_attribution
+                run_attribution(positions, today)
+            except Exception as e:
+                print(f"[Runner] Attribution failed ({e})")
     except Exception as e:
         print(f"[Runner] Holdings log skipped ({e})")
 
