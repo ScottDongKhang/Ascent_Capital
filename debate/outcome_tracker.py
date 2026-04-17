@@ -28,19 +28,34 @@ OUTCOME_WINDOW_DAYS = 14  # days after verdict to measure outcome
 # ── NAV loader ────────────────────────────────────────────────────────────────
 
 def _load_nav_series() -> dict:
-    """Returns {date_str: nav} from eod_log.jsonl. Handles both old and new key names."""
+    """Returns {date_str: equity} from holdings_log.jsonl. Falls back to eod_log."""
     nav = {}
-    if not EOD_LOG_PATH.exists():
-        return nav
-    for line in EOD_LOG_PATH.read_text().splitlines():
-        try:
-            e  = json.loads(line)
-            d  = e.get("date")  or e.get("run_date")        # new key first, legacy fallback
-            pv = e.get("nav")   or e.get("portfolio_value")  # new key first, legacy fallback
-            if d and pv:
-                nav[d] = float(pv)
-        except Exception:
-            pass
+    # Primary: holdings_log (real Alpaca equity)
+    holdings_path = Path("logs/holdings_log.jsonl")
+    if holdings_path.exists():
+        for line in holdings_path.read_text().splitlines():
+            try:
+                e = json.loads(line)
+                d = e.get("date")
+                pv = e.get("equity")
+                if d and pv:
+                    nav[d] = float(pv)
+            except Exception:
+                pass
+        if nav:
+            return nav
+    # Legacy fallback: eod_log
+    legacy_path = Path("logs/eod_log.jsonl")
+    if legacy_path.exists():
+        for line in legacy_path.read_text().splitlines():
+            try:
+                e = json.loads(line)
+                d = e.get("date") or e.get("run_date")
+                pv = e.get("nav") or e.get("portfolio_value")
+                if d and pv:
+                    nav[d] = float(pv)
+            except Exception:
+                pass
     return nav
 
 
