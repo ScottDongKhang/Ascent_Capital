@@ -261,6 +261,10 @@ def main():
     # ── Non-rebalance day: stop here ──────────────────────────────────────────
     if not is_rebalance:
         print("[Runner] Non-rebalance day — weights updated, no debate, no execution.")
+        try:
+            _log_holdings(today)
+        except Exception as e:
+            print(f"[Runner] Holdings log skipped: {e}")
         _log_run(today, merged_weights, agent_outputs, dry_run)
         return
 
@@ -268,6 +272,10 @@ def main():
     if not check_halt_state(today=today):
         print("[Runner] Halted — agents ran, weights updated, execution skipped.")
         print("[Runner] Create execution/halt_override.json to resume.")
+        try:
+            _log_holdings(today)
+        except Exception as e:
+            print(f"[Runner] Holdings log skipped: {e}")
         _log_run(today, merged_weights, agent_outputs, dry_run)
         return
 
@@ -303,6 +311,10 @@ def main():
         if verdict.get("recommendation") == "halt_and_review":
             print("[Runner] DEBATE VERDICT: halt_and_review — skipping execution")
             print("[Runner] Review at outputs/debate_log/")
+            try:
+                _log_holdings(today)
+            except Exception as e:
+                print(f"[Runner] Holdings log skipped: {e}")
             _log_run(today, merged_weights, agent_outputs, dry_run)
             return
 
@@ -325,6 +337,10 @@ def main():
             print(f"[Runner] Execution failed: {e}")
 
     # ── Step 6: Log the run ───────────────────────────────────────────────────
+    try:
+        _log_holdings(today)
+    except Exception as e:
+        print(f"[Runner] Holdings log skipped: {e}")
     _log_run(today, merged_weights, agent_outputs, dry_run)
 
 
