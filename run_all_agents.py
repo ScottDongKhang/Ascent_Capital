@@ -358,52 +358,6 @@ def main():
     _log_run(today, merged_weights, agent_outputs, dry_run)
 
 
-def _log_holdings(today):
-    """
-    Snapshot actual Alpaca positions + account equity to logs/holdings_log.jsonl.
-    Called every run regardless of rebalance/non-rebalance.
-    Fails silently if Alpaca is unreachable.
-    """
-    log_path = Path("logs/holdings_log.jsonl")
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        from ascent.execution.alpaca_broker import get_positions, get_account
-        pos = get_positions()
-        acct = get_account()
-        equity    = float(acct.get("equity", 0))
-        last_eq   = float(acct.get("last_equity", equity) or equity)
-        day_ret   = (equity / last_eq - 1) if last_eq else 0.0
-
-        positions = []
-        if not pos.empty:
-            for _, row in pos.sort_values("market_value", ascending=False).iterrows():
-                positions.append({
-                    "symbol":        row["symbol"],
-                    "qty":           round(float(row["qty"]), 4),
-                    "market_value":  round(float(row["market_value"]), 2),
-                    "current_price": round(float(row["current_price"]), 4),
-                    "weight":        round(float(row["weight"]), 4),
-                })
-
-        entry = {
-            "date":           today.isoformat(),
-            "timestamp":      datetime.now().isoformat(),
-            "equity":         round(equity, 2),
-            "cash":           round(float(acct.get("cash", 0)), 2),
-            "day_return":     round(day_ret, 6),
-            "n_positions":    len(positions),
-            "positions":      positions,
-        }
-        with open(log_path, "a") as f:
-            f.write(json.dumps(entry) + "\n")
-
-        print(f"[Runner] Holdings logged — {len(positions)} positions, "
-              f"equity ${equity:,.2f} ({day_ret:+.2%} today)")
-
-    except Exception as e:
-        print(f"[Runner] Holdings log skipped ({e})")
-
-
 def _log_run(today, merged_weights, agent_outputs, dry_run):
     def _regime_str(val):
         if val is None:
@@ -437,10 +391,6 @@ def _log_run(today, merged_weights, agent_outputs, dry_run):
         f.write(json.dumps(run_log) + "\n")
 
     print(f"\n[Runner] Run logged to {log_path}")
-
-    # Always snapshot actual Alpaca positions
-    _log_holdings(today)
-
     print(f"[Runner] Done.\n")
 
 
