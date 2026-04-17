@@ -260,10 +260,13 @@ def run_forward_pnl_cycle(agent_outputs: list, today: date = None) -> dict:
         if snap:
             all_symbols.update(snap.get("weights", {}).keys())
 
+    all_symbols.add("SPY")  # always fetch SPY for benchmark
     batch_returns: Dict[str, float] = {}
     if all_symbols:
         batch_returns = _fetch_latest_returns(list(all_symbols))
         print(f"[ForwardPnL] Batch-fetched returns for {len(all_symbols)} symbols in one call")
+        spy_return = batch_returns.get("SPY", 0.0)
+        print(f"[ForwardPnL] SPY benchmark: {spy_return:+.2%}")
 
     # Score each agent using the pre-fetched returns
     for agent_id in agent_ids:
@@ -289,4 +292,4 @@ def run_forward_pnl_cycle(agent_outputs: list, today: date = None) -> dict:
 
     print(f"[ForwardPnL] Saved {saved} weight snapshot(s) for tomorrow's scoring")
 
-    return results
+    return {"agent_returns": results, "spy_return": batch_returns.get("SPY", 0.0)}
