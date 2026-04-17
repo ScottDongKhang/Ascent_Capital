@@ -698,6 +698,8 @@ def run_eod_with_weights(merged_weights: dict, run_date=None, dry_run: bool = Fa
                 regime_path = _pl.Path("dashboard/regime_signal.json")
                 if regime_path.exists():
                     _rsig = _json.loads(regime_path.read_text())
+                    if isinstance(_rsig, list):
+                        _rsig = _rsig[-1] if _rsig else {}
                     debate_state["us_regime"] = _rsig.get("label", "unknown")
             except Exception:
                 pass

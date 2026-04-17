@@ -77,3 +77,47 @@ def test_reduce_size_empty_haiku_returns_original():
     original = {"AAPL": 0.50, "MSFT": 0.50}
     result = _enforce_reduce_size(original, {})
     assert result == original
+
+
+# ── B3: Regime staleness detection ───────────────────────────────────────────
+
+from datetime import date, timedelta
+import json
+from pathlib import Path
+
+
+def test_regime_staleness_detected(tmp_path, monkeypatch):
+    """Regime signal older than 5 days must be flagged as stale."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "dashboard").mkdir()
+    stale_date = (date.today() - timedelta(days=8)).isoformat()
+    sig = {"regime": "stressed", "label": "stressed", "as_of": stale_date, "last_refit_date": stale_date}
+    (tmp_path / "dashboard" / "regime_signal.json").write_text(json.dumps(sig))
+    import importlib
+    import run_all_agents
+    importlib.reload(run_all_agents)
+    assert run_all_agents._is_regime_stale() is True
+
+
+def test_regime_staleness_fresh(tmp_path, monkeypatch):
+    """Regime signal updated today must not be stale."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "dashboard").mkdir()
+    sig = {"regime": "calm_bull", "as_of": date.today().isoformat(), "last_refit_date": date.today().isoformat()}
+    (tmp_path / "dashboard" / "regime_signal.json").write_text(json.dumps(sig))
+    import importlib
+    import run_all_agents
+    importlib.reload(run_all_agents)
+    assert run_all_agents._is_regime_stale() is False
+
+
+def test_regime_list_schema_detected_as_stale(tmp_path, monkeypatch):
+    """Old list-schema regime_signal.json must be detected as stale (needs migration)."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "dashboard").mkdir()
+    old_list = [{"d": "2026-04-01", "label": "calm_bull"}, {"d": "2026-04-17", "label": "stressed"}]
+    (tmp_path / "dashboard" / "regime_signal.json").write_text(json.dumps(old_list))
+    import importlib
+    import run_all_agents
+    importlib.reload(run_all_agents)
+    assert run_all_agents._is_regime_stale() is True
