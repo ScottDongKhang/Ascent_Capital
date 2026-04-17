@@ -275,6 +275,10 @@ def main():
     # ── Non-rebalance day: stop here ──────────────────────────────────────────
     if not is_rebalance:
         print("[Runner] Non-rebalance day — weights updated, no debate, no execution.")
+        try:
+            _log_holdings(today)
+        except Exception as e:
+            print(f"[Runner] Holdings log skipped: {e}")
         _log_run(today, merged_weights, agent_outputs, dry_run)
         return
 
@@ -282,6 +286,10 @@ def main():
     if not check_halt_state(today=today):
         print("[Runner] Halted — agents ran, weights updated, execution skipped.")
         print("[Runner] Create execution/halt_override.json to resume.")
+        try:
+            _log_holdings(today)
+        except Exception as e:
+            print(f"[Runner] Holdings log skipped: {e}")
         _log_run(today, merged_weights, agent_outputs, dry_run)
         return
 
@@ -317,6 +325,10 @@ def main():
         if verdict.get("recommendation") == "halt_and_review":
             print("[Runner] DEBATE VERDICT: halt_and_review — skipping execution")
             print("[Runner] Review at outputs/debate_log/")
+            try:
+                _log_holdings(today)
+            except Exception as e:
+                print(f"[Runner] Holdings log skipped: {e}")
             _log_run(today, merged_weights, agent_outputs, dry_run)
             return
 
@@ -339,6 +351,10 @@ def main():
             print(f"[Runner] Execution failed: {e}")
 
     # ── Step 6: Log the run ───────────────────────────────────────────────────
+    try:
+        _log_holdings(today)
+    except Exception as e:
+        print(f"[Runner] Holdings log skipped: {e}")
     _log_run(today, merged_weights, agent_outputs, dry_run)
 
 
@@ -426,6 +442,72 @@ def _log_run(today, merged_weights, agent_outputs, dry_run):
     _log_holdings(today)
 
     print(f"[Runner] Done.\n")
+
+
+def _log_holdings(today):
+    log_path = Path("logs/holdings_log.jsonl")
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        from ascent.execution.alpaca_broker import get_positions, get_account
+        pos = get_positions()
+        acct = get_account()
+        equity    = float(acct.get("equity", 0))
+        last_eq   = float(acct.get("last_equity", equity) or equity)
+        day_ret   = (equity / last_eq - 1) if last_eq else 0.0
+
+        # Fetch SPY benchmark
+        spy_ret = 0.0
+        try:
+            import yfinance as yf
+            spy_data = yf.download("SPY", period="2d", interval="1d",
+                                   progress=False, auto_adjust=True)
+            if len(spy_data) >= 2:
+                close_col = spy_data["Close"]
+                # MultiIndex result (e.g. from batch fetch mock) → select SPY column
+                if hasattr(close_col, "columns"):
+                    close_col = close_col.iloc[:, 0]
+                spy_ret = float(close_col.pct_change().iloc[-1])
+        except Exception:
+            pass
+
+        positions = []
+        if not pos.empty:
+            for _, row in pos.sort_values("market_value", ascending=False).iterrows():
+                positions.append({
+                    "symbol":        row["symbol"],
+                    "qty":           round(float(row["qty"]), 4),
+                    "market_value":  round(float(row["market_value"]), 2),
+                    "current_price": round(float(row["current_price"]), 4),
+                    "weight":        round(float(row["weight"]), 4),
+                })
+
+        entry = {
+            "date":           today.isoformat(),
+            "timestamp":      datetime.now().isoformat(),
+            "equity":         round(equity, 2),
+            "cash":           round(float(acct.get("cash", 0)), 2),
+            "day_return":     round(day_ret, 6),
+            "spy_return":     round(spy_ret, 6),
+            "alpha_vs_spy":   round(day_ret - spy_ret, 6),
+            "n_positions":    len(positions),
+            "positions":      positions,
+        }
+        with open(log_path, "a") as f:
+            f.write(json.dumps(entry) + "\n")
+
+        sign = "+" if day_ret >= spy_ret else "-"
+        print(f"[Runner] Holdings logged — equity ${equity:,.2f} | "
+              f"portfolio {day_ret:+.2%} vs SPY {spy_ret:+.2%} ({sign})")
+
+        # Run attribution report
+        if positions:
+            try:
+                from ascent.monitoring.attribution import run_attribution
+                run_attribution(positions, today)
+            except Exception as e:
+                print(f"[Runner] Attribution failed ({e})")
+    except Exception as e:
+        print(f"[Runner] Holdings log skipped ({e})")
 
 
 if __name__ == "__main__":

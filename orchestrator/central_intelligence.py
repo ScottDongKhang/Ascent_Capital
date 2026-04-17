@@ -51,6 +51,48 @@ FACTOR_CONTRADICTIONS = [
     ("us_tech",      "rates_long",   "tech valuation sensitive to rising rates — directional conflict"),
 ]
 
+# EM+commodity hard cap
+EM_COMMODITY_CAP = 0.20
+EM_COMMODITY_BUCKETS = {"em_equity", "commodities", "gold"}
+
+
+def _cap_em_commodity(weights: Dict[str, float]) -> Dict[str, float]:
+    """
+    Hard cap: sum of symbols in em_equity + commodities + gold <= 20%.
+    Trims EM/commodity proportionally; redistributes freed weight to non-EM.
+    """
+    em_syms = set()
+    for bucket_name in EM_COMMODITY_BUCKETS:
+        em_syms.update(FACTOR_BUCKETS.get(bucket_name, set()))
+
+    em_weight    = sum(w for s, w in weights.items() if s in em_syms)
+    non_em_syms  = {s for s in weights if s not in em_syms}
+    non_em_total = sum(weights.get(s, 0) for s in non_em_syms)
+
+    if em_weight <= EM_COMMODITY_CAP + 1e-6:
+        return dict(weights)
+
+    scale  = EM_COMMODITY_CAP / em_weight
+    result = {}
+    freed  = 0.0
+    for sym, w in weights.items():
+        if sym in em_syms:
+            new_w        = w * scale
+            freed       += w - new_w
+            result[sym]  = new_w
+        else:
+            result[sym] = w
+
+    if non_em_total > 0 and freed > 0:
+        for sym in non_em_syms:
+            result[sym] = result[sym] + freed * (result[sym] / non_em_total)
+
+    total = sum(result.values())
+    if total > 0:
+        result = {s: round(w / total, 6) for s, w in result.items()}
+
+    return result
+
 FACTOR_WEIGHT_THRESHOLD    = 0.08  # agent must have >8% in a bucket to be considered exposed
 PARTIAL_CONFLICT_THRESHOLD = 0.06  # both sides must exceed 6% in merged portfolio to trigger
 
@@ -323,6 +365,15 @@ def merge_agent_outputs(
     total = sum(merged.values())
     if total > 0 and abs(total - 1.0) > 0.01:
         merged = {sym: round(w / total, 6) for sym, w in merged.items()}
+
+    # Hard cap EM+commodity to 20%
+    em_before = sum(w for s, w in merged.items()
+                    if any(s in FACTOR_BUCKETS.get(b, set()) for b in EM_COMMODITY_BUCKETS))
+    merged = _cap_em_commodity(merged)
+    em_after = sum(w for s, w in merged.items()
+                   if any(s in FACTOR_BUCKETS.get(b, set()) for b in EM_COMMODITY_BUCKETS))
+    if abs(em_before - em_after) > 0.005:
+        print(f"[Orchestrator] EM+commodity cap applied: {em_before:.1%} → {em_after:.1%}")
 
     return merged
 

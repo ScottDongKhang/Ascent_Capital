@@ -27,15 +27,10 @@ ROLLING_WINDOW    = 63  # trading days
 def _load_agent_pnl(agent_id: str) -> pd.Series:
     """
     Load daily returns for a specific agent from its PnL log.
-
-    us_equities: reads portfolio_value from logs/eod_log.jsonl
-    macro:       reads nav from logs/macro_pnl.jsonl
-    others:      reads nav from logs/{agent_id}_pnl.jsonl
+    Log paths are sourced from PNL_LOGS in forward_pnl_tracker — single source of truth.
     """
-    if agent_id == "us_equities":
-        log_path = Path("logs/eod_log.jsonl")
-    else:
-        log_path = Path(f"logs/{agent_id}_pnl.jsonl")
+    from ascent.monitoring.forward_pnl_tracker import PNL_LOGS
+    log_path = PNL_LOGS.get(agent_id, Path(f"logs/{agent_id}_pnl.jsonl"))
 
     if not log_path.exists():
         return pd.Series(dtype=float)
