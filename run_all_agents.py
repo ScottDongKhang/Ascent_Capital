@@ -128,7 +128,7 @@ def main():
     today               = date.today()
 
     # ── Startup validation: sector data must be present before agents spawn ───
-    from ascent.config.settings import UniverseConfig
+    from ascent.config.settings import UniverseConfig, get_config
     us_symbols = UniverseConfig().symbols
     validate_sector_data(us_symbols, skip=skip_sector_check)
 
@@ -137,6 +137,20 @@ def main():
     print(f"# Date:  {today}")
     print(f"# Mode:  {'DRY RUN' if dry_run else 'LIVE'}")
     print(f"{'#'*60}\n")
+
+    # ── Step 0: Centralized data ingestion — runs before all agents ──────────
+    # Fetches all symbols (all universes) in one parallel pass. Agents read
+    # from cache instead of calling yfinance individually. If the hub fails,
+    # agents fall back to their own fetches — no abort.
+    from ascent.data.hub import run_hub
+    cfg = get_config()
+    hub_manifest = run_hub(
+        start_date=cfg.backtest.start_date,
+        end_date=today.isoformat(),
+    )
+    if hub_manifest.get("status") != "ok":
+        print(f"[Hub] WARNING: hub failed ({hub_manifest.get('error', 'unknown')}) "
+              "— agents will fetch data individually")
 
     # ── Import agents (lazy, after startup validation) ───────────────────────
     from agents.us_equities_agent import run_us_equities_agent
@@ -328,6 +342,52 @@ def main():
     _log_run(today, merged_weights, agent_outputs, dry_run)
 
 
+def _log_holdings(today):
+    """
+    Snapshot actual Alpaca positions + account equity to logs/holdings_log.jsonl.
+    Called every run regardless of rebalance/non-rebalance.
+    Fails silently if Alpaca is unreachable.
+    """
+    log_path = Path("logs/holdings_log.jsonl")
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        from ascent.execution.alpaca_broker import get_positions, get_account
+        pos = get_positions()
+        acct = get_account()
+        equity    = float(acct.get("equity", 0))
+        last_eq   = float(acct.get("last_equity", equity) or equity)
+        day_ret   = (equity / last_eq - 1) if last_eq else 0.0
+
+        positions = []
+        if not pos.empty:
+            for _, row in pos.sort_values("market_value", ascending=False).iterrows():
+                positions.append({
+                    "symbol":        row["symbol"],
+                    "qty":           round(float(row["qty"]), 4),
+                    "market_value":  round(float(row["market_value"]), 2),
+                    "current_price": round(float(row["current_price"]), 4),
+                    "weight":        round(float(row["weight"]), 4),
+                })
+
+        entry = {
+            "date":           today.isoformat(),
+            "timestamp":      datetime.now().isoformat(),
+            "equity":         round(equity, 2),
+            "cash":           round(float(acct.get("cash", 0)), 2),
+            "day_return":     round(day_ret, 6),
+            "n_positions":    len(positions),
+            "positions":      positions,
+        }
+        with open(log_path, "a") as f:
+            f.write(json.dumps(entry) + "\n")
+
+        print(f"[Runner] Holdings logged — {len(positions)} positions, "
+              f"equity ${equity:,.2f} ({day_ret:+.2%} today)")
+
+    except Exception as e:
+        print(f"[Runner] Holdings log skipped ({e})")
+
+
 def _log_run(today, merged_weights, agent_outputs, dry_run):
     def _regime_str(val):
         if val is None:
@@ -361,6 +421,10 @@ def _log_run(today, merged_weights, agent_outputs, dry_run):
         f.write(json.dumps(run_log) + "\n")
 
     print(f"\n[Runner] Run logged to {log_path}")
+
+    # Always snapshot actual Alpaca positions
+    _log_holdings(today)
+
     print(f"[Runner] Done.\n")
 
 

@@ -44,6 +44,20 @@ def volatility_ratio(close: pd.DataFrame, short_window: int = 10, long_window: i
     return vol_short / vol_long.replace(0, np.nan)
 
 
+def vol_of_vol(close: pd.DataFrame, vol_window: int = 21, vov_window: int = 21) -> pd.DataFrame:
+    """Rolling std of realized vol — measures how erratic vol itself is.
+    Low vov = stable vol regime (historically outperforms high-vov names)."""
+    rv = rolling_volatility(close, vol_window)
+    return rv.rolling(vov_window, min_periods=max(vov_window // 2, 5)).std()
+
+
+def vol_trend(close: pd.DataFrame, vol_window: int = 21, trend_window: int = 10) -> pd.DataFrame:
+    """Change in realized vol over trend_window days.
+    Negative = vol declining (bullish for vol-regime alpha)."""
+    rv = rolling_volatility(close, vol_window)
+    return rv.diff(trend_window)
+
+
 # ── Volume / Liquidity Features ────────────────────────────────────────
 
 def volume_ratio(volume: pd.DataFrame, window: int) -> pd.DataFrame:
@@ -150,6 +164,8 @@ def build_all_features(
         features[f"vol_{w}d"] = rolling_volatility(close, w)
 
     features["vol_ratio_10_63"] = volatility_ratio(close, 10, 63)
+    features["vol_of_vol_21d"]  = vol_of_vol(close, vol_window=21, vov_window=21)
+    features["vol_trend_10d"]   = vol_trend(close, vol_window=21, trend_window=10)
 
     # Volume / liquidity
     for w in [10, 21]:

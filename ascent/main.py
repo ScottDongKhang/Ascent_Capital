@@ -38,6 +38,21 @@ def load_or_fetch_prices(cfg: Config, live: bool) -> tuple[pd.DataFrame, str]:
     stale_days       = _LIVE_STALE_DAYS if live else _SIM_STALE_DAYS
     required_symbols = cfg.universe.symbols + [cfg.universe.benchmark]
 
+    # Hub bypass: if the centralized hub ran recently, trust its data and skip
+    # validate_cache. validate_cache would fail because required_end=today but
+    # today's close isn't available until after market close. The hub guarantees
+    # data is as fresh as it can be — re-fetching wastes time and hits rate limits.
+    if live:
+        try:
+            from ascent.data.hub import hub_is_fresh
+            if hub_is_fresh():
+                df = load_parquet(cache_name)
+                if not df.empty:
+                    print("[Data] Hub data is fresh — loading prices_live.parquet (skipping re-fetch)")
+                    return df, cache_name
+        except Exception:
+            pass  # fall through to validate_cache path
+
     ok, reason = validate_cache(
         cache_name,
         required_start=cfg.backtest.start_date,
@@ -294,6 +309,10 @@ def run_pipeline(
     print("\n" + "=" * 70)
     print("  STEP 3: ALPHA GENERATION")
     print("=" * 70)
+
+    # Inject 21-day forward returns into features dict so ML sleeve can train
+    if "fwd_ret_21d" in targets:
+        features["targets"] = targets["fwd_ret_21d"]
 
     alpha = build_alpha_stack(features, regime_signal=None)
     print(f"[Alpha] Composite alpha computed: {alpha.shape}")

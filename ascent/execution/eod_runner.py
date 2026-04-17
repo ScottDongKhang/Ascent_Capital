@@ -668,7 +668,7 @@ def run_eod_with_weights(merged_weights: dict, run_date=None, dry_run: bool = Fa
             print(f"[EOD-Multi] Debate failed ({_debate_exc}) -- proceeding without debate gate")
 
     # 2. Get current positions and portfolio value
-    from ascent.execution.alpaca_broker import get_positions, get_portfolio_value, cancel_all_orders, submit_order
+    from ascent.execution.alpaca_broker import get_positions, get_portfolio_value, cancel_all_orders, submit_order, close_position
     portfolio_value   = get_portfolio_value()
     current_positions = get_positions()
     print(f"[EOD-Multi] Portfolio value: ${portfolio_value:,.2f}")
@@ -677,9 +677,27 @@ def run_eod_with_weights(merged_weights: dict, run_date=None, dry_run: bool = Fa
     # 3. Convert merged_weights dict to Series for order engine
     target_weights = _pd.Series(merged_weights)
 
-    # 4. Compute orders
+    # 4. Compute orders — wire cost model features from price cache
     from ascent.execution.order_engine import compute_orders, summarise_orders
-    orders, diff_df = compute_orders(target_weights, current_positions, portfolio_value)
+    from ascent.execution.cost_model import extract_cost_features
+    _cost_features = {}
+    try:
+        import pathlib as _pl
+        _price_cache = _pl.Path("data_cache/prices_live.parquet")
+        if _price_cache.exists():
+            _prices_raw = _pd.read_parquet(_price_cache)
+            # Build dollar_volume DataFrame: dates × symbols
+            _prices_raw["date"] = _pd.to_datetime(_prices_raw["date"]).dt.tz_localize(None)
+            _dv = _prices_raw.pivot_table(
+                index="date", columns="symbol", values="dollar_volume", aggfunc="last"
+            )
+            _cost_features = extract_cost_features({"dollar_volume": _dv})
+            print(f"[EOD-Multi] Cost features loaded: {len(_cost_features.get('dollar_vol_21d', {}))} symbols")
+    except Exception as _cf_exc:
+        print(f"[EOD-Multi] Cost features unavailable ({_cf_exc}) — cost filtering inactive")
+
+    orders, diff_df = compute_orders(target_weights, current_positions, portfolio_value,
+                                     features=_cost_features or None)
 
     if not orders:
         print("[EOD-Multi] No orders needed — portfolio matches targets")
@@ -751,8 +769,13 @@ def run_eod_with_weights(merged_weights: dict, run_date=None, dry_run: bool = Fa
             skipped.append(order.symbol)
             continue
         try:
-            submit_order(order.symbol, qty=qty, side=order.side)
-            print(f"[EOD-Multi] {order.side.upper()} {qty:.4f} {order.symbol}  (${order.dollar_amount:,.0f})")
+            # Full liquidation: use close_position() to avoid qty rounding mismatch → 403
+            if order.side == "sell" and order.target_weight == 0.0:
+                close_position(order.symbol)
+                print(f"[EOD-Multi] CLOSE {order.symbol}  (${order.dollar_amount:,.0f})")
+            else:
+                submit_order(order.symbol, qty=qty, side=order.side)
+                print(f"[EOD-Multi] {order.side.upper()} {qty:.4f} {order.symbol}  (${order.dollar_amount:,.0f})")
             executed.append(order.symbol)
         except Exception as _e:
             print(f"[EOD-Multi] {order.symbol} FAILED: {_e}")

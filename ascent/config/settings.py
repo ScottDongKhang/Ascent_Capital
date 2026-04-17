@@ -77,12 +77,33 @@ class UniverseConfig:
         # Mid-cap quality additions — strong factor characteristics
         "DECK", "AXON", "FICO", "WST", "POOL", "TRGP", "ELV", "HUM",
         "MPWR", "IDXX", "FANG", "CASY", "ROP", "ODFL", "FAST",
-        # Removed/delisted — included for survivorship bias reduction
-        # universe.py excludes these after their removal dates in walk-forward
-        "XRX", "HP", "NOV", "TIF", "FLIR", "XLNX", "PBCT", "CERN",
-        "CTXS", "TWTR", "DRE", "FBHS", "IPGP", "SIVB", "FRC", "ATVI",
-        "DISH", "SJM", "BIO", "SEDG", "HAS", "AAL", "XRAY", "BEN",
-        "PARA", "WBA", "INTC", "UA", "LUMN", "VNO", "ALK", "IVZ",
+        # Still-trading legacy names (weak but live — kept for factor diversity)
+        "XRX", "HP", "NOV", "IPGP", "SJM", "BIO", "SEDG", "HAS",
+        "AAL", "XRAY", "BEN", "UA", "LUMN", "VNO", "ALK", "IVZ",
+        # New additions — fill sector gaps and add stronger factor signals
+        # Financial data/analytics (previously zero coverage — MSCI/MCO/SPGI are oligopolies)
+        "MSCI", "MCO", "SPGI",
+        # Cybersecurity (PANW alone was thin — CRWD has best momentum in sector)
+        "CRWD",
+        # Medical devices (ISRG alone was thin — SYK has strongest consistent trend)
+        "SYK",
+        # Strong momentum signals the system was blind to
+        "APP",   # AppLovin — adtech, top momentum name
+        "CMG",   # Chipotle — quality consumer, long-term compounder
+        "TMUS",  # T-Mobile — telecom with growth, different profile from T
+        # Quality industrials with pricing power (ITW/TDG compound through all regimes)
+        "ITW",   # Illinois Tool Works — 80/20 model, best margins in industrials
+        "TDG",   # TransDigm — aerospace, extreme pricing power
+        # Healthcare services gap (no large hospital exposure)
+        "HCA",   # HCA Healthcare — largest for-profit hospital, defensive
+        # Semiconductor equipment (adjacent to chips but different cycle)
+        "KLAC",  # KLA Corp — wafer inspection duopoly
+        # Insurance brokerage (recession-resistant, different from CB/AXP)
+        "AJG",   # Arthur J. Gallagher — fee-based, very defensive cash flows
+        # Defensive utilities gap (water is most defensive utility class)
+        "AWK",   # American Water Works — regulated monopoly, no commodity exposure
+        # Healthcare REIT (different from PLD/EQIX/SPG — senior housing + medical)
+        "WELL",  # Welltower — healthcare real estate, demographic tailwind
     ])
     benchmark: str = "SPY"
 

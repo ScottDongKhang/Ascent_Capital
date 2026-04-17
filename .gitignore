@@ -9,3 +9,4 @@ build/
 .pytest_cache/
 .venv/
 .worktrees/
+.streamlit/secrets.toml

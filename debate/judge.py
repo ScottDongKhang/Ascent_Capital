@@ -81,13 +81,13 @@ def run_judge(
     try:
         raw = generate_structured(system_prompt, context, temperature=0.3, max_tokens=800)
 
-        # Strip markdown fences if present
-        raw = raw.strip()
-        if raw.startswith("```"):
-            raw = raw.split("\n", 1)[-1]
-        if raw.endswith("```"):
-            raw = raw.rsplit("```", 1)[0]
-        raw = raw.strip()
+        # Extract the JSON object by brace-finding — robust against markdown fences,
+        # trailing text, or any preamble the LLM adds before/after the JSON block.
+        start = raw.find("{")
+        end   = raw.rfind("}") + 1
+        if start == -1 or end == 0:
+            raise ValueError(f"No JSON object found in response (len={len(raw)})")
+        raw = raw[start:end]
 
         verdict = json.loads(raw)
 

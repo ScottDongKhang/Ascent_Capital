@@ -9,14 +9,14 @@ import pandas as pd
 from ascent.alpha.trend import trend_alpha
 from ascent.alpha.meanrev import meanrev_alpha
 from ascent.alpha.statarb import statarb_alpha
-from ascent.alpha.ml_sleeve import build_ml_alpha
+from ascent.alpha.ml_sleeve import build_ml_alpha, build_ml_alpha_cpcv
 
 log = logging.getLogger(__name__)
 
 DEFAULT_ALPHA_WEIGHTS = {
-    "trend":      0.70,
+    "trend":      0.65,
     "meanrev":    0.05,
-    "volatility": 0.00,
+    "volatility": 0.05,
     "statarb":    0.15,
     "ml":         0.10,
 }
@@ -76,11 +76,23 @@ def build_alpha_stack(features, alpha_weights=None, regime_signal=None, agent_id
             log.info("meanrev alpha loaded shape=%s", mr.shape)
     except Exception as exc:
         log.error("meanrev alpha failed: %s", exc)
-    if "vol_21d" in features:
+    if "vol_of_vol_21d" in features and "vol_trend_10d" in features:
+        try:
+            # Vol-regime alpha: long names with declining vol AND stable vol-of-vol.
+            # Signal = -(vol_trend) / (vol_of_vol + epsilon)
+            # Positive when vol is falling stably; orthogonal to raw momentum.
+            vov   = features["vol_of_vol_21d"].copy().replace(0, np.nan)
+            vtrnd = features["vol_trend_10d"].copy()
+            vol_alpha = _cs_normalize(-vtrnd / (vov + 1e-6))
+            alphas["volatility"] = vol_alpha
+            log.info("vol-regime alpha loaded shape=%s", vol_alpha.shape)
+        except Exception as exc:
+            log.error("vol-regime alpha failed: %s", exc)
+    elif "vol_21d" in features:
         try:
             vol_alpha = -_cs_normalize(features["vol_21d"].copy())
             alphas["volatility"] = vol_alpha
-            log.info("volatility alpha loaded shape=%s", vol_alpha.shape)
+            log.info("volatility alpha (low-vol fallback) loaded shape=%s", vol_alpha.shape)
         except Exception as exc:
             log.error("volatility alpha failed: %s", exc)
     try:
@@ -94,34 +106,19 @@ def build_alpha_stack(features, alpha_weights=None, regime_signal=None, agent_id
     try:
         if "targets" in features:
             targets_df = features["targets"]
-            dates = sorted(alphas[list(alphas.keys())[0]].index)
-            n_total = len(dates)
-            # OOS split: train on first 80%, predict only on last 20%.
-            # Never predict on training dates — that was in-sample bias.
-            n_train = int(n_total * 0.80)
-            if n_train >= 63 and (n_total - n_train) >= 10:
-                train_end     = str(dates[n_train - 1])[:10]
-                predict_start = str(dates[n_train])[:10]
-                predict_end   = str(dates[-1])[:10]
-                ml = build_ml_alpha(
-                    features=features,
-                    targets=targets_df,
-                    train_end=train_end,
-                    predict_start=predict_start,
-                    predict_end=predict_end,
-                    agent_id=agent_id,
-                )
-                if not ml.empty:
-                    alphas["ml"] = ml
-                    log.info("ML sleeve loaded shape=%s (OOS: %s → %s)",
-                             ml.shape, predict_start, predict_end)
-                else:
-                    log.warning("ML sleeve returned empty")
+            # Phase 3a: CPCV replaces the 80/20 split.
+            # build_ml_alpha_cpcv uses C(6,2)=15 purged folds with 5-day embargo.
+            # Returns empty DF (and logs reason) if reliability guards fail.
+            ml = build_ml_alpha_cpcv(
+                features=features,
+                targets=targets_df,
+                agent_id=agent_id,
+            )
+            if not ml.empty:
+                alphas["ml"] = ml
+                log.info("ML sleeve loaded shape=%s (CPCV OOS)", ml.shape)
             else:
-                log.warning(
-                    "ML sleeve skipped — insufficient data for OOS split "
-                    "(need ≥63 train + ≥10 predict, have %d total)", n_total
-                )
+                log.warning("ML sleeve returned empty (CPCV reliability guard or insufficient data)")
         else:
             log.warning("ML sleeve skipped - targets not in features dict")
     except Exception as exc:

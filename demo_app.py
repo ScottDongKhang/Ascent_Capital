@@ -15,6 +15,13 @@ import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+# Load .env so ANTHROPIC_API_KEY is available
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).parent / ".env")
+except ImportError:
+    pass
+
 # ── Page config ────────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="Ascent Capital",
@@ -102,15 +109,6 @@ st.markdown("""
     border: none; border-top: 1px solid #222; margin: 24px 0;
   }
 
-  /* Neuroplasticity table */
-  .np-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  .np-table th { color: #888; font-weight: 600; font-size: 10px; letter-spacing: 1px;
-                 text-transform: uppercase; padding: 6px 12px; text-align: left; border-bottom: 1px solid #222; }
-  .np-table td { padding: 8px 12px; color: #D8D8D8; border-bottom: 1px solid #1A1A1A; }
-  .np-shift-up { color: #27AE60; }
-  .np-shift-down { color: #E74C3C; }
-  .np-neutral { color: #888; }
-
   /* Confidence bar */
   .conf-bar-bg {
     background: #222; border-radius: 3px; height: 6px; margin-top: 6px;
@@ -155,23 +153,14 @@ REGIME_CONFIG = {
     },
 }
 
-BASE_SLEEVES = {
-    "Trend": 0.70, "Stat-Arb": 0.15, "Mean Rev": 0.05, "ML (XGBoost)": 0.10
-}
-
-# Regime-aware sleeve adjustments (honest: trend-heavy in stress, ML reduced)
-SLEEVE_ADJUSTMENTS = {
-    "calm_bull":  {"Trend": 0.00,  "Stat-Arb": 0.00,  "Mean Rev": 0.00,  "ML (XGBoost)": 0.00},
-    "stressed":   {"Trend": +0.08, "Stat-Arb": -0.03, "Mean Rev": +0.02, "ML (XGBoost)": -0.07},
-    "crisis":     {"Trend": +0.15, "Stat-Arb": -0.08, "Mean Rev": +0.03, "ML (XGBoost)": -0.10},
-    "uncertain":  {"Trend": +0.05, "Stat-Arb": -0.02, "Mean Rev": 0.00,  "ML (XGBoost)": -0.03},
-}
-
 PORTFOLIO_PRESETS = {
-    "Current Ascent (Apr 14)": {
-        "GLD": 0.095, "CAT": 0.063, "EQIX": 0.063, "JNJ": 0.063,
-        "NEE": 0.061, "NEM": 0.063, "T": 0.063, "TRGP": 0.063,
-        "CASY": 0.063, "CB": 0.036, "HYG": 0.044, "PDBC": 0.045, "VIXY": 0.050,
+    "Current Ascent (Apr 15)": {
+        "EWY": 0.108, "PDBC": 0.093, "CASY": 0.060, "CAT": 0.060,
+        "EQIX": 0.060, "MPWR": 0.060, "TRGP": 0.060, "HYG": 0.045,
+        "BIL": 0.045, "DBB": 0.045, "EWZ": 0.048, "EWT": 0.048,
+        "NEM": 0.044, "LQD": 0.030, "MRK": 0.032, "IFRA": 0.035,
+        "VNQ": 0.029, "PAVE": 0.025, "AMZN": 0.023, "GOOGL": 0.023,
+        "CB": 0.019, "EWC": 0.006,
     },
     "Tech-Heavy": {
         "AAPL": 0.15, "MSFT": 0.13, "NVDA": 0.12, "GOOGL": 0.10,
@@ -233,16 +222,26 @@ def get_demo_args(regime: str, vix: float, top_holdings: list, spy_momentum: str
 LIVE_MODE = False
 _agents_loaded = False
 
-def _try_load_agents():
+
+def _get_secret(key: str) -> str:
+    """Read from st.secrets (Streamlit Cloud) with fallback to env var."""
+    try:
+        return st.secrets.get(key, "")
+    except Exception:
+        return os.environ.get(key, "")
+
+
+def _try_load_agents() -> bool:
+    """Return True if API key is available and debate agents can be imported."""
     global LIVE_MODE, _agents_loaded
     if _agents_loaded:
         return LIVE_MODE
     _agents_loaded = True
     try:
-        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        api_key = _get_secret("ANTHROPIC_API_KEY")
         if not api_key:
             return False
-        import anthropic  # noqa
+        os.environ["ANTHROPIC_API_KEY"] = api_key  # make available to LLM client
         from debate.agents import run_bull_agent  # noqa
         LIVE_MODE = True
         return True
@@ -314,66 +313,6 @@ def verdict_card(verdict: dict) -> str:
 </div>"""
 
 
-# ── Helper: neuroplasticity card ───────────────────────────────────────────────
-def neuroplasticity_card(regime: str, gross_exposure: float) -> str:
-    adj = SLEEVE_ADJUSTMENTS.get(regime, SLEEVE_ADJUSTMENTS["uncertain"])
-    rc = REGIME_CONFIG[regime]
-    spy_overlay = "0.70× applied (SPY < 200-day MA)" if regime in ("stressed", "crisis") else "1.00× (SPY above 200-day MA)"
-
-    rows = ""
-    for sleeve, base in BASE_SLEEVES.items():
-        delta = adj.get(sleeve, 0.0)
-        adjusted = base + delta
-        if delta > 0:
-            shift = f'<span class="np-shift-up">▲ +{delta:.0%}</span>'
-        elif delta < 0:
-            shift = f'<span class="np-shift-down">▼ {delta:.0%}</span>'
-        else:
-            shift = '<span class="np-neutral">—</span>'
-        rows += f"""
-        <tr>
-          <td>{sleeve}</td>
-          <td>{base:.0%}</td>
-          <td>{adjusted:.0%}</td>
-          <td>{shift}</td>
-        </tr>"""
-
-    return f"""
-<div class="ac-card ac-card-gold">
-  <div class="ac-label ac-label-gold">Neuroplasticity — Regime Adaptation Active</div>
-  <div class="metric-row" style="margin-bottom:16px;">
-    <div class="metric-box">
-      <div class="metric-label">Regime</div>
-      <div class="metric-value" style="font-size:15px;color:{rc['color']}">{regime.replace('_',' ').title()}</div>
-    </div>
-    <div class="metric-box">
-      <div class="metric-label">Gross Exposure</div>
-      <div class="metric-value">{gross_exposure:.0%}</div>
-    </div>
-    <div class="metric-box">
-      <div class="metric-label">Max Position</div>
-      <div class="metric-value">{rc['max_weight']:.0%}</div>
-    </div>
-    <div class="metric-box">
-      <div class="metric-label">SPY Overlay</div>
-      <div class="metric-value" style="font-size:13px;">{spy_overlay.split('(')[0].strip()}</div>
-    </div>
-  </div>
-  <table class="np-table">
-    <tr>
-      <th>Alpha Sleeve</th>
-      <th>Base Weight</th>
-      <th>Adapted Weight</th>
-      <th>Shift</th>
-    </tr>
-    {rows}
-  </table>
-  <div class="ac-muted" style="margin-top:12px;">
-    Sleeve shifts reflect regime-calibrated alpha allocation. ML sleeve downweighted in stress/crisis — model trained on calm-bull distributions loses predictive power in regime transitions.
-  </div>
-</div>"""
-
-
 # ── SIDEBAR ────────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("""
@@ -405,22 +344,12 @@ with st.sidebar:
     preset_name = st.selectbox("Preset", list(PORTFOLIO_PRESETS.keys()))
     weights = PORTFOLIO_PRESETS[preset_name].copy()
 
-    st.markdown('<div class="sidebar-section">System Parameters</div>', unsafe_allow_html=True)
-
-    neuroplasticity = st.toggle("Neuroplasticity", value=True)
-
-    aggressiveness = st.slider(
-        "Agent Aggressiveness",
-        min_value=1, max_value=5, value=3,
-        help="Higher = agents take stronger positions and challenge each other more forcefully.",
-    )
-
     show_round2 = st.toggle("Show Round 2 Rebuttals", value=True)
 
     st.markdown('<div class="sidebar-section">Mode</div>', unsafe_allow_html=True)
     live_available = _try_load_agents()
     if live_available:
-        st.success("Live LLM — real agent calls")
+        st.success("Live LLM — real Claude calls")
     else:
         st.info("Demo mode — scenario-aware arguments")
 
@@ -466,19 +395,19 @@ def _fallback_verdict(regime: str, vix: float) -> dict:
 
 # ── MAIN PANEL ─────────────────────────────────────────────────────────────────
 st.markdown("""
-<div style="margin-bottom:24px;">
+<div style="margin-bottom:20px;">
   <div style="color:#C9A84C;font-size:11px;letter-spacing:3px;text-transform:uppercase;">
     Ascent Capital — Decision Engine
   </div>
-  <div style="color:#888;font-size:12px;margin-top:4px;">
-    Multi-agent debate layer · Pre-rebalance analysis · Regime-adaptive
+  <div style="color:#C0C0C0;font-size:14px;margin-top:6px;line-height:1.6;">
+    Before every rebalance, 5 AI analysts debate the proposed portfolio.
+    Pick a scenario → run the debate → get a verdict that gates execution.
   </div>
 </div>
 """, unsafe_allow_html=True)
 
 # Portfolio summary
 rc = REGIME_CONFIG[regime]
-gross_exposure = rc["risk_multiplier"] if neuroplasticity else 1.0
 
 col1, col2 = st.columns([3, 2])
 
@@ -489,15 +418,13 @@ with col1:
         f"border-bottom:1px solid #1E1E1E;font-size:13px;'>"
         f"<span style='color:#D0D0D0;'>{sym}</span>"
         f"<span style='color:#C9A84C;font-weight:600;'>{w:.1%}</span></div>"
-        for sym, w in top_holdings[:8]
+        for sym, w in top_holdings
     )
-    if len(top_holdings) > 8:
-        holdings_html += f"<div style='color:#555;font-size:11px;margin-top:6px;'>+{len(top_holdings)-8} more positions</div>"
 
     st.markdown(f"""
     <div class="ac-card">
       <div class="ac-label ac-label-gold">Portfolio — {preset_name}</div>
-      {holdings_html}
+      <div style="max-height:260px;overflow-y:auto;">{holdings_html}</div>
     </div>""", unsafe_allow_html=True)
 
 with col2:
@@ -520,92 +447,100 @@ with col2:
     </div>
     """, unsafe_allow_html=True)
 
-# Neuroplasticity card
-if neuroplasticity:
-    st.markdown(neuroplasticity_card(regime, gross_exposure), unsafe_allow_html=True)
+st.markdown("<br>", unsafe_allow_html=True)
 
-st.markdown("<hr class='ac-sep'>", unsafe_allow_html=True)
+# ── Tabs ───────────────────────────────────────────────────────────────────────
+tab_debate, tab_arch = st.tabs(["▶  Run Debate", "⬡  How It Works"])
 
-# ── Debate section ─────────────────────────────────────────────────────────────
-if not run_btn:
-    st.markdown("""
-    <div style="text-align:center;padding:60px 0;color:#444;">
-      <div style="font-size:36px;margin-bottom:12px;">▶</div>
-      <div style="font-size:14px;">Configure a scenario and run the debate</div>
-    </div>
-    """, unsafe_allow_html=True)
-else:
-    portfolio_state = build_portfolio_state(regime, weights, vix, spy_momentum)
-    top_symbols = [s for s, _ in top_holdings[:5]]
-    demo_args = get_demo_args(regime, vix, top_symbols, spy_momentum)
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 1 — DEBATE
+# ══════════════════════════════════════════════════════════════════════════════
+with tab_debate:
+    if not run_btn:
+        st.markdown("""
+        <div style="text-align:center;padding:60px 0;color:#444;">
+          <div style="font-size:36px;margin-bottom:12px;">▶</div>
+          <div style="font-size:14px;color:#555;">Configure a scenario in the sidebar, then click <b style="color:#C9A84C;">Run Debate</b></div>
+          <div style="font-size:12px;color:#333;margin-top:10px;">Bull · Bear · Devil's Advocate · Regime Specialist · Quant Sanity → Judge</div>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        portfolio_state = build_portfolio_state(regime, weights, vix, spy_momentum)
+        top_symbols = [s for s, _ in top_holdings[:5]]
+        demo_args = get_demo_args(regime, vix, top_symbols, spy_momentum)
 
-    st.markdown("""
-    <div style="color:#C9A84C;font-size:10px;letter-spacing:2px;text-transform:uppercase;margin-bottom:16px;">
-      Round 1 — Initial Arguments
-    </div>""", unsafe_allow_html=True)
+        # Verdict placeholder at TOP — filled after all agents complete
+        st.markdown("""
+        <div style="color:#C9A84C;font-size:10px;letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;">
+          Verdict
+        </div>""", unsafe_allow_html=True)
+        verdict_ph = st.empty()
+        verdict_ph.markdown("""
+        <div class="ac-card" style="border-left:3px solid #333;opacity:0.4;text-align:center;padding:20px;">
+          <div style="color:#555;font-size:13px;">Running debate agents...</div>
+        </div>""", unsafe_allow_html=True)
 
-    # Placeholders for progressive rendering
-    bull_ph = st.empty()
-    bear_ph = st.empty()
-    devil_ph = st.empty()
-    regime_ph = st.empty()
-    quant_ph = st.empty()
+        st.markdown("<hr class='ac-sep'>", unsafe_allow_html=True)
+        st.markdown("""
+        <div style="color:#555;font-size:10px;letter-spacing:2px;text-transform:uppercase;margin-bottom:16px;">
+          Round 1 — Agent Arguments
+        </div>""", unsafe_allow_html=True)
 
-    # ── Bull ──
-    with st.spinner("Bull analyst..."):
-        if LIVE_MODE:
-            try:
-                from debate.agents import run_bull_agent
-                bull = run_bull_agent(portfolio_state)
-            except Exception as e:
+        bull_ph = st.empty()
+        bear_ph = st.empty()
+        devil_ph = st.empty()
+        regime_ph = st.empty()
+        quant_ph = st.empty()
+
+        with st.spinner("Bull analyst..."):
+            if LIVE_MODE:
+                try:
+                    from debate.agents import run_bull_agent
+                    bull = run_bull_agent(portfolio_state)
+                except Exception:
+                    bull = demo_args["bull"]
+            else:
+                time.sleep(0.4)
                 bull = demo_args["bull"]
-        else:
-            time.sleep(0.4)
-            bull = demo_args["bull"]
-    bull_ph.markdown(agent_card("Bull Analyst", "bull", bull), unsafe_allow_html=True)
+        bull_ph.markdown(agent_card("Bull Analyst", "bull", bull), unsafe_allow_html=True)
 
-    # ── Bear ──
-    with st.spinner("Bear analyst..."):
-        if LIVE_MODE:
-            try:
-                from debate.agents import run_bear_agent
-                bear = run_bear_agent(portfolio_state)
-            except Exception as e:
+        with st.spinner("Bear analyst..."):
+            if LIVE_MODE:
+                try:
+                    from debate.agents import run_bear_agent
+                    bear = run_bear_agent(portfolio_state)
+                except Exception:
+                    bear = demo_args["bear"]
+            else:
+                time.sleep(0.4)
                 bear = demo_args["bear"]
-        else:
-            time.sleep(0.4)
-            bear = demo_args["bear"]
-    bear_ph.markdown(agent_card("Bear Analyst", "bear", bear), unsafe_allow_html=True)
+        bear_ph.markdown(agent_card("Bear Analyst", "bear", bear), unsafe_allow_html=True)
 
-    # ── Devil's Advocate ──
-    with st.spinner("Devil's advocate..."):
-        if LIVE_MODE:
-            try:
-                from debate.agents import run_devils_advocate
-                devil = run_devils_advocate(portfolio_state)
-            except Exception as e:
+        with st.spinner("Devil's advocate..."):
+            if LIVE_MODE:
+                try:
+                    from debate.agents import run_devils_advocate
+                    devil = run_devils_advocate(portfolio_state)
+                except Exception:
+                    devil = demo_args["devil"]
+            else:
+                time.sleep(0.4)
                 devil = demo_args["devil"]
-        else:
-            time.sleep(0.4)
-            devil = demo_args["devil"]
-    devil_ph.markdown(agent_card("Devil's Advocate", "devil", devil), unsafe_allow_html=True)
+        devil_ph.markdown(agent_card("Devil's Advocate", "devil", devil), unsafe_allow_html=True)
 
-    # ── Regime Specialist ──
-    with st.spinner("Regime specialist..."):
-        if LIVE_MODE:
-            try:
-                from debate.agents import run_regime_specialist
-                regime_arg = run_regime_specialist(portfolio_state)
-            except Exception as e:
+        with st.spinner("Regime specialist..."):
+            if LIVE_MODE:
+                try:
+                    from debate.agents import run_regime_specialist
+                    regime_arg = run_regime_specialist(portfolio_state)
+                except Exception:
+                    regime_arg = demo_args["regime"]
+            else:
+                time.sleep(0.3)
                 regime_arg = demo_args["regime"]
-        else:
-            time.sleep(0.3)
-            regime_arg = demo_args["regime"]
-    regime_ph.markdown(agent_card("Regime Specialist", "regime", regime_arg), unsafe_allow_html=True)
+        regime_ph.markdown(agent_card("Regime Specialist", "regime", regime_arg), unsafe_allow_html=True)
 
-    # ── Quant Sanity ──
-    with st.spinner("Quant sanity check..."):
-        if LIVE_MODE or True:  # always run — pure Python, no LLM
+        with st.spinner("Quant sanity check..."):
             try:
                 from debate.agents import run_quant_sanity_check
                 quant_check = run_quant_sanity_check(portfolio_state)
@@ -618,68 +553,181 @@ else:
                     f"  ✓ Clean: {n} positions, sum={total:.4f}, "
                     f"max={max_sym} {max_w:.1%}"
                 )
-    quant_ph.markdown(agent_card("Quant Sanity", "quant", quant_check.replace("\n", "<br>")), unsafe_allow_html=True)
+        quant_ph.markdown(agent_card("Quant Sanity", "quant", quant_check.replace("\n", "<br>")), unsafe_allow_html=True)
 
-    # ── Round 2 ──
-    round1_args = {"bull": bull, "bear": bear, "devils_advocate": devil, "regime_specialist": regime_arg}
-    round2_args = {}
+        round1_args = {"bull": bull, "bear": bear, "devils_advocate": devil, "regime_specialist": regime_arg}
+        round2_args = {}
 
-    if show_round2:
-        st.markdown("""
-        <hr class="ac-sep">
-        <div style="color:#555;font-size:10px;letter-spacing:2px;text-transform:uppercase;margin-bottom:16px;">
-          Round 2 — Agents Rebut Each Other
-        </div>""", unsafe_allow_html=True)
+        if show_round2:
+            st.markdown("""
+            <hr class="ac-sep">
+            <div style="color:#555;font-size:10px;letter-spacing:2px;text-transform:uppercase;margin-bottom:16px;">
+              Round 2 — Agents Rebut Each Other
+            </div>""", unsafe_allow_html=True)
 
-        bull_r2_ph = st.empty()
-        bear_r2_ph = st.empty()
-        devil_r2_ph = st.empty()
+            bull_r2_ph = st.empty()
+            bear_r2_ph = st.empty()
+            devil_r2_ph = st.empty()
 
-        with st.spinner("Round 2..."):
+            with st.spinner("Round 2..."):
+                if LIVE_MODE:
+                    try:
+                        from debate.agents import run_bull_rebuttal, run_bear_rebuttal, run_devils_advocate_rebuttal
+                        bull_r2 = run_bull_rebuttal(portfolio_state, round1_args)
+                        bear_r2 = run_bear_rebuttal(portfolio_state, round1_args)
+                        devil_r2 = run_devils_advocate_rebuttal(portfolio_state, round1_args)
+                    except Exception:
+                        bull_r2 = "The bear's valuation concern ignores FCF yield. At these prices, we're buying quality at a discount to intrinsic value."
+                        bear_r2 = "The bull's FCF argument assumes steady-state. In a liquidity crunch, even quality names face forced selling. Quality is the last thing to go — not immune."
+                        devil_r2 = "The shared assumption: both sides think the market's regime classification agrees with ours. It doesn't. The market is already pricing crisis; we're positioned for stress. That gap is the real risk."
+                else:
+                    time.sleep(0.3)
+                    bull_r2 = f"The bear's duration concern is real but backward-looking. These positions weren't selected for rate sensitivity — they were selected for pricing power. That doesn't change with VIX at {vix:.0f}."
+                    bear_r2 = f"The bull concedes nothing on correlation risk. In the stress transitions I've modeled, even 'quality' names saw 0.78+ cross-correlation at the bottom. The diversification case is theoretical."
+                    devil_r2 = "Both sides are still arguing about direction. The real shared blind spot: liquidity. Three of these positions average under $200M daily volume. In a real exit scenario, we are the market."
+
+            round2_args = {"bull_rebuttal": bull_r2, "bear_rebuttal": bear_r2, "devils_advocate_rebuttal": devil_r2}
+            bull_r2_ph.markdown(agent_card("Bull — Rebuttal", "bull", bull_r2, round2=True), unsafe_allow_html=True)
+            bear_r2_ph.markdown(agent_card("Bear — Rebuttal", "bear", bear_r2, round2=True), unsafe_allow_html=True)
+            devil_r2_ph.markdown(agent_card("Devil's Advocate — Rebuttal", "devil", devil_r2, round2=True), unsafe_allow_html=True)
+
+        with st.spinner("Judge synthesizing verdict..."):
             if LIVE_MODE:
                 try:
-                    from debate.agents import run_bull_rebuttal, run_bear_rebuttal, run_devils_advocate_rebuttal
-                    bull_r2 = run_bull_rebuttal(portfolio_state, round1_args)
-                    bear_r2 = run_bear_rebuttal(portfolio_state, round1_args)
-                    devil_r2 = run_devils_advocate_rebuttal(portfolio_state, round1_args)
+                    from debate.judge import run_judge
+                    verdict = run_judge(
+                        bull, bear, devil, portfolio_state,
+                        regime_arg=regime_arg,
+                        quant_check=quant_check,
+                        round2_args=round2_args if show_round2 else None,
+                    )
                 except Exception:
-                    bull_r2 = f"Bull rebuttal: The bear's valuation concern ignores FCF yield. At these prices, we're buying quality at a discount to intrinsic value."
-                    bear_r2 = f"Bear rebuttal: The bull's FCF argument assumes steady-state. In a liquidity crunch, even quality names face forced selling. Quality is the last thing to go — not immune."
-                    devil_r2 = f"The shared assumption: both sides think the market's regime classification agrees with ours. It doesn't. The market is already pricing crisis; we're positioned for stress. That gap is the real risk."
+                    verdict = _fallback_verdict(regime, vix)
             else:
                 time.sleep(0.3)
-                bull_r2 = f"The bear's duration concern is real but backward-looking. These positions weren't selected for rate sensitivity — they were selected for pricing power. That doesn't change with VIX at {vix:.0f}."
-                bear_r2 = f"The bull concedes nothing on correlation risk. In the stress transitions I've modeled, even 'quality' names saw 0.78+ cross-correlation at the bottom. The diversification case is theoretical."
-                devil_r2 = f"Both sides are still arguing about direction. The real shared blind spot: liquidity. Three of these positions average under $200M daily volume. In a real exit scenario, we are the market."
-
-        round2_args = {"bull_rebuttal": bull_r2, "bear_rebuttal": bear_r2, "devils_advocate_rebuttal": devil_r2}
-        bull_r2_ph.markdown(agent_card("Bull — Rebuttal", "bull", bull_r2, round2=True), unsafe_allow_html=True)
-        bear_r2_ph.markdown(agent_card("Bear — Rebuttal", "bear", bear_r2, round2=True), unsafe_allow_html=True)
-        devil_r2_ph.markdown(agent_card("Devil's Advocate — Rebuttal", "devil", devil_r2, round2=True), unsafe_allow_html=True)
-
-    # ── Judge ──
-    st.markdown("<hr class='ac-sep'>", unsafe_allow_html=True)
-    with st.spinner("Judge synthesizing verdict..."):
-        if LIVE_MODE:
-            try:
-                from debate.judge import run_judge
-                verdict = run_judge(
-                    bull, bear, devil, portfolio_state,
-                    regime_arg=regime_arg,
-                    quant_check=quant_check,
-                    round2_args=round2_args if show_round2 else None,
-                )
-            except Exception:
                 verdict = _fallback_verdict(regime, vix)
-        else:
-            time.sleep(0.3)
-            verdict = _fallback_verdict(regime, vix)
 
-    st.markdown(verdict_card(verdict), unsafe_allow_html=True)
+        # Fill verdict placeholder at top
+        verdict_ph.markdown(verdict_card(verdict), unsafe_allow_html=True)
 
-    st.markdown(f"""
-    <div class="ac-muted" style="margin-top:20px;text-align:right;">
-      Ascent Capital · {date.today().strftime('%B %d, %Y')} ·
-      {'Live LLM' if LIVE_MODE else 'Demo mode'} ·
-      Neuroplasticity {'ON' if neuroplasticity else 'OFF'}
-    </div>""", unsafe_allow_html=True)
+        st.markdown(f"""
+        <div class="ac-muted" style="margin-top:20px;text-align:right;">
+          Ascent Capital · {date.today().strftime('%B %d, %Y')} · {'Live LLM' if LIVE_MODE else 'Demo mode'}
+        </div>""", unsafe_allow_html=True)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 2 — ARCHITECTURE
+# ══════════════════════════════════════════════════════════════════════════════
+with tab_arch:
+
+    def _card(num_label, color, title, body, demo=False):
+        badge = (
+            '<span style="background:#1E1A0E;border:1px solid #C9A84C;'
+            'border-radius:3px;padding:1px 6px;font-size:9px;font-weight:700;'
+            'color:#C9A84C;letter-spacing:1px;margin-left:8px;">THIS DEMO</span>'
+        ) if demo else ""
+        return (
+            f'<div style="background:#141414;border:1px solid #222;'
+            f'border-left:3px solid {color};border-radius:6px;padding:14px 16px;">'
+            f'<div style="font-size:9px;font-weight:700;letter-spacing:2px;'
+            f'text-transform:uppercase;color:{color};margin-bottom:6px;">{num_label}</div>'
+            f'<div style="font-size:13px;font-weight:600;color:#D0D0D0;margin-bottom:7px;">'
+            f'{title}{badge}</div>'
+            f'<div style="color:#666;font-size:12px;line-height:1.55;">{body}</div>'
+            f'</div>'
+        )
+
+    st.markdown(
+        '<div style="color:#888;font-size:12px;margin-bottom:16px;">'
+        'Ascent runs daily at 1:45 PM ET. Each layer gates the next — '
+        'a bad regime signal tightens position limits before a trade is proposed.'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+    # Row 1 — four stages
+    c1, c2, c3, c4 = st.columns(4)
+    c1.markdown(_card("1 · Data", "#C9A84C", "Prices + Macro",
+        "Yahoo Finance prices · FRED macro · Parquet cache · "
+        "point-in-time joins prevent look-ahead bias"), unsafe_allow_html=True)
+    c2.markdown(_card("2 · Regime", "#9B59B6", "HMM + Particle Filter",
+        "Best K=2–4 via walk-forward CV · 500-particle online filter · "
+        "emergency refit on SPY −3% + VIX&gt;30"), unsafe_allow_html=True)
+    c3.markdown(_card("3 · Alpha", "#C9A84C", "4-Sleeve Stack",
+        "Trend 70% · Stat-Arb 15% · Mean Rev 5% · ML 10% (CPCV-validated) · "
+        "regime shifts weights before blending"), unsafe_allow_html=True)
+    agents_body = (
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:4px;">'
+        + "".join([
+            f'<div style="background:#1A1A1A;border-radius:3px;padding:6px 8px;">'
+            f'<div style="font-size:9px;font-weight:700;color:#5DADE2;letter-spacing:0.5px;'
+            f'text-transform:uppercase;margin-bottom:2px;">{nm}</div>'
+            f'<div style="color:#555;font-size:10px;line-height:1.35;">{desc}</div></div>'
+            for nm, desc in [
+                ("US Equities", "135 large/mid-cap stocks · full alpha stack"),
+                ("Macro", "TLT · GLD · BIL · HYG · trend-only"),
+                ("International", "EEM · EWJ · EWZ · max 2 per region"),
+                ("Alternatives", "VNQ · VIXY · PDBC · 12% kill switch"),
+            ]
+        ])
+        + '</div>'
+    )
+    c4.markdown(_card("4 · Agents", "#2980B9", "4 Parallel Agents", agents_body), unsafe_allow_html=True)
+
+    st.markdown('<div style="text-align:center;color:#2A2A2A;font-size:18px;margin:6px 0;">↓</div>',
+                unsafe_allow_html=True)
+
+    # Row 2 — orchestrator (full width)
+    st.markdown(_card("5 · Orchestrator", "#27AE60", "Capital Allocation",
+        '<span style="color:#888;">Skill-weighted blend</span> (63-day Sharpe per agent) &nbsp;·&nbsp; '
+        '<span style="color:#888;">Conviction bonus</span> up to +15% when ≥2 agents share a name &nbsp;·&nbsp; '
+        '<span style="color:#888;">Correlation guard</span> caps cross-agent pairs at 0.70 &nbsp;·&nbsp; '
+        '<span style="color:#888;">Crisis veto</span> flips to 60% macro when US regime = crisis'),
+        unsafe_allow_html=True)
+
+    st.markdown('<div style="text-align:center;color:#2A2A2A;font-size:18px;margin:6px 0;">↓</div>',
+                unsafe_allow_html=True)
+
+    # Row 3 — debate (full width, highlighted)
+    debate_body = (
+        '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:10px;">'
+        + "".join([
+            f'<div style="background:#1A1A1A;border-radius:4px;padding:8px 10px;">'
+            f'<div style="font-size:9px;font-weight:700;letter-spacing:0.5px;'
+            f'text-transform:uppercase;color:{nc};margin-bottom:4px;">{nm}</div>'
+            f'<div style="color:#555;font-size:10px;line-height:1.4;">{desc}</div></div>'
+            for nm, nc, desc in [
+                ("Bull", "#27AE60", "Strongest case for executing · Claude Opus"),
+                ("Bear", "#E74C3C", "Case for cutting exposure · Claude Opus"),
+                ("Devil's Advocate", "#9B59B6", "Most dangerous assumption + Monte Carlo · Claude Opus"),
+                ("Regime Specialist", "#2980B9", "Sizing playbook for current regime · Claude Haiku"),
+                ("Quant Sanity", "#7F8C8D", "Hard checks: weight sum, concentration · Pure Python"),
+            ]
+        ])
+        + '</div>'
+        '<span style="background:#1A3A27;border:1px solid #27AE60;color:#2ECC71;'
+        'border-radius:3px;padding:3px 10px;font-size:10px;font-weight:700;margin-right:6px;">▲ Proceed</span>'
+        '<span style="background:#3A2A10;border:1px solid #F39C12;color:#F39C12;'
+        'border-radius:3px;padding:3px 10px;font-size:10px;font-weight:700;margin-right:6px;">◆ Reduce Size</span>'
+        '<span style="background:#3A1010;border:1px solid #E74C3C;color:#E74C3C;'
+        'border-radius:3px;padding:3px 10px;font-size:10px;font-weight:700;">■ Halt &amp; Review</span>'
+    )
+    st.markdown(_card("6 · Debate", "#9B59B6",
+        "5 Agents Argue → Round 2 Rebuttals → Judge Verdict", debate_body, demo=True),
+        unsafe_allow_html=True)
+
+    st.markdown('<div style="text-align:center;color:#2A2A2A;font-size:18px;margin:6px 0;">↓</div>',
+                unsafe_allow_html=True)
+
+    # Row 4 — execution + monitoring
+    c5, c6 = st.columns(2)
+    c5.markdown(_card("7 · Execution", "#E74C3C", "Alpaca Paper Trading",
+        "Almgren-Chriss market impact blocks &gt;10% ADV · "
+        "approval gate for orders &gt;2% NAV · kill switch at 8% warn / 15% halt"),
+        unsafe_allow_html=True)
+    c6.markdown(_card("8 · Monitoring", "#555555", "Closes the Loop",
+        "Forward PnL: yesterday's weights × today's returns · "
+        "63-day Sharpe per agent gates next allocation · "
+        "weekly sleeve variants shadow-tested 30 days before promoting"),
+        unsafe_allow_html=True)
