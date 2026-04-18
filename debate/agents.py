@@ -49,6 +49,13 @@ def _build_context(portfolio_state: dict) -> str:
         except Exception:
             pass
 
+    quant_ctx = portfolio_state.get("quant_context")
+    if quant_ctx and isinstance(quant_ctx, dict):
+        summary = quant_ctx.get("summary_text", "")
+        if summary:
+            lines.append("")
+            lines.append(summary)
+
     return "\n".join(lines)
 
 
@@ -71,6 +78,7 @@ def run_bull_agent(portfolio_state: dict) -> str:
         user_prompt=user_prompt,
         model=DEBATE_MODEL,
         temperature=0.6,
+        use_cache=True,
     )
 
 
@@ -93,6 +101,7 @@ def run_bear_agent(portfolio_state: dict) -> str:
         user_prompt=user_prompt,
         model=DEBATE_MODEL,
         temperature=0.6,
+        use_cache=True,
     )
 
 
@@ -138,6 +147,7 @@ def run_devils_advocate(portfolio_state: dict) -> str:
         user_prompt=user_prompt,
         model=DEBATE_MODEL,
         temperature=0.7,
+        use_cache=True,
     )
 
 
@@ -231,6 +241,7 @@ def run_regime_specialist(portfolio_state: dict) -> str:
             user_prompt=f"Regime context:\n{context}\n\nIs this portfolio right for this regime?",
             model=HAIKU_MODEL,
             temperature=0.4,
+            use_cache=True,
         )
     except Exception as e:
         return f"Regime specialist failed: {e}"

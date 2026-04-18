@@ -62,6 +62,7 @@ def chat_completion(
     model: str = DEFAULT_MODEL,
     max_tokens: int = 2000,
     temperature: float = 0.7,
+    use_cache: bool = False,
 ) -> str:
     """
     Send a chat completion request to Anthropic.
@@ -96,7 +97,12 @@ def chat_completion(
         messages=filtered_messages,
     )
     if system_prompt:
-        kwargs["system"] = system_prompt
+        if use_cache:
+            kwargs["system"] = [
+                {"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}
+            ]
+        else:
+            kwargs["system"] = system_prompt
 
     for attempt in range(_MAX_RETRIES):
         try:
@@ -116,6 +122,7 @@ def generate_structured(
     model: str = DEFAULT_MODEL,
     max_tokens: int = 2000,
     temperature: float = 0.4,
+    use_cache: bool = False,
 ) -> str:
     """
     Convenience wrapper for structured generation tasks.
@@ -125,7 +132,48 @@ def generate_structured(
         {"role": "system", "content": system_prompt},
         {"role": "user",   "content": user_prompt},
     ]
-    return chat_completion(messages, model=model, max_tokens=max_tokens, temperature=temperature)
+    return chat_completion(messages, model=model, max_tokens=max_tokens, temperature=temperature,
+                           use_cache=use_cache)
+
+
+def extended_thinking_completion(
+    messages,
+    model: str = DEFAULT_MODEL,
+    max_tokens: int = 5000,
+    thinking_budget: int = 3000,
+) -> str:
+    """Extended thinking mode. temperature=1 required by Anthropic API. Falls back on rejection."""
+    _check_api_key()
+    client = _get_client()
+    system_prompt = ""
+    filtered = []
+    for m in messages:
+        if m["role"] == "system":
+            system_prompt = m["content"]
+        else:
+            filtered.append(m)
+    kwargs = dict(
+        model=model,
+        max_tokens=max_tokens,
+        temperature=1,
+        thinking={"type": "enabled", "budget_tokens": thinking_budget},
+        messages=filtered,
+    )
+    if system_prompt:
+        kwargs["system"] = system_prompt
+    for attempt in range(_MAX_RETRIES):
+        try:
+            resp = client.messages.create(**kwargs)
+            text_parts = [b.text for b in resp.content if getattr(b, "type", "") == "text"]
+            return "\n".join(text_parts)
+        except Exception as e:
+            msg = str(e).lower()
+            if any(x in msg for x in ("thinking", "budget", "unsupported", "temperature")):
+                log.warning(f"[LLM] Extended thinking unavailable ({e}), falling back")
+                return chat_completion(messages, model=model, max_tokens=max_tokens, temperature=0.3)
+            if attempt == _MAX_RETRIES - 1:
+                raise
+            time.sleep(2 ** attempt)
 
 
 if __name__ == "__main__":
