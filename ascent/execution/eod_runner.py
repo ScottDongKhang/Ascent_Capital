@@ -62,7 +62,9 @@ def run_eod(dry_run: bool = False, as_of_date: str = None):
         if target_weights_all is None or target_weights_all.empty:
             raise ValueError("Pipeline returned no target weights.")
 
-        valid_rows  = target_weights_all[(target_weights_all > 0).any(axis=1)]
+        valid_rows = target_weights_all[(target_weights_all > 0).any(axis=1)]
+        if valid_rows.empty:
+            raise ValueError("Pipeline returned no positive-weight positions — aborting EOD run")
         latest_date = valid_rows.index[-1]
         target_weights_all = valid_rows
         target_weights     = target_weights_all.loc[latest_date]
@@ -105,8 +107,11 @@ def run_eod(dry_run: bool = False, as_of_date: str = None):
                         print(f"[EOD] WARNING: posture import failed ({_ie}) — using regime label as fallback")
                         posture = regime_label or "unknown"
             except Exception as _re:
-                # Bug 7 fix: log instead of silently swallowing
-                print(f"[EOD] WARNING: regime signal extraction failed ({type(_re).__name__}: {_re}) — regime/posture will be null")
+                print(f"[EOD] WARNING: regime signal extraction failed ({type(_re).__name__}: {_re}) — proceeding with posture=unknown")
+                try:
+                    log_error(run_date=today, error=f"regime_unavailable: {type(_re).__name__}: {_re}")
+                except Exception:
+                    pass
 
         print(f"[EOD] Regime: {regime_label}  |  Posture: {posture}")
 
@@ -135,7 +140,9 @@ def run_eod(dry_run: bool = False, as_of_date: str = None):
             if not current_positions.empty and "symbol" in current_positions.columns:
                 current_weights_dict = dict(zip(
                     current_positions["symbol"],
-                    current_positions.get("weight", [0.0] * len(current_positions))
+                    current_positions["weight"].tolist()
+                    if "weight" in current_positions.columns
+                    else [0.0] * len(current_positions)
                 ))
             signal_alerts = run_exit_alerts(current_weights_dict)
             if signal_alerts:
@@ -777,16 +784,21 @@ def run_eod_with_weights(merged_weights: dict, run_date=None, dry_run: bool = Fa
             _prices_raw = _pd.read_parquet(_price_cache)
             # Build dollar_volume DataFrame: dates × symbols
             _prices_raw["date"] = _pd.to_datetime(_prices_raw["date"]).dt.tz_localize(None)
-            _dv = _prices_raw.pivot_table(
-                index="date", columns="symbol", values="dollar_volume", aggfunc="last"
-            )
-            _cost_features = extract_cost_features({"dollar_volume": _dv})
-            print(f"[EOD-Multi] Cost features loaded: {len(_cost_features.get('dollar_vol_21d', {}))} symbols")
+            if "dollar_volume" not in _prices_raw.columns:
+                print("[EodRunner] WARNING: dollar_volume missing from prices cache — cost features disabled")
+            else:
+                _dv = _prices_raw.pivot_table(
+                    index="date", columns="symbol", values="dollar_volume", aggfunc="last"
+                )
+                _cost_features = extract_cost_features({"dollar_volume": _dv})
+                print(f"[EOD-Multi] Cost features loaded: {len(_cost_features.get('dollar_vol_21d', {}))} symbols")
     except Exception as _cf_exc:
         print(f"[EOD-Multi] Cost features unavailable ({_cf_exc}) — cost filtering inactive")
 
+    _required_cost_keys = {"dollar_volume"}
+    features_arg = _cost_features if (_cost_features and _required_cost_keys.issubset(_cost_features)) else None
     orders, diff_df = compute_orders(target_weights, current_positions, portfolio_value,
-                                     features=_cost_features or None)
+                                     features=features_arg)
 
     if not orders:
         print("[EOD-Multi] No orders needed — portfolio matches targets")
