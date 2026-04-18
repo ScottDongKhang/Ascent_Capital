@@ -1,0 +1,370 @@
+Fri Apr  3 17:17:14 PDT 2026: Starting EOD run...
+/Users/kdong/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+$TIF: possibly delisted; no timezone found
+$FLIR: possibly delisted; no timezone found
+$XLNX: possibly delisted; no timezone found
+$PBCT: possibly delisted; no timezone found
+$CERN: possibly delisted; no timezone found
+$CTXS: possibly delisted; no timezone found
+$TWTR: possibly delisted; no timezone found
+$DRE: possibly delisted; no timezone found
+$FBHS: possibly delisted; no timezone found
+$SIVB: possibly delisted; no timezone found
+$FRC: possibly delisted; no timezone found
+$ATVI: possibly delisted; no timezone found
+$DISH: possibly delisted; no timezone found
+$PARA: possibly delisted; no timezone found
+$WBA: possibly delisted; no timezone found
+Model is not converging.  Current: -5786.166917540105 is not greater than -5786.166902307616. Delta is -1.5232489204208832e-05
+Model is not converging.  Current: -5792.138679519633 is not greater than -5792.136936014886. Delta is -0.0017435047475373722
+Model is not converging.  Current: -4245.577917939861 is not greater than -4245.5776580516595. Delta is -0.0002598882019810844
+Model is not converging.  Current: -4245.577997308315 is not greater than -4245.577679297349. Delta is -0.00031801096611161483
+Model is not converging.  Current: -5511.59970053618 is not greater than -5511.587899697422. Delta is -0.011800838758063037
+Model is not converging.  Current: -4931.1731088293 is not greater than -4931.173082142285. Delta is -2.668701472430257e-05
+Model is not converging.  Current: -4639.937392854238 is not greater than -4639.937275784803. Delta is -0.00011706943496392341
+Model is not converging.  Current: -5924.0578042977295 is not greater than -5923.894225419887. Delta is -0.16357887784215563
+Model is not converging.  Current: -5925.181586104614 is not greater than -5925.079851807077. Delta is -0.10173429753740493
+Model is not converging.  Current: -6587.471007044676 is not greater than -6587.448820818122. Delta is -0.02218622655436775
+Model is not converging.  Current: -6148.520982811403 is not greater than -6148.501533657239. Delta is -0.019449154164249194
+Model is not converging.  Current: -6201.180857412854 is not greater than -6201.180614519103. Delta is -0.0002428937505101203
+Model is not converging.  Current: -6633.804879571605 is not greater than -6633.756663300205. Delta is -0.048216271399724064
+Model is not converging.  Current: -6634.191595215635 is not greater than -6634.167632232337. Delta is -0.023962983297678875
+Model is not converging.  Current: -6608.009362048625 is not greater than -6608.009342679199. Delta is -1.936942589964019e-05
+Model is not converging.  Current: -6312.788687978146 is not greater than -6312.772336892325. Delta is -0.016351085821042943
+Model is not converging.  Current: -5400.75004824711 is not greater than -5400.749780171451. Delta is -0.0002680756588233635
+Model is not converging.  Current: -5569.487882144752 is not greater than -5569.487879467685. Delta is -2.677066731848754e-06
+Model is not converging.  Current: -5575.705966457957 is not greater than -5575.705955846525. Delta is -1.061143211700255e-05
+Model is not converging.  Current: -5575.705972064347 is not greater than -5575.70597091548. Delta is -1.1488673408166505e-06
+Model is not converging.  Current: -5569.487882196302 is not greater than -5569.487880887895. Delta is -1.3084072634228505e-06
+Model is not converging.  Current: -4044.9465231069807 is not greater than -4044.912060827399. Delta is -0.03446227958193049
+Model is not converging.  Current: -6831.220968354744 is not greater than -6831.220937485224. Delta is -3.086952074227156e-05
+Model is not converging.  Current: -6813.516935623137 is not greater than -6813.516854693817. Delta is -8.092932057479629e-05
+Model is not converging.  Current: -6813.516940772878 is not greater than -6813.516919485087. Delta is -2.1287791241775267e-05
+Model is not converging.  Current: -6813.516940307803 is not greater than -6813.516912447948. Delta is -2.7859855435963254e-05
+Model is not converging.  Current: -6242.452857912635 is not greater than -6242.452851585338. Delta is -6.32729734206805e-06
+Model is not converging.  Current: -6690.087145067207 is not greater than -6690.045105808669. Delta is -0.04203925853744295
+Model is not converging.  Current: -7123.555655303093 is not greater than -7123.5556454669195. Delta is -9.836173376243096e-06
+Model is not converging.  Current: -6089.26665765424 is not greater than -6089.238384240953. Delta is -0.028273413287024596
+Model is not converging.  Current: -6026.778660967738 is not greater than -6026.778660729943. Delta is -2.3779466573614627e-07
+Model is not converging.  Current: -5408.58691902701 is not greater than -5408.575448445578. Delta is -0.011470581431240134
+Model is not converging.  Current: -6487.842810817733 is not greater than -6487.609324685484. Delta is -0.23348613224879955
+Model is not converging.  Current: -6732.890409879003 is not greater than -6732.872417366037. Delta is -0.017992512965975038
+Model is not converging.  Current: -6732.835188671037 is not greater than -6732.820997605679. Delta is -0.014191065358318156
+Model is not converging.  Current: -6732.871119181948 is not greater than -6732.856838350279. Delta is -0.014280831669566396
+Model is not converging.  Current: -6124.89359577433 is not greater than -6124.88132737945. Delta is -0.012268394879356492
+Model is not converging.  Current: -6126.415101318289 is not greater than -6126.407247457372. Delta is -0.00785386091683904
+Model is not converging.  Current: -6126.419689858018 is not greater than -6126.412357240442. Delta is -0.0073326175752299605
+Model is not converging.  Current: -6126.419109174932 is not greater than -6126.411433012403. Delta is -0.007676162528696295
+Model is not converging.  Current: -5383.000019101705 is not greater than -5382.996472892775. Delta is -0.00354620892994717
+Model is not converging.  Current: -5382.995627613998 is not greater than -5382.987263472313. Delta is -0.008364141684978676
+Model is not converging.  Current: -5353.79742444701 is not greater than -5353.785578241413. Delta is -0.011846205597066728
+Model is not converging.  Current: -5374.332095226569 is not greater than -5374.326854990049. Delta is -0.005240236520876351
+Model is not converging.  Current: -5354.234075877826 is not greater than -5354.234039261372. Delta is -3.6616454053728376e-05
+
+============================================================
+  ASCENT CAPITAL — EOD RUNNER  |  2026-04-03  |  LIVE PAPER
+============================================================
+
+[EOD] Running Ascent pipeline...
+[Config] End date set to today: 2026-04-03
+
+======================================================================
+  STEP 1: DATA INGESTION
+======================================================================
+[Data] Cache invalid (cache ends 2026-04-02 but required_end=2026-04-03) — refreshing...
+[Data] Fetching live price data...
+  [Yahoo 1/122] AAPL: 1571 bars
+  [Yahoo 2/122] MSFT: 1571 bars
+  [Yahoo 3/122] NVDA: 1571 bars
+  [Yahoo 4/122] AVGO: 1571 bars
+  [Yahoo 5/122] CRM: 1571 bars
+  [Yahoo 6/122] ACN: 1571 bars
+  [Yahoo 7/122] ADBE: 1571 bars
+  [Yahoo 8/122] INTC: 1571 bars
+  [Yahoo 9/122] AMD: 1571 bars
+  [Yahoo 10/122] QCOM: 1571 bars
+  [Yahoo 11/122] TXN: 1571 bars
+  [Yahoo 12/122] NOW: 1571 bars
+  [Yahoo 13/122] INTU: 1571 bars
+  [Yahoo 14/122] ANET: 1571 bars
+  [Yahoo 15/122] PANW: 1571 bars
+  [Yahoo 16/122] GOOGL: 1571 bars
+  [Yahoo 17/122] META: 1571 bars
+  [Yahoo 18/122] NFLX: 1571 bars
+  [Yahoo 19/122] DIS: 1571 bars
+  [Yahoo 20/122] CMCSA: 1571 bars
+  [Yahoo 21/122] T: 1571 bars
+  [Yahoo 22/122] AMZN: 1571 bars
+  [Yahoo 23/122] TSLA: 1571 bars
+  [Yahoo 24/122] HD: 1571 bars
+  [Yahoo 25/122] MCD: 1571 bars
+  [Yahoo 26/122] NKE: 1571 bars
+  [Yahoo 27/122] SBUX: 1571 bars
+  [Yahoo 28/122] LOW: 1571 bars
+  [Yahoo 29/122] TJX: 1571 bars
+  [Yahoo 30/122] BKNG: 1571 bars
+  [Yahoo 31/122] ORLY: 1571 bars
+  [Yahoo 32/122] PG: 1571 bars
+  [Yahoo 33/122] KO: 1571 bars
+  [Yahoo 34/122] PEP: 1571 bars
+  [Yahoo 35/122] COST: 1571 bars
+  [Yahoo 36/122] WMT: 1571 bars
+  [Yahoo 37/122] CL: 1571 bars
+  [Yahoo 38/122] MDLZ: 1571 bars
+  [Yahoo 39/122] KHC: 1571 bars
+  [Yahoo 40/122] JPM: 1571 bars
+  [Yahoo 41/122] V: 1571 bars
+  [Yahoo 42/122] MA: 1571 bars
+  [Yahoo 43/122] BAC: 1571 bars
+  [Yahoo 44/122] GS: 1571 bars
+  [Yahoo 45/122] MS: 1571 bars
+  [Yahoo 46/122] BLK: 1571 bars
+  [Yahoo 47/122] SCHW: 1571 bars
+  [Yahoo 48/122] AXP: 1571 bars
+  [Yahoo 49/122] CB: 1571 bars
+  [Yahoo 50/122] UNH: 1571 bars
+  [Yahoo 51/122] JNJ: 1571 bars
+  [Yahoo 52/122] ABBV: 1571 bars
+  [Yahoo 53/122] MRK: 1571 bars
+  [Yahoo 54/122] LLY: 1571 bars
+  [Yahoo 55/122] TMO: 1571 bars
+  [Yahoo 56/122] PFE: 1571 bars
+  [Yahoo 57/122] ABT: 1571 bars
+  [Yahoo 58/122] DHR: 1571 bars
+  [Yahoo 59/122] BMY: 1571 bars
+  [Yahoo 60/122] AMGN: 1571 bars
+  [Yahoo 61/122] ISRG: 1571 bars
+  [Yahoo 62/122] XOM: 1571 bars
+  [Yahoo 63/122] CVX: 1571 bars
+  [Yahoo 64/122] COP: 1571 bars
+  [Yahoo 65/122] SLB: 1571 bars
+  [Yahoo 66/122] EOG: 1571 bars
+  [Yahoo 67/122] MPC: 1571 bars
+  [Yahoo 68/122] CAT: 1571 bars
+  [Yahoo 69/122] HON: 1571 bars
+  [Yahoo 70/122] UNP: 1571 bars
+  [Yahoo 71/122] RTX: 1571 bars
+  [Yahoo 72/122] DE: 1571 bars
+  [Yahoo 73/122] GE: 1571 bars
+  [Yahoo 74/122] LMT: 1571 bars
+  [Yahoo 75/122] MMM: 1571 bars
+  [Yahoo 76/122] FDX: 1571 bars
+  [Yahoo 77/122] WM: 1571 bars
+  [Yahoo 78/122] LIN: 1571 bars
+  [Yahoo 79/122] APD: 1571 bars
+  [Yahoo 80/122] ECL: 1571 bars
+  [Yahoo 81/122] NEM: 1571 bars
+  [Yahoo 82/122] PLD: 1571 bars
+  [Yahoo 83/122] AMT: 1571 bars
+  [Yahoo 84/122] EQIX: 1571 bars
+  [Yahoo 85/122] SPG: 1571 bars
+  [Yahoo 86/122] NEE: 1571 bars
+  [Yahoo 87/122] DUK: 1571 bars
+  [Yahoo 88/122] SO: 1571 bars
+  [Yahoo 89/122] D: 1571 bars
+  [Yahoo 90/122] XRX: 1571 bars
+  [Yahoo 91/122] HP: 1571 bars
+  [Yahoo 92/122] NOV: 1571 bars
+  [Yahoo 93/122] TIF: no data
+  [Yahoo 94/122] FLIR: no data
+  [Yahoo 95/122] XLNX: no data
+  [Yahoo 96/122] PBCT: no data
+  [Yahoo 97/122] CERN: no data
+  [Yahoo 98/122] CTXS: no data
+  [Yahoo 99/122] TWTR: no data
+  [Yahoo 100/122] DRE: no data
+  [Yahoo 101/122] FBHS: no data
+  [Yahoo 102/122] IPGP: 1571 bars
+  [Yahoo 103/122] SIVB: no data
+  [Yahoo 104/122] FRC: no data
+  [Yahoo 105/122] ATVI: no data
+  [Yahoo 106/122] DISH: no data
+  [Yahoo 107/122] SJM: 1571 bars
+  [Yahoo 108/122] BIO: 1571 bars
+  [Yahoo 109/122] SEDG: 1571 bars
+  [Yahoo 110/122] HAS: 1571 bars
+  [Yahoo 111/122] AAL: 1571 bars
+  [Yahoo 112/122] XRAY: 1571 bars
+  [Yahoo 113/122] BEN: 1571 bars
+  [Yahoo 114/122] PARA: no data
+  [Yahoo 115/122] WBA: no data
+  [Yahoo 116/122] INTC: 1571 bars
+  [Yahoo 117/122] UA: 1571 bars
+  [Yahoo 118/122] LUMN: 1571 bars
+  [Yahoo 119/122] VNO: 1571 bars
+  [Yahoo 120/122] ALK: 1571 bars
+  [Yahoo 121/122] IVZ: 1571 bars
+  [Yahoo 122/122] SPY: 1571 bars
+[Data] WARNING: live fetch returned only 106 of 121 required symbols. Missing: ['ATVI', 'CERN', 'CTXS', 'DISH', 'DRE', 'FBHS', 'FLIR', 'FRC', 'PARA', 'PBCT', 'SIVB', 'TIF', 'TWTR', 'WBA', 'XLNX'] — likely delisted, using available symbols.
+[Data] 166526 rows, 106 symbols cached
+[Data] Macro cache invalid (cache ends 2026-04-02 but required_end=2026-04-03) — refreshing...
+  [FRED] DFF (fed_funds_rate): 2283 observations
+  [FRED] DGS10 (treasury_10y): 1563 observations
+  [FRED] DGS2 (treasury_2y): 1563 observations
+  [FRED] T10Y2Y (yield_spread_10y2y): 1564 observations
+  [FRED] VIXCLS (vix): 1599 observations
+  [FRED] CPIAUCSL (cpi): 73 observations
+  [FRED] UNRATE (unemployment): 74 observations
+  [FRED] DCOILWTICO (oil_wti): 1560 observations
+  [FRED] DEXUSEU (usd_eur): 1558 observations
+  [FRED] BAMLH0A0HYM2 (hy_spread): 1636 observations
+[Data] Universe: 105 symbols
+[Data] Date range: 2020-01-02 → 2026-04-02
+
+======================================================================
+  STEP 1.5: REGIME ENGINE
+======================================================================
+[Regime] VIX data fetched
+[Regime] Macro panel: 10 series, 2285 dates
+REGIME DEBUG panel_len= 1571 min_days= 252
+HMM K= 3 fracs= [0.22619048 0.63095238 0.14285714] n_degen= 0
+HMM K= 4 fracs= [0.1468254  0.29761905 0.08730159 0.46825397] n_degen= 0
+HMM K= 3 fracs= [0.53174603 0.16269841 0.30555556] n_degen= 0
+HMM K= 4 fracs= [0.35714286 0.14285714 0.1984127  0.3015873 ] n_degen= 0
+HMM K= 3 fracs= [0.22619048 0.51587302 0.25793651] n_degen= 0
+HMM K= 4 fracs= [0.36904762 0.23412698 0.1468254  0.25      ] n_degen= 0
+HMM K= 3 fracs= [0.25793651 0.23412698 0.50793651] n_degen= 0
+HMM K= 4 fracs= [0.11904762 0.44047619 0.18650794 0.25396825] n_degen= 0
+HMM K= 3 fracs= [0.42063492 0.37301587 0.20634921] n_degen= 0
+HMM K= 4 fracs= [0.37301587 0.18253968 0.17460317 0.26984127] n_degen= 0
+HMM K= 3 fracs= [0.19444444 0.50396825 0.3015873 ] n_degen= 0
+HMM K= 4 fracs= [0.50396825 0.3015873  0.04761905 0.1468254 ] n_degen= 0
+HMM K= 3 fracs= [0.20238095 0.54761905 0.25      ] n_degen= 0
+HMM K= 4 fracs= [0.30555556 0.21428571 0.24603175 0.23412698] n_degen= 0
+HMM K= 3 fracs= [0.30555556 0.48809524 0.20634921] n_degen= 0
+HMM K= 4 fracs= [0.11507937 0.1984127  0.29761905 0.38888889] n_degen= 0
+HMM K= 3 fracs= [0.46825397 0.33333333 0.1984127 ] n_degen= 0
+HMM K= 4 fracs= [0.1468254  0.1468254  0.40079365 0.30555556] n_degen= 0
+HMM K= 3 fracs= [0.37301587 0.20634921 0.42063492] n_degen= 0
+HMM K= 4 fracs= [0.23015873 0.30555556 0.16666667 0.29761905] n_degen= 0
+HMM K= 3 fracs= [0.38888889 0.19444444 0.41666667] n_degen= 0
+HMM K= 4 fracs= [0.21031746 0.24206349 0.20238095 0.3452381 ] n_degen= 0
+HMM K= 3 fracs= [0.47619048 0.26984127 0.25396825] n_degen= 0
+HMM K= 4 fracs= [0.17460317 0.11111111 0.25396825 0.46031746] n_degen= 0
+HMM K= 3 fracs= [0.33333333 0.50793651 0.15873016] n_degen= 0
+HMM K= 4 fracs= [0.20634921 0.26190476 0.11111111 0.42063492] n_degen= 0
+HMM K= 3 fracs= [0.40079365 0.48015873 0.11904762] n_degen= 0
+HMM K= 4 fracs= [0.26984127 0.3531746  0.25793651 0.11904762] n_degen= 0
+HMM K= 3 fracs= [0.12301587 0.54761905 0.32936508] n_degen= 0
+HMM K= 4 fracs= [0.56349206 0.09126984 0.20634921 0.13888889] n_degen= 0
+HMM K= 3 fracs= [0.19047619 0.6031746  0.20634921] n_degen= 0
+HMM K= 4 fracs= [0.5952381  0.17857143 0.19047619 0.03571429] n_degen= 0
+HMM K= 3 fracs= [0.20634921 0.56349206 0.23015873] n_degen= 0
+HMM K= 4 fracs= [0.23412698 0.19047619 0.53968254 0.03571429] n_degen= 0
+HMM K= 3 fracs= [0.28174603 0.49603175 0.22222222] n_degen= 0
+HMM K= 4 fracs= [0.41269841 0.26190476 0.13492063 0.19047619] n_degen= 0
+HMM K= 3 fracs= [0.17460317 0.61111111 0.21428571] n_degen= 0
+HMM K= 4 fracs= Model is not converging.  Current: -4074.6321081966666 is not greater than -4074.564525958683. Delta is -0.06758223798351537
+Model is not converging.  Current: -30830.57799300884 is not greater than -30830.57798732662. Delta is -5.682220944436267e-06
+Model is not converging.  Current: -30830.577990653466 is not greater than -30830.577987842724. Delta is -2.8107424441259354e-06
+Model is not converging.  Current: -30830.57799194278 is not greater than -30830.577987245404. Delta is -4.697376425610855e-06
+Model is not converging.  Current: -30830.577992497027 is not greater than -30830.577987256824. Delta is -5.240202881395817e-06
+ML sleeve skipped - targets not in features dict
+[0.47619048 0.17460317 0.26587302 0.08333333] n_degen= 0
+HMM K= 3 fracs= [0.17857143 0.19047619 0.63095238] n_degen= 0
+HMM K= 4 fracs= [0.16269841 0.21031746 0.52380952 0.1031746 ] n_degen= 0
+REGIME SELECTION valid candidates: {3: 20, 4: 20}
+REGIME SELECTION K=3 composite=-641.2937
+REGIME SELECTION K=4 composite=-552.6745
+REGIME SELECTION: chose K= 4 score= -552.6745
+HMM K= 4 fracs= [0.49013367 0.11266709 0.36155315 0.03564609] n_degen= 0
+[Regime] K=4  label=stressed  risk_mult=0.65  entropy=0.000
+
+======================================================================
+  STEP 2: FEATURE ENGINEERING
+======================================================================
+[Features] Computed 29 features across 105 symbols
+[Features] Date range: 2020-01-02 → 2026-04-02
+
+======================================================================
+  STEP 3: ALPHA GENERATION
+======================================================================
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb']  skipped=['ml']
+[Alpha] Composite alpha computed: (1571, 105)
+[Alpha] NOTE: regime adjustment disabled in full-mode (look-ahead risk). Regime is applied causally in walk-forward mode only.
+[Alpha] Mean IC (21d fwd return): 0.0235
+[Alpha] IC t-stat: 3.84
+
+======================================================================
+  STEP 4: PORTFOLIO CONSTRUCTION
+======================================================================
+[Portfolio] Sector constraint: max 1 per sector
+[Portfolio] SPY 200d MA filter: 292 dates below MA (22.5%) → 30% exposure cut
+[Portfolio] Target weights: (1298, 105)
+[Portfolio] Active rebalance dates: 1298
+[Portfolio] Top-15 rank-weighted, max weight 10%
+
+======================================================================
+  STEP 5: BACKTEST
+======================================================================
+
+######################################################################
+  ASCENT CAPITAL — FULL BACKTEST
+######################################################################
+============================================================
+  PERFORMANCE REPORT
+============================================================
+  Total Return:     +57.49%
+  CAGR:             +9.22%
+  Volatility:       19.80%
+  Sharpe Ratio:     0.465
+  Sortino Ratio:    0.675
+  Max Drawdown:     -37.65%
+  Calmar Ratio:     0.245
+  Hit Rate:         52.5%
+  Profit Factor:    1.10
+------------------------------------------------------------
+  Trading Days:     1298
+  Best Day:         +8.93%
+  Worst Day:        -6.99%
+------------------------------------------------------------
+  Benchmark CAGR:   +11.09%
+  Alpha:            -1.87%
+  Beta:             0.848
+  Excess Sharpe:    -0.153
+------------------------------------------------------------
+  Avg Turnover:     5.85% per day
+  Avg Positions:    9.9
+============================================================
+
+  Total Transaction Costs: $63,766.07
+  Avg Daily Turnover:     4.913%
+  Total Cost Drag:        6.377%
+
+  Start Value:  $1,000,000.00
+  End Value:    $1,574,875.52
+  Peak Value:   $1,705,843.25
+  Trough Value: $731,489.54
+
+  Worst Drawdown: -37.65% on 2022-10-12
+
+  Avg Positions:  9.9
+  Max Weight:     19.2%
+######################################################################
+
+
+── Regime Occupancy ──────────────────────────────────
+           days   pct  avg_dwell_days  max_dwell_days  n_episodes
+regime                                                           
+calm_bull   796  50.7            39.8             135          20
+stressed    581  37.0            26.4             269          22
+euphoric    138   8.8            69.0              75           2
+crisis       56   3.6            56.0              56           1
+
+── Per-Regime Return Stats ───────────────────────────
+
+  Pipeline completed in 177.4s
+
+[Regime] Intel export -> dashboard/regime_labels.csv  (1571 rows, latest=stressed)
+[EOD] Latest signal date: 2026-04-02
+[EOD] Target positions: 9
+[EOD] Regime: stressed  |  Posture: uncertain
+[EOD] 2026-04-03 is NOT on the rebalance calendar — skipping.
+[EOD] Rebalance day: False
+[EOD] Portfolio value: $101,126.97
+[EOD] Current positions: 9
+[EOD] Non-rebalance day — logging regime + holdings only.
+[RunLog] Logged log_only run for 2026-04-03 → logs/eod_log.jsonl
+[EOD] Done — no trades submitted.
+Fri Apr  3 17:20:13 PDT 2026: EOD run complete.

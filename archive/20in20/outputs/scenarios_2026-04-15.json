@@ -1,0 +1,209 @@
+{
+  "date": "2026-04-15",
+  "generated_at": "2026-04-15T15:43:07.638870",
+  "n_positions": 22,
+  "portfolio": {
+    "PDBC": 0.093022,
+    "IFRA": 0.035498,
+    "VNQ": 0.029004,
+    "EWY": 0.107936,
+    "EWZ": 0.047861,
+    "EWT": 0.047861,
+    "EWC": 0.006418,
+    "HYG": 0.045072,
+    "LQD": 0.029928,
+    "BIL": 0.04497,
+    "DBB": 0.045072,
+    "AMZN": 0.02344,
+    "CASY": 0.060076,
+    "CAT": 0.060076,
+    "CB": 0.018981,
+    "EQIX": 0.060076,
+    "GOOGL": 0.023192,
+    "MPWR": 0.060076,
+    "MRK": 0.031961,
+    "NEM": 0.044367,
+    "PAVE": 0.025039,
+    "TRGP": 0.060076
+  },
+  "scenarios": [
+    {
+      "scenario": "em_risk_off",
+      "description": "EM equities -15%, USD +5%, flight to safety",
+      "portfolio_impact_pct": -1.49,
+      "affected_positions": [
+        {
+          "symbol": "EWZ",
+          "weight": 0.0479,
+          "shock": -0.2,
+          "contribution": -0.009572
+        },
+        {
+          "symbol": "EWT",
+          "weight": 0.0479,
+          "shock": -0.12,
+          "contribution": -0.005743
+        },
+        {
+          "symbol": "BIL",
+          "weight": 0.045,
+          "shock": 0.01,
+          "contribution": 0.00045
+        }
+      ],
+      "unaffected_weight_pct": 85.93,
+      "n_affected": 3,
+      "percentiles": {
+        "p5": -2.03,
+        "p25": -1.72,
+        "p50": -1.5,
+        "p75": -1.27,
+        "p95": -0.95
+      },
+      "worst_case": -2.03,
+      "base_case": -1.5,
+      "best_case": -0.95
+    },
+    {
+      "scenario": "rates_spike",
+      "description": "Rates spike \u2014 TLT -8%, rate-sensitive equities repriced",
+      "portfolio_impact_pct": -0.59,
+      "affected_positions": [
+        {
+          "symbol": "EQIX",
+          "weight": 0.0601,
+          "shock": -0.05,
+          "contribution": -0.003004
+        },
+        {
+          "symbol": "VNQ",
+          "weight": 0.029,
+          "shock": -0.06,
+          "contribution": -0.00174
+        },
+        {
+          "symbol": "LQD",
+          "weight": 0.0299,
+          "shock": -0.04,
+          "contribution": -0.001197
+        }
+      ],
+      "unaffected_weight_pct": 88.1,
+      "n_affected": 3,
+      "percentiles": {
+        "p5": -0.79,
+        "p25": -0.68,
+        "p50": -0.6,
+        "p75": -0.52,
+        "p95": -0.42
+      },
+      "worst_case": -0.79,
+      "base_case": -0.6,
+      "best_case": -0.42
+    },
+    {
+      "scenario": "tech_unwind",
+      "description": "Nasdaq -12%, tech correlation spike",
+      "portfolio_impact_pct": -0.51,
+      "affected_positions": [
+        {
+          "symbol": "GOOGL",
+          "weight": 0.0232,
+          "shock": -0.12,
+          "contribution": -0.002783
+        },
+        {
+          "symbol": "AMZN",
+          "weight": 0.0234,
+          "shock": -0.1,
+          "contribution": -0.002344
+        }
+      ],
+      "unaffected_weight_pct": 95.34,
+      "n_affected": 2,
+      "percentiles": {
+        "p5": -0.7,
+        "p25": -0.6,
+        "p50": -0.52,
+        "p75": -0.44,
+        "p95": -0.34
+      },
+      "worst_case": -0.7,
+      "base_case": -0.52,
+      "best_case": -0.34
+    },
+    {
+      "scenario": "commodity_shock",
+      "description": "Oil spike +15%, gold rallies +8%, inflation fears",
+      "portfolio_impact_pct": 0.0,
+      "affected_positions": [],
+      "unaffected_weight_pct": 100.0,
+      "n_affected": 0,
+      "percentiles": {
+        "p5": 0.0,
+        "p25": 0.0,
+        "p50": 0.0,
+        "p75": 0.0,
+        "p95": 0.0
+      },
+      "worst_case": 0.0,
+      "base_case": 0.0,
+      "best_case": 0.0
+    },
+    {
+      "scenario": "correlation_crisis",
+      "description": "All risky assets fall simultaneously \u2014 correlation breakdown",
+      "portfolio_impact_pct": -2.41,
+      "affected_positions": [
+        {
+          "symbol": "CAT",
+          "weight": 0.0601,
+          "shock": -0.1,
+          "contribution": -0.006008
+        },
+        {
+          "symbol": "EQIX",
+          "weight": 0.0601,
+          "shock": -0.1,
+          "contribution": -0.006008
+        },
+        {
+          "symbol": "HYG",
+          "weight": 0.0451,
+          "shock": -0.1,
+          "contribution": -0.004507
+        },
+        {
+          "symbol": "VNQ",
+          "weight": 0.029,
+          "shock": -0.1,
+          "contribution": -0.0029
+        },
+        {
+          "symbol": "AMZN",
+          "weight": 0.0234,
+          "shock": -0.1,
+          "contribution": -0.002344
+        },
+        {
+          "symbol": "GOOGL",
+          "weight": 0.0232,
+          "shock": -0.1,
+          "contribution": -0.002319
+        }
+      ],
+      "unaffected_weight_pct": 75.91,
+      "n_affected": 6,
+      "percentiles": {
+        "p5": -2.94,
+        "p25": -2.62,
+        "p50": -2.4,
+        "p75": -2.19,
+        "p95": -1.9
+      },
+      "worst_case": -2.94,
+      "base_case": -2.4,
+      "best_case": -1.9
+    }
+  ]
+}

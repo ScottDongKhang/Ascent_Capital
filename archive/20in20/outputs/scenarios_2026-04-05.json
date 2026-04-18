@@ -1,0 +1,189 @@
+{
+  "date": "2026-04-05",
+  "generated_at": "2026-04-05T20:49:35.154573",
+  "n_positions": 20,
+  "portfolio": {
+    "PDBC": 0.1178,
+    "APD": 0.0556,
+    "BMY": 0.0556,
+    "CASY": 0.0556,
+    "CAT": 0.0556,
+    "EQIX": 0.0556,
+    "MPC": 0.0556,
+    "NEE": 0.0556,
+    "SEDG": 0.0556,
+    "T": 0.0556,
+    "EWZ": 0.0555,
+    "KMLM": 0.0549,
+    "GLD": 0.0515,
+    "EWT": 0.0496,
+    "EWY": 0.0425,
+    "EWU": 0.0354,
+    "IFRA": 0.0345,
+    "DBA": 0.0246,
+    "DBB": 0.0217,
+    "CB": 0.0118
+  },
+  "scenarios": [
+    {
+      "scenario": "em_risk_off",
+      "description": "EM equities -15%, USD +5%, flight to safety",
+      "portfolio_impact_pct": -1.45,
+      "affected_positions": [
+        {
+          "symbol": "EWZ",
+          "weight": 0.0555,
+          "shock": -0.2,
+          "contribution": -0.0111
+        },
+        {
+          "symbol": "EWT",
+          "weight": 0.0496,
+          "shock": -0.12,
+          "contribution": -0.005952
+        },
+        {
+          "symbol": "GLD",
+          "weight": 0.0515,
+          "shock": 0.05,
+          "contribution": 0.002575
+        }
+      ],
+      "unaffected_weight_pct": 84.36,
+      "n_affected": 3,
+      "percentiles": {
+        "p5": -2.08,
+        "p25": -1.71,
+        "p50": -1.46,
+        "p75": -1.19,
+        "p95": -0.81
+      },
+      "worst_case": -2.08,
+      "base_case": -1.46,
+      "best_case": -0.81
+    },
+    {
+      "scenario": "rates_spike",
+      "description": "Rates spike \u2014 TLT -8%, rate-sensitive equities repriced",
+      "portfolio_impact_pct": -0.5,
+      "affected_positions": [
+        {
+          "symbol": "EQIX",
+          "weight": 0.0556,
+          "shock": -0.05,
+          "contribution": -0.00278
+        },
+        {
+          "symbol": "NEE",
+          "weight": 0.0556,
+          "shock": -0.04,
+          "contribution": -0.002224
+        }
+      ],
+      "unaffected_weight_pct": 88.9,
+      "n_affected": 2,
+      "percentiles": {
+        "p5": -0.69,
+        "p25": -0.59,
+        "p50": -0.51,
+        "p75": -0.43,
+        "p95": -0.34
+      },
+      "worst_case": -0.69,
+      "base_case": -0.51,
+      "best_case": -0.34
+    },
+    {
+      "scenario": "tech_unwind",
+      "description": "Nasdaq -12%, tech correlation spike",
+      "portfolio_impact_pct": 0.0,
+      "affected_positions": [],
+      "unaffected_weight_pct": 100.02,
+      "n_affected": 0,
+      "percentiles": {
+        "p5": 0.0,
+        "p25": 0.0,
+        "p50": 0.0,
+        "p75": 0.0,
+        "p95": 0.0
+      },
+      "worst_case": 0.0,
+      "base_case": 0.0,
+      "best_case": 0.0
+    },
+    {
+      "scenario": "commodity_shock",
+      "description": "Oil spike +15%, gold rallies +8%, inflation fears",
+      "portfolio_impact_pct": 0.99,
+      "affected_positions": [
+        {
+          "symbol": "DBA",
+          "weight": 0.0246,
+          "shock": 0.1,
+          "contribution": 0.00246
+        },
+        {
+          "symbol": "MPC",
+          "weight": 0.0556,
+          "shock": 0.06,
+          "contribution": 0.003336
+        },
+        {
+          "symbol": "GLD",
+          "weight": 0.0515,
+          "shock": 0.08,
+          "contribution": 0.00412
+        }
+      ],
+      "unaffected_weight_pct": 86.85,
+      "n_affected": 3,
+      "percentiles": {
+        "p5": 0.69,
+        "p25": 0.87,
+        "p50": 0.98,
+        "p75": 1.1,
+        "p95": 1.27
+      },
+      "worst_case": 0.69,
+      "base_case": 0.98,
+      "best_case": 1.27
+    },
+    {
+      "scenario": "correlation_crisis",
+      "description": "All risky assets fall simultaneously \u2014 correlation breakdown",
+      "portfolio_impact_pct": -1.67,
+      "affected_positions": [
+        {
+          "symbol": "CAT",
+          "weight": 0.0556,
+          "shock": -0.1,
+          "contribution": -0.00556
+        },
+        {
+          "symbol": "EQIX",
+          "weight": 0.0556,
+          "shock": -0.1,
+          "contribution": -0.00556
+        },
+        {
+          "symbol": "MPC",
+          "weight": 0.0556,
+          "shock": -0.1,
+          "contribution": -0.00556
+        }
+      ],
+      "unaffected_weight_pct": 83.34,
+      "n_affected": 3,
+      "percentiles": {
+        "p5": -2.16,
+        "p25": -1.88,
+        "p50": -1.69,
+        "p75": -1.48,
+        "p95": -1.21
+      },
+      "worst_case": -2.16,
+      "base_case": -1.69,
+      "best_case": -1.21
+    }
+  ]
+}

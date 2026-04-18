@@ -1,0 +1,407 @@
+"""
+ascent/execution/eod_runner.py
+
+End-of-day execution runner for Ascent Capital paper trading.
+
+Usage:
+    python -m ascent.execution.eod_runner
+    python -m ascent.execution.eod_runner --dry-run
+    python -m ascent.execution.eod_runner --date 2026-03-24
+"""
+import argparse
+import time
+import traceback
+from datetime import datetime, date
+import pandas as pd
+
+from ascent.execution.run_log import log_run
+from ascent.execution import kill_switch
+from ascent.execution.run_log import log_error, read_last_run
+from ascent.execution.alpaca_broker import (
+    get_account,
+    get_positions,
+    get_portfolio_value,
+    submit_order,
+    cancel_all_orders,
+    is_market_open,
+)
+from ascent.execution.order_engine import compute_orders, summarise_orders
+
+# Task 8: large-trade approval threshold
+LARGE_TRADE_THRESHOLD_PCT = 2.0  # % of portfolio NAV
+
+
+def run_eod(dry_run: bool = False, as_of_date: str = None):
+    today = as_of_date or date.today().isoformat()
+    print(f"\n{'='*60}")
+    print(f"  ASCENT CAPITAL — EOD RUNNER  |  {today}  |  {'DRY RUN' if dry_run else 'LIVE PAPER'}")
+    print(f"{'='*60}\n")
+
+    try:
+        print("[EOD] Running Ascent pipeline...")
+        from ascent.config.settings import get_config
+        from ascent.main import run_pipeline
+
+        cfg = get_config()  # Bug 13 fix: use shared get_config() not direct Config()
+
+        # Bug 3 fix: run_pipeline() returns 9 values — was only unpacking 6.
+        (
+            result,
+            regime_engine,
+            spy_wide,
+            univ_wide,
+            vix_series,
+            target_weights_all,
+            price_df,
+            macro_df,
+            price_cache_name,
+        ) = run_pipeline(
+            live=True,
+        )
+
+        if target_weights_all is None or target_weights_all.empty:
+            raise ValueError("Pipeline returned no target weights.")
+
+        valid_rows  = target_weights_all[(target_weights_all > 0).any(axis=1)]
+        latest_date = valid_rows.index[-1]
+        target_weights_all = valid_rows
+        target_weights     = target_weights_all.loc[latest_date]
+        target_weights     = target_weights[target_weights > 0].dropna()
+
+        # Filter to only currently tradeable symbols
+        from ascent.data.universe import get_universe_on_date, build_historical_universe
+        universe_df = build_historical_universe(strict=False)
+        tradeable = set(get_universe_on_date(today, universe_df))
+        target_weights = target_weights[target_weights.index.isin(tradeable)]
+        target_weights = target_weights[target_weights > 0].dropna()
+        if target_weights.sum() > 0:
+            target_weights = target_weights / target_weights.sum()
+
+        print(f"[EOD] Latest signal date: {latest_date.date()}")
+        print(f"[EOD] Target positions: {len(target_weights)}")
+
+        regime_label      = None
+        regime_confidence = None
+        posture           = "unknown"
+
+        if regime_engine is not None:
+            try:
+                latest_date_ts = pd.Timestamp(target_weights_all.index[-1])
+                sig = regime_engine.get_signal(latest_date_ts)
+                if sig is not None:
+                    regime_label      = sig.label
+                    regime_confidence = float(sig.confidence) if sig.confidence else None
+                try:
+                    from ascent.regime.posture import compute_posture_from_regime
+                    probs_dict = {str(k): float(v) for k, v in enumerate([])}
+                    posture_obj = compute_posture_from_regime(
+                        asof=str(latest_date_ts.date()),
+                        regime_label=str(regime_label) if regime_label else "unknown",
+                        probs=probs_dict,
+                    )
+                    posture = str(posture_obj.posture) if posture_obj and hasattr(posture_obj, "posture") else regime_label or "unknown"
+                except ImportError as _ie:
+                    print(f"[EOD] WARNING: posture import failed ({_ie}) — using regime label as fallback")
+                    posture = regime_label or "unknown"
+            except Exception as _re:
+                # Bug 7 fix: log instead of silently swallowing
+                print(f"[EOD] WARNING: regime signal extraction failed ({type(_re).__name__}: {_re}) — regime/posture will be null")
+
+        print(f"[EOD] Regime: {regime_label}  |  Posture: {posture}")
+
+        is_rebalance = _is_rebalance_day(target_weights_all, today)
+        print(f"[EOD] Rebalance day: {is_rebalance}")
+
+        portfolio_value   = get_portfolio_value()
+        current_positions = get_positions()
+
+        print(f"[EOD] Portfolio value: ${portfolio_value:,.2f}")
+        print(f"[EOD] Current positions: {len(current_positions)}")
+
+        if is_rebalance and not current_positions.empty:
+            current_weights_series = current_positions.set_index("symbol")["weight"]
+            all_syms = target_weights.index.union(current_weights_series.index)
+            target_aligned  = target_weights.reindex(all_syms, fill_value=0.0)
+            current_aligned = current_weights_series.reindex(all_syms, fill_value=0.0)
+            max_delta = (target_aligned - current_aligned).abs().max()
+            if max_delta < 0.005:
+                is_rebalance = False
+                print('[EOD] Weights match targets within 0.5% — skipping rebalance.')
+
+        if not is_rebalance:
+            print("[EOD] Non-rebalance day — logging regime + holdings only.")
+            current_holdings = (
+                current_positions.set_index("symbol")["weight"].to_dict()
+                if not current_positions.empty else {}
+            )
+            log_run(
+                run_date=today,
+                run_type="log_only",
+                regime_label=regime_label,
+                regime_confidence=regime_confidence,
+                posture=posture,
+                portfolio_value=portfolio_value,
+                target_weights=target_weights.to_dict(),
+                orders_executed=[],
+                orders_skipped=[],
+                notes=f"Non-rebalance day. Current holdings: {list(current_holdings.keys())}",
+            )
+            print("[EOD] Done — no trades submitted.")
+            return
+
+        orders, diff_df = compute_orders(
+            target_weights=target_weights,
+            current_positions=current_positions,
+            portfolio_value=portfolio_value,
+        )
+
+        print(f"\n[EOD] Order plan:\n{summarise_orders(orders)}\n")
+
+        if not orders:
+            log_run(
+                run_date=today,
+                run_type="rebalance",
+                regime_label=regime_label,
+                regime_confidence=regime_confidence,
+                posture=posture,
+                portfolio_value=portfolio_value,
+                target_weights=target_weights.to_dict(),
+                orders_executed=[],
+                orders_skipped=[],
+                notes="Rebalance day but all deltas below 0.5% threshold.",
+            )
+            print("[EOD] No orders above threshold. Done.")
+            return
+
+        # Kill switch check
+        try:
+            kill_switch.check(current_nav=portfolio_value)
+        except kill_switch.KillSwitchTriggered:
+            log_run(
+                run_date=today,
+                run_type="error",
+                regime_label=regime_label,
+                regime_confidence=regime_confidence,
+                posture=posture,
+                portfolio_value=portfolio_value,
+                target_weights=target_weights.to_dict(),
+                orders_executed=[],
+                orders_skipped=[],
+                notes="HALTED by kill switch — drawdown exceeded threshold.",
+            )
+            return
+
+        if dry_run:
+            print("[EOD] DRY RUN — orders NOT submitted to Alpaca.")
+            log_run(
+                run_date=today,
+                run_type="rebalance",
+                regime_label=regime_label,
+                regime_confidence=regime_confidence,
+                posture=posture,
+                portfolio_value=portfolio_value,
+                target_weights=target_weights.to_dict(),
+                orders_executed=[],
+                orders_skipped=[{"symbol": o.symbol, "side": o.side, "delta": o.weight_delta, "dry_run": True} for o in orders],
+                notes="Dry run — no orders submitted.",
+            )
+            return
+
+        # ── Task 8: Large-trade approval check ───────────────────────────────
+        # Any individual order that moves more than LARGE_TRADE_THRESHOLD_PCT
+        # of portfolio NAV requires human approval before execution.
+        large_trades = []
+        for order in orders:
+            order_notional = order.dollar_amount  # already computed by order_engine
+            order_pct = order_notional / portfolio_value * 100
+            if order_pct >= LARGE_TRADE_THRESHOLD_PCT:
+                large_trades.append({
+                    "symbol":     order.symbol,
+                    "side":       order.side,
+                    "qty":        round(order.estimated_shares, 4),
+                    "notional":   round(order_notional, 2),
+                    "weight_pct": round(order_pct, 2),
+                })
+
+        if large_trades:
+            try:
+                from ascent.execution.approval_server import write_pending_trades, check_approval_status
+                print(f"[EOD] {len(large_trades)} trades exceed {LARGE_TRADE_THRESHOLD_PCT}% threshold — requesting approval")
+                write_pending_trades(large_trades, run_date=today)
+
+                # Poll for approval — check every 30s, timeout after 30 minutes
+                max_wait    = 30 * 60
+                waited      = 0
+                poll_interval = 30
+
+                while waited < max_wait:
+                    status = check_approval_status()
+                    if status == "approved":
+                        print("[EOD] Trades APPROVED — proceeding with execution")
+                        break
+                    elif status == "rejected":
+                        print("[EOD] Trades REJECTED — skipping execution")
+                        log_run(
+                            run_date=today,
+                            run_type="rebalance",
+                            regime_label=regime_label,
+                            regime_confidence=regime_confidence,
+                            posture=posture,
+                            portfolio_value=portfolio_value,
+                            target_weights=target_weights.to_dict(),
+                            orders_executed=[],
+                            orders_skipped=[{"symbol": t["symbol"], "reason": "rejected_by_approval_ui"} for t in large_trades],
+                            notes=f"Execution rejected via approval UI for {len(large_trades)} large trades.",
+                        )
+                        return
+                    elif status == "expired":
+                        print("[EOD] Approval EXPIRED — cancelling trades")
+                        log_run(
+                            run_date=today,
+                            run_type="rebalance",
+                            regime_label=regime_label,
+                            regime_confidence=regime_confidence,
+                            posture=posture,
+                            portfolio_value=portfolio_value,
+                            target_weights=target_weights.to_dict(),
+                            orders_executed=[],
+                            orders_skipped=[{"symbol": t["symbol"], "reason": "approval_timeout"} for t in large_trades],
+                            notes="Approval timed out — trades cancelled.",
+                        )
+                        return
+                    time.sleep(poll_interval)
+                    waited += poll_interval
+                    print(f"[EOD] Waiting for approval... ({waited}s / {max_wait}s)")
+
+                if waited >= max_wait:
+                    print("[EOD] Approval timeout — cancelling trades")
+                    return
+
+            except ImportError:
+                # approval_server not installed — warn but don't block
+                print(f"[EOD] WARNING: approval_server not available, skipping large-trade check for {len(large_trades)} trades")
+            except Exception as e:
+                print(f"[EOD] WARNING: approval check failed ({e}) — proceeding without approval gate")
+        # ── End Task 8 ────────────────────────────────────────────────────────
+
+        cancel_all_orders()
+        print("[EOD] Cancelled open orders.")
+
+        executed = []
+        skipped  = []
+
+        for o in orders:
+            from ascent.execution.order_engine import _get_approx_price
+            price = _get_approx_price(o.symbol, current_positions)
+            if price is None:
+                print(f"[EOD] Skipping {o.symbol} — price unavailable")
+                skipped.append({"symbol": o.symbol, "reason": "price unavailable"})
+                continue
+
+            qty = round(o.dollar_amount / price, 6)
+            if qty < 0.001:
+                skipped.append({"symbol": o.symbol, "reason": "qty too small"})
+                continue
+
+            try:
+                resp = submit_order(symbol=o.symbol, qty=qty, side=o.side)
+                print(f"[EOD] {o.side.upper()} {qty:.4f} {o.symbol}  (${o.dollar_amount:,.0f})")
+                executed.append({
+                    "symbol":        o.symbol,
+                    "side":          o.side,
+                    "qty":           qty,
+                    "dollar_amount": o.dollar_amount,
+                    "order_id":      resp.get("id"),
+                })
+            except Exception as e:
+                print(f"[EOD] Failed {o.symbol}: {e}")
+                skipped.append({"symbol": o.symbol, "reason": str(e)})
+
+        # ── Task 5: Slippage tracking (post-fill) ────────────────────────────
+        # Only runs when orders were actually submitted (not dry-run, not non-rebalance).
+        if executed:
+            try:
+                print("[EOD] Waiting 30s for fills to settle before slippage check...")
+                time.sleep(30)
+
+                # Build signal prices from the pipeline's last close row
+                if price_df is not None and not price_df.empty:
+                    signal_prices = price_df.iloc[-1].dropna().to_dict()
+                    from ascent.execution.slippage_tracker import track_slippage
+                    track_slippage(signal_prices, run_date=date.fromisoformat(today))
+                else:
+                    print("[EOD] No price data available for slippage tracking")
+            except Exception as e:
+                print(f"[EOD] Slippage tracking failed ({e}) — non-fatal, continuing")
+        # ── End Task 5 ───────────────────────────────────────────────────────
+
+        log_run(
+            run_date=today,
+            run_type="rebalance",
+            regime_label=regime_label,
+            regime_confidence=regime_confidence,
+            posture=posture,
+            portfolio_value=portfolio_value,
+            target_weights=target_weights.to_dict(),
+            orders_executed=executed,
+            orders_skipped=skipped,
+            notes=f"Submitted {len(executed)} orders, skipped {len(skipped)}.",
+        )
+
+        print(f"\n[EOD] Complete — {len(executed)} orders submitted, {len(skipped)} skipped.")
+
+    except Exception as e:
+        tb = traceback.format_exc()
+        print(f"[EOD] ERROR: {e}\n{tb}")
+        log_error(run_date=today, error=f"{e}\n{tb}")
+        raise
+
+
+def _is_rebalance_day(target_weights_all: pd.DataFrame, today: str) -> bool:
+    import os
+    calendar_path = os.path.normpath(os.path.join(
+        os.path.dirname(__file__), "..", "..", "rebalance_calendar.csv"))
+    if os.path.exists(calendar_path):
+        import pandas as _pd
+        cal = _pd.read_csv(calendar_path)
+        scheduled = set(cal["rebalance_date"].tolist())
+        if today in scheduled:
+            print(f"[EOD] {today} is on the rebalance calendar — rebalancing.")
+            return True
+        print(f"[EOD] {today} is NOT on the rebalance calendar — skipping.")
+        return False
+    today_ts    = pd.Timestamp(today)
+    rebal_dates = target_weights_all.index
+    if rebal_dates.tz is not None:
+        today_ts = today_ts.tz_localize(rebal_dates.tz)
+    diffs = abs(rebal_dates - today_ts)
+    if diffs.min().days > 1:
+        return False
+    if len(rebal_dates) < 2:
+        return True
+    latest_weights = target_weights_all.iloc[-1]
+    prev_weights   = target_weights_all.iloc[-2]
+    all_cols       = latest_weights.index.union(prev_weights.index)
+    latest_aligned = latest_weights.reindex(all_cols, fill_value=0.0)
+    prev_aligned   = prev_weights.reindex(all_cols, fill_value=0.0)
+    return bool((latest_aligned - prev_aligned).abs().max() >= 0.005)
+
+def _get_price(symbol: str, positions: pd.DataFrame) -> float:
+    if not positions.empty and symbol in positions["symbol"].values:
+        p = positions.loc[positions["symbol"] == symbol, "current_price"].values[0]
+        if p > 0:
+            return float(p)
+    return 0.0
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Ascent Capital EOD Runner")
+    parser.add_argument("--dry-run",           action="store_true")
+    parser.add_argument("--reset-kill-switch",  action="store_true")
+    parser.add_argument("--date",              type=str, default=None)
+    args = parser.parse_args()
+
+    if args.reset_kill_switch:
+        kill_switch.reset()
+    else:
+        run_eod(dry_run=args.dry_run, as_of_date=args.date)

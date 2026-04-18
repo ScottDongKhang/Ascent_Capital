@@ -1,0 +1,10 @@
+{
+  "agent_id": "alternatives",
+  "date": "2026-04-09",
+  "weights": {
+    "PDBC": 0.35,
+    "IFRA": 0.35,
+    "GLD": 0.299999
+  },
+  "saved_at": "2026-04-09T20:16:30.628597"
+}

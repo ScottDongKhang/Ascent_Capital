@@ -1,0 +1,90 @@
+{
+  "date": "2026-04-12",
+  "data_as_of": "2026-04-12",
+  "timestamp": "2026-04-18T14:19:15.076783",
+  "portfolio_state": {
+    "date": "2026-04-12",
+    "us_regime": "calm_bull",
+    "macro_regime": "neutral",
+    "n_positions": 2,
+    "allocation": {},
+    "weights": {
+      "AAPL": 0.5,
+      "MSFT": 0.5
+    },
+    "_data_as_of": "2026-04-12",
+    "memory_context": [
+      {
+        "date": "2026-04-12",
+        "recommendation": "proceed",
+        "reasoning": "ok",
+        "regime": "calm_bull",
+        "key_risks": []
+      },
+      {
+        "date": "2026-04-06",
+        "recommendation": "reduce_size",
+        "reasoning": "The portfolio is fundamentally misaligned with a stressed equity regime. While the bull case makes reasonable points about defensive equity names and commodity diversification, the weight of evidence from bear, devil's advocate, regime specialist, and even the quant check (only 4.5% defensive) all c",
+        "regime": "stressed",
+        "key_risks": [
+          "Regime divergence trap: calm_bull macro lagging stressed equities creates false comfort \u2014 historically resolves with macro deteriorating, not equities recovering",
+          "Cyclical and EM overexposure (~22% cyclicals + 15.4% EM) amplifies downside in stressed regime with correlated selloff risk",
+          "Insufficient defensive allocation (4.5% vs. 15-25% regime-appropriate level) with no bond duration, minimal gold, and no volatility hedge"
+        ]
+      },
+      {
+        "date": "2026-04-05",
+        "recommendation": "halt_and_review",
+        "reasoning": "The convergence of bear, devil's advocate, and regime specialist arguments is overwhelming and internally consistent. We are in a STRESSED equity regime, and this portfolio is constructed as if calm_bull macro will persist indefinitely and equity stress is a temporary dislocation. That's a bet, not ",
+        "regime": "stressed",
+        "key_risks": [
+          "Portfolio is fundamentally misaligned with STRESSED equity regime \u2014 only 5.1% defensive allocation vs. 11.8% risk-on, with no bond or tail-hedge exposure",
+          "~32% combined EM/commodity exposure (EWZ, EWT, EWY, PDBC, DBA, DBB) creates correlated liquidation risk in a dollar spike or risk-off cascade that the Monte Carlo likely underestimates",
+          "Cyclical names (CAT, SEDG, MPC) totaling ~16.7% are max-pain positions if stressed regime deepens into full drawdown, and macro calm_bull can lag-flip rapidly"
+        ]
+      }
+    ],
+    "scenario_summary": "",
+    "scenario_results": [],
+    "catalyst_context": {
+      "upcoming_events": [],
+      "catalyst_text": ""
+    },
+    "quant_context": {
+      "portfolio_var_95": -0.025546,
+      "portfolio_var_99": -0.035058,
+      "factor_exposures": {
+        "us_tech": 1.0
+      },
+      "sector_concentration": {
+        "us_tech": 1.0
+      },
+      "top_correlated_pairs": [
+        {
+          "sym1": "AAPL",
+          "sym2": "MSFT",
+          "correlation": 0.16
+        }
+      ],
+      "summary_text": "QUANTITATIVE RISK CONTEXT (pre-computed):\n\nPortfolio VaR (historical simulation, 63 trading days):\n  95th percentile (1-day): -2.55%  (1 in 20 chance of loss >= this)\n  99th percentile (1-day): -3.51%  (1 in 100 chance of loss >= this)\n\nFactor exposures (sum of position weights per factor):\n  us_tech            100.0%\n\nCorrelation: No high-correlation pairs (>0.65) detected.\n\nConcentration warning: us_tech is 100.0% of portfolio"
+    }
+  },
+  "arguments": {
+    "bull": "bull_r1",
+    "bear": "bear_r1",
+    "devils_advocate": "devil_r1",
+    "regime_specialist": "regime_r1",
+    "quant_sanity": "quant_r1",
+    "bull_rebuttal": "bull_r2",
+    "bear_rebuttal": "bear_r2",
+    "devils_advocate_rebuttal": "devil_r2",
+    "regime_specialist_rebuttal": "regime_r2"
+  },
+  "verdict": {
+    "confidence": 0.7,
+    "recommendation": "proceed",
+    "key_risks": [],
+    "reasoning": "ok"
+  },
+  "outcome_scored": false
+}

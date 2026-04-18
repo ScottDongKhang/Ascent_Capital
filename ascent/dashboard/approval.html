@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ascent Capital — Trade Approval</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:       #0d0f12;
+    --surface:  #161a1f;
+    --border:   #252b33;
+    --muted:    #4a5568;
+    --text:     #c9d1d9;
+    --dim:      #8b949e;
+    --green:    #39d353;
+    --red:      #f85149;
+    --yellow:   #e3b341;
+    --blue:     #58a6ff;
+    --font:     'Menlo', 'Consolas', 'Monaco', monospace;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 13px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 32px 16px;
+  }
+
+  /* ── Header ── */
+  .header {
+    width: 100%;
+    max-width: 780px;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 12px;
+    margin-bottom: 24px;
+  }
+  .header-title {
+    font-size: 15px;
+    font-weight: bold;
+    letter-spacing: 0.06em;
+    color: var(--blue);
+    text-transform: uppercase;
+  }
+  .header-meta { color: var(--dim); font-size: 11px; }
+
+  /* ── Status banner ── */
+  .status-bar {
+    width: 100%;
+    max-width: 780px;
+    padding: 10px 14px;
+    border-radius: 4px;
+    margin-bottom: 20px;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    border: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .status-bar.pending  { border-color: var(--yellow); background: rgba(227,179,65,0.07); }
+  .status-bar.approved { border-color: var(--green);  background: rgba(57,211,83,0.07); }
+  .status-bar.rejected { border-color: var(--red);    background: rgba(248,81,73,0.07); }
+  .status-bar.expired  { border-color: var(--muted);  background: rgba(74,85,104,0.07); }
+  .status-bar.empty    { border-color: var(--border);  }
+
+  .status-label { font-weight: bold; text-transform: uppercase; letter-spacing: 0.08em; }
+  .status-bar.pending  .status-label { color: var(--yellow); }
+  .status-bar.approved .status-label { color: var(--green);  }
+  .status-bar.rejected .status-label { color: var(--red);    }
+  .status-bar.expired  .status-label { color: var(--muted);  }
+
+  .countdown { color: var(--dim); font-size: 11px; }
+
+  /* ── Table ── */
+  .table-wrap {
+    width: 100%;
+    max-width: 780px;
+    overflow-x: auto;
+    margin-bottom: 24px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  thead th {
+    text-align: left;
+    color: var(--dim);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  tbody tr { border-bottom: 1px solid var(--border); }
+  tbody tr:last-child { border-bottom: none; }
+  tbody td {
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+  .sym  { color: var(--blue); font-weight: bold; }
+  .buy  { color: var(--green); }
+  .sell { color: var(--red); }
+  .num  { text-align: right; }
+  .pct  { color: var(--yellow); text-align: right; }
+
+  /* ── Action buttons ── */
+  .actions {
+    width: 100%;
+    max-width: 780px;
+    display: flex;
+    gap: 12px;
+  }
+  button {
+    flex: 1;
+    padding: 12px;
+    border: none;
+    border-radius: 4px;
+    font-family: var(--font);
+    font-size: 13px;
+    font-weight: bold;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  button:hover:not(:disabled) { opacity: 0.85; }
+  button:disabled { opacity: 0.35; cursor: not-allowed; }
+  .btn-approve { background: var(--green);  color: #0d1117; }
+  .btn-reject  { background: var(--red);    color: #fff; }
+
+  /* ── Empty / decided states ── */
+  .center-msg {
+    width: 100%;
+    max-width: 780px;
+    padding: 40px;
+    text-align: center;
+    color: var(--dim);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    margin-bottom: 24px;
+  }
+  .center-msg .icon { font-size: 28px; margin-bottom: 10px; }
+
+  /* ── Footer ── */
+  .footer {
+    width: 100%;
+    max-width: 780px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 11px;
+    margin-top: 32px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <span class="header-title">⬡ Ascent Capital — Trade Approval</span>
+  <span class="header-meta" id="last-refresh">—</span>
+</div>
+
+<div class="status-bar empty" id="status-bar">
+  <span class="status-label" id="status-label">Loading...</span>
+  <span class="countdown" id="countdown"></span>
+</div>
+
+<div id="content"></div>
+
+<div class="actions" id="actions" style="display:none">
+  <button class="btn-approve" id="btn-approve" onclick="decide('approve')">✓ Approve All</button>
+  <button class="btn-reject"  id="btn-reject"  onclick="decide('reject')">✕ Reject All</button>
+</div>
+
+<div class="footer">
+  Auto-refreshes every 10s &nbsp;·&nbsp; Unapproved trades expire in 30 minutes &nbsp;·&nbsp; Ascent Capital EOD Runner
+</div>
+
+<script>
+  let _expiresAt = null;
+  let _countdownTimer = null;
+  let _pollTimer = null;
+
+  function fmt(n, digits=2) {
+    return Number(n).toLocaleString('en-US', {minimumFractionDigits: digits, maximumFractionDigits: digits});
+  }
+
+  function renderTable(trades) {
+    if (!trades || trades.length === 0) return '';
+    let rows = trades.map(t => `
+      <tr>
+        <td class="sym">${t.symbol}</td>
+        <td class="${t.side}">${t.side.toUpperCase()}</td>
+        <td class="num">${fmt(t.qty, 4)}</td>
+        <td class="num">$${fmt(t.notional)}</td>
+        <td class="pct">${fmt(t.weight_pct)}%</td>
+      </tr>`).join('');
+    return `
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Symbol</th><th>Side</th><th style="text-align:right">Qty</th>
+              <th style="text-align:right">Notional</th><th style="text-align:right">% of NAV</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  }
+
+  function startCountdown(expiresAt) {
+    _expiresAt = new Date(expiresAt);
+    if (_countdownTimer) clearInterval(_countdownTimer);
+    _countdownTimer = setInterval(() => {
+      const secs = Math.max(0, Math.round((_expiresAt - Date.now()) / 1000));
+      const m = Math.floor(secs / 60).toString().padStart(2, '0');
+      const s = (secs % 60).toString().padStart(2, '0');
+      const el = document.getElementById('countdown');
+      if (el) el.textContent = secs > 0 ? `Expires in ${m}:${s}` : 'Expired';
+      if (secs === 0) { clearInterval(_countdownTimer); refresh(); }
+    }, 1000);
+  }
+
+  function setButtons(enabled) {
+    ['btn-approve','btn-reject'].forEach(id => {
+      document.getElementById(id).disabled = !enabled;
+    });
+  }
+
+  function render(data) {
+    const statusBar = document.getElementById('status-bar');
+    const statusLabel = document.getElementById('status-label');
+    const content = document.getElementById('content');
+    const actions = document.getElementById('actions');
+    const lastRefresh = document.getElementById('last-refresh');
+
+    lastRefresh.textContent = 'Last refresh: ' + new Date().toLocaleTimeString();
+
+    // Reset classes
+    statusBar.className = 'status-bar ' + (data.status || 'empty');
+
+    const statusText = {
+      pending:  '⚠ Approval Required',
+      approved: '✓ Approved',
+      rejected: '✕ Rejected',
+      expired:  '⏱ Expired',
+      empty:    'No Pending Trades',
+    }[data.status] || data.status;
+
+    statusLabel.textContent = statusText;
+
+    if (data.status === 'pending') {
+      const meta = data.run_date ? ` — Run date: ${data.run_date}` : '';
+      statusBar.querySelector('.status-label').insertAdjacentHTML(
+        'afterend', `<span style="color:var(--dim);font-size:11px;margin-left:10px">${meta}</span>`);
+
+      if (data.expires_at) startCountdown(data.expires_at);
+      content.innerHTML = renderTable(data.trades);
+      actions.style.display = 'flex';
+      setButtons(true);
+
+    } else if (data.status === 'approved') {
+      content.innerHTML = `<div class="center-msg"><div class="icon">✓</div>Trades approved at ${data.decided_at ? new Date(data.decided_at).toLocaleTimeString() : '—'}</div>`;
+      actions.style.display = 'flex';
+      setButtons(false);
+      if (_countdownTimer) clearInterval(_countdownTimer);
+      document.getElementById('countdown').textContent = '';
+
+    } else if (data.status === 'rejected') {
+      content.innerHTML = `<div class="center-msg"><div class="icon" style="color:var(--red)">✕</div>Trades rejected at ${data.decided_at ? new Date(data.decided_at).toLocaleTimeString() : '—'}</div>`;
+      actions.style.display = 'flex';
+      setButtons(false);
+      if (_countdownTimer) clearInterval(_countdownTimer);
+      document.getElementById('countdown').textContent = '';
+
+    } else if (data.status === 'expired') {
+      content.innerHTML = `<div class="center-msg"><div class="icon" style="color:var(--muted)">⏱</div>Approval window expired — trades were cancelled automatically.</div>`;
+      actions.style.display = 'none';
+      if (_countdownTimer) clearInterval(_countdownTimer);
+      document.getElementById('countdown').textContent = '';
+
+    } else {
+      content.innerHTML = `<div class="center-msg"><div class="icon">—</div>No pending trades.<br><br>This page will update automatically when the EOD runner flags a large trade for approval.</div>`;
+      actions.style.display = 'none';
+      if (_countdownTimer) clearInterval(_countdownTimer);
+      document.getElementById('countdown').textContent = '';
+    }
+  }
+
+  async function refresh() {
+    try {
+      const r = await fetch('/api/pending', {cache: 'no-store'});
+      const data = await r.json();
+      render(data);
+    } catch(e) {
+      document.getElementById('last-refresh').textContent = 'Refresh failed — ' + new Date().toLocaleTimeString();
+    }
+  }
+
+  async function decide(action) {
+    setButtons(false);
+    try {
+      const r = await fetch(`/api/${action}`, {method: 'POST'});
+      const data = await r.json();
+      await refresh();
+    } catch(e) {
+      alert('Request failed: ' + e);
+      setButtons(true);
+    }
+  }
+
+  // Initial load + poll
+  refresh();
+  _pollTimer = setInterval(refresh, 10_000);
+</script>
+</body>
+</html>

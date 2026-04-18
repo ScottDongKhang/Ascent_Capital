@@ -1,0 +1,10 @@
+{
+  "agent_id": "alternatives",
+  "date": "2026-04-14",
+  "weights": {
+    "IFRA": 0.35,
+    "VNQ": 0.35,
+    "DBA": 0.3
+  },
+  "saved_at": "2026-04-14T21:40:33.310129"
+}

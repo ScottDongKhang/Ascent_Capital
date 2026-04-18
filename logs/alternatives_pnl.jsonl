@@ -1,0 +1,16 @@
+{"date": "2026-04-06", "nav": 101291.58, "return": 0.012916, "agent_id": "alternatives", "source": "forward_pnl_tracker", "timestamp": "2026-04-06T02:05:25.442959"}
+{"date": "2026-04-06", "nav": 102599.84, "return": 0.012916, "agent_id": "alternatives", "source": "forward_pnl_tracker", "timestamp": "2026-04-06T02:28:40.752170"}
+{"date": "2026-04-06", "nav": 102781.91, "return": 0.001775, "agent_id": "alternatives", "source": "forward_pnl_tracker", "timestamp": "2026-04-06T18:24:41.410475"}
+{"date": "2026-04-06", "nav": 102964.31, "return": 0.001775, "agent_id": "alternatives", "source": "forward_pnl_tracker", "timestamp": "2026-04-06T19:54:51.453205"}
+{"date": "2026-04-06", "nav": 103147.03, "return": 0.001775, "agent_id": "alternatives", "source": "forward_pnl_tracker", "timestamp": "2026-04-06T20:00:17.315163"}
+{"date": "2026-04-07", "nav": 103017.14, "return": -0.001259, "agent_id": "alternatives", "source": "forward_pnl_tracker", "timestamp": "2026-04-07T20:46:03.303385"}
+{"date": "2026-04-08", "nav": 102713.25, "return": -0.00295, "agent_id": "alternatives", "source": "forward_pnl_tracker", "timestamp": "2026-04-08T17:13:57.482866"}
+{"date": "2026-04-09", "nav": 103538.35, "return": 0.008033, "agent_id": "alternatives", "source": "forward_pnl_tracker", "timestamp": "2026-04-09T20:16:30.627551"}
+{"date": "2026-04-10", "nav": 103153.38, "return": -0.003718, "agent_id": "alternatives", "source": "forward_pnl_tracker", "timestamp": "2026-04-10T22:06:33.615687"}
+{"date": "2026-04-10", "nav": 102769.85, "return": -0.003718, "agent_id": "alternatives", "source": "forward_pnl_tracker", "timestamp": "2026-04-10T22:08:48.811326"}
+{"date": "2026-04-13", "nav": 103871.67, "return": 0.010721, "agent_id": "alternatives", "source": "forward_pnl_tracker", "timestamp": "2026-04-13T22:27:32.901282"}
+{"date": "2026-04-14", "nav": 104106.92, "return": 0.002265, "agent_id": "alternatives", "source": "forward_pnl_tracker", "timestamp": "2026-04-14T21:40:33.308648"}
+{"date": "2026-04-15", "nav": 103771.0, "return": -0.003227, "agent_id": "alternatives", "source": "forward_pnl_tracker", "timestamp": "2026-04-15T15:32:58.905829"}
+{"date": "2026-04-15", "nav": 103436.16, "return": -0.003227, "agent_id": "alternatives", "source": "forward_pnl_tracker", "timestamp": "2026-04-15T15:42:52.286373"}
+{"date": "2026-04-16", "nav": 103987.34, "return": 0.005329, "agent_id": "alternatives", "source": "forward_pnl_tracker", "timestamp": "2026-04-16T22:44:28.029762"}
+{"date": "2026-04-17", "nav": 103804.58, "return": -0.001758, "agent_id": "alternatives", "source": "forward_pnl_tracker", "timestamp": "2026-04-17T22:56:12.120839"}

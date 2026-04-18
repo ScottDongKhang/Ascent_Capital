@@ -1,0 +1,193 @@
+{
+  "trades": [
+    {
+      "symbol": "APD",
+      "side": "sell",
+      "qty": 44.0631,
+      "notional": 13007.88,
+      "weight_pct": 13.02
+    },
+    {
+      "symbol": "CAT",
+      "side": "sell",
+      "qty": 9.5779,
+      "notional": 7382.63,
+      "weight_pct": 7.39
+    },
+    {
+      "symbol": "CB",
+      "side": "sell",
+      "qty": 23.1808,
+      "notional": 7586.38,
+      "weight_pct": 7.59
+    },
+    {
+      "symbol": "EQIX",
+      "side": "sell",
+      "qty": 3.8381,
+      "notional": 4041.4,
+      "weight_pct": 4.04
+    },
+    {
+      "symbol": "MPC",
+      "side": "sell",
+      "qty": 53.8209,
+      "notional": 12003.68,
+      "weight_pct": 12.01
+    },
+    {
+      "symbol": "MRK",
+      "side": "sell",
+      "qty": 78.1531,
+      "notional": 9214.25,
+      "weight_pct": 9.22
+    },
+    {
+      "symbol": "NEE",
+      "side": "sell",
+      "qty": 137.2497,
+      "notional": 12550.11,
+      "weight_pct": 12.56
+    },
+    {
+      "symbol": "T",
+      "side": "sell",
+      "qty": 401.4063,
+      "notional": 10227.83,
+      "weight_pct": 10.24
+    },
+    {
+      "symbol": "WMT",
+      "side": "sell",
+      "qty": 54.6355,
+      "notional": 6810.01,
+      "weight_pct": 6.82
+    },
+    {
+      "symbol": "AMZN",
+      "side": "buy",
+      "qty": 9.4266,
+      "notional": 2342.12,
+      "weight_pct": 2.34
+    },
+    {
+      "symbol": "BIL",
+      "side": "buy",
+      "qty": 49.1001,
+      "notional": 4493.4,
+      "weight_pct": 4.5
+    },
+    {
+      "symbol": "CASY",
+      "side": "buy",
+      "qty": 8.1452,
+      "notional": 6002.78,
+      "weight_pct": 6.01
+    },
+    {
+      "symbol": "DBB",
+      "side": "buy",
+      "qty": 179.7839,
+      "notional": 4503.59,
+      "weight_pct": 4.51
+    },
+    {
+      "symbol": "EWT",
+      "side": "buy",
+      "qty": 59.2378,
+      "notional": 4782.26,
+      "weight_pct": 4.79
+    },
+    {
+      "symbol": "EWY",
+      "side": "buy",
+      "qty": 74.4354,
+      "notional": 10784.95,
+      "weight_pct": 10.79
+    },
+    {
+      "symbol": "EWZ",
+      "side": "buy",
+      "qty": 115.3465,
+      "notional": 4782.26,
+      "weight_pct": 4.79
+    },
+    {
+      "symbol": "GOOGL",
+      "side": "buy",
+      "qty": 6.8739,
+      "notional": 2317.34,
+      "weight_pct": 2.32
+    },
+    {
+      "symbol": "HYG",
+      "side": "buy",
+      "qty": 55.98,
+      "notional": 4503.59,
+      "weight_pct": 4.51
+    },
+    {
+      "symbol": "IFRA",
+      "side": "buy",
+      "qty": 60.0314,
+      "notional": 3546.95,
+      "weight_pct": 3.55
+    },
+    {
+      "symbol": "LQD",
+      "side": "buy",
+      "qty": 27.1978,
+      "notional": 2990.4,
+      "weight_pct": 2.99
+    },
+    {
+      "symbol": "MPWR",
+      "side": "buy",
+      "qty": 4.436,
+      "notional": 6002.78,
+      "weight_pct": 6.01
+    },
+    {
+      "symbol": "NEM",
+      "side": "buy",
+      "qty": 39.2175,
+      "notional": 4433.14,
+      "weight_pct": 4.44
+    },
+    {
+      "symbol": "PAVE",
+      "side": "buy",
+      "qty": 46.2671,
+      "notional": 2501.89,
+      "weight_pct": 2.5
+    },
+    {
+      "symbol": "PDBC",
+      "side": "buy",
+      "qty": 539.9212,
+      "notional": 9294.74,
+      "weight_pct": 9.3
+    },
+    {
+      "symbol": "TRGP",
+      "side": "buy",
+      "qty": 25.1468,
+      "notional": 6002.78,
+      "weight_pct": 6.01
+    },
+    {
+      "symbol": "VNQ",
+      "side": "buy",
+      "qty": 30.726,
+      "notional": 2898.08,
+      "weight_pct": 2.9
+    }
+  ],
+  "created_at": "2026-04-15T15:44:37.387593",
+  "run_date": "2026-04-15",
+  "status": "approved",
+  "expires_at": "2026-04-15T16:14:37.387613",
+  "approved_by": "scott",
+  "approved_at": "2026-04-15T23:01:29.348276+00:00",
+  "note": "Manual approval \u2014 rebalance 2026-04-15, verdict=REDUCE_SIZE confidence=0.88"
+}

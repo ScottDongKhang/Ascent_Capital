@@ -1,0 +1,127 @@
+{
+  "date": "2026-04-12",
+  "generated_at": "2026-04-13T23:42:34.425518",
+  "n_positions": 2,
+  "portfolio": {
+    "AAPL": 0.5,
+    "MSFT": 0.5
+  },
+  "scenarios": [
+    {
+      "scenario": "em_risk_off",
+      "description": "EM equities -15%, USD +5%, flight to safety",
+      "portfolio_impact_pct": 0.0,
+      "affected_positions": [],
+      "unaffected_weight_pct": 100.0,
+      "n_affected": 0,
+      "percentiles": {
+        "p5": 0.0,
+        "p25": 0.0,
+        "p50": 0.0,
+        "p75": 0.0,
+        "p95": 0.0
+      },
+      "worst_case": 0.0,
+      "base_case": 0.0,
+      "best_case": 0.0
+    },
+    {
+      "scenario": "rates_spike",
+      "description": "Rates spike \u2014 TLT -8%, rate-sensitive equities repriced",
+      "portfolio_impact_pct": 0.0,
+      "affected_positions": [],
+      "unaffected_weight_pct": 100.0,
+      "n_affected": 0,
+      "percentiles": {
+        "p5": 0.0,
+        "p25": 0.0,
+        "p50": 0.0,
+        "p75": 0.0,
+        "p95": 0.0
+      },
+      "worst_case": 0.0,
+      "base_case": 0.0,
+      "best_case": 0.0
+    },
+    {
+      "scenario": "tech_unwind",
+      "description": "Nasdaq -12%, tech correlation spike",
+      "portfolio_impact_pct": -12.0,
+      "affected_positions": [
+        {
+          "symbol": "AAPL",
+          "weight": 0.5,
+          "shock": -0.12,
+          "contribution": -0.06
+        },
+        {
+          "symbol": "MSFT",
+          "weight": 0.5,
+          "shock": -0.12,
+          "contribution": -0.06
+        }
+      ],
+      "unaffected_weight_pct": 0,
+      "n_affected": 2,
+      "percentiles": {
+        "p5": -16.45,
+        "p25": -13.99,
+        "p50": -12.12,
+        "p75": -10.38,
+        "p95": -8.06
+      },
+      "worst_case": -16.45,
+      "base_case": -12.12,
+      "best_case": -8.06
+    },
+    {
+      "scenario": "commodity_shock",
+      "description": "Oil spike +15%, gold rallies +8%, inflation fears",
+      "portfolio_impact_pct": 0.0,
+      "affected_positions": [],
+      "unaffected_weight_pct": 100.0,
+      "n_affected": 0,
+      "percentiles": {
+        "p5": 0.0,
+        "p25": 0.0,
+        "p50": 0.0,
+        "p75": 0.0,
+        "p95": 0.0
+      },
+      "worst_case": 0.0,
+      "base_case": 0.0,
+      "best_case": 0.0
+    },
+    {
+      "scenario": "correlation_crisis",
+      "description": "All risky assets fall simultaneously \u2014 correlation breakdown",
+      "portfolio_impact_pct": -10.0,
+      "affected_positions": [
+        {
+          "symbol": "AAPL",
+          "weight": 0.5,
+          "shock": -0.1,
+          "contribution": -0.05
+        },
+        {
+          "symbol": "MSFT",
+          "weight": 0.5,
+          "shock": -0.1,
+          "contribution": -0.05
+        }
+      ],
+      "unaffected_weight_pct": 0,
+      "n_affected": 2,
+      "percentiles": {
+        "p5": -13.71,
+        "p25": -11.66,
+        "p50": -10.1,
+        "p75": -8.65,
+        "p95": -6.71
+      },
+      "worst_case": -13.71,
+      "base_case": -10.1,
+      "best_case": -6.71
+    }
+  ]
+}

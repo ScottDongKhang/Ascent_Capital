@@ -1,0 +1,64 @@
+{
+  "patterns": [
+    {
+      "pattern": "Macro regime misalignment never resolved despite repeated flagging \u2014 portfolio constructed for calm_bull but system repeatedly detects stressed regime; no mechanism to force portfolio reconstruction or explicit regime-conditional rebalancing rules",
+      "frequency": 4,
+      "first_seen": "2026-04-04",
+      "last_seen": "2026-04-15",
+      "severity": "high",
+      "recommendation": "Implement hard rule: if regime detection diverges from portfolio construction regime for >2 consecutive sessions, trigger mandatory portfolio rebuild or explicit override documentation. Do not allow calm_bull portfolio to persist in stressed regime without explicit rebalancing decision."
+    },
+    {
+      "pattern": "Correlated liquidation risk in EM/commodity cluster (EWZ, EWT, EWY, PDBC, DBA, DBB) flagged repeatedly as underestimated by Monte Carlo; system acknowledges correlation risk but takes no action to reduce or hedge the exposure",
+      "frequency": 3,
+      "first_seen": "2026-04-05",
+      "last_seen": "2026-04-06",
+      "severity": "high",
+      "recommendation": "Establish maximum combined EM+commodity allocation threshold (suggest 20% vs. current 32%) and require explicit correlation matrix stress-test output before any session approving >25% combined exposure. Flag if Monte Carlo VaR/CVaR diverges from historical stress scenarios."
+    },
+    {
+      "pattern": "Internal portfolio hedging inefficiency (SEDG/NEE offsetting energy thesis, UUP offsetting commodity inflation bet) identified but never eliminated; system recognizes these create zero net exposure while paying transaction costs but does not force consolidation",
+      "frequency": 2,
+      "first_seen": "2026-04-04",
+      "last_seen": "2026-04-04",
+      "severity": "medium",
+      "recommendation": "Before each session, run correlation analysis on all position pairs. Flag any pair with correlation <-0.5 and combined allocation >5%; require explicit justification or consolidation. Do not allow offsetting bets to persist without documented tail-hedge rationale."
+    },
+    {
+      "pattern": "Defensive allocation chronically undersized (4.5%-5.1% vs. 15-25% regime-appropriate) in stressed regime; flagged as unacceptable but portfolio proceeds with minor adjustments; system lacks enforcement mechanism for regime-appropriate allocation floors",
+      "frequency": 3,
+      "first_seen": "2026-04-05",
+      "last_seen": "2026-04-06",
+      "severity": "high",
+      "recommendation": "Establish regime-conditional allocation guardrails: calm_bull requires minimum 5% defensive, stressed requires minimum 15%, crisis requires minimum 25%. Halt execution if guardrails violated; require explicit risk officer override with documented rationale."
+    },
+    {
+      "pattern": "Structural instrument decay (USO contango/roll costs vs. spot oil) identified as 'unacceptable' but 12.52% allocation persists; system recognizes flaw but does not force substitution to better instrument (e.g., XLE, CL futures, or direct commodity exposure)",
+      "frequency": 1,
+      "first_seen": "2026-04-04",
+      "last_seen": "2026-04-04",
+      "severity": "medium",
+      "recommendation": "Maintain blacklist of instruments with documented structural decay (USO, leveraged ETFs, high-decay VIX products). Require explicit exemption request with performance justification before allowing allocation >5%. Default to superior alternatives."
+    },
+    {
+      "pattern": "Confidence scores collapse (0.35\u21920.7\u21920.3) with minimal reasoning change; 2026-04-12 PROCEED at 0.7 confidence appears disconnected from prior stressed regime consensus; no documented regime shift or portfolio change justifies confidence jump",
+      "frequency": 1,
+      "first_seen": "2026-04-12",
+      "last_seen": "2026-04-12",
+      "severity": "medium",
+      "recommendation": "Require explicit regime shift documentation and portfolio change log before confidence can increase >0.2 points from prior session. If regime or portfolio unchanged, confidence cannot exceed prior session maximum. Flag unexplained confidence jumps as potential judge failure."
+    },
+    {
+      "pattern": "System defaults to REDUCE_SIZE on technical failure (2026-04-15) rather than escalating to human review; this masks underlying parsing/integration issues and creates false sense of safety through default conservatism",
+      "frequency": 1,
+      "first_seen": "2026-04-15",
+      "last_seen": "2026-04-15",
+      "severity": "medium",
+      "recommendation": "On judge parsing failure, escalate to human review with full debate transcript and error log; do not execute default action. Log all technical failures and require root-cause analysis before next session. Treat technical failures as system-level risk, not portfolio risk."
+    }
+  ],
+  "summary": "The system exhibits a critical gap between detection and enforcement: it repeatedly identifies macro regime misalignment (calm_bull portfolio in stressed regime), correlated liquidation risk in EM/commodities (32% combined), undersized defensive allocation (4.5% vs. 15-25% required), and structural instrument flaws (USO decay), yet takes no decisive action across 5 sessions. Confidence scores fluctuate without documented justification, and internal hedging inefficiencies persist despite explicit recognition. The root failure is architectural: the debate system flags risks accurately but lacks hard allocation guardrails, regime-conditional rebalancing rules, and enforcement mechanisms to force resolution. The 2026-04-12 PROCEED decision at 0.7 confidence appears disconnected from prior consensus, suggesting either regime shift documentation is missing or the judge is not properly constrained by prior session findings. Technical failures default to conservative action rather than escalation, masking integration problems.",
+  "updated": "2026-04-15",
+  "n_verdicts_analyzed": 5,
+  "n_debriefs_analyzed": 0
+}

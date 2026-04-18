@@ -1,0 +1,9 @@
+{
+  "agent_id": "alternatives",
+  "date": "2026-04-13",
+  "weights": {
+    "GLD": 0.5,
+    "VIXY": 0.5
+  },
+  "saved_at": "2026-04-13T22:27:32.902647"
+}

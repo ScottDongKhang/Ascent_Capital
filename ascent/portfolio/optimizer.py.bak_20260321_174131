@@ -1,0 +1,155 @@
+"""
+Ascent Capital — Portfolio Optimizer
+Converts alpha scores into portfolio target weights.
+"""
+from __future__ import annotations
+import pandas as pd
+import numpy as np
+from typing import Optional
+
+
+def top_n_equal_weight(
+    alpha: pd.DataFrame,
+    n: int = 10,
+    max_weight: float = 0.15,
+    min_weight: float = 0.02,
+    long_only: bool = True,
+) -> pd.DataFrame:
+    weights = pd.DataFrame(0.0, index=alpha.index, columns=alpha.columns)
+
+    for dt in alpha.index:
+        row = alpha.loc[dt].dropna()
+        if len(row) < min(n, 3):
+            continue
+        n_actual = min(n, len(row))
+
+        top = row.nlargest(n)
+        w = 1.0 / len(top)
+        w = np.clip(w, min_weight, max_weight)
+
+        for sym in top.index:
+            weights.loc[dt, sym] = w
+
+        row_sum = weights.loc[dt].sum()
+        if row_sum > 0:
+            weights.loc[dt] = weights.loc[dt] / row_sum
+
+    return weights
+
+
+def rank_weighted(
+    alpha: pd.DataFrame,
+    n: int = 10,
+    max_weight: float = 0.15,
+    long_only: bool = True,
+) -> pd.DataFrame:
+    weights = pd.DataFrame(0.0, index=alpha.index, columns=alpha.columns)
+
+    for dt in alpha.index:
+        row = alpha.loc[dt].dropna()
+        if len(row) < min(n, 3):
+            continue
+        n_actual = min(n, len(row))
+
+        top = row.nlargest(n)
+        scores = top - top.min() + 1e-8
+        raw_w = scores / scores.sum()
+
+        for _ in range(10):
+            raw_w = raw_w.clip(upper=max_weight)
+            raw_w = raw_w / raw_w.sum()
+            if raw_w.max() <= max_weight + 1e-9:
+                break
+
+        for sym in raw_w.index:
+            weights.loc[dt, sym] = raw_w[sym]
+
+    return weights
+
+
+def apply_turnover_penalty(
+    new_weights: pd.DataFrame,
+    prev_weights: pd.Series,
+    turnover_penalty: float = 0.5,
+) -> pd.Series:
+    if prev_weights is None or prev_weights.empty:
+        return new_weights
+    return (1 - turnover_penalty) * new_weights + turnover_penalty * prev_weights
+
+
+def enforce_constraints(
+    weights: pd.Series,
+    max_weight: float = 0.15,
+    min_weight: float = 0.01,
+    max_gross: float = 1.0,
+) -> pd.Series:
+    w = weights.copy()
+    w[w.abs() < min_weight] = 0.0
+    w = w.clip(-max_weight, max_weight)
+    gross = w.abs().sum()
+    if gross > max_gross and gross > 0:
+        w = w * (max_gross / gross)
+    return w
+
+
+def sector_constrained_weighted(
+    alpha,
+    n=10,
+    max_weight=0.15,
+    max_per_sector=1,
+    sector_map=None,
+    regime_signal=None,             # ← NEW: Optional[RegimeSignal]
+):
+    """
+    Sector-constrained rank-weighted portfolio.
+
+    If regime_signal is provided, max_weight is tightened based on the
+    current regime (e.g. 0.08 cap in crisis vs 0.15 in calm bull).
+    """
+    # ── NEW: regime-adjusted max weight ──────────────────────────────
+    if regime_signal is not None:
+        try:
+            from ascent.regime import regime_max_weight
+            max_weight = regime_max_weight(max_weight, regime_signal)
+        except Exception:
+            pass  # silently keep base max_weight if import fails
+
+    if sector_map is None:
+        sector_map = {}
+
+    weights = pd.DataFrame(0.0, index=alpha.index, columns=alpha.columns)
+
+    for dt in alpha.index:
+        row = alpha.loc[dt].dropna()
+        if len(row) < min(n, 3):
+            continue
+        n_actual = min(n, len(row))
+
+        ranked = row.sort_values(ascending=False)
+        selected = []
+        sector_count = {}
+        for sym in ranked.index:
+            sec = sector_map.get(sym, "Unknown")
+            if sector_count.get(sec, 0) < max_per_sector:
+                selected.append(sym)
+                sector_count[sec] = sector_count.get(sec, 0) + 1
+            if len(selected) >= n_actual:
+                break
+
+        if not selected:
+            continue
+
+        scores = ranked[selected]
+        scores = scores - scores.min() + 1e-8
+        raw_w = scores / scores.sum()
+
+        for _ in range(10):
+            raw_w = raw_w.clip(upper=max_weight)
+            raw_w = raw_w / raw_w.sum()
+            if raw_w.max() <= max_weight + 1e-9:
+                break
+
+        for sym in raw_w.index:
+            weights.loc[dt, sym] = raw_w[sym]
+
+    return weights

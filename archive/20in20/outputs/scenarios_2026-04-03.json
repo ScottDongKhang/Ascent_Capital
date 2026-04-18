@@ -1,0 +1,139 @@
+{
+  "date": "2026-04-03",
+  "generated_at": "2026-04-03T14:47:46.718519",
+  "n_positions": 14,
+  "portfolio": {
+    "APD": 0.084,
+    "CAT": 0.084,
+    "EQIX": 0.084,
+    "MPC": 0.084,
+    "MRK": 0.084,
+    "NEE": 0.084,
+    "SEDG": 0.084,
+    "T": 0.084,
+    "UUP": 0.082,
+    "GLD": 0.082,
+    "USO": 0.082,
+    "HAS": 0.036,
+    "SCHW": 0.026,
+    "HYG": 0.019
+  },
+  "scenarios": [
+    {
+      "scenario": "em_risk_off",
+      "description": "EM equities -15%, USD +5%, flight to safety",
+      "portfolio_impact_pct": 0.82,
+      "affected_positions": [
+        {
+          "symbol": "UUP",
+          "weight": 0.082,
+          "shock": 0.05,
+          "contribution": 0.0041
+        },
+        {
+          "symbol": "GLD",
+          "weight": 0.082,
+          "shock": 0.05,
+          "contribution": 0.0041
+        }
+      ],
+      "unaffected_weight_pct": 83.5,
+      "n_affected": 2
+    },
+    {
+      "scenario": "rates_spike",
+      "description": "Rates spike \u2014 TLT -8%, rate-sensitive equities repriced",
+      "portfolio_impact_pct": -0.76,
+      "affected_positions": [
+        {
+          "symbol": "EQIX",
+          "weight": 0.084,
+          "shock": -0.05,
+          "contribution": -0.0042
+        },
+        {
+          "symbol": "NEE",
+          "weight": 0.084,
+          "shock": -0.04,
+          "contribution": -0.00336
+        }
+      ],
+      "unaffected_weight_pct": 83.1,
+      "n_affected": 2
+    },
+    {
+      "scenario": "tech_unwind",
+      "description": "Nasdaq -12%, tech correlation spike",
+      "portfolio_impact_pct": 0.0,
+      "affected_positions": [],
+      "unaffected_weight_pct": 99.9,
+      "n_affected": 0
+    },
+    {
+      "scenario": "commodity_shock",
+      "description": "Oil spike +15%, gold rallies +8%, inflation fears",
+      "portfolio_impact_pct": 2.39,
+      "affected_positions": [
+        {
+          "symbol": "MPC",
+          "weight": 0.084,
+          "shock": 0.06,
+          "contribution": 0.00504
+        },
+        {
+          "symbol": "GLD",
+          "weight": 0.082,
+          "shock": 0.08,
+          "contribution": 0.00656
+        },
+        {
+          "symbol": "USO",
+          "weight": 0.082,
+          "shock": 0.15,
+          "contribution": 0.0123
+        }
+      ],
+      "unaffected_weight_pct": 75.1,
+      "n_affected": 3
+    },
+    {
+      "scenario": "correlation_crisis",
+      "description": "All risky assets fall simultaneously \u2014 correlation breakdown",
+      "portfolio_impact_pct": -3.53,
+      "affected_positions": [
+        {
+          "symbol": "CAT",
+          "weight": 0.084,
+          "shock": -0.1,
+          "contribution": -0.0084
+        },
+        {
+          "symbol": "EQIX",
+          "weight": 0.084,
+          "shock": -0.1,
+          "contribution": -0.0084
+        },
+        {
+          "symbol": "MPC",
+          "weight": 0.084,
+          "shock": -0.1,
+          "contribution": -0.0084
+        },
+        {
+          "symbol": "USO",
+          "weight": 0.082,
+          "shock": -0.1,
+          "contribution": -0.0082
+        },
+        {
+          "symbol": "HYG",
+          "weight": 0.019,
+          "shock": -0.1,
+          "contribution": -0.0019
+        }
+      ],
+      "unaffected_weight_pct": 64.6,
+      "n_affected": 5
+    }
+  ]
+}

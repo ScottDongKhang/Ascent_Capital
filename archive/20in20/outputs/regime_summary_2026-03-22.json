@@ -1,0 +1,20 @@
+{
+  "asof": "2026-03-22",
+  "regime_label": "stressed",
+  "probs": {
+    "0": 2.100447596987821e-28,
+    "1": 0.9999999997877698,
+    "2": 0.0,
+    "3": 2.1123011035204668e-10
+  },
+  "confidence": 1.0,
+  "days_in_regime": 11,
+  "posture": "defensive",
+  "risk_multiplier": 0.65,
+  "notes": "Risk elevated. Reduce concentration; prefer low-vol and quality tilt.",
+  "drivers": [
+    "High probability mass on stressed (100%)",
+    "Volatility elevated vs baseline",
+    "Breadth weakening outside leaders"
+  ]
+}

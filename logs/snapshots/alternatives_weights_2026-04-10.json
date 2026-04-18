@@ -1,0 +1,9 @@
+{
+  "agent_id": "alternatives",
+  "date": "2026-04-10",
+  "weights": {
+    "PDBC": 0.5,
+    "VNQ": 0.5
+  },
+  "saved_at": "2026-04-10T22:08:48.812230"
+}

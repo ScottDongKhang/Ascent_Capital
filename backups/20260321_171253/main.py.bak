@@ -1,0 +1,410 @@
+#!/usr/bin/env python3
+"""
+Ascent Capital — Main Pipeline Runner
+End-to-end: data → features → alpha → portfolio → backtest → report
+"""
+from __future__ import annotations
+import argparse
+import time
+from pathlib import Path
+
+import pandas as pd
+import numpy as np
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except Exception:
+    pass
+
+from ascent.config.settings import get_config, Config
+from ascent.data.ingest.simulated import generate_price_data, generate_macro_data
+from ascent.data.normalize.prices import normalize_prices, normalize_macro, pivot_prices
+from ascent.data.store.parquet import save_parquet, load_parquet, has_data
+from ascent.features.build_features import FeatureBuilder
+from ascent.alpha.stack import build_alpha_stack, alpha_to_ranks
+from ascent.portfolio.optimizer import top_n_equal_weight, rank_weighted, sector_constrained_weighted
+from ascent.backtest.engine import BacktestEngine
+from ascent.backtest.reports import print_report
+from ascent.research.evaluation import format_metrics
+
+
+def load_or_fetch_prices(cfg: Config, live: bool) -> pd.DataFrame:
+    cache_name = "prices_live" if live else "prices_simulated"
+    if has_data(cache_name):
+        print("[Data] Loading cached price data...")
+        return load_parquet(cache_name)
+    if live:
+        print("[Data] Fetching live price data...")
+        all_symbols = cfg.universe.symbols + [cfg.universe.benchmark]
+        try:
+            from ascent.data.ingest.yahoo import fetch_universe_daily
+            df = fetch_universe_daily(all_symbols, cfg.backtest.start_date, cfg.backtest.end_date)
+        except Exception as e:
+            print(f"[Data] Yahoo failed: {e}")
+            df = pd.DataFrame()
+        if df.empty:
+            print("[Data] No live data, falling back to simulated")
+            df = generate_price_data(all_symbols, cfg.backtest.start_date, cfg.backtest.end_date)
+    else:
+        print("[Data] Generating simulated price data...")
+        df = generate_price_data(
+            cfg.universe.symbols + [cfg.universe.benchmark],
+            cfg.backtest.start_date,
+            cfg.backtest.end_date,
+        )
+    df = normalize_prices(df)
+    save_parquet(df, cache_name)
+    print(f"[Data] {len(df)} rows, {df['symbol'].nunique()} symbols cached")
+    return df
+
+
+def load_or_fetch_macro(cfg: Config, live: bool) -> pd.DataFrame:
+    cache_name = "macro_live" if live else "macro_simulated"
+    if has_data(cache_name):
+        print("[Data] Loading cached macro data...")
+        return load_parquet(cache_name)
+    if live:
+        try:
+            from ascent.data.ingest.fred import fetch_all_macro
+            df = fetch_all_macro(start_date=cfg.backtest.start_date, end_date=cfg.backtest.end_date)
+        except Exception as e:
+            print(f"[Data] FRED failed ({e}), using simulated macro")
+            df = generate_macro_data(cfg.backtest.start_date, cfg.backtest.end_date)
+        if df.empty:
+            df = generate_macro_data(cfg.backtest.start_date, cfg.backtest.end_date)
+    else:
+        print("[Data] Generating simulated macro data...")
+        df = generate_macro_data(cfg.backtest.start_date, cfg.backtest.end_date)
+    df = normalize_macro(df)
+    save_parquet(df, cache_name)
+    return df
+
+
+def run_pipeline(
+    live: bool = False,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    top_n: int | None = None,
+    rebalance_days: int | None = None,
+) -> None:
+    cfg = get_config()
+    if not cfg.backtest.end_date:
+        from datetime import date
+        cfg.backtest.end_date = pd.bdate_range(end="today", periods=1)[0].strftime("%Y-%m-%d")
+        print(f"[Config] End date set to today: {cfg.backtest.end_date}")
+
+    if start_date:
+        cfg.backtest.start_date = start_date
+    if end_date:
+        cfg.backtest.end_date = end_date
+    if top_n:
+        cfg.backtest.top_n = top_n
+    if rebalance_days:
+        cfg.backtest.rebalance_freq_days = rebalance_days
+
+    t0 = time.time()
+
+    # ══════════════════════════════════════════════════════════════
+    # 1. DATA
+    # ══════════════════════════════════════════════════════════════
+    print("\n" + "=" * 70)
+    print("  STEP 1: DATA INGESTION")
+    print("=" * 70)
+
+    price_df = load_or_fetch_prices(cfg, live)
+    macro_df = load_or_fetch_macro(cfg, live)
+
+    benchmark_sym = cfg.universe.benchmark
+    benchmark_mask = price_df["symbol"] == benchmark_sym
+    benchmark_df = price_df[benchmark_mask].copy()
+    universe_df = price_df[~benchmark_mask].copy()
+
+    symbols = sorted(universe_df["symbol"].unique())
+    print(f"[Data] Universe: {len(symbols)} symbols")
+    print(f"[Data] Date range: {universe_df['date'].min().date()} → {universe_df['date'].max().date()}")
+
+    # ══════════════════════════════════════════════════════════════
+    # 1.5 REGIME ENGINE
+    # ══════════════════════════════════════════════════════════════
+    print("\n" + "=" * 70)
+    print("  STEP 1.5: REGIME ENGINE")
+    print("=" * 70)
+
+    regime_engine = None
+    regime_signal = None
+
+    try:
+        from ascent.regime import RegimeEngine, apply_regime_to_portfolio
+
+        # Build a wide-format SPY price series for the engine
+        spy_wide = (
+            benchmark_df.set_index("date")["close"]
+            .sort_index()
+            .pipe(lambda s: s[~s.index.duplicated(keep="last")])
+        )
+
+        # Build wide universe prices (dates × symbols) for cross-sectional features
+        univ_wide = (
+            universe_df.pivot_table(index="date", columns="symbol", values="close")
+            .sort_index()
+        )
+
+        # Optional: fetch VIX for stress features
+        vix_series = None
+        if live:
+            try:
+                import yfinance as yf
+                vix_raw = yf.download(
+                    "^VIX",
+                    start=cfg.backtest.start_date,
+                    end=cfg.backtest.end_date,
+                    progress=False,
+                )["Close"].squeeze()
+                vix_raw.index = pd.to_datetime(vix_raw.index).tz_localize(None)
+                vix_series = vix_raw
+                print("[Regime] VIX data fetched")
+            except Exception as e:
+                print(f"[Regime] VIX fetch skipped: {e}")
+
+        if hasattr(spy_wide.index, 'tz') and spy_wide.index.tz is not None:
+            spy_wide.index = spy_wide.index.tz_localize(None)
+        if hasattr(univ_wide.index, 'tz') and univ_wide.index.tz is not None:
+            univ_wide.index = univ_wide.index.tz_localize(None)
+        regime_engine = RegimeEngine(config=cfg.regime.to_engine_dict())
+        regime_engine.fit(
+            spy_prices=spy_wide,
+            universe_prices=univ_wide,
+            vix_prices=vix_series,
+            macro_df=None,   # macro_df is in long format; pass None to avoid shape issues
+            run_model_selection=True,
+        )
+
+        # Get the signal as of the last available date (used for alpha sleeve weights)
+        last_date = spy_wide.index[-1]
+        regime_signal = regime_engine.get_signal(last_date)
+
+        if regime_signal:
+            print(
+                f"[Regime] K={regime_engine.best_k}  "
+                f"label={regime_signal.label.value}  "
+                f"risk_mult={regime_signal.risk_multiplier:.2f}  "
+                f"entropy={regime_signal.entropy:.3f}"
+            )
+        else:
+            print("[Regime] Engine fitted but no signal returned — continuing without regime")
+
+    except Exception as exc:
+        print(f"[Regime] Engine failed ({exc}) — pipeline continues without regime adjustment")
+        regime_engine = None
+        regime_signal = None
+
+    # ══════════════════════════════════════════════════════════════
+    # 2. FEATURES
+    # ══════════════════════════════════════════════════════════════
+    print("\n" + "=" * 70)
+    print("  STEP 2: FEATURE COMPUTATION")
+    print("=" * 70)
+
+    builder = FeatureBuilder(universe_df, macro_df)
+    features = builder.compute_features()
+    targets = builder.compute_targets(horizons=[1, 5, 21])
+
+    print(f"[Features] Computed {len(features)} features across {len(builder.symbols)} symbols")
+    print(f"[Features] Date range: {builder.dates.min().date()} → {builder.dates.max().date()}")
+
+    # ══════════════════════════════════════════════════════════════
+    # 3. ALPHA  (regime signal adjusts sleeve weights here)
+    # ══════════════════════════════════════════════════════════════
+    print("\n" + "=" * 70)
+    print("  STEP 3: ALPHA GENERATION")
+    print("=" * 70)
+
+    # Pass regime_signal so build_alpha_stack can shift sleeve weights.
+    # If regime_engine is None, regime_signal is None → base weights used.
+    alpha = -build_alpha_stack(features, regime_signal=regime_signal)
+    ranks = alpha_to_ranks(alpha)
+    print(f"[Alpha] Composite alpha computed: {alpha.shape}")
+
+    if "fwd_ret_21d" in targets:
+        fwd = targets["fwd_ret_21d"]
+        common = alpha.index.intersection(fwd.index)
+        if len(common) > 100:
+            ic_series = alpha.loc[common].corrwith(fwd.loc[common], axis=1)
+            mean_ic = ic_series.mean()
+            print(f"[Alpha] Mean IC (21d fwd return): {mean_ic:.4f}")
+            print(f"[Alpha] IC t-stat: {mean_ic / (ic_series.std() / np.sqrt(len(ic_series))):.2f}")
+
+    # ══════════════════════════════════════════════════════════════
+    # 4. PORTFOLIO CONSTRUCTION  (regime tightens max_weight here)
+    # ══════════════════════════════════════════════════════════════
+    print("\n" + "=" * 70)
+    print("  STEP 4: PORTFOLIO CONSTRUCTION")
+    print("=" * 70)
+
+    from ascent.data.store.parquet import has_data as _hd
+    sector_map = {}
+    if _hd("profiles"):
+        from ascent.data.store.parquet import load_parquet as _lp
+        _prof = _lp("profiles")
+        sector_map = dict(zip(_prof["symbol"], _prof["sector"]))
+        print("[Portfolio] Sector constraint: max 1 per sector")
+
+    # Pass regime_signal so sector_constrained_weighted can apply the
+    # regime-adjusted max_weight cap (e.g. 0.08 in crisis).
+    target_weights = sector_constrained_weighted(
+        alpha,
+        n=cfg.backtest.top_n,
+        max_weight=cfg.backtest.max_weight,
+        max_per_sector=1,
+        sector_map=sector_map,
+        regime_signal=regime_signal,            # ← NEW
+    )
+
+    # Drop warmup period
+    warmup = 252 + 21
+    if len(target_weights) > warmup:
+        target_weights = target_weights.iloc[warmup:]
+
+    # ── NEW: apply per-date gross exposure scaling ─────────────────
+    # Walk each rebalance date, look up the regime signal for that date,
+    # and scale the weight vector by risk_multiplier.
+    if regime_engine is not None:
+        try:
+            from ascent.regime import apply_regime_to_portfolio
+            scaled_rows = []
+            for dt in target_weights.index:
+                raw_w = target_weights.loc[dt]
+                sig = regime_engine.get_signal(pd.Timestamp(dt))
+                if sig is not None and raw_w.sum() > 0.01:
+                    adj_w, _ = apply_regime_to_portfolio(
+                        raw_w,
+                        sig,
+                        base_max_weight=cfg.backtest.max_weight,
+                    )
+                    scaled_rows.append(adj_w)
+                else:
+                    scaled_rows.append(raw_w)
+            target_weights = pd.DataFrame(scaled_rows, index=target_weights.index)
+            print("[Portfolio] Regime gross exposure scaling applied")
+        except Exception as exc:
+            import traceback; traceback.print_exc()
+            print(f"[Portfolio] Regime scaling skipped: {exc}")
+
+    active_dates = (target_weights.sum(axis=1) > 0.01).sum()
+    print(f"[Portfolio] Target weights: {target_weights.shape}")
+    print(f"[Portfolio] Active rebalance dates: {active_dates}")
+    print(f"[Portfolio] Top-{cfg.backtest.top_n} rank-weighted, max weight {cfg.backtest.max_weight:.0%}")
+
+    # ══════════════════════════════════════════════════════════════
+    # 5. BACKTEST
+    # ══════════════════════════════════════════════════════════════
+    print("\n" + "=" * 70)
+    print("  STEP 5: BACKTEST")
+    print("=" * 70)
+
+    engine = BacktestEngine(
+        initial_capital=cfg.backtest.initial_capital,
+        spread_bps=cfg.backtest.spread_bps,
+        impact_bps=cfg.backtest.impact_bps,
+        rebalance_freq_days=cfg.backtest.rebalance_freq_days,
+        execution_delay=cfg.backtest.execution_delay_days,
+    )
+
+    close = builder.close
+    open_ = builder.open
+    bm_close = benchmark_df.set_index("date")["close"].sort_index()
+    bm_close = bm_close[~bm_close.index.duplicated(keep="last")]
+
+    result = engine.run(
+        target_weights=target_weights,
+        close_prices=close,
+        open_prices=open_,
+        benchmark_prices=bm_close,
+    )
+
+    # ══════════════════════════════════════════════════════════════
+    # 6. REPORT
+    # ══════════════════════════════════════════════════════════════
+    print_report(result, title="ASCENT CAPITAL — FULL BACKTEST")
+
+    # Print regime summary if available
+    if regime_engine is not None:
+        try:
+            from ascent.regime.diagnostics import regime_occupancy_table, regime_return_stats
+            sigs = regime_engine.get_signal_series()
+            if not sigs.empty:
+                print("\n── Regime Occupancy ──────────────────────────────────")
+                print(regime_occupancy_table(sigs).to_string())
+                spy_ret = bm_close.pct_change().dropna()
+                print("\n── Per-Regime Return Stats ───────────────────────────")
+                print(regime_return_stats(spy_ret, sigs).to_string())
+        except Exception:
+            pass
+
+    elapsed = time.time() - t0
+    print(f"\n  Pipeline completed in {elapsed:.1f}s\n")
+
+
+    # Export VIX-based regime signal to JSON for dashboard
+    try:
+        import json, yfinance as yf
+        vix = yf.download("^VIX", start="2020-01-01", progress=False)["Close"].squeeze()
+        vix.index = pd.to_datetime(vix.index).tz_localize(None)
+        regime_json = []
+        for dt, v in vix.items():
+            if v < 15:
+                lbl, rs, rm = "CALM", 0.1, 1.0
+            elif v < 20:
+                lbl, rs, rm = "ELEVATED", 0.4, 0.9
+            elif v < 30:
+                lbl, rs, rm = "STRESS", 0.7, 0.75
+            else:
+                lbl, rs, rm = "CRISIS", 0.95, 0.5
+            regime_json.append({"d": dt.strftime("%Y-%m-%d"), "rs": rs, "label": lbl, "risk_mult": rm})
+        with open("dashboard/regime_signal.json", "w") as f:
+            json.dump(regime_json, f)
+        print(f"[Regime] Exported {len(regime_json)} VIX-based regime signals to dashboard/regime_signal.json")
+    except Exception as e:
+        print(f"[Regime] VIX export failed: {e}")
+
+    return result, regime_engine
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Ascent Capital — Quant Trading Platform")
+    parser.add_argument("--live", action="store_true")
+    parser.add_argument("--start", type=str, default=None)
+    parser.add_argument("--end", type=str, default=None)
+    parser.add_argument("--top-n", type=int, default=None)
+    parser.add_argument("--rebalance", type=int, default=None)
+    parser.add_argument("--mode", type=str, default="walkforward", choices=["walkforward", "full"])
+    parser.add_argument("--clear-cache", action="store_true")
+
+    args = parser.parse_args()
+
+    if args.clear_cache:
+        import shutil
+        cfg = get_config()
+        if cfg.data_dir.exists():
+            shutil.rmtree(cfg.data_dir)
+            print("Cache cleared.")
+
+    _, _regime_engine = run_pipeline(
+        live=args.live,
+        start_date=args.start,
+        end_date=args.end,
+        top_n=args.top_n,
+        rebalance_days=args.rebalance,
+    )
+
+    if args.mode == "walkforward":
+        print("\n" + "#" * 70)
+        print("  RUNNING WALK-FORWARD OUT-OF-SAMPLE EVALUATION")
+        print("#" * 70)
+        from ascent.research.walk_forward_runner import walk_forward_pipeline
+        walk_forward_pipeline(regime_engine=_regime_engine)
+
+
+if __name__ == "__main__":
+    main()
