@@ -198,9 +198,28 @@ Next rebalance: ~April 29, 2026. Live since April 1, 2026.
 
 ---
 
+## Known bugs — audit status (2026-04-18)
+
+All second-audit bugs now fixed. Third-pass audit found no new crashes (all remaining `iloc[-1]` accesses verified guarded).
+
+### Fixed 2026-04-17 (E1–E5, D1–D2, R1–R4)
+- eod_runner: empty weights guard, DataFrame.get(), cost features, dollar_volume column, regime log
+- debate_runner: None-safe weights, split generic except
+- run_all_agents: empty list guard, allocation source, regime staleness log, hasattr removal
+
+### Fixed 2026-04-18 (second audit)
+- **`debate/outcome_tracker.py`** — `future_navs[-1]` guard already in place; added `len(scores) > 0` guard in both `_rebuild_credibility` loops ✅
+- **`agents/international_agent.py`** — `len(uup) > 50` and `len(eem) > 200` guards added after `.dropna()` ✅
+- **`agents/alternatives_agent.py`** — `len(gld) > 200` guard added after `.dropna()` ✅
+- **`agents/macro_agent.py`** — already had `len(gld) > 200` guard ✅
+- **`orchestrator/central_intelligence.py`** — conviction bonus now logs when skipped ✅
+- **`ascent/research/self_improve.py`** — fallback to 0.518 now prints a warning ✅
+
+---
+
 ## What is not built yet
 
-- **Plans B2–D4**: enforce reduce_size, regime staleness fix, verdict outcome scoring, live Sharpe in self-improve, quant_context for debate agents, extended thinking for judge, prompt caching — all specced in `docs/superpowers/plans/`, partially implemented (see session log)
+- **Plans B2–D4**: ✅ All implemented (B2 enforce reduce_size, B3 regime staleness, C1–C3 outcome scoring + live Sharpe, D1–D4 quant context + extended thinking + prompt caching)
 - **Phase 4 hedge overlay**: blocked until ~May 13, 2026 (30 days live)
 - **R2R semantic memory**: built but `R2R_API_KEY` not configured; BM25 fallback active
 - **Live dashboard UI**: data files generated but no live render
@@ -270,3 +289,12 @@ Next rebalance: ~April 29, 2026. Live since April 1, 2026.
 - R4: removed hasattr(ao, "n_positions") guard — n_positions is already a @property
 - Files: eod_runner.py, debate_runner.py, run_all_agents.py, tests/test_bug_hardening.py (new)
 - Tests: 144 passing
+
+### 2026-04-18 (plans B2–D4 verified + second audit fixes)
+- Confirmed B2–D4 were already fully implemented (done in a prior session, not logged)
+- Fixed test_plan_d.py _make_prices helper: use len(idx) not n_days (breaks on non-business days like Saturdays)
+- Fixed 6 second-audit bugs: international_agent (uup/eem iloc guards after dropna), alternatives_agent (gld iloc guard), outcome_tracker (_rebuild_credibility division-by-zero × 2), orchestrator (conviction bonus skip log), self_improve (fallback warning print)
+- Full third-pass codebase audit: all remaining iloc[-1] accesses verified as guarded; no new crash risks found
+- All Python files pass ast.parse; 144 tests passing
+- Files: agents/international_agent.py, agents/alternatives_agent.py, debate/outcome_tracker.py, orchestrator/central_intelligence.py, ascent/research/self_improve.py, tests/test_plan_d.py, CLAUDE.md
+- Open: Phase 4 hedge overlay (blocked until ~May 13), debate trigger condition (high-uncertainty days only), R2R API key config
