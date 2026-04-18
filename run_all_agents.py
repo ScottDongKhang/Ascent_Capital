@@ -396,7 +396,7 @@ def main():
             pass
         # TODO: wire orchestrator_result.allocation when central_intelligence exposes it
         _base_alloc = {"us_equities": 0.60, "macro": 0.15, "international": 0.15, "alternatives": 0.10}
-        _orch_alloc = orchestrator_result.get("allocation") if isinstance(orchestrator_result, dict) else None
+        _orch_alloc = merged_weights.get("allocation") if isinstance(merged_weights, dict) else None
         portfolio_state = {
             "date":         today.isoformat(),
             "us_regime":    next((ao.regime_signal for ao in agent_outputs if ao.agent_id == "us_equities" and ao.regime_signal), _saved_regime),
