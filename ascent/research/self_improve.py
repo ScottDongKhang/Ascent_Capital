@@ -129,38 +129,25 @@ def _load_recent_returns(agent_id="us_equities", window=63):
 # ── Deterministic evaluator ────────────────────────────────────────────────────
 
 def evaluate_variant(variant_config: dict) -> float:
-    """Deterministic variant evaluation using real return history. Same variant = same score."""
-    import numpy as np
-
-    baseline = get_baseline_sharpe()
-    if baseline is None:
-        print("[SelfImprove] WARNING: no live Sharpe available — falling back to hardcoded 0.518")
-        baseline = 0.518
-
-    weights = variant_config.get("alpha_weights", DEFAULT_ALPHA_WEIGHTS)
-
-    # Deterministic diversity score: how far from defaults?
-    deviation = sum(abs(weights.get(k, 0) - DEFAULT_ALPHA_WEIGHTS.get(k, 0)) for k in DEFAULT_ALPHA_WEIGHTS)
-    if deviation < 0.05:
-        diversity_adj = -0.03
-    elif deviation <= 0.20:
-        diversity_adj = +0.01
-    else:
-        diversity_adj = -0.04
-
-    recent_returns = _load_recent_returns()
-    if len(recent_returns) >= 21:
-        returns_arr = np.array(recent_returns)
-        mean_r = np.mean(returns_arr)
-        std_r = np.std(returns_arr)
-        sharpe = (mean_r / std_r * (252 ** 0.5)) if std_r > 0 else 0.0
-        trend_w = weights.get("trend", 0.65)
-        trend_adj = (trend_w - DEFAULT_ALPHA_WEIGHTS["trend"]) * std_r * (252 ** 0.5) * 0.5
-        adjusted = sharpe + diversity_adj + trend_adj
-    else:
-        adjusted = baseline + diversity_adj
-
-    return round(float(adjusted), 4)
+    """Evaluate variant using real lightweight OOS walk-forward. Deterministic."""
+    try:
+        from ascent.research.walk_forward_lightweight import run_lightweight_oos, TURNOVER_PENALTY
+        result = run_lightweight_oos(variant_config, n_days=63)
+        n_folds = result.get("n_folds", 0)
+        if n_folds == 0:
+            # Fall back to baseline Sharpe if OOS failed
+            baseline = get_baseline_sharpe()
+            if baseline is None:
+                print("[SelfImprove] WARNING: no live Sharpe available — falling back to hardcoded 0.518")
+                baseline = 0.518
+            return round(float(baseline), 4)
+        sharpe   = result["sharpe"]
+        turnover = result["turnover"]
+        return round(float(sharpe - TURNOVER_PENALTY * turnover), 4)
+    except Exception as e:
+        print(f"[SelfImprove] evaluate_variant failed: {e} — using baseline")
+        baseline = get_baseline_sharpe() or 0.518
+        return round(float(baseline), 4)
 
 
 # ── Shadow promotion ───────────────────────────────────────────────────────────
