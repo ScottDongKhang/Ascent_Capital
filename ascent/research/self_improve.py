@@ -134,7 +134,8 @@ def evaluate_variant(variant_config: dict) -> float:
 
     baseline = get_baseline_sharpe()
     if baseline is None:
-        baseline = 0.518  # hard fallback — only when truly no live data
+        print("[SelfImprove] WARNING: no live Sharpe available — falling back to hardcoded 0.518")
+        baseline = 0.518
 
     weights = variant_config.get("alpha_weights", DEFAULT_ALPHA_WEIGHTS)
 

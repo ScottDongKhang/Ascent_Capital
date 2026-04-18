@@ -231,11 +231,13 @@ def _rebuild_credibility():
         credibility["by_regime"][regime] = {}
         credibility["sample_counts"][regime] = {}
         for agent, scores in agents.items():
-            credibility["by_regime"][regime][agent] = round(sum(scores) / len(scores), 3)
-            credibility["sample_counts"][regime][agent] = len(scores)
+            if len(scores) > 0:
+                credibility["by_regime"][regime][agent] = round(sum(scores) / len(scores), 3)
+                credibility["sample_counts"][regime][agent] = len(scores)
 
     for agent, scores in overall.items():
-        credibility["overall"][agent] = round(sum(scores) / len(scores), 3)
+        if len(scores) > 0:
+            credibility["overall"][agent] = round(sum(scores) / len(scores), 3)
 
     DEBATE_LOG_DIR.mkdir(parents=True, exist_ok=True)
     with open(CREDIBILITY_PATH, "w") as f:

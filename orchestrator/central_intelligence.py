@@ -309,7 +309,9 @@ def _compute_allocation(
                 allocation[aid] for aid in active_agents
                 if conviction_scores.get(aid, 0.0) < 0.3
             )
-            if low_conv_total > bonus_pool:
+            if low_conv_total < 1e-9:
+                print(f"[Orchestrator] Conviction bonus: all agents high-conviction — skipping redistribution")
+            elif low_conv_total > bonus_pool:
                 for aid in agent_ids:
                     conv = conviction_scores.get(aid, 0.0)
                     if aid in active_agents and conv < 0.3:

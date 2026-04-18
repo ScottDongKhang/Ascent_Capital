@@ -245,16 +245,17 @@ def run_alternatives_agent(
     # Regime from GLD 200MA — using standard system labels
     regime_signal = None
     try:
-        if "GLD" in prices.columns and len(prices) > 200:
-            gld     = prices["GLD"].dropna()
-            ma200   = gld.rolling(200).mean().iloc[-1]
-            current = gld.iloc[-1]
-            if current > ma200 * 1.02:
-                regime_signal = "stressed"   # gold rising = defensive demand = stress signal
-            elif current < ma200 * 0.98:
-                regime_signal = "calm_bull"  # gold falling = risk-on = calm bull
-            else:
-                regime_signal = "neutral"
+        if "GLD" in prices.columns:
+            gld = prices["GLD"].dropna()
+            if len(gld) > 200:
+                ma200   = gld.rolling(200).mean().iloc[-1]
+                current = gld.iloc[-1]
+                if current > ma200 * 1.02:
+                    regime_signal = "stressed"   # gold rising = defensive demand = stress signal
+                elif current < ma200 * 0.98:
+                    regime_signal = "calm_bull"  # gold falling = risk-on = calm bull
+                else:
+                    regime_signal = "neutral"
     except Exception:
         pass
 

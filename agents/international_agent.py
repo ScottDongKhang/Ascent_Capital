@@ -203,12 +203,13 @@ def run_international_agent(
     # USD strength: UUP above its 50-day MA → dollar in uptrend
     usd_uptrend = False
     try:
-        if "UUP" in prices.columns and len(prices) > 50:
-            uup    = prices["UUP"].dropna()
-            ma50   = uup.rolling(50).mean().iloc[-1]
-            if uup.iloc[-1] > ma50:
-                usd_uptrend = True
-                print(f"[Intl] USD uptrend detected — applying {USD_PENALTY:.0%} EM penalty")
+        if "UUP" in prices.columns:
+            uup = prices["UUP"].dropna()
+            if len(uup) > 50:
+                ma50 = uup.rolling(50).mean().iloc[-1]
+                if uup.iloc[-1] > ma50:
+                    usd_uptrend = True
+                    print(f"[Intl] USD uptrend detected — applying {USD_PENALTY:.0%} EM penalty")
     except Exception:
         pass
 
@@ -237,16 +238,17 @@ def run_international_agent(
     # Regime from EEM 200MA
     regime_signal = None
     try:
-        if "EEM" in prices.columns and len(prices) > 200:
-            eem     = prices["EEM"].dropna()
-            ma200   = eem.rolling(200).mean().iloc[-1]
-            current = eem.iloc[-1]
-            if current > ma200 * 1.05:
-                regime_signal = "calm_bull"
-            elif current < ma200 * 0.95:
-                regime_signal = "stressed"
-            else:
-                regime_signal = "neutral"
+        if "EEM" in prices.columns:
+            eem = prices["EEM"].dropna()
+            if len(eem) > 200:
+                ma200   = eem.rolling(200).mean().iloc[-1]
+                current = eem.iloc[-1]
+                if current > ma200 * 1.05:
+                    regime_signal = "calm_bull"
+                elif current < ma200 * 0.95:
+                    regime_signal = "stressed"
+                else:
+                    regime_signal = "neutral"
     except Exception:
         pass
 
