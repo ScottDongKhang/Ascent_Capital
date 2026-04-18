@@ -7,7 +7,7 @@ from datetime import date, timedelta
 def _make_prices(symbols, n_days=90, seed=42):
     np.random.seed(seed)
     idx = pd.date_range(end=date.today(), periods=n_days, freq="B")
-    returns = np.random.normal(0.0003, 0.012, size=(n_days, len(symbols)))
+    returns = np.random.normal(0.0003, 0.012, size=(len(idx), len(symbols)))
     prices = 100 * np.cumprod(1 + returns, axis=0)
     return pd.DataFrame(prices, index=idx, columns=symbols)
 
