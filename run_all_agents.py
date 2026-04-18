@@ -40,7 +40,8 @@ def _is_regime_stale() -> bool:
             return True
         last = date.fromisoformat(date_str[:10])
         return (date.today() - last).days > REGIME_STALE_DAYS
-    except Exception:
+    except Exception as e:
+        print(f"[Runner] Regime staleness check failed ({type(e).__name__}: {e}) — treating as stale")
         return True
 
 
@@ -389,20 +390,20 @@ def main():
         _saved_regime = "unknown"
         try:
             _rdata        = _json.loads(_regime_path.read_text())
-            _saved_regime = (_rdata[-1] if isinstance(_rdata, list) else _rdata).get("label", "unknown")
+            _sig = (_rdata[-1] if (isinstance(_rdata, list) and _rdata) else _rdata) or {}
+            _saved_regime = _sig.get("label", "unknown")
         except Exception:
             pass
+        # TODO: wire orchestrator_result.allocation when central_intelligence exposes it
+        _base_alloc = {"us_equities": 0.60, "macro": 0.15, "international": 0.15, "alternatives": 0.10}
+        _orch_alloc = orchestrator_result.get("allocation") if isinstance(orchestrator_result, dict) else None
         portfolio_state = {
             "date":         today.isoformat(),
             "us_regime":    next((ao.regime_signal for ao in agent_outputs if ao.agent_id == "us_equities" and ao.regime_signal), _saved_regime),
             "macro_regime": next((ao.regime_signal for ao in agent_outputs if ao.agent_id == "macro" and ao.regime_signal), "unknown"),
             "n_positions":  len(merged_weights),
-            "allocation":   {ao.agent_id: round(
-                next((v for k, v in {
-                    "us_equities": 0.60, "macro": 0.15,
-                    "international": 0.15, "alternatives": 0.10
-                }.items() if k == ao.agent_id), 0.0), 2)
-                for ao in agent_outputs},
+            "allocation":   _orch_alloc or {ao.agent_id: round(_base_alloc.get(ao.agent_id, 0.0), 2)
+                            for ao in agent_outputs},
             "weights":      merged_weights,
         }
         verdict = run_debate(portfolio_state, run_date=today)
@@ -454,7 +455,7 @@ def _log_run(today, merged_weights, agent_outputs, dry_run):
         "weights":          merged_weights,
         "agents": {
             ao.agent_id: {
-                "n_positions": ao.n_positions if hasattr(ao, "n_positions") else len(getattr(ao, "target_weights", {})),
+                "n_positions": ao.n_positions,
                 "regime":      _regime_str(ao.regime_signal),
             }
             for ao in agent_outputs
