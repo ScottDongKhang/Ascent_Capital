@@ -254,3 +254,19 @@ Next rebalance: ~April 29, 2026. Live since April 1, 2026.
 - Rewired volatility sleeve in `ascent/alpha/stack.py`: signal = -(vol_trend_10d) / (vol_of_vol_21d); long names with declining AND stable vol — orthogonal to momentum
 - Enabled volatility sleeve at 5% weight; trend reduced 70% → 65%
 - Files: `ascent/features/feature_defs.py`, `ascent/alpha/stack.py`, `CLAUDE.md`
+
+### 2026-04-17 (bug hardening — E1–E5, D1–D2, R1–R4)
+- Fixed 11 bugs across execution, debate, and runner layers
+- E1: empty weights guard in eod_runner (IndexError → ValueError with message)
+- E2: DataFrame.get() → column check + .tolist()
+- E3: cost features key guard before passing to order engine
+- E4: dollar_volume column check before pivot_table
+- E5: regime extraction failure now logged via log_error (not just print)
+- D1: None-safe weights access in debate_runner (or {} guard)
+- D2: split generic except into FileNotFoundError/ImportError/Exception
+- R1: empty list guard on regime_signal.json read
+- R2: allocation pulled from merged_weights.get("allocation") (static fallback + TODO)
+- R3: bare except in _is_regime_stale now logs exception details
+- R4: removed hasattr(ao, "n_positions") guard — n_positions is already a @property
+- Files: eod_runner.py, debate_runner.py, run_all_agents.py, tests/test_bug_hardening.py (new)
+- Tests: 144 passing
