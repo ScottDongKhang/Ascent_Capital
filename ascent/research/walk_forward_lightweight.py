@@ -144,15 +144,16 @@ def run_lightweight_oos(
             print(f"[LightweightOOS] Feature build failed: {e}")
             return {"sharpe": 0.0, "turnover": 0.0, "n_folds": 0}
 
+        # Cross-sectional normalizer — defined once, used in both alpha build and blending
+        def _cs_normalize(df: pd.DataFrame) -> pd.DataFrame:
+            mean = df.mean(axis=1)
+            std  = df.std(axis=1).replace(0, np.nan)
+            return df.sub(mean, axis=0).div(std, axis=0).clip(-3, 3).fillna(0)
+
         # Build alpha on training data — skip ML sleeve (no targets)
         try:
             from ascent.alpha.trend import trend_alpha
             from ascent.alpha.meanrev import meanrev_alpha
-
-            def _cs_normalize(df: pd.DataFrame) -> pd.DataFrame:
-                mean = df.mean(axis=1)
-                std  = df.std(axis=1).replace(0, np.nan)
-                return df.sub(mean, axis=0).div(std, axis=0).clip(-3, 3).fillna(0)
 
             alphas: Dict[str, pd.DataFrame] = {}
 
@@ -205,11 +206,6 @@ def run_lightweight_oos(
             return {"sharpe": 0.0, "turnover": 0.0, "n_folds": 0}
 
         # Blend alphas
-        def _cs_normalize(df: pd.DataFrame) -> pd.DataFrame:
-            mean = df.mean(axis=1)
-            std  = df.std(axis=1).replace(0, np.nan)
-            return df.sub(mean, axis=0).div(std, axis=0).clip(-3, 3).fillna(0)
-
         total_w = sum(alpha_weights.get(k, 0.0) for k in alphas)
         if total_w == 0:
             total_w = 1.0
@@ -253,7 +249,10 @@ def run_lightweight_oos(
             return {"sharpe": 0.0, "turnover": 0.0, "n_folds": 0}
 
         w_arr = np.array([weights_dict[s] for s in oos_symbols])
-        w_arr /= w_arr.sum()  # renorm to available symbols
+        w_sum = w_arr.sum()
+        if w_sum <= 0:
+            return {"sharpe": 0.0, "turnover": 0.0, "n_folds": 0}
+        w_arr /= w_sum  # renorm to available symbols
 
         price_oos = oos_close[oos_symbols].dropna(how="all")
         if len(price_oos) < 5:

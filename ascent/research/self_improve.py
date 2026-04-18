@@ -68,7 +68,7 @@ def generate_variants(base_config: dict, n: int = N_VARIANTS) -> list:
     Volatility sleeve is excluded (currently disabled in stack.py).
     """
     base_weights = base_config.get("alpha_weights", DEFAULT_ALPHA_WEIGHTS)
-    active_sleeves = {k: v for k, v in base_weights.items() if k != "volatility"}
+    active_sleeves = {k: v for k, v in base_weights.items()}
     variants = []
 
     for i in range(n):
@@ -82,9 +82,6 @@ def generate_variants(base_config: dict, n: int = N_VARIANTS) -> list:
             variant = {k: round(v / total, 4) for k, v in variant.items()}
         else:
             variant = copy.deepcopy(active_sleeves)
-
-        # Keep volatility at 0 (disabled)
-        variant["volatility"] = 0.0
 
         variants.append({
             "variant_id":    f"v{i+1}_{datetime.now().strftime('%Y%m%d')}",
@@ -146,7 +143,10 @@ def evaluate_variant(variant_config: dict) -> float:
         return round(float(sharpe - TURNOVER_PENALTY * turnover), 4)
     except Exception as e:
         print(f"[SelfImprove] evaluate_variant failed: {e} — using baseline")
-        baseline = get_baseline_sharpe() or 0.518
+        baseline = get_baseline_sharpe()
+        if baseline is None:
+            print("[SelfImprove] WARNING: no live Sharpe available — falling back to hardcoded 0.518")
+            baseline = 0.518
         return round(float(baseline), 4)
 
 
