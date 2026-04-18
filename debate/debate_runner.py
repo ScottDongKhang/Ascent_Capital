@@ -187,6 +187,20 @@ def run_debate(portfolio_state: dict = None, run_date: date = None, as_of_date=N
         portfolio_state["catalyst_context"] = {"upcoming_events": [], "catalyst_text": ""}
         print(f"[Debate] Catalyst scan failed (non-fatal): {e}")
 
+    # Build quant context (VaR, factor exposures, correlations) for debate agents
+    try:
+        from ascent.monitoring.quant_context import build_quant_context
+        from ascent.data.store.parquet import load_parquet
+        prices_long = load_parquet("prices_live")
+        prices_wide = prices_long.pivot_table(
+            index="date", columns="symbol", values="adj_close", aggfunc="last"
+        )
+        qctx = build_quant_context(portfolio_state.get("weights", {}), prices_wide)
+        portfolio_state["quant_context"] = qctx
+        print(f"[Debate] Quant context: VaR95 {qctx['portfolio_var_95']:.2%}")
+    except Exception as e:
+        print(f"[Debate] Quant context skipped: {e}")
+
     # Bull agent
     print("[Debate] Bull agent arguing...")
     try:

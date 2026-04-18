@@ -99,7 +99,7 @@ def test_judge_accepts_round2_args():
         "reasoning": "Bull case wins.",
     })
 
-    with patch("debate.judge.generate_structured", return_value=fake_verdict_json):
+    with patch("debate.judge.extended_thinking_completion", return_value=fake_verdict_json):
         from debate.judge import run_judge
         verdict = run_judge(
             "bull round 1", "bear round 1", "devil round 1",
@@ -116,8 +116,11 @@ def test_judge_round2_prompt_includes_rebuttals():
     """The judge's user prompt must include Round 2 rebuttal content."""
     captured = {}
 
-    def mock_gen(system_prompt, user_prompt, **kwargs):
-        captured["user"] = user_prompt
+    def mock_thinking(messages, **kwargs):
+        # messages is a list; the user message is the last one
+        for m in messages:
+            if m["role"] == "user":
+                captured["user"] = m["content"]
         return json.dumps({
             "confidence": 0.5,
             "recommendation": "reduce_size",
@@ -132,7 +135,7 @@ def test_judge_round2_prompt_includes_rebuttals():
         "regime_specialist_rebuttal": "UniqueStringRegimeR2",
     }
 
-    with patch("debate.judge.generate_structured", side_effect=mock_gen):
+    with patch("debate.judge.extended_thinking_completion", side_effect=mock_thinking):
         from debate.judge import run_judge
         run_judge(
             "bull r1", "bear r1", "devil r1",
@@ -154,7 +157,7 @@ def test_judge_works_without_round2_args():
         "reasoning": "ok",
     })
 
-    with patch("debate.judge.generate_structured", return_value=fake_verdict_json):
+    with patch("debate.judge.extended_thinking_completion", return_value=fake_verdict_json):
         from debate.judge import run_judge
         verdict = run_judge("bull", "bear", "devil", PORTFOLIO_STATE)
 

@@ -148,5 +148,31 @@ def export_skill_scores(agent_ids: list = None) -> dict:
     return scores
 
 
+def get_current_sharpe(agent_id: str):
+    """Return the most recent Sharpe for agent_id. Returns None if unavailable."""
+    skill_path = Path("dashboard/agent_skill_scores.json")
+    if not skill_path.exists():
+        return None
+    try:
+        payload = json.loads(skill_path.read_text())
+    except Exception:
+        return None
+    # Handle both nested (real) and flat (test mock) schemas
+    agents = payload.get("agents", payload)
+    agent_data = agents.get(agent_id)
+    if not isinstance(agent_data, dict):
+        return None
+    # Try real schema field first, then mock field
+    val = agent_data.get("skill_score")
+    if val is None:
+        val = agent_data.get("sharpe")
+    if val is None:
+        return None
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return None
+
+
 if __name__ == "__main__":
     export_skill_scores()

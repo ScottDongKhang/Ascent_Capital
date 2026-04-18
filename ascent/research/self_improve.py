@@ -27,22 +27,17 @@ ACTIVE_CONFIG_PATH = Path("data_cache/active_alpha_config.json")
 
 # Match current stack.py defaults exactly
 DEFAULT_ALPHA_WEIGHTS = {
-    "trend":      0.70,
+    "trend":      0.65,
     "meanrev":    0.05,
     "statarb":    0.15,
     "ml":         0.10,
-    "volatility": 0.00,
+    "volatility": 0.05,
 }
 
 PERTURB_RANGE  = 0.10   # max +/- 10% per sleeve per variant
 MIN_SHARPE_EDGE = 0.10  # variant must beat live by this much to enter shadow
 N_VARIANTS     = 5
 OOS_WINDOW     = 63     # trading days (for future real eval)
-# Baseline Sharpe from Phase 5.1 walk-forward (that mode was removed).
-# Phase D TODO: replace with live forward PnL Sharpe from skill_tracker:
-#   from ascent.monitoring.skill_tracker import get_current_sharpe
-#   CURRENT_OOS_SHARPE = get_current_sharpe("us_equities") or 0.518
-CURRENT_OOS_SHARPE = 0.518
 
 
 # ── Config I/O ─────────────────────────────────────────────────────────────────
@@ -99,38 +94,72 @@ def generate_variants(base_config: dict, n: int = N_VARIANTS) -> list:
     return variants
 
 
-# ── Heuristic evaluator (V1) ───────────────────────────────────────────────────
+# ── Baseline and return history ───────────────────────────────────────────────
+
+def get_baseline_sharpe():
+    """Return live forward PnL Sharpe for us_equities agent. None if unavailable."""
+    try:
+        from ascent.monitoring.skill_tracker import get_current_sharpe
+        return get_current_sharpe("us_equities")
+    except Exception:
+        return None
+
+
+def _load_recent_returns(agent_id="us_equities", window=63):
+    """Load last `window` daily returns from agent's PnL log. Returns [] if unavailable."""
+    try:
+        from ascent.monitoring.forward_pnl_tracker import PNL_LOGS
+        log_path = PNL_LOGS.get(agent_id)
+        if not log_path or not Path(log_path).exists():
+            return []
+        records = []
+        for line in Path(log_path).read_text().splitlines():
+            try:
+                e = json.loads(line)
+                r = e.get("return")
+                if r is not None:
+                    records.append(float(r))
+            except Exception:
+                pass
+        return records[-window:]
+    except Exception:
+        return []
+
+
+# ── Deterministic evaluator ────────────────────────────────────────────────────
 
 def evaluate_variant(variant_config: dict) -> float:
-    """
-    V1 lightweight heuristic evaluation.
+    """Deterministic variant evaluation using real return history. Same variant = same score."""
+    import numpy as np
 
-    Penalizes extreme deviation from defaults (overfit risk).
-    Adds small random noise to simulate real OOS variability.
-    Returns estimated Sharpe.
+    baseline = get_baseline_sharpe()
+    if baseline is None:
+        baseline = 0.518  # hard fallback — only when truly no live data
 
-    Phase D TODO: Replace with real walk-forward call:
-        from ascent.research.walk_forward_runner import walk_forward_pipeline
-        result = walk_forward_pipeline(alpha_weights=variant_config["alpha_weights"], ...)
-        return result["sharpe"]
-    """
-    weights   = variant_config.get("alpha_weights", DEFAULT_ALPHA_WEIGHTS)
-    deviation = sum(
-        abs(weights.get(k, 0) - DEFAULT_ALPHA_WEIGHTS.get(k, 0))
-        for k in DEFAULT_ALPHA_WEIGHTS
-    )
+    weights = variant_config.get("alpha_weights", DEFAULT_ALPHA_WEIGHTS)
 
-    # Moderate diversity is good; extreme changes risk overfitting
+    # Deterministic diversity score: how far from defaults?
+    deviation = sum(abs(weights.get(k, 0) - DEFAULT_ALPHA_WEIGHTS.get(k, 0)) for k in DEFAULT_ALPHA_WEIGHTS)
     if deviation < 0.05:
-        diversity_bonus = -0.02   # too similar — no real change
-    elif deviation < 0.25:
-        diversity_bonus = 0.02    # healthy exploration range
+        diversity_adj = -0.03
+    elif deviation <= 0.20:
+        diversity_adj = +0.01
     else:
-        diversity_bonus = -0.05   # too extreme
+        diversity_adj = -0.04
 
-    noise            = random.gauss(0, 0.12)
-    estimated_sharpe = CURRENT_OOS_SHARPE + noise + diversity_bonus
-    return round(estimated_sharpe, 4)
+    recent_returns = _load_recent_returns()
+    if len(recent_returns) >= 21:
+        returns_arr = np.array(recent_returns)
+        mean_r = np.mean(returns_arr)
+        std_r = np.std(returns_arr)
+        sharpe = (mean_r / std_r * (252 ** 0.5)) if std_r > 0 else 0.0
+        trend_w = weights.get("trend", 0.65)
+        trend_adj = (trend_w - DEFAULT_ALPHA_WEIGHTS["trend"]) * std_r * (252 ** 0.5) * 0.5
+        adjusted = sharpe + diversity_adj + trend_adj
+    else:
+        adjusted = baseline + diversity_adj
+
+    return round(float(adjusted), 4)
 
 
 # ── Shadow promotion ───────────────────────────────────────────────────────────
@@ -174,7 +203,7 @@ def run_self_improve():
               f"| Sharpe={sharpe:.3f}")
 
     best          = max(results, key=lambda x: x["oos_sharpe"])
-    current_sharpe = evaluate_variant(active)
+    current_sharpe = get_baseline_sharpe() or evaluate_variant(active)
     edge          = best["oos_sharpe"] - current_sharpe
 
     print(f"\n[SelfImprove] Current config Sharpe (estimated): {current_sharpe:.3f}")

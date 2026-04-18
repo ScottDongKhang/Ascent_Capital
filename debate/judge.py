@@ -10,7 +10,7 @@ Returns a JSON verdict with:
 """
 
 import json
-from ascent.llm.client import generate_structured
+from ascent.llm.client import generate_structured, extended_thinking_completion, DEFAULT_MODEL
 from debate.outcome_tracker import load_credibility_context, load_recent_verdict_outcomes
 
 
@@ -79,7 +79,15 @@ def run_judge(
     )
 
     try:
-        raw = generate_structured(system_prompt, context, temperature=0.3, max_tokens=800)
+        raw = extended_thinking_completion(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": context},
+            ],
+            model=DEFAULT_MODEL,
+            max_tokens=5000,
+            thinking_budget=3000,
+        )
 
         # Extract the JSON object by brace-finding — robust against markdown fences,
         # trailing text, or any preamble the LLM adds before/after the JSON block.

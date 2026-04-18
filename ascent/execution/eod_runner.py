@@ -423,6 +423,89 @@ if __name__ == "__main__":
 
 from ascent.llm.client import HAIKU_MODEL
 
+
+def _enforce_reduce_size(
+    original_weights: dict,
+    haiku_weights: dict,
+    min_reduction_threshold: float = 0.01,
+    min_positions_reduced: int = 3,
+) -> dict:
+    """
+    Ensure that a reduce_size verdict actually produces measurably smaller weights.
+
+    If Haiku already reduced >= min_positions_reduced positions by >= min_reduction_threshold,
+    return haiku_weights unchanged (pass-through).
+
+    Otherwise, force a trim on the top 5 positions (0.02 each), redistribute freed weight
+    proportionally, and renormalize to 1.0.
+
+    Args:
+        original_weights: Dict of {symbol: weight} before reduce_size verdict
+        haiku_weights: Dict of {symbol: weight} adjusted by Haiku
+        min_reduction_threshold: Minimum weight reduction per position to count as "genuine"
+        min_positions_reduced: Minimum number of positions that must be reduced
+
+    Returns:
+        Dict of {symbol: weight} that guarantees measurable reduction
+    """
+    # Guard: empty haiku_weights
+    if not haiku_weights:
+        print("[EodRunner] reduce_size: haiku_weights is empty — returning original weights")
+        return dict(original_weights)
+
+    # Count how many positions Haiku genuinely reduced
+    reduced_count = sum(
+        1 for s, w in haiku_weights.items()
+        if w < original_weights.get(s, 0) - min_reduction_threshold
+    )
+
+    if reduced_count >= min_positions_reduced:
+        print(f"[EodRunner] reduce_size: Haiku reduced {reduced_count} positions — accepted")
+        return haiku_weights
+
+    # Haiku didn't reduce enough — apply forced trim to top positions
+    print(f"[EodRunner] reduce_size: Haiku only reduced {reduced_count} positions "
+          f"(need {min_positions_reduced}) — forcing trim on top positions")
+
+    weights = dict(haiku_weights)
+    sorted_syms = sorted(weights, key=lambda s: weights[s], reverse=True)
+    top_n = min(5, len(sorted_syms))
+    trim_per = 0.02
+    total_freed = 0.0
+    trimmed_syms = set(sorted_syms[:top_n])
+
+    for sym in sorted_syms[:top_n]:
+        actual_trim = min(trim_per, weights[sym])  # don't go negative
+        weights[sym] -= actual_trim
+        total_freed += actual_trim
+
+    # Guard: no weight freed
+    if total_freed == 0:
+        print("[EodRunner] reduce_size: no weight freed during trim (all positions at 0?) — weights unchanged")
+        return dict(haiku_weights)
+
+    # Redistribute freed weight only to NON-trimmed positions
+    non_trimmed_total = sum(weights[s] for s in weights if s not in trimmed_syms)
+
+    if non_trimmed_total > 0 and total_freed > 0:
+        for sym in weights:
+            if sym not in trimmed_syms:
+                weights[sym] += total_freed * (weights[sym] / non_trimmed_total)
+    elif total_freed > 0:
+        # All positions were trimmed (very small portfolio) — distribute to all
+        total = sum(weights.values())
+        if total > 0:
+            for sym in weights:
+                weights[sym] += total_freed * (weights[sym] / total)
+
+    # Renorm to exactly 1.0
+    final_total = sum(weights.values())
+    if final_total > 0:
+        weights = {s: round(w / final_total, 6) for s, w in weights.items()}
+
+    return weights
+
+
 def _apply_verdict_adjustments(merged_weights: dict, verdict: dict) -> dict:
     """
     Send verdict + current weights to Haiku and get back adjusted weights.
@@ -590,7 +673,9 @@ def run_eod_with_weights(merged_weights: dict, run_date=None, dry_run: bool = Fa
             return
         if _rec == "reduce_size":
             print("[EOD-Multi] REDUCE SIZE -- applying Haiku adjustments...")
+            original_weights = dict(merged_weights)
             merged_weights = _apply_verdict_adjustments(merged_weights, precomputed_verdict)
+            merged_weights = _enforce_reduce_size(original_weights, merged_weights)
             print(f"[EOD-Multi] Adjusted. Total: {sum(merged_weights.values()):.4f}")
     else:
         try:
@@ -613,6 +698,8 @@ def run_eod_with_weights(merged_weights: dict, run_date=None, dry_run: bool = Fa
                 regime_path = _pl.Path("dashboard/regime_signal.json")
                 if regime_path.exists():
                     _rsig = _json.loads(regime_path.read_text())
+                    if isinstance(_rsig, list):
+                        _rsig = _rsig[-1] if _rsig else {}
                     debate_state["us_regime"] = _rsig.get("label", "unknown")
             except Exception:
                 pass
@@ -642,7 +729,9 @@ def run_eod_with_weights(merged_weights: dict, run_date=None, dry_run: bool = Fa
 
             if recommendation == "reduce_size":
                 print("[EOD-Multi] Debate says REDUCE SIZE — applying verdict-specific adjustments...")
+                original_weights = dict(merged_weights)
                 merged_weights = _apply_verdict_adjustments(merged_weights, verdict)
+                merged_weights = _enforce_reduce_size(original_weights, merged_weights)
                 print(f"[EOD-Multi] Adjusted weights. Total: {sum(merged_weights.values()):.4f}")
                 import json as _jpdp
                 from pathlib import Path as _Ppdp

@@ -23,6 +23,87 @@ from ascent.portfolio.optimizer import SectorDataError
 SECTOR_OVERRIDE_LOG  = Path("logs/sector_override.jsonl")
 HALT_STATE_PATH     = Path("execution/halt_state.json")
 HALT_OVERRIDE_PATH  = Path("execution/halt_override.json")
+REGIME_SIGNAL_PATH  = Path("dashboard/regime_signal.json")
+REGIME_STALE_DAYS   = 5
+
+
+def _is_regime_stale() -> bool:
+    """Return True if regime_signal.json is missing, is the old list schema, or last_refit_date > 5 days ago."""
+    if not REGIME_SIGNAL_PATH.exists():
+        return True
+    try:
+        sig = json.loads(REGIME_SIGNAL_PATH.read_text())
+        if isinstance(sig, list):
+            return True  # old list schema — trigger migration
+        date_str = sig.get("last_refit_date") or sig.get("as_of") or ""
+        if not date_str:
+            return True
+        last = date.fromisoformat(date_str[:10])
+        return (date.today() - last).days > REGIME_STALE_DAYS
+    except Exception:
+        return True
+
+
+def _refresh_regime():
+    """Trigger a regime refit and write updated regime_signal.json."""
+    print("[Runner] Regime signal stale — triggering refit")
+    try:
+        from ascent.data.store.parquet import load_parquet as _load_parquet
+        from ascent.config.settings import get_config as _get_config
+        from ascent.regime.engine import RegimeEngine
+
+        cfg = _get_config()
+        prices_long = _load_parquet("prices_live")
+        prices_wide = prices_long.pivot_table(
+            index="date", columns="symbol", values="adj_close", aggfunc="last"
+        )
+
+        if "SPY" not in prices_wide.columns:
+            print("[Runner] SPY not in prices cache — cannot refit regime")
+            return
+
+        spy_prices = prices_wide["SPY"].dropna()
+        engine = RegimeEngine(cfg)
+        engine.fit(spy_prices, run_model_selection=False)
+
+        # Get current label from signal series
+        sig_series = engine.get_signal_series()
+        if sig_series is not None and not sig_series.empty and "label" in sig_series.columns:
+            label = str(sig_series["label"].iloc[-1])
+            # Convert enum value if needed (e.g. RegimeLabel.calm_bull → "calm_bull")
+            if "." in label:
+                label = label.split(".")[-1]
+        else:
+            label = "unknown"
+
+        # Preserve old series if it exists
+        old_series = []
+        if REGIME_SIGNAL_PATH.exists():
+            try:
+                old_data = json.loads(REGIME_SIGNAL_PATH.read_text())
+                if isinstance(old_data, list):
+                    old_series = old_data
+                elif isinstance(old_data, dict):
+                    old_series = old_data.get("series", [])
+            except Exception:
+                pass
+
+        # Write hybrid schema
+        REGIME_SIGNAL_PATH.parent.mkdir(parents=True, exist_ok=True)
+        sig = {
+            "regime": label,
+            "label": label,
+            "as_of": date.today().isoformat(),
+            "last_refit_date": date.today().isoformat(),
+            "series": old_series,
+        }
+        REGIME_SIGNAL_PATH.write_text(json.dumps(sig, indent=2))
+        print(f"[Runner] Regime refreshed → {label}")
+
+    except FileNotFoundError:
+        print("[Runner] prices_live not in cache — cannot refit regime")
+    except Exception as e:
+        print(f"[Runner] Regime refit failed: {e}")
 
 
 def validate_sector_data(symbols: list, skip: bool = False) -> None:
@@ -131,6 +212,10 @@ def main():
     from ascent.config.settings import UniverseConfig, get_config
     us_symbols = UniverseConfig().symbols
     validate_sector_data(us_symbols, skip=skip_sector_check)
+
+    # ── B3: Auto-refresh stale regime signal ──────────────────────────────────
+    if _is_regime_stale():
+        _refresh_regime()
 
     print(f"\n{'#'*60}")
     print(f"# ASCENT CAPITAL — Multi-Agent Daily Run")
