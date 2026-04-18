@@ -137,7 +137,7 @@ def run_debate(portfolio_state: dict = None, run_date: date = None, as_of_date=N
     print("[Debate] Querying memory for similar past situations...")
     try:
         regime = portfolio_state.get("us_regime", "")
-        top_symbols = sorted(portfolio_state.get("weights", {}).items(), key=lambda x: -x[1])
+        top_symbols = sorted((portfolio_state.get("weights") or {}).items(), key=lambda x: -x[1])
         symbol_query = " ".join(sym for sym, _ in top_symbols[:5])
         memory_query = f"{regime} {symbol_query}"
         memory_results = query_memory(memory_query, n=3)
@@ -198,8 +198,12 @@ def run_debate(portfolio_state: dict = None, run_date: date = None, as_of_date=N
         qctx = build_quant_context(portfolio_state.get("weights", {}), prices_wide)
         portfolio_state["quant_context"] = qctx
         print(f"[Debate] Quant context: VaR95 {qctx['portfolio_var_95']:.2%}")
+    except FileNotFoundError:
+        print("[Debate] Quant context skipped: prices_live cache not found")
+    except ImportError as e:
+        print(f"[Debate] Quant context skipped: import error — {e}")
     except Exception as e:
-        print(f"[Debate] Quant context skipped: {e}")
+        print(f"[Debate] Quant context skipped: {type(e).__name__}: {e}")
 
     # Bull agent
     print("[Debate] Bull agent arguing...")
