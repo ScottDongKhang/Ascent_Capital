@@ -39,6 +39,22 @@ def _build_context(portfolio_state: dict) -> str:
         lines.append(catalyst_text)
 
     memory_ctx = portfolio_state.get("memory_context", [])
+    if not memory_ctx:
+        # Actively query memory for relevant past verdicts
+        try:
+            from memory.r2r_interface import query_memory, format_memory_context
+            regime_label = portfolio_state.get("us_regime", "unknown")
+            top_positions = sorted(
+                (portfolio_state.get("weights") or {}).items(),
+                key=lambda x: -x[1]
+            )[:3]
+            top_str = ", ".join(f"{s}({w:.0%})" for s, w in top_positions)
+            memory_ctx = query_memory(
+                f"verdict outcome {regime_label} regime {top_str}",
+                n=3,
+            )
+        except Exception:
+            pass
     if memory_ctx:
         try:
             from memory.r2r_interface import format_memory_context
