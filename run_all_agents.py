@@ -335,6 +335,15 @@ def main():
     except Exception as e:
         print(f"[Runner] Skill score update failed: {e} — continuing with stale scores")
 
+    # Score counterfactuals where 10 days have passed
+    try:
+        from ascent.monitoring.counterfactual_tracker import score_pending_counterfactuals
+        n_scored = score_pending_counterfactuals()
+        if n_scored > 0:
+            print(f"[Runner] Scored {n_scored} counterfactual(s)")
+    except Exception as e:
+        print(f"[Runner] Counterfactual scoring failed: {type(e).__name__}: {e}")
+
     # ── Step 5: Run orchestrator (reads fresh skill scores written above) ─────
     merged_weights = run_orchestrator(agent_outputs)
 

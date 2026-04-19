@@ -711,54 +711,84 @@ def run_eod_with_weights(merged_weights: dict, run_date=None, dry_run: bool = Fa
             except Exception:
                 pass
 
-            print(f"\n[EOD-Multi] Running pre-rebalance debate...")
-            verdict = run_debate(debate_state, run_date=today)
-            recommendation = verdict.get("recommendation", "proceed")
-            confidence     = verdict.get("confidence", 0.5)
-            print(f"[EOD-Multi] Debate verdict: {recommendation.upper()} (confidence={confidence})")
+            # Debate gate: only fire debate when uncertainty is elevated
+            try:
+                from ascent.execution.debate_gate import should_run_debate
+                from ascent.monitoring.counterfactual_tracker import snapshot_quant_weights, snapshot_debate_weights
+                _regime_info = {"entropy": debate_state.get("regime_entropy", 0.0),
+                                "label": debate_state.get("us_regime", "unknown")}
+                _gate_state = {"weights": merged_weights,
+                               "quant_context": debate_state.get("quant_context", {}),
+                               "catalyst_detected": debate_state.get("catalyst_detected", False)}
+                _run_debate = should_run_debate(_gate_state, _regime_info)
+            except Exception as _gate_exc:
+                print(f"[EOD-Multi] Debate gate check failed ({_gate_exc}) — defaulting to run debate")
+                _run_debate = True
 
-            if recommendation == "halt_and_review":
-                print("[EOD-Multi] Debate says HALT — skipping execution.")
-                print(f"[EOD-Multi] Key risks:")
-                for risk in verdict.get("key_risks", []):
-                    print(f"  - {risk}")
-                import json as _jlog
-                from pathlib import Path as _Plog
-                _Plog("logs/post_debate_portfolio.jsonl").open("a").write(
-                    _jlog.dumps({"date": today_str, "recommendation": recommendation,
-                        "confidence": verdict.get("confidence"),
-                        "weights": merged_weights,
-                        "key_risks": verdict.get("key_risks", [])}) + "\n")
-                print("[EOD-Multi] Post-debate portfolio logged to logs/post_debate_portfolio.jsonl")
-                _log_multi_run(today_str, merged_weights, rebalanced=False,
-                               note=f"debate_halt: {verdict.get('reasoning', '')[:200]}")
-                return
+            if not _run_debate:
+                print("[EOD-Multi] Debate gate: SKIP — no trigger conditions met — using quant weights")
+            else:
+                # Snapshot pure quant weights before debate can modify them
+                try:
+                    snapshot_quant_weights(dict(merged_weights), run_date=today)
+                except Exception as _snap_exc:
+                    print(f"[EOD-Multi] Quant snapshot failed: {_snap_exc}")
 
-            if recommendation == "reduce_size":
-                print("[EOD-Multi] Debate says REDUCE SIZE — applying verdict-specific adjustments...")
-                original_weights = dict(merged_weights)
-                merged_weights = _apply_verdict_adjustments(merged_weights, verdict)
-                merged_weights = _enforce_reduce_size(original_weights, merged_weights)
-                print(f"[EOD-Multi] Adjusted weights. Total: {sum(merged_weights.values()):.4f}")
-                import json as _jpdp
-                from pathlib import Path as _Ppdp
-                _Ppdp("logs/post_debate_portfolio.jsonl").open("a").write(
-                    _jpdp.dumps({"date": today_str, "recommendation": recommendation,
-                        "confidence": verdict.get("confidence"),
-                        "weights": merged_weights,
-                        "key_risks": verdict.get("key_risks", [])}) + "\n")
-                print("[EOD-Multi] Post-debate portfolio logged to logs/post_debate_portfolio.jsonl")
+            if _run_debate:
+                print(f"\n[EOD-Multi] Running pre-rebalance debate...")
+                verdict = run_debate(debate_state, run_date=today)
+                recommendation = verdict.get("recommendation", "proceed")
+                confidence     = verdict.get("confidence", 0.5)
+                print(f"[EOD-Multi] Debate verdict: {recommendation.upper()} (confidence={confidence})")
 
-            if recommendation == "proceed":
-                import json as _jlog
-                from pathlib import Path as _Plog
-                _Plog("logs/post_debate_portfolio.jsonl").open("a").write(
-                    _jlog.dumps({"date": today_str, "recommendation": recommendation,
-                        "confidence": verdict.get("confidence"),
-                        "weights": merged_weights,
-                        "key_risks": verdict.get("key_risks", [])}) + "\n")
-                print("[EOD-Multi] Post-debate portfolio logged to logs/post_debate_portfolio.jsonl")
-            # proceed — continue as normal
+                if recommendation == "halt_and_review":
+                    print("[EOD-Multi] Debate says HALT — skipping execution.")
+                    print(f"[EOD-Multi] Key risks:")
+                    for risk in verdict.get("key_risks", []):
+                        print(f"  - {risk}")
+                    import json as _jlog
+                    from pathlib import Path as _Plog
+                    _Plog("logs/post_debate_portfolio.jsonl").open("a").write(
+                        _jlog.dumps({"date": today_str, "recommendation": recommendation,
+                            "confidence": verdict.get("confidence"),
+                            "weights": merged_weights,
+                            "key_risks": verdict.get("key_risks", [])}) + "\n")
+                    print("[EOD-Multi] Post-debate portfolio logged to logs/post_debate_portfolio.jsonl")
+                    _log_multi_run(today_str, merged_weights, rebalanced=False,
+                                   note=f"debate_halt: {verdict.get('reasoning', '')[:200]}")
+                    return
+
+                if recommendation == "reduce_size":
+                    print("[EOD-Multi] Debate says REDUCE SIZE — applying verdict-specific adjustments...")
+                    original_weights = dict(merged_weights)
+                    merged_weights = _apply_verdict_adjustments(merged_weights, verdict)
+                    merged_weights = _enforce_reduce_size(original_weights, merged_weights)
+                    print(f"[EOD-Multi] Adjusted weights. Total: {sum(merged_weights.values()):.4f}")
+                    import json as _jpdp
+                    from pathlib import Path as _Ppdp
+                    _Ppdp("logs/post_debate_portfolio.jsonl").open("a").write(
+                        _jpdp.dumps({"date": today_str, "recommendation": recommendation,
+                            "confidence": verdict.get("confidence"),
+                            "weights": merged_weights,
+                            "key_risks": verdict.get("key_risks", [])}) + "\n")
+                    print("[EOD-Multi] Post-debate portfolio logged to logs/post_debate_portfolio.jsonl")
+
+                if recommendation == "proceed":
+                    import json as _jlog
+                    from pathlib import Path as _Plog
+                    _Plog("logs/post_debate_portfolio.jsonl").open("a").write(
+                        _jlog.dumps({"date": today_str, "recommendation": recommendation,
+                            "confidence": verdict.get("confidence"),
+                            "weights": merged_weights,
+                            "key_risks": verdict.get("key_risks", [])}) + "\n")
+                    print("[EOD-Multi] Post-debate portfolio logged to logs/post_debate_portfolio.jsonl")
+
+                # Snapshot debate-adjusted weights for counterfactual scoring
+                try:
+                    snapshot_debate_weights(dict(merged_weights), run_date=today)
+                except Exception as _dsnap_exc:
+                    print(f"[EOD-Multi] Debate snapshot failed: {_dsnap_exc}")
+            # debate skipped or proceed — continue with quant weights
 
         except Exception as _debate_exc:
             print(f"[EOD-Multi] Debate failed ({_debate_exc}) -- proceeding without debate gate")
