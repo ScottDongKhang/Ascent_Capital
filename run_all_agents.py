@@ -353,6 +353,29 @@ def main():
     except Exception as e:
         print(f"[Runner] Shadow promotion failed: {type(e).__name__}: {e}")
 
+    # Self-improve: runs on Sundays with current regime
+    try:
+        import calendar as _cal
+        from datetime import date as _date
+        if _date.today().weekday() == 6:  # Sunday = 6
+            from ascent.research.self_improve import run_self_improve
+            _current_regime = None
+            try:
+                import json as _rj
+                from pathlib import Path as _rp
+                _rsig_path = _rp("dashboard/regime_signal.json")
+                if _rsig_path.exists():
+                    _rsig = _rj.loads(_rsig_path.read_text())
+                    if isinstance(_rsig, list):
+                        _rsig = _rsig[-1] if _rsig else {}
+                    _current_regime = str(_rsig.get("label", "")).lower() or None
+            except Exception:
+                pass
+            print(f"[Runner] Running self-improve (regime={_current_regime})")
+            run_self_improve(current_regime=_current_regime)
+    except Exception as e:
+        print(f"[Runner] Self-improve failed: {type(e).__name__}: {e}")
+
     # ── Step 5: Run orchestrator (reads fresh skill scores written above) ─────
     merged_weights = run_orchestrator(agent_outputs)
 

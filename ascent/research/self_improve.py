@@ -166,9 +166,32 @@ def _promote_to_shadow(variant: dict, edge: float):
     print(f"[SelfImprove] Monitor for 30 days before promoting to live")
 
 
+def _promote_regime_variant(weights: dict, regime: str, oos_sharpe: float, edge: float):
+    """Write a regime-specific weight set into active_alpha_config.json by_regime section."""
+    config = {}
+    if ACTIVE_CONFIG_PATH.exists():
+        try:
+            config = json.loads(ACTIVE_CONFIG_PATH.read_text())
+        except Exception:
+            pass
+
+    if "by_regime" not in config or not isinstance(config["by_regime"], dict):
+        config["by_regime"] = {}
+
+    config["by_regime"][str(regime).lower()] = {k: round(float(v), 4) for k, v in weights.items()}
+    config["regime_updated_at"] = datetime.now().isoformat()
+    config[f"regime_{regime}_edge"] = round(edge, 4)
+    config[f"regime_{regime}_sharpe"] = round(oos_sharpe, 4)
+
+    os.makedirs(ACTIVE_CONFIG_PATH.parent, exist_ok=True)
+    with open(ACTIVE_CONFIG_PATH, "w") as f:
+        json.dump(config, f, indent=2)
+    print(f"[SelfImprove] Per-regime weights written: {regime} -> {weights}")
+
+
 # ── Main loop ──────────────────────────────────────────────────────────────────
 
-def run_self_improve():
+def run_self_improve(current_regime: str = None):
     """Main entry point for the weekly self-improve loop."""
     print(f"\n{'='*60}")
     print(f"[SelfImprove] Darwinian signal optimization | {date.today()}")
@@ -221,6 +244,23 @@ def run_self_improve():
         f.write(json.dumps(log_entry) + "\n")
 
     print(f"[SelfImprove] Logged to {LOG_PATH}")
+
+    # Per-regime promotion: if a regime is specified and best variant exceeds MIN_SHARPE_EDGE
+    if current_regime and results:
+        best_regime = max(results, key=lambda r: r.get("oos_sharpe", 0))
+        live_sharpe = best_regime.get("oos_sharpe", 0)
+        current_live = 0.518
+        try:
+            from ascent.monitoring.skill_tracker import get_current_sharpe
+            current_live = get_current_sharpe("us_equities") or 0.518
+        except Exception:
+            pass
+        regime_edge = live_sharpe - current_live
+        if regime_edge > MIN_SHARPE_EDGE:
+            regime_weights = best_regime.get("alpha_weights", {})
+            _promote_regime_variant(regime_weights, current_regime, live_sharpe, regime_edge)
+            print(f"[SelfImprove] Per-regime weights promoted: {current_regime}")
+
     return results
 
 

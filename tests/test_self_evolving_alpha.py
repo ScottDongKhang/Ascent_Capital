@@ -189,3 +189,58 @@ def test_shadow_promoter_archives_weak_expired(tmp_path, monkeypatch):
     assert not active_path.exists(), "weak expired config must not become live"
     archived = list((tmp_path / "data_cache" / "archived_configs").glob("*.json"))
     assert len(archived) >= 1, "expired weak config must be moved to archived_configs"
+
+
+# ── Task 3 tests ───────────────────────────────────────────────────────────────
+
+def test_generate_variants_produces_valid_weights():
+    """generate_variants must produce N variants, each summing to 1.0."""
+    from ascent.research.self_improve import generate_variants
+    base = {"alpha_weights": {"trend": 0.65, "meanrev": 0.05,
+                               "statarb": 0.15, "ml": 0.10, "volatility": 0.05}}
+    variants = generate_variants(base, n=5)
+    assert len(variants) == 5
+    for v in variants:
+        total = sum(v["alpha_weights"].values())
+        assert abs(total - 1.0) < 0.01, f"weights must sum to 1, got {total}"
+
+
+def test_run_self_improve_writes_regime_config(tmp_path, monkeypatch):
+    """When regime='stressed', self_improve must write stressed weights to by_regime."""
+    import numpy as np
+    import pandas as pd
+    from datetime import date
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "data_cache").mkdir()
+    (tmp_path / "logs").mkdir()
+
+    idx = pd.bdate_range(end=date.today(), periods=300)
+    syms = [f"S{i}" for i in range(20)] + ["SPY"]
+    np.random.seed(2)
+    rets = np.random.normal(0.0003, 0.012, (len(idx), len(syms)))
+    prices = pd.DataFrame(100 * np.cumprod(1 + rets, axis=0), index=idx, columns=syms)
+    prices.to_parquet(tmp_path / "data_cache" / "prices_live.parquet")
+
+    from ascent.research.self_improve import run_self_improve
+    run_self_improve(current_regime="stressed")
+
+    log_path = tmp_path / "logs" / "self_improve_log.jsonl"
+    assert log_path.exists()
+
+
+def test_promote_regime_variant_writes_by_regime(tmp_path, monkeypatch):
+    """_promote_regime_variant must write weights to by_regime.stressed in active config."""
+    import json
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "data_cache").mkdir()
+
+    from ascent.research.self_improve import _promote_regime_variant
+    weights = {"trend": 0.50, "meanrev": 0.05, "statarb": 0.25, "ml": 0.15, "volatility": 0.05}
+    _promote_regime_variant(weights, regime="stressed", oos_sharpe=0.65, edge=0.13)
+
+    config_path = tmp_path / "data_cache" / "active_alpha_config.json"
+    assert config_path.exists()
+    config = json.loads(config_path.read_text())
+    assert "by_regime" in config
+    assert "stressed" in config["by_regime"]
+    assert abs(config["by_regime"]["stressed"].get("trend", 0) - 0.50) < 0.001
