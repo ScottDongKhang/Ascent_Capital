@@ -158,6 +158,7 @@ class RegimeEngine:
         self._spy_prices: Optional[pd.Series] = None
         self._tlt_prices: Optional[pd.Series] = None
         self._vix_prices: Optional[pd.Series] = None
+        self._market_prices: Optional[pd.DataFrame] = None
 
     # ── public fit API ────────────────────────────────────────────────────
 
@@ -169,6 +170,7 @@ class RegimeEngine:
         macro_df: Optional[pd.DataFrame] = None,
         alpha_scores: Optional[pd.DataFrame] = None,
         fwd_returns: Optional[pd.DataFrame] = None,
+        market_prices: Optional[pd.DataFrame] = None,
         run_model_selection: bool = True,
     ) -> None:
         """
@@ -201,6 +203,7 @@ class RegimeEngine:
             macro_df=macro_df,
             alpha_scores=alpha_scores,
             fwd_returns=fwd_returns,
+            market_prices=market_prices,
             lookbacks=tuple(self._cfg["regime_feature_lookbacks"]),
         )
         self._feature_panel = builder.build()
@@ -268,6 +271,7 @@ class RegimeEngine:
         self._spy_prices = spy_prices
         self._tlt_prices = None   # populated if caller passes it
         self._vix_prices = vix_prices
+        self._market_prices = market_prices
 
         # DIAGNOSTIC: regime occupancy
         if self._signal_cache is not None and 'label' in self._signal_cache.columns:
@@ -403,6 +407,7 @@ class RegimeEngine:
                 universe_prices=universe_prices,
                 vix_prices=vix_prices,
                 macro_df=macro_df,
+                market_prices=getattr(self, '_market_prices', None),
                 run_model_selection=False,  # fast refit: reuse best_k, skip K selection
             )
             log.info("[Engine] Emergency refit complete: %s", reason)

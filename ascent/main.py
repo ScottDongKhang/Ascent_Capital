@@ -231,6 +231,7 @@ def run_pipeline(
         )
 
         vix_series = None
+        market_prices_df = None
         if live:
             try:
                 import yfinance as yf
@@ -245,6 +246,27 @@ def run_pipeline(
                 print("[Regime] VIX data fetched")
             except Exception as e:
                 print(f"[Regime] VIX fetch skipped: {e}")
+
+            # Fetch credit/yield instruments for enhanced regime detection
+            try:
+                import yfinance as _yf
+                _mkt_raw = _yf.download(
+                    ["HYG", "LQD", "TLT", "IEF"],
+                    start=str(cfg.backtest.start_date),
+                    end=str(cfg.backtest.end_date),
+                    auto_adjust=True,
+                    progress=False,
+                    threads=False,
+                )
+                if isinstance(_mkt_raw.columns, pd.MultiIndex):
+                    _close_key = [c for c in _mkt_raw.columns.get_level_values(0) if str(c).lower() == "close"]
+                    if _close_key:
+                        _mkt_raw = _mkt_raw[_close_key[0]]
+                market_prices_df = _mkt_raw.reindex(columns=["HYG", "LQD", "TLT", "IEF"])
+                market_prices_df.index = pd.to_datetime(market_prices_df.index).tz_localize(None)
+                print(f"[Regime] Credit/yield instruments fetched: {market_prices_df.shape}")
+            except Exception as _e:
+                print(f"[Regime] Credit/yield fetch skipped: {_e}")
 
         if hasattr(spy_wide.index, "tz") and spy_wide.index.tz is not None:
             spy_wide.index = spy_wide.index.tz_localize(None)
@@ -274,6 +296,7 @@ def run_pipeline(
             universe_prices=univ_wide,
             vix_prices=vix_series,
             macro_df=macro_wide,
+            market_prices=market_prices_df,
             run_model_selection=True,
         )
 

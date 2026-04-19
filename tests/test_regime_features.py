@@ -77,3 +77,30 @@ def test_credit_spread_values_are_finite():
     valid = panel["credit_spread_chg_21d"].dropna()
     assert len(valid) > 200, "credit spread should have >200 valid rows with 300 days of data"
     assert np.isfinite(valid.values).all(), "no inf values in credit spread"
+
+
+def test_regime_engine_fit_accepts_market_prices():
+    """RegimeEngine.fit() must accept and pass through market_prices without error."""
+    import pandas as pd
+    import numpy as np
+    from ascent.regime.engine import RegimeEngine
+
+    idx = pd.bdate_range(end="2026-04-18", periods=300)
+    n = len(idx)
+    np.random.seed(0)
+    spy = pd.Series(100 * np.cumprod(1 + np.random.normal(0.0003, 0.012, n)), index=idx)
+    univ = pd.DataFrame(
+        100 * np.cumprod(1 + np.random.normal(0.0003, 0.012, (n, 5)), axis=0),
+        index=idx, columns=["A", "B", "C", "D", "E"]
+    )
+    mkt = pd.DataFrame({
+        "HYG": 100 * np.cumprod(1 + np.random.normal(0.0002, 0.005, n)),
+        "LQD": 100 * np.cumprod(1 + np.random.normal(0.0002, 0.003, n)),
+        "TLT": 100 * np.cumprod(1 + np.random.normal(0.0001, 0.010, n)),
+        "IEF": 100 * np.cumprod(1 + np.random.normal(0.0001, 0.006, n)),
+    }, index=idx)
+
+    engine = RegimeEngine()
+    engine.fit(spy_prices=spy, universe_prices=univ, market_prices=mkt,
+               run_model_selection=False)
+    assert engine.best_k >= 2
