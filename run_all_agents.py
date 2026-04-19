@@ -344,6 +344,15 @@ def main():
     except Exception as e:
         print(f"[Runner] Counterfactual scoring failed: {type(e).__name__}: {e}")
 
+    # Daily shadow promotion check (only acts on expired shadows)
+    try:
+        from ascent.research.shadow_promoter import run_shadow_promotion
+        n_promoted = run_shadow_promotion()
+        if n_promoted > 0:
+            print(f"[Runner] Shadow promoter: {n_promoted} config(s) promoted to live")
+    except Exception as e:
+        print(f"[Runner] Shadow promotion failed: {type(e).__name__}: {e}")
+
     # ── Step 5: Run orchestrator (reads fresh skill scores written above) ─────
     merged_weights = run_orchestrator(agent_outputs)
 

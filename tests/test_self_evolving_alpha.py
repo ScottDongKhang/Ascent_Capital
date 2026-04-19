@@ -92,3 +92,100 @@ def test_stack_falls_back_to_global_for_unknown_regime(tmp_path, monkeypatch):
 
     loaded = stack_mod._load_active_alpha_weights(regime="euphoric")
     assert abs(loaded.get("trend", 0) - 0.70) < 0.001
+
+
+# ── Task 2 tests ───────────────────────────────────────────────────────────────
+
+def test_shadow_promoter_promotes_expired_winner(tmp_path, monkeypatch):
+    """A shadow config past its expiry that still beats baseline must be promoted to live."""
+    import json
+    import numpy as np
+    import pandas as pd
+    from datetime import timedelta, date
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "data_cache" / "shadow_configs").mkdir(parents=True)
+    (tmp_path / "data_cache").mkdir(exist_ok=True)
+    (tmp_path / "logs").mkdir()
+
+    shadow = {
+        "variant_id":        "v1_20260318",
+        "alpha_weights":     {"trend": 0.70, "meanrev": 0.05, "statarb": 0.15, "ml": 0.10, "volatility": 0.0},
+        "oos_sharpe":        0.72,
+        "edge_over_current": 0.20,
+        "shadow_expires":    (date.today() - timedelta(days=1)).isoformat(),
+        "promoted_at":       "2026-03-18T06:00:00",
+    }
+    shadow_file = tmp_path / "data_cache" / "shadow_configs" / "v1_20260318.json"
+    shadow_file.write_text(json.dumps(shadow))
+
+    # Write prices so lightweight OOS can run
+    idx = pd.bdate_range(end=date.today(), periods=300)
+    syms = [f"S{i}" for i in range(20)] + ["SPY"]
+    np.random.seed(1)
+    rets = np.random.normal(0.0003, 0.012, (len(idx), len(syms)))
+    prices = pd.DataFrame(100 * np.cumprod(1 + rets, axis=0), index=idx, columns=syms)
+    prices.to_parquet(tmp_path / "data_cache" / "prices_live.parquet")
+
+    from ascent.research.shadow_promoter import run_shadow_promotion
+    run_shadow_promotion(baseline_sharpe=0.518)
+
+    active_path = tmp_path / "data_cache" / "active_alpha_config.json"
+    assert active_path.exists(), "active_alpha_config.json must be written after promotion"
+    config = json.loads(active_path.read_text())
+    assert "global" in config, "promoted config must have 'global' key"
+    assert abs(config["global"].get("trend", 0) - 0.70) < 0.001
+
+
+def test_shadow_promoter_skips_unexpired(tmp_path, monkeypatch):
+    """Shadow configs that haven't expired yet must not be promoted."""
+    import json
+    from datetime import timedelta, date
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "data_cache" / "shadow_configs").mkdir(parents=True)
+    (tmp_path / "logs").mkdir()
+
+    shadow = {
+        "variant_id":    "v2_20260410",
+        "alpha_weights": {"trend": 0.65, "meanrev": 0.05, "statarb": 0.15, "ml": 0.10, "volatility": 0.05},
+        "oos_sharpe":    0.70,
+        "shadow_expires": (date.today() + timedelta(days=15)).isoformat(),
+        "promoted_at":   "2026-04-10T06:00:00",
+    }
+    shadow_file = tmp_path / "data_cache" / "shadow_configs" / "v2_20260410.json"
+    shadow_file.write_text(json.dumps(shadow))
+
+    from ascent.research.shadow_promoter import run_shadow_promotion
+    run_shadow_promotion(baseline_sharpe=0.518)
+
+    active_path = tmp_path / "data_cache" / "active_alpha_config.json"
+    assert not active_path.exists(), "must NOT promote a config that hasn't expired yet"
+
+
+def test_shadow_promoter_archives_weak_expired(tmp_path, monkeypatch):
+    """An expired shadow config that no longer beats baseline must be archived, not promoted."""
+    import json
+    from datetime import timedelta, date
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "data_cache" / "shadow_configs").mkdir(parents=True)
+    (tmp_path / "data_cache").mkdir(exist_ok=True)
+    (tmp_path / "logs").mkdir()
+    (tmp_path / "data_cache" / "archived_configs").mkdir()
+
+    shadow = {
+        "variant_id":    "v3_20260318",
+        "alpha_weights": {"trend": 0.65, "meanrev": 0.05, "statarb": 0.15, "ml": 0.10, "volatility": 0.05},
+        "oos_sharpe":    0.52,
+        "shadow_expires": (date.today() - timedelta(days=1)).isoformat(),
+        "promoted_at":   "2026-03-18T06:00:00",
+    }
+    shadow_file = tmp_path / "data_cache" / "shadow_configs" / "v3_20260318.json"
+    shadow_file.write_text(json.dumps(shadow))
+
+    # No price cache — OOS returns 0.0 sharpe → below baseline 0.518
+    from ascent.research.shadow_promoter import run_shadow_promotion
+    run_shadow_promotion(baseline_sharpe=0.518)
+
+    active_path = tmp_path / "data_cache" / "active_alpha_config.json"
+    assert not active_path.exists(), "weak expired config must not become live"
+    archived = list((tmp_path / "data_cache" / "archived_configs").glob("*.json"))
+    assert len(archived) >= 1, "expired weak config must be moved to archived_configs"
