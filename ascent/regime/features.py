@@ -142,6 +142,7 @@ class RegimeFeatureBuilder:
         alpha_scores: Optional[pd.DataFrame] = None,
         fwd_returns: Optional[pd.DataFrame] = None,
         lookbacks: Tuple[int, ...] = (5, 21, 63),
+        market_prices: Optional[pd.DataFrame] = None,
     ):
         self.spy          = spy_prices.copy()
         self.universe     = universe_prices.copy() if universe_prices is not None else None
@@ -150,6 +151,7 @@ class RegimeFeatureBuilder:
         self.alpha_scores = alpha_scores
         self.fwd_returns  = fwd_returns
         self.lookbacks    = sorted(lookbacks)
+        self.market_prices = market_prices.copy() if market_prices is not None else None
         self._validate_inputs()
 
     def _validate_inputs(self) -> None:
@@ -288,6 +290,36 @@ class RegimeFeatureBuilder:
 
         return pd.DataFrame(features, index=self.spy.index)
 
+    # ── Group E: credit spread + yield curve features ────────────────────
+
+    def _build_credit_yield_features(self) -> pd.DataFrame:
+        features: dict = {}
+        if self.market_prices is None:
+            return pd.DataFrame(index=self.spy.index)
+
+        mkt = self.market_prices.reindex(self.spy.index, method="ffill")
+
+        if "HYG" in mkt.columns and "LQD" in mkt.columns:
+            hyg = mkt["HYG"].ffill()
+            lqd = mkt["LQD"].ffill()
+            ratio = (hyg / lqd.replace(0, np.nan)).ffill()
+            ratio_ret = ratio.pct_change()
+            features["credit_spread_chg_21d"] = ratio_ret.rolling(21).sum()
+            features["credit_spread_level"]   = ratio.pct_change(63)
+            log.info("regime.features: credit spread features included (HYG/LQD)")
+
+        if "TLT" in mkt.columns and "IEF" in mkt.columns:
+            tlt = mkt["TLT"].ffill()
+            ief = mkt["IEF"].ffill()
+            tlt_ret_21 = tlt.pct_change(21)
+            ief_ret_21 = ief.pct_change(21)
+            slope = tlt_ret_21 - ief_ret_21
+            features["yield_curve_slope"] = slope
+            features["yield_curve_chg"]   = slope.diff(10)
+            log.info("regime.features: yield curve features included (TLT/IEF)")
+
+        return pd.DataFrame(features, index=self.spy.index)
+
     # ── public API ───────────────────────────────────────────────────────
 
     def build(self) -> pd.DataFrame:
@@ -302,6 +334,7 @@ class RegimeFeatureBuilder:
             self._build_market_features(),
             self._build_cs_features(),
             self._build_stress_features(),
+            self._build_credit_yield_features(),
             self._build_strategy_features(),
         ]
         panel = pd.concat([p for p in parts if not p.empty], axis=1)
