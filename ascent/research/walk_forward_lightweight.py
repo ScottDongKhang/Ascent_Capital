@@ -89,189 +89,244 @@ def run_lightweight_oos(
     prices_cache: str = "prices_live",
     top_n: int = 15,
     max_weight: float = 0.10,
-) -> Dict[str, float]:
+    train_days: int = 126,
+    purge_days: int = 5,
+    embargo_days: int = 5,
+    filter_universe_by_date: bool = True,
+) -> Dict[str, Any]:
     """
-    Run a lightweight OOS evaluation over the last n_days of price data.
+    Multi-fold expanding walk-forward OOS evaluation.
+
+    Institutional-grade: purge gap + embargo between folds, universe
+    filtered by listing date per fold (no survivorship bias).
 
     Args:
-        config_overrides: Dict with 'alpha_weights' key mapping sleeve names to floats.
-        n_days:           Number of OOS trading days to evaluate.
-        prices_cache:     Parquet cache name to load prices from.
-        top_n:            Portfolio size.
-        max_weight:       Max position weight.
+        config_overrides:       Dict with 'alpha_weights' key mapping sleeve names to floats.
+        n_days:                 Number of OOS trading days per fold.
+        prices_cache:           Parquet cache name to load prices from.
+        top_n:                  Portfolio size.
+        max_weight:             Max position weight.
+        train_days:             Minimum training window per fold.
+        purge_days:             Gap between train end and test start (prevents leakage).
+        embargo_days:           Gap between test end and next fold's train end.
+        filter_universe_by_date: When True, call get_universe_on_date() per fold.
 
     Returns:
         {"sharpe": float, "turnover": float, "n_folds": int}
         Returns {"sharpe": 0.0, "turnover": 0.0, "n_folds": 0} on failure.
     """
     try:
-        raw_df = _load_prices(prices_cache)
-        if raw_df is None:
-            print(f"[LightweightOOS] No cache '{prices_cache}' — returning 0.0")
+        price_df = _load_prices(prices_cache)
+        if price_df is None or price_df.empty:
+            print(f"[LightweightOOS] No cache '{prices_cache}' -- returning 0.0")
             return {"sharpe": 0.0, "turnover": 0.0, "n_folds": 0}
 
-        close = _to_wide_close(raw_df)
-        if close.empty or len(close) < n_days + 63:
-            print(f"[LightweightOOS] Insufficient data ({len(close)} rows after pivot)")
+        price_wide = _to_wide_close(price_df)
+        if price_wide.empty:
             return {"sharpe": 0.0, "turnover": 0.0, "n_folds": 0}
 
-        # Use last (n_days + 126) rows — 126 training, n_days OOS
-        window = close.tail(n_days + 126).copy()
-        train_close = window.iloc[:126]
-        oos_close   = window.iloc[126:]
+        min_required = train_days + purge_days + n_days + embargo_days
+        if len(price_wide) < min_required:
+            print(f"[LightweightOOS] Insufficient data ({len(price_wide)} rows, need {min_required})")
+            return {"sharpe": 0.0, "turnover": 0.0, "n_folds": 0}
 
         alpha_weights = config_overrides.get("alpha_weights", {
             "trend": 0.65, "meanrev": 0.05, "statarb": 0.15, "ml": 0.10, "volatility": 0.05
         })
 
-        # Build features on training slice only (causal)
-        # We need volume and dollar_volume — approximate from close if unavailable
-        try:
-            from ascent.features.feature_defs import build_all_features
+        # Build fold positions: expanding window, working backwards from end
+        fold_positions = []
+        pos = len(price_wide) - 1
+        while pos >= train_days + purge_days + n_days:
+            test_end_i   = pos
+            test_start_i = test_end_i - n_days + 1
+            train_end_i  = test_start_i - purge_days - 1
+            if train_end_i < train_days:
+                break
+            fold_positions.append((train_end_i, test_start_i, test_end_i))
+            pos = test_start_i - embargo_days - n_days
+        fold_positions = list(reversed(fold_positions))  # chronological order
 
-            # Approximate volume as constant (1e6 shares) for lightweight eval
-            n_rows, n_cols = train_close.shape
-            dummy_volume       = pd.DataFrame(1e6, index=train_close.index, columns=train_close.columns)
-            dummy_dollar_volume = train_close * 1e6
+        all_fold_returns = []
+        prev_weights: Dict[str, float] = {}
+        fold_turnovers = []
+        n_folds = 0
 
-            features = build_all_features(
-                close=train_close,
-                volume=dummy_volume,
-                dollar_volume=dummy_dollar_volume,
-                macro_pivot=None,
-            )
-        except Exception as e:
-            print(f"[LightweightOOS] Feature build failed: {e}")
-            return {"sharpe": 0.0, "turnover": 0.0, "n_folds": 0}
-
-        # Cross-sectional normalizer — defined once, used in both alpha build and blending
+        # Cross-sectional normalizer
         def _cs_normalize(df: pd.DataFrame) -> pd.DataFrame:
             mean = df.mean(axis=1)
             std  = df.std(axis=1).replace(0, np.nan)
             return df.sub(mean, axis=0).div(std, axis=0).clip(-3, 3).fillna(0)
 
-        # Build alpha on training data — skip ML sleeve (no targets)
-        try:
-            from ascent.alpha.trend import trend_alpha
-            from ascent.alpha.meanrev import meanrev_alpha
+        for train_end_i, test_start_i, test_end_i in fold_positions:
+            train_slice = price_wide.iloc[:train_end_i + 1]
+            oos_slice   = price_wide.iloc[test_start_i:test_end_i + 1]
 
-            alphas: Dict[str, pd.DataFrame] = {}
+            if len(train_slice) < train_days or len(oos_slice) < 5:
+                continue
 
-            trend_w = alpha_weights.get("trend", 0.65)
-            if trend_w > 0:
+            fold_date = price_wide.index[test_start_i]
+
+            # Survivorship bias fix: filter to symbols valid on fold date
+            valid_symbols = list(price_wide.columns)
+            if filter_universe_by_date:
                 try:
-                    t = trend_alpha(features)
-                    if not t.empty:
-                        alphas["trend"] = t
+                    from ascent.data.universe import get_universe_on_date
+                    universe_df = get_universe_on_date(fold_date)
+                    if universe_df is not None and not universe_df.empty:
+                        if "symbol" in universe_df.columns:
+                            valid_set = set(universe_df["symbol"].tolist())
+                        else:
+                            valid_set = set(universe_df.index.tolist())
+                        filtered = [s for s in price_wide.columns if s in valid_set or s == "SPY"]
+                        if len(filtered) >= 5:
+                            valid_symbols = filtered
                 except Exception:
-                    pass
+                    pass  # graceful fallback: use all symbols
 
-            mr_w = alpha_weights.get("meanrev", 0.05)
-            if mr_w > 0:
-                try:
-                    mr = meanrev_alpha(features)
-                    if not mr.empty:
-                        alphas["meanrev"] = mr
-                except Exception:
-                    pass
+            train_filtered = train_slice[valid_symbols]
+            oos_filtered   = oos_slice[valid_symbols]
 
-            vol_w = alpha_weights.get("volatility", 0.05)
-            if vol_w > 0 and "vol_of_vol_21d" in features and "vol_trend_10d" in features:
-                try:
-                    vov   = features["vol_of_vol_21d"].copy().replace(0, np.nan)
-                    vtrnd = features["vol_trend_10d"].copy()
-                    vol_alpha = _cs_normalize(-vtrnd / (vov + 1e-6))
-                    if not vol_alpha.empty:
-                        alphas["volatility"] = vol_alpha
-                except Exception:
-                    pass
+            # Build features on training slice only (causal)
+            try:
+                from ascent.features.feature_defs import build_all_features
+                dummy_volume        = pd.DataFrame(1e6, index=train_filtered.index, columns=train_filtered.columns)
+                dummy_dollar_volume = train_filtered * 1e6
+                features = build_all_features(
+                    close=train_filtered,
+                    volume=dummy_volume,
+                    dollar_volume=dummy_dollar_volume,
+                    macro_pivot=None,
+                )
+            except Exception as e:
+                print(f"[LightweightOOS] Fold {n_folds+1} feature build failed: {e}")
+                continue
 
-            # statarb — skip if no sector map (graceful fallback)
-            sa_w = alpha_weights.get("statarb", 0.15)
-            if sa_w > 0:
-                try:
-                    from ascent.alpha.statarb import statarb_alpha
-                    sa = statarb_alpha(features, sector_map={})
-                    if not sa.empty:
-                        alphas["statarb"] = sa
-                except Exception:
-                    pass
+            # Build alpha signals
+            try:
+                from ascent.alpha.trend import trend_alpha
+                from ascent.alpha.meanrev import meanrev_alpha
 
-        except Exception as e:
-            print(f"[LightweightOOS] Alpha build failed: {e}")
-            return {"sharpe": 0.0, "turnover": 0.0, "n_folds": 0}
+                alphas: Dict[str, pd.DataFrame] = {}
 
-        if not alphas:
-            print("[LightweightOOS] No alpha signals computed")
-            return {"sharpe": 0.0, "turnover": 0.0, "n_folds": 0}
+                if alpha_weights.get("trend", 0) > 0:
+                    try:
+                        t = trend_alpha(features)
+                        if not t.empty:
+                            alphas["trend"] = t
+                    except Exception:
+                        pass
 
-        # Blend alphas
-        total_w = sum(alpha_weights.get(k, 0.0) for k in alphas)
-        if total_w == 0:
-            total_w = 1.0
+                if alpha_weights.get("meanrev", 0) > 0:
+                    try:
+                        mr = meanrev_alpha(features)
+                        if not mr.empty:
+                            alphas["meanrev"] = mr
+                    except Exception:
+                        pass
 
-        composite = None
-        for name, alpha_df in alphas.items():
-            w = alpha_weights.get(name, 0.0) / total_w
-            normed = _cs_normalize(alpha_df)
-            if composite is None:
-                composite = normed * w
-            else:
-                union_idx  = composite.index.union(normed.index)
-                union_cols = composite.columns.union(normed.columns)
-                composite  = composite.reindex(index=union_idx, columns=union_cols).fillna(0.0)
-                normed_r   = normed.reindex(index=union_idx, columns=union_cols).fillna(0.0)
-                composite  = composite + normed_r * w
+                if alpha_weights.get("volatility", 0) > 0 and "vol_of_vol_21d" in features and "vol_trend_10d" in features:
+                    try:
+                        vov   = features["vol_of_vol_21d"].copy().replace(0, np.nan)
+                        vtrnd = features["vol_trend_10d"].copy()
+                        vol_alpha = _cs_normalize(-vtrnd / (vov + 1e-6))
+                        if not vol_alpha.empty:
+                            alphas["volatility"] = vol_alpha
+                    except Exception:
+                        pass
 
-        if composite is None or composite.empty:
-            return {"sharpe": 0.0, "turnover": 0.0, "n_folds": 0}
+                if alpha_weights.get("statarb", 0) > 0:
+                    try:
+                        from ascent.alpha.statarb import statarb_alpha
+                        sa = statarb_alpha(features, sector_map={})
+                        if not sa.empty:
+                            alphas["statarb"] = sa
+                    except Exception:
+                        pass
 
-        # Get latest alpha scores (last row of training composite)
-        latest_alpha = composite.iloc[-1].dropna().sort_values(ascending=False)
-        if latest_alpha.empty:
-            return {"sharpe": 0.0, "turnover": 0.0, "n_folds": 0}
+            except Exception as e:
+                print(f"[LightweightOOS] Fold {n_folds+1} alpha build failed: {e}")
+                continue
 
-        # Simple rank-weighted portfolio (skip sector constraints — no profiles in test)
-        top_names = latest_alpha.head(top_n)
-        scores = top_names - top_names.min() + 1e-8
-        raw_w  = scores / scores.sum()
-        raw_w  = raw_w.clip(upper=max_weight)
-        if raw_w.sum() > 0:
-            raw_w = raw_w / raw_w.sum()
-        weights_dict = raw_w.to_dict()
+            if not alphas:
+                continue
 
-        if not weights_dict:
-            return {"sharpe": 0.0, "turnover": 0.0, "n_folds": 0}
+            # Blend alphas with normalized weights
+            total_w = sum(alpha_weights.get(k, 0.0) for k in alphas)
+            if total_w == 0:
+                total_w = 1.0
 
-        # Compute OOS returns
-        oos_symbols = [s for s in weights_dict if s in oos_close.columns]
-        if not oos_symbols:
-            return {"sharpe": 0.0, "turnover": 0.0, "n_folds": 0}
+            composite = None
+            for name, alpha_df in alphas.items():
+                w = alpha_weights.get(name, 0.0) / total_w
+                normed = _cs_normalize(alpha_df)
+                if composite is None:
+                    composite = normed * w
+                else:
+                    union_idx  = composite.index.union(normed.index)
+                    union_cols = composite.columns.union(normed.columns)
+                    composite  = composite.reindex(index=union_idx, columns=union_cols).fillna(0.0)
+                    normed_r   = normed.reindex(index=union_idx, columns=union_cols).fillna(0.0)
+                    composite  = composite + normed_r * w
 
-        w_arr = np.array([weights_dict[s] for s in oos_symbols])
-        w_sum = w_arr.sum()
-        if w_sum <= 0:
-            return {"sharpe": 0.0, "turnover": 0.0, "n_folds": 0}
-        w_arr /= w_sum  # renorm to available symbols
+            if composite is None or composite.empty:
+                continue
 
-        price_oos = oos_close[oos_symbols].dropna(how="all")
-        if len(price_oos) < 5:
-            return {"sharpe": 0.0, "turnover": 0.0, "n_folds": 0}
+            latest_alpha = composite.iloc[-1].dropna().sort_values(ascending=False)
+            if latest_alpha.empty:
+                continue
 
-        rets = price_oos.pct_change().dropna()
-        port_rets = rets.values @ w_arr
+            # Simple rank-weighted portfolio (no sector profiles in test environment)
+            top_names = latest_alpha.head(top_n)
+            scores = top_names - top_names.min() + 1e-8
+            raw_w  = scores / scores.sum()
+            raw_w  = raw_w.clip(upper=max_weight)
+            if raw_w.sum() > 0:
+                raw_w = raw_w / raw_w.sum()
+            weights_dict = raw_w.to_dict()
 
+            if not weights_dict:
+                continue
+
+            oos_syms = [s for s in weights_dict if s in oos_filtered.columns]
+            if not oos_syms:
+                continue
+
+            w_arr = np.array([weights_dict[s] for s in oos_syms])
+            w_sum = w_arr.sum()
+            if w_sum <= 0:
+                continue
+            w_arr /= w_sum
+
+            oos_px = oos_filtered[oos_syms].dropna(how="all")
+            if len(oos_px) < 3:
+                continue
+
+            fold_rets = (oos_px.pct_change().dropna().values @ w_arr).tolist()
+            all_fold_returns.extend(fold_rets)
+
+            if prev_weights:
+                common = set(weights_dict) | set(prev_weights)
+                turnover = sum(abs(weights_dict.get(s, 0) - prev_weights.get(s, 0))
+                               for s in common) / 2.0
+                fold_turnovers.append(turnover)
+
+            prev_weights = weights_dict
+            n_folds += 1
+
+        if n_folds == 0 or len(all_fold_returns) < 5:
+            return {"sharpe": 0.0, "turnover": 0.0, "n_folds": n_folds}
+
+        port_rets = np.array(all_fold_returns)
         mean_r = np.mean(port_rets)
         std_r  = np.std(port_rets)
         sharpe = float(mean_r / std_r * np.sqrt(252)) if std_r > 0 else 0.0
-
-        # Approximate turnover: assume one rebalance per period
-        turnover = 0.20  # conservative estimate for single-rebalance period
+        avg_turnover = float(np.mean(fold_turnovers)) if fold_turnovers else 0.20
 
         return {
             "sharpe":   round(sharpe, 4),
-            "turnover": round(turnover, 4),
-            "n_folds":  1,
+            "turnover": round(avg_turnover, 4),
+            "n_folds":  n_folds,
         }
 
     except Exception as e:
