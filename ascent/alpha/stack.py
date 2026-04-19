@@ -19,7 +19,8 @@ DEFAULT_ALPHA_WEIGHTS = {
     "volatility":  0.05,
     "statarb":     0.15,
     "ml":          0.10,
-    "fundamental": 0.10,
+    "fundamental": 0.05,
+    "earnings":    0.05,
 }
 
 def _load_active_alpha_weights(regime: str = None) -> dict:
@@ -163,6 +164,16 @@ def build_alpha_stack(features, alpha_weights=None, regime_signal=None, agent_id
             log.warning("fundamental alpha returned empty")
     except Exception as exc:
         log.error("fundamental alpha failed: %s", exc)
+    try:
+        from ascent.alpha.earnings import earnings_alpha
+        earn = earnings_alpha(features)
+        if earn is not None and not earn.empty:
+            alphas["earnings"] = earn
+            log.info("earnings alpha (PEAD) loaded shape=%s", earn.shape)
+        else:
+            log.debug("earnings alpha returned empty — cache absent or no recent surprises")
+    except Exception as exc:
+        log.error("earnings alpha failed: %s", exc)
     loaded = list(alphas.keys())
     skipped = [k for k in alpha_weights if k not in loaded]
     print(f"[alpha_stack] loaded={loaded}  skipped={skipped}")

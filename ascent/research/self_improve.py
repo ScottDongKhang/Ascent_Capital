@@ -32,7 +32,8 @@ DEFAULT_ALPHA_WEIGHTS = {
     "statarb":     0.15,
     "ml":          0.10,
     "volatility":  0.05,
-    "fundamental": 0.10,
+    "fundamental": 0.05,
+    "earnings":    0.05,
 }
 
 PERTURB_RANGE  = 0.10   # max +/- 10% per sleeve per variant

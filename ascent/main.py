@@ -333,7 +333,15 @@ def run_pipeline(
         except Exception as _fe:
             print(f"[Alpha] Fundamentals load failed: {_fe}")
 
-    builder  = FeatureBuilder(universe_df, macro_df, fundamentals_df=fundamentals_df)
+    earnings_df = None
+    if _hd("earnings"):
+        try:
+            earnings_df = _lp("earnings")
+            print(f"[Alpha] Earnings loaded: {len(earnings_df)} rows")
+        except Exception as _ee:
+            print(f"[Alpha] Earnings load failed: {_ee}")
+
+    builder  = FeatureBuilder(universe_df, macro_df, fundamentals_df=fundamentals_df, earnings_df=earnings_df)
     features = builder.compute_features()
     targets  = builder.compute_targets(horizons=[1, 5, 21])
 

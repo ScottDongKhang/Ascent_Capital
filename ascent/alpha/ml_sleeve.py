@@ -31,6 +31,7 @@ ML_FEATURES = [
     "gross_profitability",
     "accruals",
     "asset_growth",
+    "earnings_surprise",
 ]
 
 

@@ -162,7 +162,8 @@ def test_fundamental_alpha_works_without_fundamentals():
 def test_default_alpha_weights_include_fundamental():
     from ascent.alpha.stack import DEFAULT_ALPHA_WEIGHTS
     assert "fundamental" in DEFAULT_ALPHA_WEIGHTS
-    assert abs(DEFAULT_ALPHA_WEIGHTS["fundamental"] - 0.10) < 0.001
+    # fundamental reduced from 0.10 to 0.05 to make room for earnings sleeve
+    assert abs(DEFAULT_ALPHA_WEIGHTS["fundamental"] - 0.05) < 0.001
     assert abs(DEFAULT_ALPHA_WEIGHTS["trend"] - 0.55) < 0.001
     assert abs(sum(DEFAULT_ALPHA_WEIGHTS.values()) - 1.0) < 0.01
 

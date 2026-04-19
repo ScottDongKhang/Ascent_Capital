@@ -203,6 +203,64 @@ def build_fundamental_panel(
     return result
 
 
+# ── Earnings Panel ────────────────────────────────────────────────────
+
+def build_earnings_panel(
+    earnings_df: pd.DataFrame | None,
+    date_index: pd.DatetimeIndex,
+    symbols: list,
+) -> dict:
+    """
+    Convert long-format earnings surprise data to a daily wide panel.
+
+    Forward-fills each symbol's surprise_pct from signal_date up to 63
+    trading days (PEAD effect decays over ~60 days).  After 63 bdays the
+    value rolls off to NaN — cross-sectional z-score in the sleeve handles
+    the rest.
+
+    Returns {"earnings_surprise": DataFrame(dates × symbols)} or {} if no data.
+    """
+    if earnings_df is None or earnings_df.empty:
+        return {}
+
+    required = {"symbol", "signal_date", "surprise_pct"}
+    if not required.issubset(set(earnings_df.columns)):
+        return {}
+
+    # Strip timezone from date_index to avoid comparison errors
+    clean_index = date_index.tz_localize(None) if date_index.tz is not None else date_index
+
+    sym_series: dict = {}
+    for sym in symbols:
+        sub = earnings_df[earnings_df["symbol"] == sym].copy()
+        if sub.empty:
+            continue
+        sub["signal_date"] = pd.to_datetime(sub["signal_date"])
+        # Strip timezone from signal_date too
+        if sub["signal_date"].dt.tz is not None:
+            sub["signal_date"] = sub["signal_date"].dt.tz_localize(None)
+        sub = sub.dropna(subset=["surprise_pct"]).sort_values("signal_date")
+        if sub.empty:
+            continue
+        s = sub.set_index("signal_date")["surprise_pct"]
+        s = s[~s.index.duplicated(keep="last")]
+        sym_series[sym] = s
+
+    if not sym_series:
+        return {}
+
+    wide = pd.DataFrame(sym_series)
+    if wide.index.tz is not None:
+        wide.index = wide.index.tz_localize(None)
+
+    # Reindex to full date range, then forward-fill up to 63 trading days
+    wide = wide.reindex(clean_index, method=None)
+    wide = wide.ffill(limit=63)
+    wide = wide.reindex(columns=symbols)
+
+    return {"earnings_surprise": wide}
+
+
 # ── Feature Builder ────────────────────────────────────────────────────
 
 def build_all_features(
@@ -210,6 +268,7 @@ def build_all_features(
     volume: pd.DataFrame,
     dollar_volume: pd.DataFrame,
     macro_pivot: pd.DataFrame | None = None,
+    earnings_df: pd.DataFrame | None = None,
 ) -> dict[str, pd.DataFrame]:
     """
     Build all features. Returns dict of {feature_name: DataFrame(dates × symbols)}.
@@ -267,5 +326,14 @@ def build_all_features(
                     np.tile(chg.values.reshape(-1, 1), (1, close.shape[1])),
                     index=chg.index, columns=close.columns,
                 ).reindex(close.index).ffill()
+
+    # Earnings surprise panel (PEAD signal)
+    if earnings_df is not None and not earnings_df.empty:
+        try:
+            ep = build_earnings_panel(earnings_df, close.index, list(close.columns))
+            features.update(ep)
+        except Exception as _e:
+            import logging as _log
+            _log.getLogger(__name__).warning("earnings panel failed: %s", _e)
 
     return features
