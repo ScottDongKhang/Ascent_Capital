@@ -179,7 +179,9 @@ def run_pipeline(
     cfg = get_config()
     if not cfg.backtest.end_date:
         from datetime import date
-        cfg.backtest.end_date = pd.bdate_range(end="today", periods=1)[0].strftime("%Y-%m-%d")
+        _today = pd.Timestamp.today().normalize()
+        _days_back = max(0, _today.weekday() - 4)
+        cfg.backtest.end_date = (_today - pd.Timedelta(days=_days_back)).strftime("%Y-%m-%d")
         print(f"[Config] End date set to today: {cfg.backtest.end_date}")
 
     if start_date:     cfg.backtest.start_date         = start_date

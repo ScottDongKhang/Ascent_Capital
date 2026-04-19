@@ -27,11 +27,12 @@ ACTIVE_CONFIG_PATH = Path("data_cache/active_alpha_config.json")
 
 # Match current stack.py defaults exactly
 DEFAULT_ALPHA_WEIGHTS = {
-    "trend":      0.65,
-    "meanrev":    0.05,
-    "statarb":    0.15,
-    "ml":         0.10,
-    "volatility": 0.05,
+    "trend":       0.55,
+    "meanrev":     0.05,
+    "statarb":     0.15,
+    "ml":          0.10,
+    "volatility":  0.05,
+    "fundamental": 0.10,
 }
 
 PERTURB_RANGE  = 0.10   # max +/- 10% per sleeve per variant

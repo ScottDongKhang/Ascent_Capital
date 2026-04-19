@@ -64,7 +64,7 @@ def _refresh_regime():
             return
 
         spy_prices = prices_wide["SPY"].dropna()
-        engine = RegimeEngine(cfg)
+        engine = RegimeEngine(config=cfg.regime.to_engine_dict())
         engine.fit(spy_prices, run_model_selection=False)
 
         # Get current label from signal series

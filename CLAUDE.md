@@ -60,11 +60,12 @@ demo_app.py           Streamlit interactive demo (Tony Ngo)
 
 | Sleeve | Weight | Notes |
 |--------|--------|-------|
-| Trend | 65% | Cross-sectional momentum |
+| Trend | 55% | Cross-sectional momentum |
 | Stat-arb | 15% | Sector residuals; needs profiles.parquet |
 | Mean reversion | 5% | Short-term reversal |
 | ML (XGBoost) | 10% | CPCV-validated; cached to `ml_model_{agent_id}.pkl` |
 | Volatility (vol-regime) | 5% | Signal = -(vol_trend_10d) / (vol_of_vol_21d); long names with declining + stable vol |
+| Fundamental | 10% | Gross profitability + accruals + asset growth + 52wk high; 45-day filing lag; cache: `fundamentals` |
 
 Regime adjusts sleeve weights via `integration.py:regime_adjust_sleeve_weights()`. All sleeves cross-sectionally z-scored before blending. ML sleeve: CPCV C(6,2)=15 folds, purge=5 bdays, embargo=5 bdays — disabled if <10 folds converge or p5 IC Sharpe < 0.
 
@@ -133,7 +134,7 @@ Verdict: `proceed` | `reduce_size` (Haiku adjusts weights) | `halt_and_review` (
 
 ## Self-improve loop
 
-Weekly (Sunday 6AM). **Status: Phase B heuristic** — generates 5 sleeve-weight variants, scores by `base_sharpe(0.518) + diversity_bonus + noise`. Shadow promotion if edge > 0.10 Sharpe, 30-day monitoring. **Phase D TODO**: replace heuristic with real `walk_forward_pipeline()` call.
+Weekly (Sunday 6AM). Generates 5 sleeve-weight variants, scores via real multi-fold OOS (`run_lightweight_oos()`). Shadow promotion if edge > 0.05 Sharpe, 30-day monitoring, auto-promoted by `shadow_promoter.py`. Per-regime variants written to `active_alpha_config.json` `by_regime` section. Stack reads live config on every run.
 
 ---
 
@@ -320,3 +321,13 @@ All second-audit bugs now fixed. Third-pass audit found no new crashes (all rema
 - Files: `ascent/alpha/stack.py`, `ascent/research/shadow_promoter.py` (new), `ascent/research/self_improve.py`, `ascent/regime/features.py`, `ascent/regime/engine.py`, `ascent/main.py`, `ascent/research/walk_forward_lightweight.py`, `run_all_agents.py`, `tests/test_self_evolving_alpha.py` (new), `tests/test_regime_features.py` (new), `tests/test_walkforward_institutional.py` (new)
 - Tests: 177 passing
 - Open: Phase 4 hedge overlay (blocked ~May 13), debate trigger condition, R2R API key
+
+### 2026-04-19 (fundamental alpha — Tier 1 signals)
+- **Task 1 ✅**: `ascent/data/ingest/fundamentals.py` (new) — yfinance quarterly fetcher with 45-day filing lag; `fetch_fundamentals()`, `save_fundamentals()`, `load_fundamentals()`; fixed `__main__` to use `get_config()` not nonexistent `get_current_universe()`
+- **Task 2 ✅**: `ascent/features/feature_defs.py` — `high_52w_pct()`, `build_fundamental_panel()` (gross_profitability, accruals, asset_growth with forward-fill); `ascent/alpha/fundamental.py` (new) — cross-sectional blend of 4 signals
+- **Task 3 ✅**: `ascent/alpha/stack.py` — `DEFAULT_ALPHA_WEIGHTS` updated: trend 0.65→0.55, fundamental 0.10 added; fundamental sleeve wired into `build_alpha_stack()`; `ascent/alpha/ml_sleeve.py` — 4 fundamental signals added to `ML_FEATURES`; `ascent/features/build_features.py` — `fundamentals_df=None` param, panel augmentation in `compute_features()`; `ascent/main.py` — loads fundamentals cache and passes to FeatureBuilder
+- Fundamentals cache seeded: 675 rows, 135 symbols
+- Fixed stale test assertion: `test_stack_falls_back_to_defaults_when_no_config` updated trend 0.65→0.55
+- Files: `ascent/data/ingest/fundamentals.py` (new), `ascent/alpha/fundamental.py` (new), `ascent/features/feature_defs.py`, `ascent/alpha/stack.py`, `ascent/alpha/ml_sleeve.py`, `ascent/features/build_features.py`, `ascent/main.py`, `tests/test_fundamental_alpha.py` (new), `tests/test_self_evolving_alpha.py`
+- Tests: 188 passing
+- Open: Phase 4 hedge overlay (blocked ~May 13), R2R API key, debate trigger condition

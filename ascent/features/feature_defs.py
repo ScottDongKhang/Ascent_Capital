@@ -187,12 +187,16 @@ def build_fundamental_panel(
             ag = ta / ta.shift(4) - 1
             sym_series["asset_growth"][sym] = ag
 
+    clean_index = date_index.tz_localize(None) if date_index.tz is not None else date_index
+
     result = {}
     for metric, sym_dict in sym_series.items():
         if not sym_dict:
             continue
         wide = pd.DataFrame(sym_dict)
-        wide = wide.reindex(date_index, method="ffill")
+        if wide.index.tz is not None:
+            wide.index = wide.index.tz_localize(None)
+        wide = wide.reindex(clean_index, method="ffill")
         wide = wide.reindex(columns=symbols)
         result[metric] = wide
 

@@ -91,8 +91,8 @@ if __name__ == "__main__":
     import sys
     sys.path.insert(0, ".")
     from ascent.config.settings import get_config
-    from ascent.data.universe import get_current_universe
-    symbols = get_current_universe()
+    cfg = get_config()
+    symbols = list(cfg.universe.symbols)
     print(f"Fetching fundamentals for {len(symbols)} symbols...")
     df = fetch_fundamentals(symbols, delay_s=0.3)
     save_fundamentals(df)
