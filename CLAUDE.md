@@ -220,6 +220,7 @@ All second-audit bugs now fixed. Third-pass audit found no new crashes (all rema
 ## What is not built yet
 
 - **Plans B2–D4**: ✅ All implemented (B2 enforce reduce_size, B3 regime staleness, C1–C3 outcome scoring + live Sharpe, D1–D4 quant context + extended thinking + prompt caching)
+- **Self-evolving alpha loop**: ✅ Full loop closed — stack.py reads active config, shadow promoter auto-promotes, per-regime variant generation, multi-fold OOS evaluation
 - **Phase 4 hedge overlay**: blocked until ~May 13, 2026 (30 days live)
 - **R2R semantic memory**: built but `R2R_API_KEY` not configured; BM25 fallback active
 - **Live dashboard UI**: data files generated but no live render
@@ -298,3 +299,24 @@ All second-audit bugs now fixed. Third-pass audit found no new crashes (all rema
 - All Python files pass ast.parse; 144 tests passing
 - Files: agents/international_agent.py, agents/alternatives_agent.py, debate/outcome_tracker.py, orchestrator/central_intelligence.py, ascent/research/self_improve.py, tests/test_plan_d.py, CLAUDE.md
 - Open: Phase 4 hedge overlay (blocked until ~May 13), debate trigger condition (high-uncertainty days only), R2R API key config
+
+### 2026-04-18 (Phase 1 firm architecture — real OOS, conditional debate, memory wiring)
+- Built `ascent/research/walk_forward_lightweight.py` — real OOS scoring via pipeline (replaced heuristic in self_improve)
+- Built `ascent/execution/debate_gate.py` — conditional debate (entropy >0.70, top pos >12%, VaR <-3.5%, catalyst)
+- Built `ascent/monitoring/counterfactual_tracker.py` — quant vs debate weights snapshotted and scored 10 days later
+- Modified `debate/agents.py` `_build_context()` — actively queries R2R/BM25 memory for past verdicts in same regime
+- Modified `ascent/execution/eod_runner.py` — debate gated, verdict only defined inside `if _run_debate:` block
+- Modified `run_all_agents.py` — calls `score_pending_counterfactuals()` daily
+- Tests: 157 passing (Phase 1 closes)
+
+### 2026-04-18/19 (Plan A: self-evolving alpha loop + Plan B: regime + walk-forward)
+- **Plan A Task 1 ✅**: `ascent/alpha/stack.py` — `_load_active_alpha_weights(regime=)` reads `data_cache/active_alpha_config.json`; self-improve changes now hit live trading
+- **Plan A Task 2 ✅**: `ascent/research/shadow_promoter.py` — auto-promotion: expired shadows re-evaluated, winners written to `active_alpha_config.json`, losers archived to `data_cache/archived_configs/`; wired into `run_all_agents.py` daily
+- **Plan A Task 3 ✅**: `ascent/research/self_improve.py` — `_promote_regime_variant()` + `run_self_improve(current_regime=)`; Sunday call in `run_all_agents.py` passes current regime; system now learns stressed ≠ calm_bull weights
+- **Plan B Task 1 ✅**: `ascent/regime/features.py` — `_build_credit_yield_features()`: credit_spread_chg_21d/level (HYG/LQD), yield_curve_slope/chg (TLT/IEF); leading indicators for regime transitions
+- **Plan B Task 2 ✅**: `ascent/regime/engine.py` + `ascent/main.py` — `market_prices` param wired through engine; main.py fetches HYG/LQD/TLT/IEF alongside VIX
+- **Plan B Task 3 ✅**: `ascent/research/walk_forward_lightweight.py` — multi-fold expanding window (3–4 folds), 5-day purge + embargo, per-fold `get_universe_on_date()`, Sharpe across all fold returns
+- **Plan B Task 4 ✅**: A4 gap confirmed already fixed in `walk_forward_runner.py` (per-fold universe filter via `build_historical_universe()` already present)
+- Files: `ascent/alpha/stack.py`, `ascent/research/shadow_promoter.py` (new), `ascent/research/self_improve.py`, `ascent/regime/features.py`, `ascent/regime/engine.py`, `ascent/main.py`, `ascent/research/walk_forward_lightweight.py`, `run_all_agents.py`, `tests/test_self_evolving_alpha.py` (new), `tests/test_regime_features.py` (new), `tests/test_walkforward_institutional.py` (new)
+- Tests: 177 passing
+- Open: Phase 4 hedge overlay (blocked ~May 13), debate trigger condition, R2R API key
