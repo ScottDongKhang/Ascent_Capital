@@ -155,3 +155,27 @@ def test_fundamental_alpha_works_without_fundamentals():
     close = _make_close()
     result = fundamental_alpha({"close": close})
     assert not result.empty
+
+
+# ── Task 3 tests ───────────────────────────────────────────────────────────────
+
+def test_default_alpha_weights_include_fundamental():
+    from ascent.alpha.stack import DEFAULT_ALPHA_WEIGHTS
+    assert "fundamental" in DEFAULT_ALPHA_WEIGHTS
+    assert abs(DEFAULT_ALPHA_WEIGHTS["fundamental"] - 0.10) < 0.001
+    assert abs(DEFAULT_ALPHA_WEIGHTS["trend"] - 0.55) < 0.001
+    assert abs(sum(DEFAULT_ALPHA_WEIGHTS.values()) - 1.0) < 0.01
+
+
+def test_ml_features_include_fundamental_signals():
+    from ascent.alpha.ml_sleeve import ML_FEATURES
+    for feat in ["gross_profitability", "accruals", "asset_growth", "high_52w_pct"]:
+        assert feat in ML_FEATURES, f"ML_FEATURES must include {feat}"
+
+
+def test_feature_builder_accepts_fundamentals_df():
+    from ascent.features.build_features import FeatureBuilder
+    import inspect
+    sig = inspect.signature(FeatureBuilder.__init__)
+    assert "fundamentals_df" in sig.parameters, \
+        "FeatureBuilder.__init__ must accept fundamentals_df parameter"

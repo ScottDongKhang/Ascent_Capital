@@ -27,6 +27,10 @@ ML_FEATURES = [
     "vol_21d", "vol_63d", "vol_ratio_10_63",
     "zscore_20d", "rsi_14", "macd_hist",
     "dollar_vol_rank_21d",
+    "high_52w_pct",
+    "gross_profitability",
+    "accruals",
+    "asset_growth",
 ]
 
 

@@ -13,7 +13,8 @@ from ascent.features.targets import build_targets
 class FeatureBuilder:
     """Builds feature matrices and targets from normalized data."""
 
-    def __init__(self, price_df: pd.DataFrame, macro_df: pd.DataFrame | None = None):
+    def __init__(self, price_df: pd.DataFrame, macro_df: pd.DataFrame | None = None,
+                 fundamentals_df: pd.DataFrame | None = None):
         self.price_df = price_df
         self.macro_df = macro_df
 
@@ -35,6 +36,7 @@ class FeatureBuilder:
         self.macro_pivot = None
         if macro_df is not None and not macro_df.empty:
             self.macro_pivot = pivot_macro(macro_df)
+        self.fundamentals_df = fundamentals_df
 
     @property
     def symbols(self) -> list[str]:
@@ -46,9 +48,20 @@ class FeatureBuilder:
 
     def compute_features(self) -> dict[str, pd.DataFrame]:
         """Compute all features. Returns {name: DataFrame(dates × symbols)}."""
-        return build_all_features(
+        features = build_all_features(
             self.close, self.volume, self.dollar_volume, self.macro_pivot
         )
+        if self.fundamentals_df is not None and not self.fundamentals_df.empty:
+            try:
+                from ascent.features.feature_defs import build_fundamental_panel
+                panel = build_fundamental_panel(
+                    self.fundamentals_df, self.close.index, list(self.close.columns)
+                )
+                features.update(panel)
+            except Exception as e:
+                import logging as _log
+                _log.getLogger(__name__).warning("fundamental panel failed: %s", e)
+        return features
 
     def compute_targets(self, horizons: list[int] = [1, 5, 21]) -> dict[str, pd.DataFrame]:
         """Compute forward return targets."""

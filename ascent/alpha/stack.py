@@ -14,11 +14,12 @@ from ascent.alpha.ml_sleeve import build_ml_alpha, build_ml_alpha_cpcv
 log = logging.getLogger(__name__)
 
 DEFAULT_ALPHA_WEIGHTS = {
-    "trend":      0.65,
-    "meanrev":    0.05,
-    "volatility": 0.05,
-    "statarb":    0.15,
-    "ml":         0.10,
+    "trend":       0.55,
+    "meanrev":     0.05,
+    "volatility":  0.05,
+    "statarb":     0.15,
+    "ml":          0.10,
+    "fundamental": 0.10,
 }
 
 def _load_active_alpha_weights(regime: str = None) -> dict:
@@ -152,6 +153,16 @@ def build_alpha_stack(features, alpha_weights=None, regime_signal=None, agent_id
             log.warning("ML sleeve skipped - targets not in features dict")
     except Exception as exc:
         log.warning("ML sleeve failed: %s", exc)
+    try:
+        from ascent.alpha.fundamental import fundamental_alpha
+        fund = fundamental_alpha(features)
+        if fund is not None and not fund.empty:
+            alphas["fundamental"] = fund
+            log.info("fundamental alpha loaded shape=%s", fund.shape)
+        else:
+            log.warning("fundamental alpha returned empty")
+    except Exception as exc:
+        log.error("fundamental alpha failed: %s", exc)
     loaded = list(alphas.keys())
     skipped = [k for k in alpha_weights if k not in loaded]
     print(f"[alpha_stack] loaded={loaded}  skipped={skipped}")

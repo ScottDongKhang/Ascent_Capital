@@ -322,7 +322,16 @@ def run_pipeline(
     print("  STEP 2: FEATURE ENGINEERING")
     print("=" * 70)
 
-    builder  = FeatureBuilder(universe_df, macro_df)
+    from ascent.data.store.parquet import has_data as _hd, load_parquet as _lp
+    fundamentals_df = None
+    if _hd("fundamentals"):
+        try:
+            fundamentals_df = _lp("fundamentals")
+            print(f"[Alpha] Fundamentals loaded: {len(fundamentals_df)} rows")
+        except Exception as _fe:
+            print(f"[Alpha] Fundamentals load failed: {_fe}")
+
+    builder  = FeatureBuilder(universe_df, macro_df, fundamentals_df=fundamentals_df)
     features = builder.compute_features()
     targets  = builder.compute_targets(horizons=[1, 5, 21])
 
@@ -355,10 +364,9 @@ def run_pipeline(
     print("  STEP 4: PORTFOLIO CONSTRUCTION")
     print("=" * 70)
 
-    from ascent.data.store.parquet import has_data as _hd
+    from ascent.data.store.parquet import has_data as _hd, load_parquet as _lp
     sector_map = {}
     if _hd("profiles"):
-        from ascent.data.store.parquet import load_parquet as _lp
         _prof      = _lp("profiles")
         sector_map = dict(zip(_prof["symbol"], _prof["sector"]))
         print("[Portfolio] Sector constraint: max 1 per sector")
