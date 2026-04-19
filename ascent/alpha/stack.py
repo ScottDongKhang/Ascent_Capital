@@ -21,6 +21,29 @@ DEFAULT_ALPHA_WEIGHTS = {
     "ml":         0.10,
 }
 
+def _load_active_alpha_weights(regime: str = None) -> dict:
+    import json as _json
+    from pathlib import Path as _Path
+
+    config_path = _Path("data_cache/active_alpha_config.json")
+    if not config_path.exists():
+        return DEFAULT_ALPHA_WEIGHTS.copy()
+
+    try:
+        config = _json.loads(config_path.read_text())
+        if regime:
+            regime_weights = config.get("by_regime", {}).get(str(regime).lower())
+            if regime_weights and isinstance(regime_weights, dict):
+                return {k: float(v) for k, v in regime_weights.items()}
+        global_weights = config.get("global")
+        if global_weights and isinstance(global_weights, dict):
+            return {k: float(v) for k, v in global_weights.items()}
+    except Exception as exc:
+        log.warning("_load_active_alpha_weights: failed to load config (%s) — using defaults", exc)
+
+    return DEFAULT_ALPHA_WEIGHTS.copy()
+
+
 def _load_sector_map():
     try:
         from ascent.data.store.parquet import load_parquet, has_data
@@ -52,7 +75,13 @@ def build_alpha_stack(features, alpha_weights=None, regime_signal=None, agent_id
                         Defaults to "us_equities" for the current single-agent setup.
     """
     if alpha_weights is None:
-        alpha_weights = DEFAULT_ALPHA_WEIGHTS.copy()
+        regime_label = None
+        if regime_signal is not None:
+            try:
+                regime_label = str(regime_signal.label.value).lower()
+            except Exception:
+                pass
+        alpha_weights = _load_active_alpha_weights(regime=regime_label)
     if regime_signal is not None:
         try:
             from ascent.regime import regime_adjust_sleeve_weights
