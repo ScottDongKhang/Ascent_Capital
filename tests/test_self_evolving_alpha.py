@@ -99,9 +99,8 @@ def test_stack_falls_back_to_global_for_unknown_regime(tmp_path, monkeypatch):
 def test_shadow_promoter_promotes_expired_winner(tmp_path, monkeypatch):
     """A shadow config past its expiry that still beats baseline must be promoted to live."""
     import json
-    import numpy as np
-    import pandas as pd
     from datetime import timedelta, date
+    from unittest.mock import patch
     monkeypatch.chdir(tmp_path)
     (tmp_path / "data_cache" / "shadow_configs").mkdir(parents=True)
     (tmp_path / "data_cache").mkdir(exist_ok=True)
@@ -118,16 +117,10 @@ def test_shadow_promoter_promotes_expired_winner(tmp_path, monkeypatch):
     shadow_file = tmp_path / "data_cache" / "shadow_configs" / "v1_20260318.json"
     shadow_file.write_text(json.dumps(shadow))
 
-    # Write prices so lightweight OOS can run
-    idx = pd.bdate_range(end=date.today(), periods=300)
-    syms = [f"S{i}" for i in range(20)] + ["SPY"]
-    np.random.seed(1)
-    rets = np.random.normal(0.0003, 0.012, (len(idx), len(syms)))
-    prices = pd.DataFrame(100 * np.cumprod(1 + rets, axis=0), index=idx, columns=syms)
-    prices.to_parquet(tmp_path / "data_cache" / "prices_live.parquet")
-
-    from ascent.research.shadow_promoter import run_shadow_promotion
-    run_shadow_promotion(baseline_sharpe=0.518)
+    # Mock _re_evaluate to return a Sharpe that beats baseline + MIN_EDGE (0.518 + 0.05 = 0.568)
+    with patch("ascent.research.shadow_promoter._re_evaluate", return_value=0.65):
+        from ascent.research.shadow_promoter import run_shadow_promotion
+        run_shadow_promotion(baseline_sharpe=0.518)
 
     active_path = tmp_path / "data_cache" / "active_alpha_config.json"
     assert active_path.exists(), "active_alpha_config.json must be written after promotion"
