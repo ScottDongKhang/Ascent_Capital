@@ -137,6 +137,68 @@ def macro_change(macro_pivot: pd.DataFrame, series_name: str, window: int = 21) 
     return level.diff(window)
 
 
+# ── 52-Week High ──────────────────────────────────────────────────────
+
+def high_52w_pct(close: pd.DataFrame) -> pd.DataFrame:
+    """Price as fraction of 52-week high (George & Hwang 2004)."""
+    return close / close.rolling(252, min_periods=63).max()
+
+
+# ── Fundamental Panel ─────────────────────────────────────────────────
+
+def build_fundamental_panel(
+    fundamentals_df: pd.DataFrame,
+    date_index: pd.DatetimeIndex,
+    symbols: list,
+) -> dict:
+    """
+    Convert long-format quarterly fundamentals to daily wide panels.
+    Forward-fills from each filing date. Returns dict of DataFrames.
+    """
+    if fundamentals_df is None or fundamentals_df.empty:
+        return {}
+
+    sym_series: dict = {
+        "gross_profitability": {},
+        "accruals": {},
+        "asset_growth": {},
+    }
+
+    for sym in symbols:
+        sub = fundamentals_df[fundamentals_df["symbol"] == sym].copy()
+        if sub.empty:
+            continue
+        sub = sub.dropna(subset=["total_assets"]).sort_values("date")
+        sub = sub[sub["total_assets"] != 0]
+        if sub.empty:
+            continue
+        sub = sub.set_index("date")
+        ta = sub["total_assets"]
+
+        if "gross_profit" in sub.columns:
+            gp = sub["gross_profit"] / ta.replace(0, np.nan)
+            sym_series["gross_profitability"][sym] = gp
+
+        if "net_income" in sub.columns and "op_cashflow" in sub.columns:
+            acc = (sub["net_income"] - sub["op_cashflow"]) / ta.replace(0, np.nan)
+            sym_series["accruals"][sym] = acc
+
+        if len(ta) >= 4:
+            ag = ta / ta.shift(4) - 1
+            sym_series["asset_growth"][sym] = ag
+
+    result = {}
+    for metric, sym_dict in sym_series.items():
+        if not sym_dict:
+            continue
+        wide = pd.DataFrame(sym_dict)
+        wide = wide.reindex(date_index, method="ffill")
+        wide = wide.reindex(columns=symbols)
+        result[metric] = wide
+
+    return result
+
+
 # ── Feature Builder ────────────────────────────────────────────────────
 
 def build_all_features(
@@ -183,6 +245,7 @@ def build_all_features(
     features["sma_cross_10_50"] = sma_crossover(close, 10, 50)
     features["macd_hist"] = macd_signal(close)
     features["rsi_14"] = rsi(close, 14)
+    features["high_52w_pct"] = high_52w_pct(close)
 
     # Macro (broadcast to all symbols if available)
     if macro_pivot is not None and not macro_pivot.empty:

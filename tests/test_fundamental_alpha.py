@@ -71,3 +71,87 @@ def test_fetch_fundamentals_graceful_on_missing_symbol():
         from ascent.data.ingest.fundamentals import fetch_fundamentals
         df = fetch_fundamentals(["BADTICKER"], delay_s=0)
     assert isinstance(df, pd.DataFrame)
+
+
+# ── Task 2 tests ───────────────────────────────────────────────────────────────
+
+def _make_fundamentals_df(syms=("AAPL", "MSFT", "GOOGL"), n_quarters=6):
+    rows = []
+    np.random.seed(42)
+    for sym in syms:
+        for q in range(n_quarters):
+            period = pd.Timestamp("2024-01-01") + pd.DateOffset(months=3 * q)
+            rows.append({
+                "symbol":       sym,
+                "period_end":   period,
+                "date":         period + pd.Timedelta(days=45),
+                "gross_profit": np.random.uniform(1e9, 5e9),
+                "total_assets": np.random.uniform(20e9, 60e9),
+                "net_income":   np.random.uniform(0.5e9, 3e9),
+                "op_cashflow":  np.random.uniform(1e9, 4e9),
+            })
+    return pd.DataFrame(rows)
+
+
+def _make_close(syms=("AAPL", "MSFT", "GOOGL"), n=300):
+    idx = pd.bdate_range(end="2026-04-19", periods=n)
+    np.random.seed(0)
+    return pd.DataFrame(
+        100 * np.cumprod(1 + np.random.normal(0.0003, 0.012, (len(idx), len(syms))), axis=0),
+        index=idx, columns=list(syms)
+    )
+
+
+def test_build_fundamental_panel_produces_three_metrics():
+    from ascent.features.feature_defs import build_fundamental_panel
+    syms = ["AAPL", "MSFT", "GOOGL"]
+    close = _make_close(syms)
+    fund_df = _make_fundamentals_df(syms)
+    result = build_fundamental_panel(fund_df, close.index, syms)
+    assert "gross_profitability" in result
+    assert "accruals" in result
+    assert "asset_growth" in result
+
+
+def test_build_fundamental_panel_forward_fills():
+    from ascent.features.feature_defs import build_fundamental_panel
+    syms = ["AAPL"]
+    close = _make_close(syms)
+    fund_df = _make_fundamentals_df(syms, n_quarters=4)
+    result = build_fundamental_panel(fund_df, close.index, syms)
+    gp = result.get("gross_profitability")
+    assert gp is not None
+    valid = gp["AAPL"].dropna()
+    assert len(valid) > 50
+
+
+def test_high_52w_pct_feature():
+    from ascent.features.feature_defs import high_52w_pct
+    close = _make_close()
+    result = high_52w_pct(close)
+    valid = result.iloc[252:].dropna(how="all")
+    assert not valid.empty
+    finite = valid.values[np.isfinite(valid.values)]
+    assert (finite <= 1.0).all()
+    assert (finite > 0).all()
+
+
+def test_fundamental_alpha_builds_composite():
+    from ascent.alpha.fundamental import fundamental_alpha
+    from ascent.features.feature_defs import build_fundamental_panel, high_52w_pct
+    syms = ["AAPL", "MSFT", "GOOGL"]
+    close = _make_close(syms)
+    fund_df = _make_fundamentals_df(syms)
+    panel = build_fundamental_panel(fund_df, close.index, syms)
+    features = {"close": close, "high_52w_pct": high_52w_pct(close)}
+    features.update(panel)
+    result = fundamental_alpha(features)
+    assert not result.empty
+    assert set(result.columns) == set(syms)
+
+
+def test_fundamental_alpha_works_without_fundamentals():
+    from ascent.alpha.fundamental import fundamental_alpha
+    close = _make_close()
+    result = fundamental_alpha({"close": close})
+    assert not result.empty
