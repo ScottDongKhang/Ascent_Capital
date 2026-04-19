@@ -78,3 +78,12 @@ def test_lightweight_oos_sharpe_from_all_folds(tmp_path, monkeypatch):
                               n_days=63)
     assert np.isfinite(r1["sharpe"])
     assert r1.get("n_folds", 0) >= 1
+
+
+def test_walk_forward_runner_calls_universe_per_fold():
+    """walk_forward_runner must call get_universe_on_date on every fold -- A4 gap."""
+    import inspect
+    from ascent.research import walk_forward_runner
+    src = inspect.getsource(walk_forward_runner)
+    assert "get_universe_on_date" in src, \
+        "walk_forward_runner must call get_universe_on_date() per fold to prevent survivorship bias"
