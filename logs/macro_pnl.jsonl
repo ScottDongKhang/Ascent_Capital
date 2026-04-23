@@ -12,3 +12,10 @@
 {"date": "2026-04-15", "nav": 101769.04, "return": -0.002491, "agent_id": "macro", "source": "forward_pnl_tracker", "timestamp": "2026-04-15T15:42:52.286933"}
 {"date": "2026-04-16", "nav": 101586.45, "return": -0.001794, "agent_id": "macro", "source": "forward_pnl_tracker", "timestamp": "2026-04-16T22:44:28.030014"}
 {"date": "2026-04-17", "nav": 101699.9, "return": 0.001117, "agent_id": "macro", "source": "forward_pnl_tracker", "timestamp": "2026-04-17T22:56:12.121317"}
+{"date": "2026-04-19", "nav": 101715.44, "return": 0.000153, "agent_id": "macro", "source": "forward_pnl_tracker", "timestamp": "2026-04-19T12:21:06.902267"}
+{"date": "2026-04-19", "nav": 101730.98, "return": 0.000153, "agent_id": "macro", "source": "forward_pnl_tracker", "timestamp": "2026-04-19T12:23:30.853859"}
+{"date": "2026-04-19", "nav": 101746.52, "return": 0.000153, "agent_id": "macro", "source": "forward_pnl_tracker", "timestamp": "2026-04-19T12:25:39.899610"}
+{"date": "2026-04-22", "nav": 103159.42, "return": 0.013886, "agent_id": "macro", "source": "forward_pnl_tracker", "timestamp": "2026-04-22T20:29:59.975738"}
+{"date": "2026-04-22", "nav": 104591.94, "return": 0.013886, "agent_id": "macro", "source": "forward_pnl_tracker", "timestamp": "2026-04-22T21:23:05.800608"}
+{"date": "2026-04-22", "nav": 106044.35, "return": 0.013886, "agent_id": "macro", "source": "forward_pnl_tracker", "timestamp": "2026-04-22T21:34:57.777463"}
+{"date": "2026-04-22", "nav": 107516.93, "return": 0.013886, "agent_id": "macro", "source": "forward_pnl_tracker", "timestamp": "2026-04-22T22:48:03.594880"}
