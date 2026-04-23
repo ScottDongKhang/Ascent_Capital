@@ -28,10 +28,10 @@ ML_FEATURES = [
     "zscore_20d", "rsi_14", "macd_hist",
     "dollar_vol_rank_21d",
     "high_52w_pct",
-    "gross_profitability",
-    "accruals",
-    "asset_growth",
     "earnings_surprise",
+    # gross_profitability / accruals / asset_growth excluded: only ~5 quarters of
+    # history available, which wipes all pre-2025 training rows via _stack_features
+    # dropna(). These signals live in the dedicated fundamental sleeve instead.
 ]
 
 
@@ -228,13 +228,20 @@ def build_ml_alpha(
 
 # ── CPCV helpers ──────────────────────────────────────────────────────────────
 
+_SPARSE_FILL_ZERO = {"earnings_surprise"}  # event-driven features: NaN = no recent event → 0
+
+
 def _stack_features(features: dict, available: list) -> pd.DataFrame:
     """Stack feature dict into long-form (date, symbol) MultiIndex DataFrame."""
     long_frames = []
     for feat_name in available:
         stacked = features[feat_name].stack().rename(feat_name)
         long_frames.append(stacked)
-    return pd.concat(long_frames, axis=1).dropna()
+    result = pd.concat(long_frames, axis=1)
+    for col in _SPARSE_FILL_ZERO:
+        if col in result.columns:
+            result[col] = result[col].fillna(0.0)
+    return result.dropna()
 
 
 def _train_xgboost(features: dict, targets: pd.DataFrame, train_dates: pd.DatetimeIndex):

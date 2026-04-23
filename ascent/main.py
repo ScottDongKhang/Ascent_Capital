@@ -200,6 +200,13 @@ def run_pipeline(
     price_df, price_cache_name = load_or_fetch_prices(cfg, live)
     macro_df, macro_cache_name = load_or_fetch_macro(cfg, live)
 
+    # Strip timezone from price dates — yfinance returns tz-aware (America/New_York),
+    # but fundamental/earnings panels strip tz, causing DatetimeIndex → plain Index
+    # degradation in build_alpha_stack when unioning tz-aware and tz-naive indices.
+    if price_df["date"].dtype.tz is not None:
+        price_df = price_df.copy()
+        price_df["date"] = price_df["date"].dt.tz_localize(None)
+
     benchmark_sym  = cfg.universe.benchmark
     benchmark_mask = price_df["symbol"] == benchmark_sym
     benchmark_df   = price_df[benchmark_mask].copy()

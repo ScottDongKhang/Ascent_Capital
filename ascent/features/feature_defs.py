@@ -275,6 +275,7 @@ def build_all_features(
     All features use only past data — safe for walk-forward use.
     """
     features = {}
+    features["close"] = close  # needed by fundamental_alpha and other sleeves
 
     # Momentum
     for w in [5, 10, 21, 63, 126, 252]:
