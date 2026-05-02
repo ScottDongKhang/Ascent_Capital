@@ -60,12 +60,13 @@ demo_app.py           Streamlit interactive demo (Tony Ngo)
 
 | Sleeve | Weight | Notes |
 |--------|--------|-------|
-| Trend | 55% | Cross-sectional momentum |
+| Trend | 50% | Cross-sectional momentum |
 | Stat-arb | 15% | Sector residuals; needs profiles.parquet |
 | Mean reversion | 5% | Short-term reversal |
 | ML (XGBoost) | 10% | CPCV-validated; cached to `ml_model_{agent_id}.pkl` |
 | Volatility (vol-regime) | 5% | Signal = -(vol_trend_10d) / (vol_of_vol_21d); long names with declining + stable vol |
-| Fundamental | 10% | Gross profitability + accruals + asset growth + 52wk high; 45-day filing lag; cache: `fundamentals` |
+| Fundamental | 5% | Gross profitability + accruals + asset growth + 52wk high; 45-day filing lag; cache: `fundamentals` |
+| Analyst | 5% | Rolling 63-day net upgrade score; yfinance upgrades_downgrades; 1-bday lag; cache: `analyst_revisions` |
 
 Regime adjusts sleeve weights via `integration.py:regime_adjust_sleeve_weights()`. All sleeves cross-sectionally z-scored before blending. ML sleeve: CPCV C(6,2)=15 folds, purge=5 bdays, embargo=5 bdays — disabled if <10 folds converge or p5 IC Sharpe < 0.
 
@@ -374,6 +375,17 @@ All second-audit bugs now fixed. Third-pass audit found no new crashes (all rema
 - Dry run result (2026-05-02, non-rebalance): 23 positions, all 7 sleeves loaded, IC t-stat=2.83, equity $105,237
 - Files: `ascent/alpha/ml_sleeve.py`, `ascent/data/hub.py`, `ascent/portfolio/optimizer.py`, `run_all_agents.py`, `CLAUDE.md`
 - Open: Phase 4 hedge overlay (unblocks May 13), analyst revision signal, R2R API key
+
+### 2026-05-02 (analyst revision alpha sleeve)
+- **New sleeve**: `ascent/data/ingest/analyst.py` — yfinance `upgrades_downgrades` fetcher; maps up/down/init/reit actions to ±1 scores; 1-bday lag; 225k rows seeded across 899 symbols
+- **Feature panel**: `build_analyst_panel()` in `feature_defs.py` — rolling 63-day net upgrade score per symbol; naturally decays as old events roll off; wired into `build_all_features(analyst_df=)`
+- **Alpha sleeve**: `ascent/alpha/analyst.py` — cross-sectional z-score of rolling revision score; drops all-zero columns (no analyst coverage)
+- **Stack**: trend 0.55 → 0.50, analyst 0.05 added; total stays 1.0; analyst wired into `build_alpha_stack()`
+- **ML**: `analyst_revision` added to `ML_FEATURES`
+- **Integrity**: `analyst` added to `MIN_SLEEVE_WEIGHTS` (floor 0.02) and shadow_promoter `_SLEEVE_FLOORS` — won't be zeroed by perturbation
+- Files: `ascent/data/ingest/analyst.py` (new), `ascent/alpha/analyst.py` (new), `ascent/features/feature_defs.py`, `ascent/features/build_features.py`, `ascent/alpha/stack.py`, `ascent/alpha/ml_sleeve.py`, `ascent/main.py`, `ascent/research/self_improve.py`, `ascent/research/shadow_promoter.py`, `tests/test_analyst_alpha.py` (new)
+- Tests: 216 passing
+- Open: Phase 4 hedge overlay (unblocks May 13), R2R API key
 
 ### 2026-05-01 (self-learning hardening — sleeve floor protection + per-sleeve IC)
 - **Root cause identified**: `generate_variants()` used `max(0.0, w + delta)` — a single -0.10 perturbation zeroed fundamental/earnings (both at 0.05); shadow_promoter wrote the zeroed config straight to active_alpha_config.json with no guard
