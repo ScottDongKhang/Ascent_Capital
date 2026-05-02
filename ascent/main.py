@@ -71,6 +71,11 @@ def _log_sleeve_ic(features: dict, targets: dict) -> None:
             sleeve_builders["earnings"] = lambda f: earnings_alpha(f)
         except Exception:
             pass
+        try:
+            from ascent.alpha.analyst import analyst_alpha
+            sleeve_builders["analyst"] = lambda f: analyst_alpha(f)
+        except Exception:
+            pass
 
         sleeve_ics: dict = {}
         for name, builder in sleeve_builders.items():
@@ -478,7 +483,16 @@ def run_pipeline(
         except Exception as _ee:
             print(f"[Alpha] Earnings load failed: {_ee}")
 
-    builder  = FeatureBuilder(universe_df, macro_df, fundamentals_df=fundamentals_df, earnings_df=earnings_df)
+    analyst_df = None
+    if _hd("analyst_revisions"):
+        try:
+            analyst_df = _lp("analyst_revisions")
+            print(f"[Alpha] Analyst revisions loaded: {len(analyst_df)} rows")
+        except Exception as _ae:
+            print(f"[Alpha] Analyst load failed: {_ae}")
+
+    builder  = FeatureBuilder(universe_df, macro_df, fundamentals_df=fundamentals_df,
+                               earnings_df=earnings_df, analyst_df=analyst_df)
     features = builder.compute_features()
     targets  = builder.compute_targets(horizons=[1, 5, 21])
 

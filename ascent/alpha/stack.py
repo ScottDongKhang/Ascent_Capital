@@ -14,13 +14,14 @@ from ascent.alpha.ml_sleeve import build_ml_alpha, build_ml_alpha_cpcv
 log = logging.getLogger(__name__)
 
 DEFAULT_ALPHA_WEIGHTS = {
-    "trend":       0.55,
+    "trend":       0.50,
     "meanrev":     0.05,
     "volatility":  0.05,
     "statarb":     0.15,
     "ml":          0.10,
     "fundamental": 0.05,
     "earnings":    0.05,
+    "analyst":     0.05,
 }
 
 def _load_active_alpha_weights(regime: str = None) -> dict:
@@ -174,6 +175,16 @@ def build_alpha_stack(features, alpha_weights=None, regime_signal=None, agent_id
             log.debug("earnings alpha returned empty — cache absent or no recent surprises")
     except Exception as exc:
         log.error("earnings alpha failed: %s", exc)
+    try:
+        from ascent.alpha.analyst import analyst_alpha
+        anl = analyst_alpha(features)
+        if anl is not None and not anl.empty:
+            alphas["analyst"] = anl
+            log.info("analyst revision alpha loaded shape=%s", anl.shape)
+        else:
+            log.debug("analyst alpha returned empty — cache absent or no revision data")
+    except Exception as exc:
+        log.error("analyst alpha failed: %s", exc)
     loaded = list(alphas.keys())
     skipped = [k for k in alpha_weights if k not in loaded]
     print(f"[alpha_stack] loaded={loaded}  skipped={skipped}")

@@ -15,7 +15,8 @@ class FeatureBuilder:
 
     def __init__(self, price_df: pd.DataFrame, macro_df: pd.DataFrame | None = None,
                  fundamentals_df: pd.DataFrame | None = None,
-                 earnings_df: pd.DataFrame | None = None):
+                 earnings_df: pd.DataFrame | None = None,
+                 analyst_df: pd.DataFrame | None = None):
         self.price_df = price_df
         self.macro_df = macro_df
 
@@ -39,6 +40,7 @@ class FeatureBuilder:
             self.macro_pivot = pivot_macro(macro_df)
         self.fundamentals_df = fundamentals_df
         self.earnings_df = earnings_df
+        self.analyst_df = analyst_df
 
     @property
     def symbols(self) -> list[str]:
@@ -53,6 +55,7 @@ class FeatureBuilder:
         features = build_all_features(
             self.close, self.volume, self.dollar_volume, self.macro_pivot,
             earnings_df=self.earnings_df,
+            analyst_df=self.analyst_df,
         )
         if self.fundamentals_df is not None and not self.fundamentals_df.empty:
             try:

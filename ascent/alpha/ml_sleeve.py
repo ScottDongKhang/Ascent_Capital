@@ -31,6 +31,7 @@ ML_FEATURES = [
     "mom_126d",            # ICIR=+0.224 — 6-month momentum
     "vol_63d",             # ICIR=-0.209 — low-vol premium (negative IC = inverse signal)
     "earnings_surprise",   # event-driven; sparse fill → 0 when no recent event
+    "analyst_revision",    # rolling 63d net upgrades; orthogonal to price momentum
     # Excluded (ICIR < 0.1): mom_21d, mom_63d, vol_21d, vol_ratio_10_63,
     # rsi_14, macd_hist, dollar_vol_rank_21d
     # gross_profitability / accruals / asset_growth excluded: only ~5 quarters of

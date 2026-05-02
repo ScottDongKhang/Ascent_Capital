@@ -261,6 +261,66 @@ def build_earnings_panel(
     return {"earnings_surprise": wide}
 
 
+def build_analyst_panel(
+    analyst_df: pd.DataFrame | None,
+    date_index: pd.DatetimeIndex,
+    symbols: list,
+    window: int = 63,
+) -> dict:
+    """
+    Convert long-format analyst revision data to a daily wide panel.
+
+    For each symbol, builds a rolling `window`-day net upgrade score:
+        score_t = sum of action scores (±1) over [t-window, t]
+
+    Positive = net upgrades over the window; negative = net downgrades.
+    Naturally decays as old events roll out of the window — no ffill needed.
+
+    Returns {"analyst_revision": DataFrame(dates × symbols)} or {} if no data.
+    """
+    if analyst_df is None or analyst_df.empty:
+        return {}
+
+    required = {"symbol", "signal_date", "score"}
+    if not required.issubset(set(analyst_df.columns)):
+        return {}
+
+    clean_index = date_index.tz_localize(None) if date_index.tz is not None else date_index
+
+    sym_series: dict = {}
+    for sym in symbols:
+        sub = analyst_df[analyst_df["symbol"] == sym].copy()
+        if sub.empty:
+            continue
+        sub["signal_date"] = pd.to_datetime(sub["signal_date"])
+        if sub["signal_date"].dt.tz is not None:
+            sub["signal_date"] = sub["signal_date"].dt.tz_localize(None)
+        sub = sub.dropna(subset=["score"]).sort_values("signal_date")
+        if sub.empty:
+            continue
+        # Sum multiple analyst actions on the same day
+        s = sub.groupby("signal_date")["score"].sum()
+        s = s[~s.index.duplicated(keep="last")]
+        sym_series[sym] = s
+
+    if not sym_series:
+        return {}
+
+    wide = pd.DataFrame(sym_series)
+    if wide.index.tz is not None:
+        wide.index = wide.index.tz_localize(None)
+
+    # Reindex to full date range, fill missing days with 0 (no action = no news)
+    wide = wide.reindex(clean_index, fill_value=0).fillna(0)
+
+    # Rolling sum accumulates net upgrades over the past `window` days.
+    # A symbol with 3 upgrades and 1 downgrade in the window scores +2.
+    rolling_score = wide.rolling(window, min_periods=1).sum()
+    rolling_score = rolling_score.reindex(columns=symbols)
+
+    return {"analyst_revision": rolling_score}
+
+
 # ── Feature Builder ────────────────────────────────────────────────────
 
 def build_all_features(
@@ -269,6 +329,7 @@ def build_all_features(
     dollar_volume: pd.DataFrame,
     macro_pivot: pd.DataFrame | None = None,
     earnings_df: pd.DataFrame | None = None,
+    analyst_df: pd.DataFrame | None = None,
 ) -> dict[str, pd.DataFrame]:
     """
     Build all features. Returns dict of {feature_name: DataFrame(dates × symbols)}.
@@ -340,5 +401,14 @@ def build_all_features(
         except Exception as _e:
             import logging as _log
             _log.getLogger(__name__).warning("earnings panel failed: %s", _e)
+
+    # Analyst revision panel
+    if analyst_df is not None and not analyst_df.empty:
+        try:
+            ap = build_analyst_panel(analyst_df, close.index, list(close.columns))
+            features.update(ap)
+        except Exception as _e:
+            import logging as _log
+            _log.getLogger(__name__).warning("analyst panel failed: %s", _e)
 
     return features

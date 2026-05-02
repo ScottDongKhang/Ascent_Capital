@@ -27,13 +27,14 @@ ACTIVE_CONFIG_PATH = Path("data_cache/active_alpha_config.json")
 
 # Match current stack.py defaults exactly
 DEFAULT_ALPHA_WEIGHTS = {
-    "trend":       0.55,
+    "trend":       0.50,
     "meanrev":     0.05,
     "statarb":     0.15,
     "ml":          0.10,
     "volatility":  0.05,
     "fundamental": 0.05,
     "earnings":    0.05,
+    "analyst":     0.05,
 }
 
 PERTURB_RANGE  = 0.10   # max +/- 10% per sleeve per variant
@@ -50,6 +51,7 @@ MIN_SLEEVE_WEIGHTS = {
     "trend":       0.10,   # core signal — never drop below 10%
     "fundamental": 0.02,   # tier-1 quant signal — floor at 2%
     "earnings":    0.02,   # PEAD signal — floor at 2%
+    "analyst":     0.02,   # analyst revision signal — floor at 2%
 }
 
 
