@@ -23,7 +23,7 @@ from ascent.data.normalize.prices import normalize_prices, normalize_macro, pivo
 from ascent.data.store.parquet import save_parquet, load_parquet, has_data, validate_cache
 from ascent.features.build_features import FeatureBuilder
 from ascent.alpha.stack import build_alpha_stack
-from ascent.portfolio.optimizer import top_n_equal_weight, rank_weighted, sector_constrained_weighted
+from ascent.portfolio.optimizer import top_n_equal_weight, rank_weighted, sector_constrained_weighted, apply_bl_to_latest
 from ascent.backtest.engine import BacktestEngine
 from ascent.research.evaluation import format_metrics
 
@@ -541,6 +541,20 @@ def run_pipeline(
         sector_map=sector_map,
         regime_signal=None,
     )
+
+    # ── Black-Litterman weight refinement (latest date only) ──────────────────
+    # BL replaces rank-weighted allocation for live trading while keeping
+    # the sector-constrained stock selection intact.
+    try:
+        target_weights = apply_bl_to_latest(
+            target_weights=target_weights,
+            price_df=builder.close,   # already pivoted (dates × symbols)
+            alpha=alpha,
+            current_holdings=None,    # no prior holdings on cold start
+            max_weight=cfg.backtest.max_weight,
+        )
+    except Exception as _bl_e:
+        print(f"[Portfolio] BL step skipped: {_bl_e}")
 
     warmup = 252 + 21
     if len(target_weights) > warmup:

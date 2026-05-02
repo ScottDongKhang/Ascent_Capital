@@ -14,7 +14,10 @@ ascent/
   data/         ingest (yahoo, fred, simulated), normalize, store (parquet, point_in_time), universe
   features/     build_features, feature_defs, targets
   alpha/        trend, meanrev, statarb, ml_sleeve, stack
-  portfolio/    optimizer — sector_constrained_weighted, _water_fill_cap
+  portfolio/    optimizer — sector_constrained_weighted, _water_fill_cap, apply_bl_to_latest
+                covariance — Ledoit-Wolf shrinkage estimator
+                mv_optimizer — Black-Litterman posterior + MV optimization (scipy SLSQP)
+                tc_aware_optimizer — TC-aware rebalancing (10bps kappa, deadband)
   backtest/     engine, costs
   research/     walk_forward_runner, cpcv, self_improve
   regime/       engine, model, features, decision, integration, posture, breaks, particle_filter, types
@@ -77,6 +80,8 @@ New features added to `feature_defs.py`: `vol_of_vol_21d` (rolling std of 21d re
 ## Portfolio construction
 
 `sector_constrained_weighted()`: coverage check (< 80% → skip sector caps + warn) → rank alpha → `max_per_sector=1` → `_water_fill_cap()` (iterative, ≤50 iterations) → hard clamp + renorm. Post-condition: sum=1.0±tol, no position > max_weight.
+
+`apply_bl_to_latest()`: Black-Litterman refinement applied to the most recent date's weights only. Sector selection unchanged — BL re-optimizes the intra-portfolio weight allocation using Ledoit-Wolf covariance. Falls back silently if <126 days of price history. Requires ≥3 names. TC-aware sizing available when current holdings provided (10bps kappa, 50bps deadband).
 
 Regime tightens max_weight: crisis → 0.08, calm_bull → 0.15. SPY 200MA overlay: SPY < 200MA → multiply weights × 0.70.
 
@@ -386,6 +391,16 @@ All second-audit bugs now fixed. Third-pass audit found no new crashes (all rema
 - Files: `ascent/data/ingest/analyst.py` (new), `ascent/alpha/analyst.py` (new), `ascent/features/feature_defs.py`, `ascent/features/build_features.py`, `ascent/alpha/stack.py`, `ascent/alpha/ml_sleeve.py`, `ascent/main.py`, `ascent/research/self_improve.py`, `ascent/research/shadow_promoter.py`, `tests/test_analyst_alpha.py` (new)
 - Tests: 216 passing
 - Open: Phase 4 hedge overlay (unblocks May 13), R2R API key
+
+### 2026-05-02 (Phase 5 — Black-Litterman MV Optimizer)
+- **`ascent/portfolio/covariance.py`** (new) — Ledoit-Wolf shrinkage covariance via sklearn; `get_cov()` falls back to sample covariance if sklearn unavailable; annualizes by ×252
+- **`ascent/portfolio/mv_optimizer.py`** (new) — Black-Litterman posterior (`_bl_posterior`) + MV optimization via scipy SLSQP (`_mv_optimize`); `bl_weights()` combines market-cap equilibrium prior with alpha z-score views; view confidence proportional to |z-score|/3 capped at 0.9
+- **`ascent/portfolio/tc_aware_optimizer.py`** (new) — TC-aware rebalancing: `tc_aware_weights()` maximizes `mu^T w - (lam/2) w^T Σ w - kappa * |w - w_curr|` with kappa=10bps; 50bps deadband prevents micro-trades
+- **`ascent/portfolio/optimizer.py`** — added `apply_bl_to_latest()`: runs after `sector_constrained_weighted()`, replaces last row with BL-optimized weights; preserves sector selection, falls back silently if <126 days history or <3 names
+- **`ascent/main.py`** — imports and calls `apply_bl_to_latest(target_weights, builder.close, alpha)` after portfolio construction
+- Files: `ascent/portfolio/covariance.py` (new), `ascent/portfolio/mv_optimizer.py` (new), `ascent/portfolio/tc_aware_optimizer.py` (new), `ascent/portfolio/optimizer.py`, `ascent/main.py`, `CLAUDE.md`, `tests/test_phase5_bl_optimizer.py` (new)
+- Tests: 231 passing (216 + 15 new)
+- Open: Phase 6 signals (options flow, insider, short interest), Phase 8.3 hedge overlay (unblocks May 13)
 
 ### 2026-05-01 (self-learning hardening — sleeve floor protection + per-sleeve IC)
 - **Root cause identified**: `generate_variants()` used `max(0.0, w + delta)` — a single -0.10 perturbation zeroed fundamental/earnings (both at 0.05); shadow_promoter wrote the zeroed config straight to active_alpha_config.json with no guard

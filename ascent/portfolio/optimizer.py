@@ -8,6 +8,133 @@ import numpy as np
 from typing import Optional
 
 
+def apply_bl_to_latest(
+    target_weights: pd.DataFrame,
+    price_df: pd.DataFrame,
+    alpha: pd.DataFrame,
+    current_holdings: Optional[dict] = None,
+    max_weight: float = 0.15,
+    min_history: int = 126,
+) -> pd.DataFrame:
+    """
+    Replace the last row of target_weights with Black-Litterman MV weights.
+
+    Sector selection and stock screening from sector_constrained_weighted are
+    preserved — BL only refines the intra-portfolio weight allocation using
+    the covariance structure of the selected names.
+
+    Parameters
+    ----------
+    target_weights  : DataFrame (dates × symbols) from sector_constrained_weighted
+    price_df        : DataFrame with 'symbol', 'date', 'close' columns (raw long format)
+    alpha           : DataFrame (dates × symbols) — composite alpha scores
+    current_holdings: dict {symbol: weight} — live holdings for TC-aware sizing
+    max_weight      : float — passed through to BL optimizer
+    min_history     : int — minimum price history rows required
+
+    Returns
+    -------
+    DataFrame with the last row replaced by BL weights (all other rows unchanged).
+    """
+    if target_weights is None or target_weights.empty:
+        return target_weights
+
+    try:
+        from .mv_optimizer import bl_weights
+        from .tc_aware_optimizer import tc_aware_weights
+
+        last_date = target_weights.index[-1]
+
+        # Selected names: symbols with non-zero weight on the last date
+        last_row = target_weights.iloc[-1]
+        selected = last_row[last_row > 0.001].index.tolist()
+        if len(selected) < 3:
+            return target_weights
+
+        # Build daily returns matrix for selected names
+        if isinstance(price_df.index, pd.DatetimeIndex):
+            # Already pivoted (dates × symbols)
+            close_wide = price_df[price_df.columns.intersection(selected)]
+        else:
+            # Long format: pivot first
+            try:
+                close_wide = price_df.pivot_table(
+                    index="date", columns="symbol", values="close"
+                )[selected]
+            except Exception:
+                return target_weights
+
+        returns = close_wide.pct_change().dropna(how="all")
+        returns = returns[[s for s in selected if s in returns.columns]]
+
+        if len(returns) < min_history or len(returns.columns) < 3:
+            return target_weights
+
+        # Alpha z-scores for the last date
+        alpha_syms = [s for s in selected if s in alpha.columns]
+        if not alpha_syms:
+            return target_weights
+
+        alpha_last = alpha.reindex(index=[last_date], columns=alpha_syms).iloc[-1].dropna()
+        if alpha_last.empty:
+            # Use last available alpha row
+            alpha_available = alpha[alpha_syms].dropna(how="all")
+            if alpha_available.empty:
+                return target_weights
+            alpha_last = alpha_available.iloc[-1]
+
+        # Run Black-Litterman
+        bl_w = bl_weights(
+            alpha_scores=alpha_last,
+            returns=returns,
+            max_weight=max_weight,
+            min_history=min_history,
+        )
+        if bl_w is None or bl_w.empty:
+            return target_weights
+
+        # TC-aware sizing if we have current holdings
+        if current_holdings:
+            from .covariance import get_cov
+            from .mv_optimizer import _equilibrium_returns, _bl_posterior, _TAU, _LAMBDA
+            import numpy as _np
+            syms = bl_w.index.tolist()
+            ret_aligned = returns[syms].dropna(how="any")
+            cov = get_cov(ret_aligned, min_periods=min_history)
+            if cov is not None:
+                n = len(syms)
+                w_mkt = _np.ones(n) / n
+                pi = _equilibrium_returns(cov, w_mkt)
+                z = alpha_last.reindex(syms).fillna(0).values
+                views = pi + z * 0.05
+                view_conf = _np.clip(_np.abs(z) / 3.0, 0.05, 0.9)
+                mu_bl_arr = _bl_posterior(pi, cov, views, view_conf, tau=_TAU)
+                mu_bl = pd.Series(mu_bl_arr, index=syms)
+                curr = pd.Series(current_holdings).reindex(syms).fillna(0)
+                bl_w = tc_aware_weights(bl_w, curr, mu_bl, cov, max_weight=max_weight)
+
+        # Replace last row
+        result = target_weights.copy()
+        result.loc[last_date] = 0.0
+        for sym, w in bl_w.items():
+            if sym in result.columns:
+                result.loc[last_date, sym] = float(w)
+
+        # Renormalize
+        row_sum = result.loc[last_date].sum()
+        if row_sum > 1e-8:
+            result.loc[last_date] = result.loc[last_date] / row_sum
+
+        print(f"[Portfolio] BL weights applied for {last_date.date()}: "
+              f"{len(bl_w)} names, max={bl_w.max():.3f}, "
+              f"HHI={((bl_w**2).sum()):.4f}")
+        return result
+
+    except Exception as e:
+        print(f"[Portfolio] BL optimizer skipped: {e}")
+        return target_weights
+
+
 class SectorDataError(RuntimeError):
     """Raised when sector coverage is below the 80% threshold required for safe portfolio construction."""
     pass
