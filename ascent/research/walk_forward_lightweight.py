@@ -192,12 +192,44 @@ def run_lightweight_oos(
                 from ascent.features.feature_defs import build_all_features
                 dummy_volume        = pd.DataFrame(1e6, index=train_filtered.index, columns=train_filtered.columns)
                 dummy_dollar_volume = train_filtered * 1e6
+
+                # Load supplemental caches once (outside fold loop is better, but
+                # these loads are fast and allow the lightweight OOS to score
+                # fundamental and earnings sleeves on the training slice)
+                _earnings_df = None
+                _fundamentals_df = None
+                try:
+                    from ascent.data.store.parquet import has_data as _hd_lw, load_parquet as _lp_lw
+                    if _hd_lw("earnings"):
+                        _earnings_df = _lp_lw("earnings")
+                    if _hd_lw("fundamentals"):
+                        _fundamentals_df = _lp_lw("fundamentals")
+                except Exception:
+                    pass
+
                 features = build_all_features(
                     close=train_filtered,
                     volume=dummy_volume,
                     dollar_volume=dummy_dollar_volume,
                     macro_pivot=None,
+                    earnings_df=_earnings_df,
                 )
+
+                # Augment with fundamental panel if cache is available
+                if _fundamentals_df is not None and not _fundamentals_df.empty:
+                    try:
+                        from ascent.features.feature_defs import build_fundamental_panel
+                        fund_panel = build_fundamental_panel(
+                            _fundamentals_df,
+                            date_index=train_filtered.index,
+                            symbols=list(train_filtered.columns),
+                        )
+                        if fund_panel is not None and not fund_panel.empty:
+                            for col in fund_panel.columns:
+                                features[col] = fund_panel[col]
+                    except Exception:
+                        pass
+
             except Exception as e:
                 print(f"[LightweightOOS] Fold {n_folds+1} feature build failed: {e}")
                 continue
@@ -241,6 +273,24 @@ def run_lightweight_oos(
                         sa = statarb_alpha(features, sector_map={})
                         if not sa.empty:
                             alphas["statarb"] = sa
+                    except Exception:
+                        pass
+
+                if alpha_weights.get("fundamental", 0) > 0:
+                    try:
+                        from ascent.alpha.fundamental import fundamental_alpha
+                        fa = fundamental_alpha(features)
+                        if fa is not None and not fa.empty:
+                            alphas["fundamental"] = fa
+                    except Exception:
+                        pass
+
+                if alpha_weights.get("earnings", 0) > 0:
+                    try:
+                        from ascent.alpha.earnings import earnings_alpha
+                        ea = earnings_alpha(features)
+                        if ea is not None and not ea.empty:
+                            alphas["earnings"] = ea
                     except Exception:
                         pass
 

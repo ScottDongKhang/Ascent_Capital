@@ -32,6 +32,83 @@ _LIVE_STALE_DAYS = 3
 _SIM_STALE_DAYS  = 0
 
 
+def _log_sleeve_ic(features: dict, targets: dict) -> None:
+    """
+    Compute IC for each individual alpha sleeve and log to logs/sleeve_ic_log.jsonl.
+    Provides the daily fast-feedback signal needed to detect IC decay early.
+    """
+    import json
+    from datetime import date
+
+    try:
+        fwd = targets.get("fwd_ret_21d")
+        if fwd is None or fwd.empty:
+            return
+
+        sleeve_builders: dict = {}
+        try:
+            from ascent.alpha.trend import trend_alpha
+            sleeve_builders["trend"] = lambda f: trend_alpha(f)
+        except Exception:
+            pass
+        try:
+            from ascent.alpha.meanrev import meanrev_alpha
+            sleeve_builders["meanrev"] = lambda f: meanrev_alpha(f)
+        except Exception:
+            pass
+        try:
+            from ascent.alpha.statarb import statarb_alpha
+            sleeve_builders["statarb"] = lambda f: statarb_alpha(f, sector_map={})
+        except Exception:
+            pass
+        try:
+            from ascent.alpha.fundamental import fundamental_alpha
+            sleeve_builders["fundamental"] = lambda f: fundamental_alpha(f)
+        except Exception:
+            pass
+        try:
+            from ascent.alpha.earnings import earnings_alpha
+            sleeve_builders["earnings"] = lambda f: earnings_alpha(f)
+        except Exception:
+            pass
+
+        sleeve_ics: dict = {}
+        for name, builder in sleeve_builders.items():
+            try:
+                alpha_df = builder(features)
+                if alpha_df is None or alpha_df.empty:
+                    continue
+                common = alpha_df.index.intersection(fwd.index)
+                if len(common) < 50:
+                    continue
+                ic_series = alpha_df.loc[common].corrwith(fwd.loc[common], axis=1).dropna()
+                if len(ic_series) < 10:
+                    continue
+                mean_ic = float(ic_series.mean())
+                std_ic  = float(ic_series.std())
+                t_stat  = mean_ic / (std_ic / np.sqrt(len(ic_series))) if std_ic > 0 else 0.0
+                sleeve_ics[name] = {
+                    "mean_ic": round(mean_ic, 5),
+                    "ic_t":    round(t_stat, 3),
+                    "n":       len(ic_series),
+                }
+                print(f"[Alpha] {name:12s}  IC={mean_ic:+.4f}  t={t_stat:+.2f}  n={len(ic_series)}")
+            except Exception:
+                pass
+
+        if not sleeve_ics:
+            return
+
+        log_path = Path("logs/sleeve_ic_log.jsonl")
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(log_path, "a") as f:
+            f.write(json.dumps({"date": date.today().isoformat(), "sleeves": sleeve_ics}) + "\n")
+        print(f"[Alpha] Per-sleeve IC logged → {log_path}")
+
+    except Exception as exc:
+        print(f"[Alpha] Per-sleeve IC logging failed: {exc}")
+
+
 def load_or_fetch_prices(cfg: Config, live: bool) -> tuple[pd.DataFrame, str]:
     """Returns (price_df, cache_name_used)."""
     cache_name       = "prices_live" if live else "prices_simulated"
@@ -429,6 +506,7 @@ def run_pipeline(
             mean_ic   = ic_series.mean()
             print(f"[Alpha] Mean IC (21d fwd return): {mean_ic:.4f}")
             print(f"[Alpha] IC t-stat: {mean_ic / (ic_series.std() / np.sqrt(len(ic_series))):.2f}")
+        _log_sleeve_ic(features, targets)
 
     print("\n" + "=" * 70)
     print("  STEP 4: PORTFOLIO CONSTRUCTION")

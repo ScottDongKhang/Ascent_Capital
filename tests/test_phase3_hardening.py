@@ -144,15 +144,25 @@ class TestBuildMlAlphaCPCV:
         features = self._make_features()
         targets = features.pop("targets")
         splitter = CPCVSplitter(n_splits=6, n_test_splits=2, purge_days=5, embargo_days=5)
-        # Mock _train_xgboost to raise for most folds
+
+        # The fold loop now inlines XGBRegressor directly (not via _train_xgboost),
+        # so we patch xgboost.XGBRegressor to raise for the first N instantiations,
+        # ensuring fewer than 10 folds converge.
         call_count = {"n": 0}
-        def _failing_train(*args, **kwargs):
-            call_count["n"] += 1
-            if call_count["n"] < 12:
-                raise RuntimeError("simulated fold failure")
-            return MagicMock()
-        with patch("ascent.alpha.ml_sleeve._train_xgboost", side_effect=_failing_train):
-            result = build_ml_alpha_cpcv(features, targets, agent_id="test", splitter=splitter)
+
+        class _FailingXGB:
+            def __init__(self, **kwargs):
+                call_count["n"] += 1
+            def fit(self, X, y):
+                if call_count["n"] < 12:
+                    raise RuntimeError("simulated fold failure")
+                return self
+            def predict(self, X):
+                return np.ones(len(X))
+
+        with patch("xgboost.XGBRegressor", _FailingXGB):
+            with patch("ascent.alpha.ml_sleeve._train_xgboost", side_effect=RuntimeError("simulated fold failure")):
+                result = build_ml_alpha_cpcv(features, targets, agent_id="test", splitter=splitter)
         assert result.empty, "Expected empty DF when < 10 folds converge"
 
     def test_returns_empty_df_when_p5_sharpe_negative(self):
@@ -162,13 +172,16 @@ class TestBuildMlAlphaCPCV:
         features = self._make_features()
         targets = features.pop("targets")
         splitter = CPCVSplitter(n_splits=6, n_test_splits=2, purge_days=5, embargo_days=5)
-        mock_model = MagicMock()
-        # Force all fold ICs to be strongly negative → p5 < 0
-        mock_model.predict.return_value = np.ones(20) * -10.0
-        with patch("ascent.alpha.ml_sleeve._train_xgboost", return_value=mock_model):
-            with patch("ascent.alpha.ml_sleeve._compute_fold_ic", return_value=-0.5):
+
+        # The fold loop inlines XGBRegressor + spearmanr directly (no _compute_fold_ic).
+        # Return inverted target as predictions → strong negative Spearman → p5 IC < -0.05.
+        # Patch spearmanr at the module level so the fold loop's
+        # `from scipy.stats import spearmanr` picks up the mock.
+        # Returns IC=-0.5 for every fold → p5 IC = -0.5 < -0.05 → sleeve disabled.
+        with patch("scipy.stats.spearmanr", return_value=(-0.5, 0.01)):
+            with patch("ascent.alpha.ml_sleeve._train_xgboost", side_effect=RuntimeError("cache only")):
                 result = build_ml_alpha_cpcv(features, targets, agent_id="test", splitter=splitter)
-        assert result.empty, "Expected empty DF when p5 Sharpe < 0"
+        assert result.empty, "Expected empty DF when p5 IC < -0.05"
 
     def test_logs_sharpe_p5_and_p50(self, caplog):
         """Logs p5 and p50 Sharpe from CPCV folds."""

@@ -19,6 +19,11 @@ LOG_PATH     = Path("logs/self_improve_log.jsonl")
 
 MIN_EDGE_FOR_PROMOTION = 0.05
 
+# Safety net: if a promoted variant has zeroed out an intentional sleeve,
+# restore it to at least this floor before writing to active config.
+# Mirrors MIN_SLEEVE_WEIGHTS in self_improve.py — both must stay in sync.
+_SLEEVE_FLOORS = {"trend": 0.10, "fundamental": 0.02, "earnings": 0.02}
+
 
 def _load_shadow_configs() -> list:
     if not SHADOW_DIR.exists():
@@ -56,9 +61,29 @@ def _re_evaluate(variant_config: dict) -> float:
         return 0.0
 
 
+def _restore_sleeve_floors(weights: dict) -> dict:
+    """
+    Restore any intentional sleeve that got zeroed during perturbation or OOS
+    scoring. Renormalizes after restoration so weights still sum to 1.0.
+    Logs a warning for each sleeve that needed restoration.
+    """
+    w = dict(weights)
+    restored = []
+    for sleeve, floor in _SLEEVE_FLOORS.items():
+        if w.get(sleeve, 0.0) < floor:
+            w[sleeve] = floor
+            restored.append(sleeve)
+    if restored:
+        total = sum(w.values())
+        if total > 0:
+            w = {k: round(v / total, 4) for k, v in w.items()}
+        print(f"[ShadowPromoter] WARNING: restored zeroed sleeves {restored} to floor — renormalized")
+    return w
+
+
 def _write_active_config(variant: dict, fresh_sharpe: float) -> None:
     ACTIVE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    weights = variant.get("alpha_weights", {})
+    weights = _restore_sleeve_floors(variant.get("alpha_weights", {}))
 
     existing = {}
     if ACTIVE_PATH.exists():

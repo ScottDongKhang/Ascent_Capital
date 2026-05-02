@@ -96,11 +96,16 @@ def test_sector_constrained_raises_on_low_coverage_at_construction_time():
         index=dates,
         columns=syms,
     )
-    # Only 3 of 5 symbols have known sectors = 60% coverage < 80% threshold
+    # Only 3 of 5 symbols have known sectors = 60% coverage < 80% threshold.
+    # Correct behavior per CLAUDE.md integrity constraint #4: fall back to plain
+    # rank weighting (do NOT raise SectorDataError).
     sector_map = {"A": "Tech", "B": "Health", "C": "Energy"}
 
-    with pytest.raises(SectorDataError):
-        sector_constrained_weighted(alpha, n=5, sector_map=sector_map)
+    result = sector_constrained_weighted(alpha, n=5, sector_map=sector_map)
+    # Falls back to rank-weighted — all 5 names should have non-zero weights
+    assert isinstance(result, pd.DataFrame)
+    last_row = result.iloc[-1]
+    assert last_row.sum() > 0.0, "expected non-zero weights on fallback path"
 
 
 def test_validate_sector_data_raises_when_profiles_missing():

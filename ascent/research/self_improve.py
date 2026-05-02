@@ -41,6 +41,17 @@ MIN_SHARPE_EDGE = 0.05  # variant must beat live by this much to enter shadow
 N_VARIANTS     = 5
 OOS_WINDOW     = 63     # trading days (for future real eval)
 
+# Minimum weight floor per sleeve.
+# Sleeves with a floor can never be perturbed to zero — this prevents the
+# self-improve loop from accidentally pruning intentional signals that were
+# deliberately added (e.g. fundamental, earnings) but have small initial
+# weights that fall within the ±10% perturbation range.
+MIN_SLEEVE_WEIGHTS = {
+    "trend":       0.10,   # core signal — never drop below 10%
+    "fundamental": 0.02,   # tier-1 quant signal — floor at 2%
+    "earnings":    0.02,   # PEAD signal — floor at 2%
+}
+
 
 # ── Config I/O ─────────────────────────────────────────────────────────────────
 
@@ -77,7 +88,8 @@ def generate_variants(base_config: dict, n: int = N_VARIANTS) -> list:
         variant = copy.deepcopy(active_sleeves)
         for sleeve in variant:
             delta = random.uniform(-PERTURB_RANGE, PERTURB_RANGE)
-            variant[sleeve] = max(0.0, variant[sleeve] + delta)
+            floor = MIN_SLEEVE_WEIGHTS.get(sleeve, 0.0)
+            variant[sleeve] = max(floor, variant[sleeve] + delta)
 
         total = sum(variant.values())
         if total > 0:
