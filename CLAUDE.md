@@ -374,3 +374,14 @@ All second-audit bugs now fixed. Third-pass audit found no new crashes (all rema
 - Dry run result (2026-05-02, non-rebalance): 23 positions, all 7 sleeves loaded, IC t-stat=2.83, equity $105,237
 - Files: `ascent/alpha/ml_sleeve.py`, `ascent/data/hub.py`, `ascent/portfolio/optimizer.py`, `run_all_agents.py`, `CLAUDE.md`
 - Open: Phase 4 hedge overlay (unblocks May 13), analyst revision signal, R2R API key
+
+### 2026-05-01 (self-learning hardening — sleeve floor protection + per-sleeve IC)
+- **Root cause identified**: `generate_variants()` used `max(0.0, w + delta)` — a single -0.10 perturbation zeroed fundamental/earnings (both at 0.05); shadow_promoter wrote the zeroed config straight to active_alpha_config.json with no guard
+- **Fix 1 — perturbation floor**: added `MIN_SLEEVE_WEIGHTS = {trend:0.10, fundamental:0.02, earnings:0.02}` to `self_improve.py`; perturbation now uses `max(floor, w + delta)` — intentional sleeves can never be zeroed
+- **Fix 2 — promoter integrity guard**: added `_restore_sleeve_floors()` to `shadow_promoter.py`; any intentional sleeve below floor is restored + renormalized before writing `active_alpha_config.json`
+- **Fix 3 — lightweight OOS now scores fundamental/earnings**: `walk_forward_lightweight.py` loads `fundamentals.parquet` and `earnings.parquet` per fold and wires fundamental+earnings alpha into the evaluator — variants that zero these sleeves now receive a lower measured score
+- **Fix 4 — per-sleeve IC logging**: added `_log_sleeve_ic()` to `main.py`; runs after every pipeline execution, computes IC per sleeve (trend, meanrev, statarb, fundamental, earnings), logs to `logs/sleeve_ic_log.jsonl` with mean_ic, t-stat, n — IC decay now detectable daily
+- Updated 3 tests: optimizer fallback, shadow promoter floor check, inlined XGBoost fold-loop patches (no longer uses `_train_xgboost` or `_compute_fold_ic` in fold loop)
+- Files: `ascent/research/self_improve.py`, `ascent/research/shadow_promoter.py`, `ascent/research/walk_forward_lightweight.py`, `ascent/main.py`, `tests/test_phase1_hardening.py`, `tests/test_phase3_hardening.py`, `tests/test_self_evolving_alpha.py`
+- Tests: 202 passing
+- Open: Phase 4 hedge overlay (unblocks May 13), analyst revision signal, R2R API key
