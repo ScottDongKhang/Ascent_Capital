@@ -1,15 +1,29 @@
 """
 Ascent Capital — Historical Universe
 Tracks which stocks were tradeable on each date.
-Includes stocks removed from S&P 500 since 2020 to reduce survivorship bias.
+Includes stocks removed from S&P 500/400 since 2020 to reduce survivorship bias.
 
-FIX #8: current symbols are now date-bounded by their actual S&P 500
-addition dates rather than all being treated as investable from 2020-01-01.
-Symbols added after 2020-01-01 will only appear in the tradeable universe
-from their actual addition date forward.
+FIX #8: current symbols are date-bounded by their actual index addition dates.
+Addition dates are sourced from ascent/config/us_equity_universe.json (generated
+from Wikipedia S&P 500 + S&P 400 constituent tables). Symbols with no recorded
+addition date default to UNIVERSE_START (2020-01-01).
 """
+import json
+from pathlib import Path
 import pandas as pd
-from datetime import datetime
+
+
+def _load_addition_dates_from_json() -> dict:
+    """Load addition dates from the universe JSON file."""
+    universe_path = Path(__file__).parent.parent / "config" / "us_equity_universe.json"
+    if not universe_path.exists():
+        return {}
+    try:
+        with open(universe_path) as f:
+            data = json.load(f)
+        return data.get("addition_dates", {})
+    except Exception:
+        return {}
 
 # Stocks removed from S&P 500 between 2020-2026
 REMOVED_STOCKS = [
@@ -109,15 +123,12 @@ def build_historical_universe(strict: bool = False):
     Build a DataFrame with symbol, sector, start_date, end_date.
 
     Bug 14 fix: added strict mode. When strict=True, any symbol without a
-    recorded addition date in SYMBOL_ADDITION_DATES is excluded entirely
-    rather than defaulted to UNIVERSE_START. Use strict=True in walk-forward
-    runs to prevent unknown-vintage symbols from inflating early OOS returns.
+    recorded addition date is excluded rather than defaulted to UNIVERSE_START.
+    Use strict=True in walk-forward runs to prevent unknown-vintage symbols
+    from inflating early OOS returns.
 
-    Parameters
-    ----------
-    strict : bool
-        If True, symbols missing from SYMBOL_ADDITION_DATES are excluded.
-        If False (default), they default to UNIVERSE_START with a warning.
+    Addition dates are merged from: (1) SYMBOL_ADDITION_DATES hardcoded below,
+    (2) ascent/config/us_equity_universe.json (JSON wins on conflict).
     """
     records = []
 
@@ -137,21 +148,22 @@ def build_historical_universe(strict: bool = False):
     except Exception:
         pass
 
+    # Merge addition dates: hardcoded dict + JSON file (JSON wins)
+    merged_addition_dates = {**SYMBOL_ADDITION_DATES, **_load_addition_dates_from_json()}
+
     removed_set = {sym for sym, *_ in REMOVED_STOCKS}
 
-    _missing_dates = []  # track symbols with no recorded addition date
+    _missing_dates = []
 
     for sym in current_symbols:
         if sym in removed_set:
             continue
 
-        if sym in SYMBOL_ADDITION_DATES:
-            start = SYMBOL_ADDITION_DATES[sym]
+        if sym in merged_addition_dates:
+            start = merged_addition_dates[sym]
         else:
             _missing_dates.append(sym)
             if strict:
-                # Bug 14 fix: exclude symbols with no recorded addition date
-                # in strict mode rather than defaulting to UNIVERSE_START.
                 continue
             else:
                 start = UNIVERSE_START
@@ -166,9 +178,11 @@ def build_historical_universe(strict: bool = False):
 
     if _missing_dates:
         mode_label = "EXCLUDED (strict mode)" if strict else f"defaulted to {UNIVERSE_START}"
+        # Only list symbols in strict mode — in non-strict mode just show count to avoid flooding logs
+        detail = f": {sorted(_missing_dates)}" if strict else ""
         print(
-            f"[Universe] Bug 14 WARNING: {len(_missing_dates)} symbols have no recorded "
-            f"addition date and were {mode_label}: {sorted(_missing_dates)}"
+            f"[Universe] {len(_missing_dates)} symbols have no recorded addition date "
+            f"— {mode_label}{detail}"
         )
 
     for sym, sector, removed, reason in REMOVED_STOCKS:

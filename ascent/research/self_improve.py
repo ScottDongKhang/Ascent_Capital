@@ -37,7 +37,7 @@ DEFAULT_ALPHA_WEIGHTS = {
 }
 
 PERTURB_RANGE  = 0.10   # max +/- 10% per sleeve per variant
-MIN_SHARPE_EDGE = 0.10  # variant must beat live by this much to enter shadow
+MIN_SHARPE_EDGE = 0.05  # variant must beat live by this much to enter shadow
 N_VARIANTS     = 5
 OOS_WINDOW     = 63     # trading days (for future real eval)
 
@@ -67,7 +67,7 @@ def generate_variants(base_config: dict, n: int = N_VARIANTS) -> list:
     """
     Generate N variant configs by perturbing sleeve weights within safe bounds.
     Weights are renormalized to sum to 1 after perturbation.
-    Volatility sleeve is excluded (currently disabled in stack.py).
+    All 7 sleeves are perturbed: trend, meanrev, statarb, ml, volatility, fundamental, earnings.
     """
     base_weights = base_config.get("alpha_weights", DEFAULT_ALPHA_WEIGHTS)
     active_sleeves = {k: v for k, v in base_weights.items()}
@@ -251,13 +251,7 @@ def run_self_improve(current_regime: str = None):
     if current_regime and results:
         best_regime = max(results, key=lambda r: r.get("oos_sharpe", 0))
         live_sharpe = best_regime.get("oos_sharpe", 0)
-        current_live = 0.518
-        try:
-            from ascent.monitoring.skill_tracker import get_current_sharpe
-            current_live = get_current_sharpe("us_equities") or 0.518
-        except Exception:
-            pass
-        regime_edge = live_sharpe - current_live
+        regime_edge = live_sharpe - current_sharpe  # reuse already-computed baseline
         if regime_edge > MIN_SHARPE_EDGE:
             regime_weights = best_regime.get("alpha_weights", {})
             _promote_regime_variant(regime_weights, current_regime, live_sharpe, regime_edge)

@@ -197,6 +197,19 @@ def build_alpha_stack(features, alpha_weights=None, regime_signal=None, agent_id
             composite  = composite.reindex(index=union_idx, columns=union_cols).fillna(0.0)
             normed_r   = normed.reindex(index=union_idx, columns=union_cols).fillna(0.0)
             composite  = composite + normed_r * w
+    # Distressed name filter: zero out alpha for names down >65% over the past year.
+    # Prevents momentum from picking up recovery bounces in deeply impaired names.
+    if composite is not None and "mom_252d" in features:
+        annual_ret = features["mom_252d"].reindex(
+            index=composite.index, columns=composite.columns
+        )
+        distressed = annual_ret < -0.65
+        composite = composite.where(~distressed, 0.0)
+        n_filtered = int(distressed.iloc[-1].sum()) if len(distressed) > 0 else 0
+        if n_filtered > 0:
+            names = list(distressed.columns[distressed.iloc[-1]])
+            log.warning("distressed filter: zeroed %d names on latest date: %s", n_filtered, names)
+
     return composite
 
 def alpha_to_ranks(alpha):

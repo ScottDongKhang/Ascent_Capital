@@ -46,65 +46,30 @@ class APIKeys:
         )
 
 
+def _load_us_equity_symbols() -> List[str]:
+    """Load US equity universe from JSON. Falls back to a minimal seed list if file missing."""
+    import json
+    universe_path = Path(__file__).parent / "us_equity_universe.json"
+    if universe_path.exists():
+        try:
+            with open(universe_path) as f:
+                data = json.load(f)
+            syms = data.get("symbols", [])
+            if syms:
+                return syms
+        except Exception:
+            pass
+    # Minimal seed — should not be hit in normal operation
+    return [
+        "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA",
+        "JPM", "V", "UNH", "XOM", "JNJ", "WMT", "PG", "MA",
+        "CAT", "HD", "CVX", "LIN", "COST",
+    ]
+
+
 @dataclass
 class UniverseConfig:
-    symbols: List[str] = field(default_factory=lambda: [
-        # Technology
-        "AAPL", "MSFT", "NVDA", "AVGO", "CRM", "ACN", "ADBE",
-        "INTC", "AMD", "QCOM", "TXN", "NOW", "INTU", "ANET", "PANW",
-        # Communication Services
-        "GOOGL", "META", "NFLX", "DIS", "CMCSA", "T",
-        # Consumer Cyclical
-        "AMZN", "TSLA", "HD", "MCD", "NKE", "SBUX", "LOW",
-        "TJX", "BKNG", "ORLY",
-        # Consumer Defensive
-        "PG", "KO", "PEP", "COST", "WMT", "CL", "MDLZ", "KHC",
-        # Financial Services
-        "JPM", "V", "MA", "BAC", "GS", "MS", "BLK", "SCHW", "AXP", "CB",
-        # Healthcare
-        "UNH", "JNJ", "ABBV", "MRK", "LLY", "TMO", "PFE",
-        "ABT", "DHR", "BMY", "AMGN", "ISRG",
-        # Energy
-        "XOM", "CVX", "COP", "SLB", "EOG", "MPC",
-        # Industrials
-        "CAT", "HON", "UNP", "RTX", "DE", "GE", "LMT", "MMM", "FDX", "WM",
-        # Basic Materials
-        "LIN", "APD", "ECL", "NEM",
-        # Real Estate
-        "PLD", "AMT", "EQIX", "SPG",
-        # Utilities
-        "NEE", "DUK", "SO", "D",
-        # Mid-cap quality additions — strong factor characteristics
-        "DECK", "AXON", "FICO", "WST", "POOL", "TRGP", "ELV", "HUM",
-        "MPWR", "IDXX", "FANG", "CASY", "ROP", "ODFL", "FAST",
-        # Still-trading legacy names (weak but live — kept for factor diversity)
-        "XRX", "HP", "NOV", "IPGP", "SJM", "BIO", "SEDG", "HAS",
-        "AAL", "XRAY", "BEN", "UA", "LUMN", "VNO", "ALK", "IVZ",
-        # New additions — fill sector gaps and add stronger factor signals
-        # Financial data/analytics (previously zero coverage — MSCI/MCO/SPGI are oligopolies)
-        "MSCI", "MCO", "SPGI",
-        # Cybersecurity (PANW alone was thin — CRWD has best momentum in sector)
-        "CRWD",
-        # Medical devices (ISRG alone was thin — SYK has strongest consistent trend)
-        "SYK",
-        # Strong momentum signals the system was blind to
-        "APP",   # AppLovin — adtech, top momentum name
-        "CMG",   # Chipotle — quality consumer, long-term compounder
-        "TMUS",  # T-Mobile — telecom with growth, different profile from T
-        # Quality industrials with pricing power (ITW/TDG compound through all regimes)
-        "ITW",   # Illinois Tool Works — 80/20 model, best margins in industrials
-        "TDG",   # TransDigm — aerospace, extreme pricing power
-        # Healthcare services gap (no large hospital exposure)
-        "HCA",   # HCA Healthcare — largest for-profit hospital, defensive
-        # Semiconductor equipment (adjacent to chips but different cycle)
-        "KLAC",  # KLA Corp — wafer inspection duopoly
-        # Insurance brokerage (recession-resistant, different from CB/AXP)
-        "AJG",   # Arthur J. Gallagher — fee-based, very defensive cash flows
-        # Defensive utilities gap (water is most defensive utility class)
-        "AWK",   # American Water Works — regulated monopoly, no commodity exposure
-        # Healthcare REIT (different from PLD/EQIX/SPG — senior housing + medical)
-        "WELL",  # Welltower — healthcare real estate, demographic tailwind
-    ])
+    symbols: List[str] = field(default_factory=_load_us_equity_symbols)
     benchmark: str = "SPY"
 
     # Macro agent universe — rate-sensitive ETFs and commodities

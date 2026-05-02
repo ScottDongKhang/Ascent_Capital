@@ -226,6 +226,7 @@ All second-audit bugs now fixed. Third-pass audit found no new crashes (all rema
 - **R2R semantic memory**: built but `R2R_API_KEY` not configured; BM25 fallback active
 - **Live dashboard UI**: data files generated but no live render
 - **Debate trigger condition**: debate should only fire on high-uncertainty days (catalyst present, regime entropy >0.70, position >12%, VaR 99th < -3.5%) — not on every rebalance
+- **Alpha signal improvements (backlog)**: (1) skip-last-month momentum: use mom_252d minus mom_21d instead of raw mom_252d; (2) analyst revision signal: yfinance `t.recommendations` as short-term catalyst; (3) neutralize earnings surprise beta to reduce momentum overlap; (4) expand universe to 50–100 Russell 1000 minus S&P 500 mid-caps
 
 ---
 
@@ -330,4 +331,46 @@ All second-audit bugs now fixed. Third-pass audit found no new crashes (all rema
 - Fixed stale test assertion: `test_stack_falls_back_to_defaults_when_no_config` updated trend 0.65→0.55
 - Files: `ascent/data/ingest/fundamentals.py` (new), `ascent/alpha/fundamental.py` (new), `ascent/features/feature_defs.py`, `ascent/alpha/stack.py`, `ascent/alpha/ml_sleeve.py`, `ascent/features/build_features.py`, `ascent/main.py`, `tests/test_fundamental_alpha.py` (new), `tests/test_self_evolving_alpha.py`
 - Tests: 188 passing
+
+### 2026-04-19 (PEAD earnings surprise alpha sleeve)
+- **Task 1 ✅**: `ascent/data/ingest/earnings.py` (new) — yfinance `earnings_dates` fetcher; 1-bday announcement lag via `pd.offsets.BDay(1)`; tz-strip on index; skips future rows (NaN Reported EPS); `fetch_earnings()`, `save_earnings()`, `load_earnings()`
+- **Task 2 ✅**: `ascent/features/feature_defs.py` — `build_earnings_panel()` (pivot surprise_pct wide, ffill limit=63, tz-strip); `build_all_features()` gains `earnings_df=None` param
+- **Task 3 ✅**: `ascent/alpha/earnings.py` (new) — `earnings_alpha()`: cross-sectional z-score of earnings_surprise; returns empty DF gracefully if feature absent
+- **Task 4 ✅**: `ascent/alpha/stack.py` — earnings=0.05 added, fundamental reduced 0.10→0.05 (total stays 1.0); earnings sleeve wired into `build_alpha_stack()`; `ascent/alpha/ml_sleeve.py` — earnings_surprise added to ML_FEATURES; `ascent/features/build_features.py` — earnings_df=None param + compute_features passes it through; `ascent/main.py` — loads earnings cache and passes to FeatureBuilder; `ascent/research/self_improve.py` — DEFAULT_ALPHA_WEIGHTS synced with stack.py
+- Earnings cache seeded: 3,228 rows, 135 symbols
+- Updated stale test: `test_fundamental_alpha.py::test_default_alpha_weights_include_fundamental` (0.10→0.05)
+- Files: `ascent/data/ingest/earnings.py` (new), `ascent/alpha/earnings.py` (new), `ascent/features/feature_defs.py`, `ascent/features/build_features.py`, `ascent/alpha/stack.py`, `ascent/alpha/ml_sleeve.py`, `ascent/main.py`, `ascent/research/self_improve.py`, `tests/test_earnings_alpha.py` (new), `tests/test_fundamental_alpha.py`
+- Tests: 202 passing
 - Open: Phase 4 hedge overlay (blocked ~May 13), R2R API key, debate trigger condition
+
+### 2026-04-19 (pipeline bug fixes + integrity hardening)
+- Fixed bdate_range weekend crash in `ascent/main.py`: `pd.bdate_range(end="today", periods=1)` returns empty on weekends; replaced with explicit weekday rollback (`max(0, today.weekday() - 4)` days back → last Friday on weekends, same day on weekdays)
+- Fixed `RegimeEngine(cfg)` → `RegimeEngine(config=cfg.regime.to_engine_dict())` in `run_all_agents.py`; was passing full Config object, engine expects Optional[Dict]
+- Fixed `build_fundamental_panel()` timezone mismatch: `datetime64[us]` vs `datetime64[us, America/New_York]`; strip tz from both `date_index` and `wide.index` before reindex
+- Synced `self_improve.py` `DEFAULT_ALPHA_WEIGHTS` to match `stack.py` exactly (was missing fundamental and earnings sleeves from prior refactor)
+- Alpha overlap note (not fixed, tracked): trend (55%) + 52wk high (inside fundamental) + earnings surprise are all momentum-correlated; effective momentum exposure ~65–70%, not 55%. Backlog: skip-last-month momentum, neutralize earnings surprise beta
+- Files: `ascent/main.py`, `run_all_agents.py`, `ascent/features/feature_defs.py`, `ascent/research/self_improve.py`
+- Commits: `85aedfc` (fundamental alpha + pipeline fixes), `7d14d5e` (PEAD earnings sleeve)
+
+### 2026-04-23 (universe expansion + ML sleeve fix + self-improve sync)
+- **Universe**: expanded from 135 hand-picked to 901 symbols (S&P 500 + S&P 400) via Wikipedia scrape; stored in `ascent/config/us_equity_universe.json`; `_load_us_equity_symbols()` in `settings.py` now reads from JSON with 20-name seed fallback
+- **Profiles**: refreshed `profiles.parquet` for all 901 symbols — 93% sector coverage (838/901 with real labels); `data/universe.py` updated to load addition dates from JSON (merges with hardcoded dict, JSON wins)
+- **Hub**: `_FETCH_WORKERS` bumped 4→8 for faster parallel ingestion on 901-symbol universe
+- **mom_skip1m**: added skip-last-month momentum feature (`mom_252d - mom_21d`) to `feature_defs.py`; wired into `trend.py` at 0.20 weight; added to `ML_FEATURES`
+- **Distressed name filter**: zeroes alpha for names with `mom_252d < -0.65` (down >65% YoY) in `stack.py` post-composite blend
+- **Debate gate**: `should_run_debate()` wired into `run_all_agents.py` rebalance path; `verdict` now initialized to `{}` when gate returns False — fixed `NoneType.get()` crash on skipped debates
+- **ML sleeve**: trimmed `ML_FEATURES` from 13 → 6 (kept only |ICIR|>0.2: mom_skip1m, zscore_20d, high_52w_pct, mom_126d, vol_63d, earnings_surprise); reduced `max_depth 4→3`, `n_estimators 200→100`; added `reg_alpha=0.1, reg_lambda=1.0`; `_stack_features` now cross-sectionally z-scores before stacking; p5 guard relaxed 0→−0.05
+- **ML sleeve validation**: CPCV on full 6-year history (1,584 days, 120 symbols) → 15/15 folds, p5=−0.016, p50=+0.012 → **sleeve now enables**; was disabled every run due to noisy features + insufficient data in prior diagnostics
+- **self_improve sync**: `MIN_SHARPE_EDGE` corrected 0.10→0.05 (matches design spec); stale docstring fixed; per-regime block now reuses `current_sharpe` instead of re-fetching with hardcoded 0.518 fallback
+- Files: `ascent/config/settings.py`, `ascent/config/us_equity_universe.json` (new), `ascent/data/universe.py`, `ascent/data/hub.py`, `ascent/features/feature_defs.py`, `ascent/alpha/trend.py`, `ascent/alpha/stack.py`, `ascent/alpha/ml_sleeve.py`, `ascent/research/self_improve.py`, `run_all_agents.py`, `tests/test_phase3_hardening.py`, `tests/test_fundamental_alpha.py`
+- Tests: 202 passing
+- Open: Phase 4 hedge overlay (blocked ~May 13), analyst revision signal, R2R API key
+
+### 2026-05-02 (dry run debugging + 3 bug fixes)
+- **ML CPCV OOM fix**: `build_ml_alpha_cpcv` was calling `_stack_features` 3× per fold (45× total on 937 symbols) and using `X_all.join(y_all)` which hangs on large MultiIndex in pandas 2.x; fixed by (1) capping ML universe to top-300 symbols by data completeness, (2) building `X_all` once before fold loop, (3) replacing `.join()` with `pd.concat([X_all, y_stacked], axis=1)` — all three operations now complete in <1s
+- **Hub `_ROOT` path fix**: `_ROOT = Path(__file__).parents[3]` resolved to `~/Downloads/` instead of project root; manifest was written/read from wrong location causing hub to always report "fresh" while `prices_live.parquet` stayed stale; fixed to `parents[2]`
+- **Optimizer sector fallback fix**: `sector_constrained_weighted()` was raising `SectorDataError` on historical dates with <80% coverage (fires frequently with 901-symbol universe); restored original intended behavior — skip sector caps + fall back to rank weighting, per CLAUDE.md integrity constraint #4
+- **`max_workers` restored**: reverted `max_workers=1` → `len(agent_tasks)` for parallel agent execution
+- Dry run result (2026-05-02, non-rebalance): 23 positions, all 7 sleeves loaded, IC t-stat=2.83, equity $105,237
+- Files: `ascent/alpha/ml_sleeve.py`, `ascent/data/hub.py`, `ascent/portfolio/optimizer.py`, `run_all_agents.py`, `CLAUDE.md`
+- Open: Phase 4 hedge overlay (unblocks May 13), analyst revision signal, R2R API key

@@ -425,14 +425,17 @@ def main():
     verdict = None
     try:
         from debate.debate_runner import run_debate
+        from ascent.execution.debate_gate import should_run_debate
         import json as _json
         from pathlib import Path as _Path
         _regime_path  = _Path("dashboard/regime_signal.json")
         _saved_regime = "unknown"
+        _regime_entropy = 0.0
         try:
             _rdata        = _json.loads(_regime_path.read_text())
             _sig = (_rdata[-1] if (isinstance(_rdata, list) and _rdata) else _rdata) or {}
-            _saved_regime = _sig.get("label", "unknown")
+            _saved_regime   = _sig.get("label", "unknown")
+            _regime_entropy = float(_sig.get("entropy", 0.0) or 0.0)
         except Exception:
             pass
         # TODO: wire orchestrator_result.allocation when central_intelligence exposes it
@@ -447,7 +450,12 @@ def main():
                             for ao in agent_outputs},
             "weights":      merged_weights,
         }
-        verdict = run_debate(portfolio_state, run_date=today)
+        _regime_dict = {"entropy": _regime_entropy, "label": _saved_regime}
+        if not should_run_debate(portfolio_state, _regime_dict):
+            print("[Runner] Debate gate: no trigger — proceeding to execution without debate")
+            verdict = {}
+        else:
+            verdict = run_debate(portfolio_state, run_date=today) or {}
 
         if verdict.get("recommendation") == "halt_and_review":
             print("[Runner] DEBATE VERDICT: halt_and_review — skipping execution")
@@ -528,24 +536,7 @@ def _log_holdings(today):
         from ascent.execution.alpaca_broker import get_positions, get_account
         pos = get_positions()
         acct = get_account()
-        equity    = float(acct.get("equity", 0))
-        last_eq   = float(acct.get("last_equity", equity) or equity)
-        day_ret   = (equity / last_eq - 1) if last_eq else 0.0
-
-        # Fetch SPY benchmark
-        spy_ret = 0.0
-        try:
-            import yfinance as yf
-            spy_data = yf.download("SPY", period="2d", interval="1d",
-                                   progress=False, auto_adjust=True)
-            if len(spy_data) >= 2:
-                close_col = spy_data["Close"]
-                # MultiIndex result (e.g. from batch fetch mock) → select SPY column
-                if hasattr(close_col, "columns"):
-                    close_col = close_col.iloc[:, 0]
-                spy_ret = float(close_col.pct_change().iloc[-1])
-        except Exception:
-            pass
+        equity = float(acct.get("equity", 0))
 
         positions = []
         if not pos.empty:
@@ -557,6 +548,20 @@ def _log_holdings(today):
                     "current_price": round(float(row["current_price"]), 4),
                     "weight":        round(float(row["weight"]), 4),
                 })
+
+        # Compute day_ret and spy_ret from attribution (position × market return),
+        # not from Alpaca equity/last_equity which diverges due to cash and paper-trading mechanics.
+        day_ret = 0.0
+        spy_ret = 0.0
+        if positions:
+            try:
+                from ascent.monitoring.attribution import run_attribution
+                attr = run_attribution(positions, today)
+                if attr:
+                    day_ret = attr.get("portfolio_return", 0.0)
+                    spy_ret = attr.get("spy_return", 0.0)
+            except Exception as e:
+                print(f"[Runner] Attribution failed ({e})")
 
         entry = {
             "date":           today.isoformat(),
@@ -575,14 +580,6 @@ def _log_holdings(today):
         sign = "+" if day_ret >= spy_ret else "-"
         print(f"[Runner] Holdings logged — equity ${equity:,.2f} | "
               f"portfolio {day_ret:+.2%} vs SPY {spy_ret:+.2%} ({sign})")
-
-        # Run attribution report
-        if positions:
-            try:
-                from ascent.monitoring.attribution import run_attribution
-                run_attribution(positions, today)
-            except Exception as e:
-                print(f"[Runner] Attribution failed ({e})")
     except Exception as e:
         print(f"[Runner] Holdings log skipped ({e})")
 

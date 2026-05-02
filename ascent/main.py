@@ -226,106 +226,159 @@ def run_pipeline(
     univ_wide     = None
     vix_series    = None
 
+    # Fast-path: use the regime JSON written by run_all_agents._refresh_regime()
+    # rather than re-running an expensive HMM fit on every agent call.
+    # The JSON is refreshed at daily startup if stale (>5 days old).
+    _REGIME_JSON = Path("dashboard/regime_signal.json")
+    _REGIME_STALE_DAYS = 5
+    _regime_from_json = False
     try:
-        from ascent.regime import RegimeEngine, apply_regime_to_portfolio
+        if _REGIME_JSON.exists():
+            import json as _json
+            from datetime import date as _date
+            _rsig = _json.loads(_REGIME_JSON.read_text())
+            if isinstance(_rsig, dict):
+                _label_str = _rsig.get("label") or _rsig.get("regime") or "uncertain"
+                _date_str  = _rsig.get("last_refit_date") or _rsig.get("as_of") or ""
+                _days_old  = (_date.today() - _date.fromisoformat(_date_str[:10])).days if _date_str else 99
+                if _days_old <= _REGIME_STALE_DAYS:
+                    from ascent.regime.types import RegimeLabel, RegimeSignal, REGIME_CONFIG_DEFAULTS
+                    try:
+                        _label = RegimeLabel(_label_str)
+                    except Exception:
+                        _label = RegimeLabel.UNCERTAIN
+                    _risk_mults = REGIME_CONFIG_DEFAULTS.get("regime_risk_multiplier", {})
+                    _risk_mult  = _risk_mults.get(_label.value, 1.0)
+                    _sleeve_adj = REGIME_CONFIG_DEFAULTS.get("regime_sleeve_adjustments", {}).get(_label.value, {})
+                    regime_signal = RegimeSignal(
+                        date=pd.Timestamp.today(),
+                        probs=np.ones(3) / 3,
+                        label=_label,
+                        entropy=float(_rsig.get("entropy", 0.0)),
+                        transition_flag=False,
+                        risk_multiplier=_risk_mult,
+                        sleeve_adjustments=_sleeve_adj,
+                    )
 
-        spy_wide = (
-            benchmark_df.set_index("date")["close"]
-            .sort_index()
-            .pipe(lambda s: s[~s.index.duplicated(keep="last")])
-        )
-        univ_wide = (
-            universe_df.pivot_table(index="date", columns="symbol", values="close")
-            .sort_index()
-        )
+                    class _JsonRegimeEngine:
+                        best_k = 3
+                        def get_signal(self, _dt=None):
+                            return regime_signal
+                        def get_signal_series(self):
+                            return pd.DataFrame()
+                        def save_for_intel(self, dashboard_dir="dashboard"):
+                            pass  # already saved by _refresh_regime()
 
-        vix_series = None
-        market_prices_df = None
-        if live:
-            try:
-                import yfinance as yf
-                vix_raw = yf.download(
-                    "^VIX",
-                    start=cfg.backtest.start_date,
-                    end=cfg.backtest.end_date,
-                    progress=False,
-                )["Close"].squeeze()
-                vix_raw.index = pd.to_datetime(vix_raw.index).tz_localize(None)
-                vix_series = vix_raw
-                print("[Regime] VIX data fetched")
-            except Exception as e:
-                print(f"[Regime] VIX fetch skipped: {e}")
+                    regime_engine    = _JsonRegimeEngine()
+                    _regime_from_json = True
+                    print(f"[Regime] Loaded from JSON (regime={_label.value}, {_days_old}d old) — skipping HMM fit")
+    except Exception as _rje:
+        print(f"[Regime] JSON load failed ({_rje}) — falling back to full fit")
 
-            # Fetch credit/yield instruments for enhanced regime detection
-            try:
-                import yfinance as _yf
-                _mkt_raw = _yf.download(
-                    ["HYG", "LQD", "TLT", "IEF"],
-                    start=str(cfg.backtest.start_date),
-                    end=str(cfg.backtest.end_date),
-                    auto_adjust=True,
-                    progress=False,
-                    threads=False,
-                )
-                if isinstance(_mkt_raw.columns, pd.MultiIndex):
-                    _close_key = [c for c in _mkt_raw.columns.get_level_values(0) if str(c).lower() == "close"]
-                    if _close_key:
-                        _mkt_raw = _mkt_raw[_close_key[0]]
-                market_prices_df = _mkt_raw.reindex(columns=["HYG", "LQD", "TLT", "IEF"])
-                market_prices_df.index = pd.to_datetime(market_prices_df.index).tz_localize(None)
-                print(f"[Regime] Credit/yield instruments fetched: {market_prices_df.shape}")
-            except Exception as _e:
-                print(f"[Regime] Credit/yield fetch skipped: {_e}")
+    if not _regime_from_json:
+        try:
+            from ascent.regime import RegimeEngine, apply_regime_to_portfolio
 
-        if hasattr(spy_wide.index, "tz") and spy_wide.index.tz is not None:
-            spy_wide.index = spy_wide.index.tz_localize(None)
-        if hasattr(univ_wide.index, "tz") and univ_wide.index.tz is not None:
-            univ_wide.index = univ_wide.index.tz_localize(None)
-
-        macro_wide = None
-        if macro_df is not None and not macro_df.empty:
-            try:
-                # FIX #3: pivot on series_id — matches what simulated.py and
-                # fred.py write. The old "series" column doesn't exist in either.
-                pivot_col = "series_id" if "series_id" in macro_df.columns else "series"
-                macro_wide = macro_df.pivot_table(
-                    index="date", columns=pivot_col, values="value"
-                ).sort_index()
-                if hasattr(macro_wide.index, "tz") and macro_wide.index.tz is not None:
-                    macro_wide.index = macro_wide.index.tz_localize(None)
-                print(f"[Regime] Macro panel: {macro_wide.shape[1]} series, "
-                      f"{macro_wide.shape[0]} dates")
-            except Exception as e:
-                print(f"[Regime] Macro pivot failed ({e}) — fitting without macro")
-                macro_wide = None
-
-        regime_engine = RegimeEngine(config=cfg.regime.to_engine_dict())
-        regime_engine.fit(
-            spy_prices=spy_wide,
-            universe_prices=univ_wide,
-            vix_prices=vix_series,
-            macro_df=macro_wide,
-            market_prices=market_prices_df,
-            run_model_selection=True,
-        )
-
-        last_date     = spy_wide.index[-1]
-        regime_signal = regime_engine.get_signal(last_date)
-
-        if regime_signal:
-            print(
-                f"[Regime] K={regime_engine.best_k}  "
-                f"label={regime_signal.label.value}  "
-                f"risk_mult={regime_signal.risk_multiplier:.2f}  "
-                f"entropy={regime_signal.entropy:.3f}"
+            spy_wide = (
+                benchmark_df.set_index("date")["close"]
+                .sort_index()
+                .pipe(lambda s: s[~s.index.duplicated(keep="last")])
             )
-        else:
-            print("[Regime] Engine fitted but no signal returned — continuing without regime")
+            univ_wide = (
+                universe_df.pivot_table(index="date", columns="symbol", values="close")
+                .sort_index()
+            )
 
-    except Exception as exc:
-        print(f"[Regime] Engine failed ({exc}) — pipeline continues without regime adjustment")
-        regime_engine = None
-        regime_signal = None
+            vix_series = None
+            market_prices_df = None
+            if live:
+                try:
+                    import yfinance as yf
+                    vix_raw = yf.download(
+                        "^VIX",
+                        start=cfg.backtest.start_date,
+                        end=cfg.backtest.end_date,
+                        progress=False,
+                    )["Close"].squeeze()
+                    vix_raw.index = pd.to_datetime(vix_raw.index).tz_localize(None)
+                    vix_series = vix_raw
+                    print("[Regime] VIX data fetched")
+                except Exception as e:
+                    print(f"[Regime] VIX fetch skipped: {e}")
+
+                try:
+                    import yfinance as _yf
+                    _mkt_raw = _yf.download(
+                        ["HYG", "LQD", "TLT", "IEF"],
+                        start=str(cfg.backtest.start_date),
+                        end=str(cfg.backtest.end_date),
+                        auto_adjust=True,
+                        progress=False,
+                        threads=False,
+                    )
+                    if isinstance(_mkt_raw.columns, pd.MultiIndex):
+                        _close_key = [c for c in _mkt_raw.columns.get_level_values(0) if str(c).lower() == "close"]
+                        if _close_key:
+                            _mkt_raw = _mkt_raw[_close_key[0]]
+                    market_prices_df = _mkt_raw.reindex(columns=["HYG", "LQD", "TLT", "IEF"])
+                    market_prices_df.index = pd.to_datetime(market_prices_df.index).tz_localize(None)
+                    print(f"[Regime] Credit/yield instruments fetched: {market_prices_df.shape}")
+                except Exception as _e:
+                    print(f"[Regime] Credit/yield fetch skipped: {_e}")
+
+            if hasattr(spy_wide.index, "tz") and spy_wide.index.tz is not None:
+                spy_wide.index = spy_wide.index.tz_localize(None)
+            if hasattr(univ_wide.index, "tz") and univ_wide.index.tz is not None:
+                univ_wide.index = univ_wide.index.tz_localize(None)
+
+            macro_wide = None
+            if macro_df is not None and not macro_df.empty:
+                try:
+                    pivot_col = "series_id" if "series_id" in macro_df.columns else "series"
+                    macro_wide = macro_df.pivot_table(
+                        index="date", columns=pivot_col, values="value"
+                    ).sort_index()
+                    if hasattr(macro_wide.index, "tz") and macro_wide.index.tz is not None:
+                        macro_wide.index = macro_wide.index.tz_localize(None)
+                    print(f"[Regime] Macro panel: {macro_wide.shape[1]} series, "
+                          f"{macro_wide.shape[0]} dates")
+                except Exception as e:
+                    print(f"[Regime] Macro pivot failed ({e}) — fitting without macro")
+                    macro_wide = None
+
+            _univ_for_regime = univ_wide
+            if _univ_for_regime is not None and _univ_for_regime.shape[1] > 200:
+                _completeness = _univ_for_regime.notna().mean()
+                _best_cols = _completeness.nlargest(200).index
+                _univ_for_regime = _univ_for_regime[_best_cols]
+
+            regime_engine = RegimeEngine(config=cfg.regime.to_engine_dict())
+            regime_engine.fit(
+                spy_prices=spy_wide,
+                universe_prices=_univ_for_regime,
+                vix_prices=vix_series,
+                macro_df=macro_wide,
+                market_prices=market_prices_df,
+                run_model_selection=False,
+            )
+
+            last_date     = spy_wide.index[-1]
+            regime_signal = regime_engine.get_signal(last_date)
+
+            if regime_signal:
+                print(
+                    f"[Regime] K={regime_engine.best_k}  "
+                    f"label={regime_signal.label.value}  "
+                    f"risk_mult={regime_signal.risk_multiplier:.2f}  "
+                    f"entropy={regime_signal.entropy:.3f}"
+                )
+            else:
+                print("[Regime] Engine fitted but no signal returned — continuing without regime")
+
+        except Exception as exc:
+            print(f"[Regime] Engine failed ({exc}) — pipeline continues without regime adjustment")
+            regime_engine = None
+            regime_signal = None
 
     print("\n" + "=" * 70)
     print("  STEP 2: FEATURE ENGINEERING")

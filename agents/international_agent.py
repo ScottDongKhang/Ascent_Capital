@@ -243,14 +243,16 @@ def run_international_agent(
             if len(eem) > 200:
                 ma200   = eem.rolling(200).mean().iloc[-1]
                 current = eem.iloc[-1]
-                if current > ma200 * 1.05:
+                if pd.isna(ma200) or pd.isna(current):
+                    pass
+                elif current > ma200 * 1.05:
                     regime_signal = "calm_bull"
                 elif current < ma200 * 0.95:
                     regime_signal = "stressed"
                 else:
                     regime_signal = "neutral"
-    except Exception:
-        pass
+    except Exception as _e:
+        print(f"[Intl] Regime detection failed: {_e}")
 
     output = AgentOutput(
         agent_id=AGENT_ID,

@@ -237,14 +237,16 @@ def run_macro_agent(
             if len(gld) > 200:
                 ma200   = gld.rolling(200).mean().iloc[-1]
                 current = gld.iloc[-1]
-                if current > ma200 * 1.05:
+                if pd.isna(ma200) or pd.isna(current):
+                    pass
+                elif current > ma200 * 1.05:
                     regime_signal = "calm_bull"
                 elif current < ma200 * 0.95:
                     regime_signal = "stressed"
                 else:
                     regime_signal = "neutral"
-    except Exception:
-        pass
+    except Exception as _e:
+        print(f"[Macro] Regime detection failed: {_e}")
 
     # 6. Regime-aware position sizing
     #    crisis / stressed → concentrate into fewer, safer instruments

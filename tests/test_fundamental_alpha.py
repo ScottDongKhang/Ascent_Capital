@@ -168,9 +168,12 @@ def test_default_alpha_weights_include_fundamental():
     assert abs(sum(DEFAULT_ALPHA_WEIGHTS.values()) - 1.0) < 0.01
 
 
-def test_ml_features_include_fundamental_signals():
+def test_ml_features_include_momentum_and_earnings():
     from ascent.alpha.ml_sleeve import ML_FEATURES
-    for feat in ["gross_profitability", "accruals", "asset_growth", "high_52w_pct"]:
+    # Fundamental signals (gross_profitability etc.) are intentionally excluded from ML:
+    # they only have ~5 quarters of history, wiping all pre-2025 training rows.
+    # They live in the dedicated fundamental sleeve instead.
+    for feat in ["high_52w_pct", "earnings_surprise", "mom_skip1m"]:
         assert feat in ML_FEATURES, f"ML_FEATURES must include {feat}"
 
 

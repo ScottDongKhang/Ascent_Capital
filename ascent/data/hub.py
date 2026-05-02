@@ -31,11 +31,11 @@ from ascent.data.store.parquet import save_parquet
 
 log = logging.getLogger(__name__)
 
-_ROOT          = Path(__file__).resolve().parents[3]
+_ROOT          = Path(__file__).resolve().parents[2]
 _MANIFEST_PATH = _ROOT / "data_cache" / "hub_manifest.json"
 
-# Max parallel yfinance workers. 4 avoids rate-limit triggers.
-_FETCH_WORKERS = 4
+# Max parallel yfinance workers. 16 balances throughput vs yfinance rate limits.
+_FETCH_WORKERS = 16
 
 
 # ── Public: symbol collection ──────────────────────────────────────────────────

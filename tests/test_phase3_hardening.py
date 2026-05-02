@@ -126,7 +126,7 @@ class TestBuildMlAlphaCPCV:
         symbols = [f"SYM{i:02d}" for i in range(n_symbols)]
         rng = np.random.default_rng(42)
         feat_dict = {}
-        for feat in ["mom_21d", "mom_63d", "vol_21d", "rsi_14", "macd_hist"]:
+        for feat in ["mom_skip1m", "zscore_20d", "high_52w_pct", "mom_126d", "vol_63d"]:
             feat_dict[feat] = pd.DataFrame(
                 rng.standard_normal((n_dates, n_symbols)),
                 index=dates, columns=symbols,

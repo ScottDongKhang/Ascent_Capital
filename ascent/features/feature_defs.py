@@ -281,6 +281,10 @@ def build_all_features(
     for w in [5, 10, 21, 63, 126, 252]:
         features[f"mom_{w}d"] = momentum_return(close, w)
 
+    # Skip-last-month momentum (11-1 momentum): 12m return minus last month.
+    # Removes short-term reversal contamination from the 252d signal.
+    features["mom_skip1m"] = features["mom_252d"] - features["mom_21d"]
+
     # Momentum ranks (cross-sectional)
     for w in [21, 63]:
         features[f"mom_rank_{w}d"] = momentum_rank(close, w)

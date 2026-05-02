@@ -24,11 +24,22 @@ def trend_alpha(features: dict[str, pd.DataFrame]) -> pd.DataFrame:
         components.append(mom)
         weights.append(0.30)
 
-    # Long-term momentum
-    if "mom_126d" in features:
+    # Skip-last-month momentum (11-1): 12m minus last month — avoids short-term reversal.
+    # Preferred over raw 252d when available.
+    if "mom_skip1m" in features:
+        mom = _cs_normalize(features["mom_skip1m"].copy())
+        components.append(mom)
+        weights.append(0.20)
+    elif "mom_126d" in features:
         mom = _cs_normalize(features["mom_126d"].copy())
         components.append(mom)
         weights.append(0.20)
+
+    # 6-month momentum (secondary long-term signal)
+    if "mom_126d" in features and "mom_skip1m" in features:
+        mom = _cs_normalize(features["mom_126d"].copy())
+        components.append(mom)
+        weights.append(0.10)
 
     # Short-term momentum (lower weight — more noise)
     if "mom_21d" in features:

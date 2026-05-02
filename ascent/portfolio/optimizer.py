@@ -211,11 +211,14 @@ def sector_constrained_weighted(
         coverage = known_count / len(top_candidates) if len(top_candidates) > 0 else 0.0
 
         if coverage < 0.80:
-            raise SectorDataError(
-                f"sector_constrained_weighted(): sector coverage {coverage:.0%} < 80% "
-                f"on {dt.date()}. This should have been caught by validate_sector_data() "
-                f"at startup. Regenerate profiles.parquet or pass --skip-sector-check."
-            )
+            # Per CLAUDE.md integrity constraint #4: < 80% coverage → skip sector
+            # caps and use plain rank weighting. Do NOT raise — this fires on historical
+            # dates when the expanded universe (901 symbols) has sparse sector labels.
+            selected_fallback = ranked.iloc[:n_actual].index
+            scores_fb = ranked[selected_fallback] - ranked[selected_fallback].min() + 1e-8
+            raw_w_fb = _water_fill_cap(scores_fb, max_weight)
+            weights.loc[dt, raw_w_fb.index] = raw_w_fb
+            continue
 
         selected = []
         sector_count = {}
