@@ -137,12 +137,29 @@ def fetch_analyst(symbols: list, delay_s: float = 0.3) -> pd.DataFrame:
 
 
 def save_analyst(df: pd.DataFrame) -> None:
-    from ascent.data.store.parquet import save_parquet
-    save_parquet(df, "analyst_revisions")
+    """Append new analyst rows, dedup by (symbol, signal_date). Never overwrites history."""
+    from ascent.data.store.parquet import save_parquet, load_parquet, has_data
+    if df is None or df.empty:
+        return
+    existing = pd.DataFrame()
+    if has_data("analyst_revisions"):
+        try:
+            existing = load_parquet("analyst_revisions")
+        except Exception:
+            pass
+    if not existing.empty:
+        combined = pd.concat([existing, df], ignore_index=True)
+        combined["signal_date"] = pd.to_datetime(combined["signal_date"]).dt.tz_localize(None)
+        combined = combined.drop_duplicates(subset=["symbol", "signal_date"], keep="last")
+        combined = combined.sort_values(["symbol", "signal_date"])
+    else:
+        combined = df.copy()
+        combined["signal_date"] = pd.to_datetime(combined["signal_date"]).dt.tz_localize(None)
+    save_parquet(combined, "analyst_revisions")
     log.info(
         "analyst: saved %d rows, %d symbols",
-        len(df),
-        df["symbol"].nunique() if not df.empty else 0,
+        len(combined),
+        combined["symbol"].nunique() if not combined.empty else 0,
     )
 
 

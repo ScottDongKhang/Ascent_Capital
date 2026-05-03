@@ -214,6 +214,21 @@ Streamlit interactive demo for Tony Ngo. Dark/gold aesthetic. Sidebar: regime, V
 
 ---
 
+## Honest OOS record (updated 2026-05-02)
+
+**CAGR 41.66% | Sharpe 1.446 | Max DD -33.27% | Alpha +28.2% vs SPY**
+Jan 2020 – May 2026 | 160 folds | ~492 symbols (S&P 500 + REMOVED_STOCKS)
+
+Year-by-year: 2020 +74%, 2021 +8%, 2022 −3%, 2023 +24%, 2024 +81%, 2025 +69%, 2026 YTD +30%.
+
+**Methodology**: `walk_forward_runner.py`, `sp500_only=True`. All 6 alpha data sources PIT-sliced per fold. Earnings (2008+) and insider (2013+) contribute throughout; options/short_interest activate from 2026 forward. Analyst sleeve currently inactive (cache had 1 row/symbol — being re-seeded).
+
+**Caveats**: The 2020–2026 window was exceptionally strong for momentum (COVID recovery + AI mega-cap rally). SIVB/FRC missing from prices (minor — momentum would have exited early). S&P 400 excluded (Option B tracks their constituent history). Analyst sleeve was inactive during this run — re-run pending after re-seed.
+
+**Prior stale figure** (Sharpe 0.518, CAGR 12.35%): from 5-sleeve system on 135 symbols, now superseded.
+
+---
+
 ## Integrity constraints
 
 1. No look-ahead bias — walk-forward uses `get_universe_on_date()` per fold; regime fitted on training slice only.
