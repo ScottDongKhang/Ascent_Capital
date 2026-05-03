@@ -63,10 +63,11 @@ def _fetch_one(sym: str) -> pd.DataFrame:
         if date_col is None:
             return pd.DataFrame()
 
-        # Detect transaction description column
+        # Detect transaction description column — prefer Text over Transaction
+        # (yfinance currently populates Text with descriptions; Transaction is often blank)
         tx_col = None
-        for cname in ["Transaction", "Text", "transaction", "text", "Insider Trading"]:
-            if cname in df.columns:
+        for cname in ["Text", "Transaction", "text", "transaction", "Insider Trading"]:
+            if cname in df.columns and df[cname].astype(str).str.strip().str.len().max() > 0:
                 tx_col = cname
                 break
         if tx_col is None:
