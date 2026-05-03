@@ -10,3 +10,5 @@ build/
 .venv/
 .worktrees/
 .streamlit/secrets.toml
+logs/
+execution/

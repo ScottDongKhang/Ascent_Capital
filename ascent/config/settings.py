@@ -17,11 +17,11 @@ RUNS_DIR = ROOT_DIR / "runs"
 @dataclass
 class APIKeys:
     polygon: str = ""
-    tiingo: str = "b208387103b5cac95a5bb5bceed29132bca8fb03"
-    fred: str = "f4ff5c2e94544a9d49c3e1a84fa64339"
-    fmp: str = "bFsrpeZ0gtfZMsy0vZVGsJhmqzLtHivV"
-    alpaca_key: str = "PKRFXINL4QJ4AWW5OSNGJ5ITZK"
-    alpaca_secret: str = "ZhVS7Q6x7jDqibByUfQL2N8pt76go4HHzNVJJUhFPUc"
+    tiingo: str = ""
+    fred: str = ""
+    fmp: str = ""
+    alpaca_key: str = ""
+    alpaca_secret: str = ""
     openai: str = ""
 
     @classmethod
