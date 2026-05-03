@@ -17,12 +17,12 @@ from typing import Dict, Optional, Tuple
 from ascent.regime.types import RegimeLabel, RegimeSignal
 
 # Base VIXY weights by regime label (before confidence scaling)
-_BASE_HEDGE: Dict[str, float] = {
-    RegimeLabel.CRISIS.value:    0.08,
-    RegimeLabel.STRESSED.value:  0.04,
-    RegimeLabel.EUPHORIC.value:  0.02,
-    RegimeLabel.CALM_BULL.value: 0.00,
-    RegimeLabel.UNCERTAIN.value: 0.00,
+_BASE_HEDGE: Dict[RegimeLabel, float] = {
+    RegimeLabel.CRISIS:    0.08,
+    RegimeLabel.STRESSED:  0.04,
+    RegimeLabel.EUPHORIC:  0.02,
+    RegimeLabel.CALM_BULL: 0.00,
+    RegimeLabel.UNCERTAIN: 0.00,
 }
 
 
@@ -38,9 +38,10 @@ def compute_hedge_weight(label: RegimeLabel, confidence: float) -> float:
         confidence: RegimeSignal.confidence (max prob across states, 0–1)
 
     Returns:
-        VIXY target weight in [0, 0.10]
+        VIXY target weight, scaled by confidence from the base hedge table.
+        With default base weights, maximum is 0.08 (crisis at full confidence).
     """
-    base = _BASE_HEDGE.get(label.value, 0.0)
+    base = _BASE_HEDGE.get(label, 0.0)
     return round(base * confidence, 4)
 
 
@@ -66,6 +67,19 @@ def apply_hedge_overlay(
         vixy_after for logging.
     """
     vixy_before = weights.get("VIXY", 0.0)
+
+    # Validate input weights sum to ~1.0
+    total_in = sum(weights.values())
+    if abs(total_in - 1.0) > 0.01:
+        import warnings
+        warnings.warn(
+            f"apply_hedge_overlay: input weights sum to {total_in:.4f}, expected ~1.0. "
+            "Normalising before overlay.",
+            stacklevel=2,
+        )
+        weights = {k: v / total_in for k, v in weights.items()}
+        vixy_before = weights.get("VIXY", 0.0)
+
     no_change_meta = {
         "hedge_weight":  0.0,
         "regime_label":  regime_signal.label.value if regime_signal else "unknown",

@@ -74,7 +74,11 @@ def test_existing_vixy_replaced_not_doubled():
     weights = {k: v / total_before for k, v in weights.items()}
 
     hedged, meta = apply_hedge_overlay(weights, _make_regime("crisis", confidence=0.90))
-    assert hedged["VIXY"] < 0.15, "Should not double-count existing VIXY allocation"
+    # VIXY should be set to exactly the overlay hedge_weight, not existing + hedge_weight
+    expected_hedge = meta["hedge_weight"]
+    assert abs(hedged["VIXY"] - expected_hedge) < 1e-6, (
+        f"VIXY should be exactly hedge_weight={expected_hedge}, got {hedged['VIXY']}"
+    )
     assert abs(sum(hedged.values()) - 1.0) < 1e-6
 
 
@@ -109,3 +113,15 @@ def test_metadata_contains_required_keys():
     _, meta = apply_hedge_overlay(weights, _make_regime("stressed"))
     for key in ["hedge_weight", "regime_label", "confidence", "vixy_before", "vixy_after"]:
         assert key in meta, f"Metadata missing key: {key}"
+
+
+def test_non_unit_sum_weights_normalised_with_warning():
+    """Weights that don't sum to 1.0 should be normalised with a warning."""
+    import warnings
+    from ascent.portfolio.hedge_overlay import apply_hedge_overlay
+    weights = {k: v * 0.85 for k, v in _make_weights().items()}  # sums to ~0.85
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        hedged, meta = apply_hedge_overlay(weights, _make_regime("crisis", confidence=0.90))
+    assert abs(sum(hedged.values()) - 1.0) < 1e-6, "Output must sum to 1.0 even if input didn't"
+    assert len(w) == 1 and "Normalising" in str(w[0].message)
