@@ -265,6 +265,7 @@ All codebase audits (Apr 17–18) complete. Third-pass found no new crash risks.
 - **Phase 7 — Autonomous research engine**: IC decay monitor → LLM hypothesis generator → auto-coder → CPCV backtest → shadow promotion. Week-long build.
 - **Phase 8.3 — Options hedge overlay**: Tail-risk hedge via SPX put spreads. Unblocks ~May 13 (30 days live data needed for sizing calibration).
 - **Phase 8.1 — VWAP execution**: Slice large orders across 8 intraday buckets proportional to historical volume profile.
+- **Option B — Full S&P 400 constituent history**: The walk-forward runner currently uses `sp500_only=True` (restricts to S&P 500 ~500 names + REMOVED_STOCKS) because 807 of the 901 S&P 400 symbols have no real addition dates and all default to 2020-01-01. Including them inflates OOS returns by trading a forward-selected winner pool. Option B: source real S&P 400 constituent change history (add/remove dates) from a data provider or scrape the S&P 400 Wikipedia change log. Once addition dates are real, remove the `sp500_only` restriction and re-run. This unlocks the full 901-symbol universe for clean historical OOS evaluation.
 - **R2R semantic memory**: built but `R2R_API_KEY` not configured; BM25 fallback active.
 - **Live dashboard UI**: data files generated but no live render.
 

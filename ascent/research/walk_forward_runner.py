@@ -156,7 +156,11 @@ def walk_forward_pipeline(
     open_full    = full_builder.open
     all_dates    = close_full.index
 
-    historical_universe_df = build_historical_universe(strict=True)  # Bug 14 fix: exclude symbols with unknown addition dates
+    # sp500_only=True: restricts to S&P 500 members + REMOVED_STOCKS.
+    # The 807 S&P 400 symbols all default to 2020-01-01 (unknown addition dates),
+    # which inflates OOS returns by trading a forward-selected winner universe.
+    # Option B (full S&P 400 constituent history) will fix this properly.
+    historical_universe_df = build_historical_universe(strict=True, sp500_only=True)
 
     def _alpha_kwargs(as_of: pd.Timestamp) -> dict:
         """Return point-in-time sliced alpha data kwargs for FeatureBuilder."""

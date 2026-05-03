@@ -25,6 +25,58 @@ def _load_addition_dates_from_json() -> dict:
     except Exception:
         return {}
 
+# S&P 500 constituent list as of 2026-05-02 (sourced from Wikipedia).
+# Used to restrict walk-forward OOS runs to the S&P 500 subset, where defaulting
+# addition_date=2020-01-01 is defensible (most were members before 2020; the
+# post-2020 additions are individually tracked in SYMBOL_ADDITION_DATES).
+# BRK.B / BF.B normalized to BRK-B / BF-B (yfinance convention).
+# Option B improvement: replace this with full constituent-change history including
+# S&P 400 add/remove dates so the full 901-symbol universe can be used cleanly.
+SP500_MEMBERS = frozenset({
+    "MMM","AOS","ABT","ABBV","ACN","ADBE","AMD","AES","AFL","A","APD","ABNB",
+    "AKAM","ALB","ARE","ALGN","ALLE","LNT","ALL","GOOGL","GOOG","MO","AMZN",
+    "AMCR","AEE","AEP","AXP","AIG","AMT","AWK","AMP","AME","AMGN","APH","ADI",
+    "AON","APA","APO","AAPL","AMAT","APP","APTV","ACGL","ADM","ARES","ANET",
+    "AJG","AIZ","T","ATO","ADSK","ADP","AZO","AVB","AVY","AXON","BKR","BALL",
+    "BAC","BAX","BDX","BRK-B","BBY","TECH","BIIB","BLK","BX","BK","BA","BKNG",
+    "BSX","BMY","AVGO","BR","BRO","BF-B","BLDR","BG","BXP","CHRW","CDNS","CPT",
+    "CPB","COF","CAH","CCL","CARR","CVNA","CASY","CAT","CBOE","CBRE","CDW","COR",
+    "CNC","CNP","CF","CRL","SCHW","CHTR","CVX","CMG","CB","CHD","CIEN","CI",
+    "CINF","CTAS","CSCO","C","CFG","CLX","CME","CMS","KO","CTSH","COHR","COIN",
+    "CL","CMCSA","FIX","CAG","COP","ED","STZ","CEG","COO","CPRT","GLW","CPAY",
+    "CTVA","CSGP","COST","CTRA","CRH","CRWD","CCI","CSX","CMI","CVS","DHR","DRI",
+    "DDOG","DVA","DECK","DE","DELL","DAL","DVN","DXCM","FANG","DLR","DG","DLTR",
+    "D","DPZ","DASH","DOV","DOW","DHI","DTE","DUK","DD","ETN","EBAY","SATS","ECL",
+    "EIX","EW","EA","ELV","EME","EMR","ETR","EOG","EPAM","EQT","EFX","EQIX","EQR",
+    "ERIE","ESS","EL","EG","EVRG","ES","EXC","EXE","EXPE","EXPD","EXR","XOM",
+    "FFIV","FDS","FICO","FAST","FRT","FDX","FIS","FITB","FSLR","FE","FISV","F",
+    "FTNT","FTV","FOXA","FOX","BEN","FCX","GRMN","IT","GE","GEHC","GEV","GEN",
+    "GNRC","GD","GIS","GM","GPC","GILD","GPN","GL","GDDY","GS","HAL","HIG","HAS",
+    "HCA","DOC","HSIC","HSY","HPE","HLT","HD","HON","HRL","HST","HWM","HPQ",
+    "HUBB","HUM","HBAN","HII","IBM","IEX","IDXX","ITW","INCY","IR","PODD","INTC",
+    "IBKR","ICE","IFF","IP","INTU","ISRG","IVZ","INVH","IQV","IRM","JBHT","JBL",
+    "JKHY","J","JNJ","JCI","JPM","KVUE","KDP","KEY","KEYS","KMB","KIM","KMI",
+    "KKR","KLAC","KHC","KR","LHX","LH","LRCX","LVS","LDOS","LEN","LII","LLY",
+    "LIN","LYV","LMT","L","LOW","LULU","LITE","LYB","MTB","MPC","MAR","MRSH",
+    "MLM","MAS","MA","MKC","MCD","MCK","MDT","MRK","META","MET","MTD","MGM",
+    "MCHP","MU","MSFT","MAA","MRNA","TAP","MDLZ","MPWR","MNST","MCO","MS","MOS",
+    "MSI","MSCI","NDAQ","NTAP","NFLX","NEM","NWSA","NWS","NEE","NKE","NI","NDSN",
+    "NSC","NTRS","NOC","NCLH","NRG","NUE","NVDA","NVR","NXPI","ORLY","OXY",
+    "ODFL","OMC","ON","OKE","ORCL","OTIS","PCAR","PKG","PLTR","PANW","PH","PAYX",
+    "PYPL","PNR","PEP","PFE","PCG","PM","PSX","PNW","PNC","POOL","PPG","PPL",
+    "PFG","PG","PGR","PLD","PRU","PEG","PTC","PSA","PHM","PWR","QCOM","DGX","Q",
+    "RL","RJF","RTX","O","REG","REGN","RF","RSG","RMD","RVTY","HOOD","ROK","ROL",
+    "ROP","ROST","RCL","SPGI","CRM","SNDK","SBAC","SLB","STX","SRE","NOW","SHW",
+    "SPG","SWKS","SJM","SW","SNA","SOLV","SO","LUV","SWK","SBUX","STT","STLD",
+    "STE","SYK","SMCI","SYF","SNPS","SYY","TMUS","TROW","TTWO","TPR","TRGP",
+    "TGT","TEL","TDY","TER","TSLA","TXN","TPL","TXT","TMO","TJX","TKO","TTD",
+    "TSCO","TT","TDG","TRV","TRMB","TFC","TYL","TSN","USB","UBER","UDR","ULTA",
+    "UNP","UAL","UPS","URI","UNH","UHS","VLO","VTR","VLTO","VRSN","VRSK","VZ",
+    "VRTX","VRT","VTRS","VICI","V","VST","VMC","WRB","GWW","WAB","WMT","DIS",
+    "WBD","WM","WAT","WEC","WFC","WELL","WST","WDC","WY","WSM","WMB","WTW",
+    "WDAY","WYNN","XEL","XYL","YUM","ZBRA","ZBH","ZTS","XYZ","PSKY",
+})
+
 # Stocks removed from S&P 500 between 2020-2026
 REMOVED_STOCKS = [
     ("XRX",  "Technology",              "2020-06-22", "Removed — market cap decline"),
@@ -118,7 +170,7 @@ UNIVERSE_START = "2020-01-01"
 UNIVERSE_END   = "2099-12-31"
 
 
-def build_historical_universe(strict: bool = False):
+def build_historical_universe(strict: bool = False, sp500_only: bool = False):
     """
     Build a DataFrame with symbol, sector, start_date, end_date.
 
@@ -126,6 +178,12 @@ def build_historical_universe(strict: bool = False):
     recorded addition date is excluded rather than defaulted to UNIVERSE_START.
     Use strict=True in walk-forward runs to prevent unknown-vintage symbols
     from inflating early OOS returns.
+
+    sp500_only=True: restrict to SP500_MEMBERS + REMOVED_STOCKS only, excluding
+    the 807 S&P 400 names whose addition dates are unknown. Defaulting those to
+    2020-01-01 would introduce survivorship bias for historical OOS evaluation.
+    Use this for all walk-forward runs until Option B (full S&P 400 constituent
+    history) is implemented.
 
     Addition dates are merged from: (1) SYMBOL_ADDITION_DATES hardcoded below,
     (2) ascent/config/us_equity_universe.json (JSON wins on conflict).
@@ -157,6 +215,9 @@ def build_historical_universe(strict: bool = False):
 
     for sym in current_symbols:
         if sym in removed_set:
+            continue
+
+        if sp500_only and sym not in SP500_MEMBERS:
             continue
 
         if sym in merged_addition_dates:
