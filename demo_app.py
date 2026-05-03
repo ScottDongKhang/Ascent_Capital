@@ -464,11 +464,9 @@ def _verdict(regime: str, vix: float) -> dict:
 
 # ── SIDEBAR ──────────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("""
-    <div class="wordmark" style="margin-bottom:2rem;padding-bottom:1.5rem;border-bottom:1px solid var(--rule-b);">
-      ▲ &nbsp; Ascent Capital
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(
+        '<div class="wordmark" style="margin-bottom:2rem;padding-bottom:1.5rem;border-bottom:1px solid var(--rule-b);">▲ &nbsp; Ascent Capital</div>',
+        unsafe_allow_html=True)
 
     st.markdown('<div class="eyebrow" style="margin-bottom:0.6rem;">Scenario</div>', unsafe_allow_html=True)
 
@@ -500,35 +498,28 @@ show_all = st.session_state.show_all_pos
 display_pos = top_holdings if show_all else top_holdings[:8]
 
 # Header
-st.markdown(f"""
-<div style="margin-bottom:2.5rem;">
-  <div class="wordmark" style="margin-bottom:0.5rem;">▲ &nbsp; Ascent Capital</div>
-  <div class="page-title">Pre-Rebalance<br><em>Decision Engine</em></div>
-  <div class="page-sub" style="margin-top:0.8rem;">
-    {date.today().strftime('%A, %B %d, %Y')} &nbsp;·&nbsp;
-    4 specialist agents &nbsp;·&nbsp; 11 alpha sleeves &nbsp;·&nbsp; S&P 500 universe
-  </div>
-</div>
-""", unsafe_allow_html=True)
+_today = date.today().strftime('%A, %B %d, %Y')
+st.markdown(
+f'<div style="margin-bottom:2.5rem;">'
+f'<div class="wordmark" style="margin-bottom:0.5rem;">▲ &nbsp; Ascent Capital</div>'
+f'<div class="page-title">Pre-Rebalance<br><em>Decision Engine</em></div>'
+f'<div class="page-sub" style="margin-top:0.8rem;">{_today} &nbsp;·&nbsp; 4 specialist agents &nbsp;·&nbsp; 11 alpha sleeves &nbsp;·&nbsp; S&amp;P 500 universe</div>'
+f'</div>',
+unsafe_allow_html=True)
 
 # Portfolio + signals
 col1, col2 = st.columns([3, 2], gap="large")
 
 with col1:
-    pos_rows = ""
-    for sym, w in display_pos:
-        bar_w = int(w / max_wt * 100)
-        pos_rows += f"""
-        <div class="pos-row">
-          <span class="pos-sym">{sym}</span>
-          <div class="pos-bar-bg"><div class="pos-bar-fill" style="width:{bar_w}%"></div></div>
-          <span class="pos-wt">{w:.1%}</span>
-        </div>"""
-    st.markdown(f"""
-    <div class="card">
-      <div class="card-head">Portfolio — {preset_name}</div>
-      {pos_rows}
-    </div>""", unsafe_allow_html=True)
+    pos_rows = "".join(
+        f'<div class="pos-row"><span class="pos-sym">{sym}</span>'
+        f'<div class="pos-bar-bg"><div class="pos-bar-fill" style="width:{int(w/max_wt*100)}%"></div></div>'
+        f'<span class="pos-wt">{w:.1%}</span></div>'
+        for sym, w in display_pos
+    )
+    st.markdown(
+        f'<div class="card"><div class="card-head">Portfolio — {preset_name}</div>{pos_rows}</div>',
+        unsafe_allow_html=True)
 
     # Toggle button below card
     if n_pos > 8:
@@ -544,34 +535,17 @@ with col1:
 
 with col2:
     spy_col = "#3A9C68" if "positive" in spy_momentum.lower() else ("#C97676" if "negative" in spy_momentum.lower() else "var(--text-mid)")
-    st.markdown(f"""
-    <div class="card">
-      <div class="card-head">Market State</div>
-      <div class="sig-row">
-        <span class="sig-key">Regime</span>
-        <span class="regime-pill regime-{regime}">{rm['label']}</span>
-      </div>
-      <div class="sig-row">
-        <span class="sig-key">VIX</span>
-        <span class="sig-val">{vix:.1f}</span>
-      </div>
-      <div class="sig-row">
-        <span class="sig-key">SPY Momentum</span>
-        <span class="sig-val" style="font-size:10px;color:{spy_col};">{spy_momentum}</span>
-      </div>
-      <div class="sig-row">
-        <span class="sig-key">Gross Exposure</span>
-        <span class="sig-val">{rm['risk']:.0%}</span>
-      </div>
-      <div class="sig-row">
-        <span class="sig-key">Max Position</span>
-        <span class="sig-val">{rm['max_wt']:.0%}</span>
-      </div>
-      <div class="sig-row">
-        <span class="sig-key">Regime Note</span>
-        <span class="sig-val" style="font-size:9px;color:var(--text-mid);font-family:'DM Mono',monospace;">{rm['desc']}</span>
-      </div>
-    </div>""", unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="card">'
+        f'<div class="card-head">Market State</div>'
+        f'<div class="sig-row"><span class="sig-key">Regime</span><span class="regime-pill regime-{regime}">{rm["label"]}</span></div>'
+        f'<div class="sig-row"><span class="sig-key">VIX</span><span class="sig-val">{vix:.1f}</span></div>'
+        f'<div class="sig-row"><span class="sig-key">SPY Momentum</span><span class="sig-val" style="font-size:10px;color:{spy_col};">{spy_momentum}</span></div>'
+        f'<div class="sig-row"><span class="sig-key">Gross Exposure</span><span class="sig-val">{rm["risk"]:.0%}</span></div>'
+        f'<div class="sig-row"><span class="sig-key">Max Position</span><span class="sig-val">{rm["max_wt"]:.0%}</span></div>'
+        f'<div class="sig-row"><span class="sig-key">Regime Note</span><span class="sig-val" style="font-size:9px;color:var(--text-mid);font-family:\'DM Mono\',monospace;">{rm["desc"]}</span></div>'
+        f'</div>',
+        unsafe_allow_html=True)
 
 # Sleeve table
 delta_map = SLEEVE_DELTA.get(regime, {})
@@ -585,32 +559,27 @@ for sleeve, base in BASE_SLEEVES.items():
     rows += f"<tr><td>{sleeve}</td><td>{base:.0%}</td><td>{adj:.0%}</td><td>{shift}</td></tr>"
 
 spy_note = "0.70× — SPY below 200-day MA" if regime in ("stressed","crisis") else "1.00× — full deployment"
-st.markdown(f"""
-<div class="card" style="margin-top:1px;">
-  <div class="card-head">Alpha Allocation — Regime Adjusted</div>
-  <table class="sl-table">
-    <tr><th style="width:44%">Sleeve</th><th>Base</th><th>Live</th><th>Δ</th></tr>
-    {rows}
-  </table>
-  <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--text-dim);margin-top:1.2rem;letter-spacing:0.5px;">
-    SPY overlay: {spy_note}
-  </div>
-</div>""", unsafe_allow_html=True)
+st.markdown(
+    f'<div class="card" style="margin-top:1px;">'
+    f'<div class="card-head">Alpha Allocation — Regime Adjusted</div>'
+    f'<table class="sl-table"><tr><th style="width:44%">Sleeve</th><th>Base</th><th>Live</th><th>Δ</th></tr>{rows}</table>'
+    f'<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--text-dim);margin-top:1.2rem;letter-spacing:0.5px;">SPY overlay: {spy_note}</div>'
+    f'</div>',
+    unsafe_allow_html=True)
 
 # Debate section
 st.markdown('<hr class="rule">', unsafe_allow_html=True)
 st.markdown('<div class="eyebrow" style="margin-bottom:1.2rem;">Pre-Rebalance Debate</div>', unsafe_allow_html=True)
 
 if not run_btn:
-    st.markdown(f"""
-    <div class="debate-empty">
-      <div class="debate-empty-glyph">◎</div>
-      <div class="debate-empty-text">
-        Five agents debate the proposed trades before every rebalance.<br>
-        The judge's verdict gates execution — advisory, never autonomous.<br><br>
-        Current scenario: {rm['label']} · VIX {vix:.0f} · {spy_momentum}
-      </div>
-    </div>""", unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="debate-empty">'
+        f'<div class="debate-empty-glyph">◎</div>'
+        f'<div class="debate-empty-text">Five agents debate the proposed trades before every rebalance.<br>'
+        f'The judge\'s verdict gates execution — advisory, never autonomous.<br><br>'
+        f'Current scenario: {rm["label"]} · VIX {vix:.0f} · {spy_momentum}</div>'
+        f'</div>',
+        unsafe_allow_html=True)
 else:
     top_syms = [s for s, _ in top_holdings[:5]]
     copy = _debate_copy(regime, vix, top_syms, spy_momentum)
@@ -660,17 +629,19 @@ else:
         time.sleep(0.2)
     v = _verdict(regime, vix)
     risks_html = "".join(f'<div class="verdict-risk">— {r}</div>' for r in v["risks"])
-    st.markdown(f"""
-    <div class="verdict-wrap">
-      <div class="card-head" style="margin-bottom:1rem;">Judge — Final Verdict</div>
-      <div class="verdict-status {v['rec']}">{v['label']}</div>
-      <div class="verdict-conf">Confidence: {int(v['conf']*100)}%</div>
-      <div class="verdict-text">{v['text']}</div>
-      <div style="margin-top:1.2rem;">{risks_html}</div>
-    </div>""", unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="verdict-wrap">'
+        f'<div class="card-head" style="margin-bottom:1rem;">Judge — Final Verdict</div>'
+        f'<div class="verdict-status {v["rec"]}">{v["label"]}</div>'
+        f'<div class="verdict-conf">Confidence: {int(v["conf"]*100)}%</div>'
+        f'<div class="verdict-text">{v["text"]}</div>'
+        f'<div style="margin-top:1.2rem;">{risks_html}</div>'
+        f'</div>',
+        unsafe_allow_html=True)
 
-    st.markdown(f"""
-    <div class="footer">
-      <span>Ascent Capital · Pre-Rebalance Analysis</span>
-      <span>{date.today().strftime('%B %d, %Y')} · For discussion purposes only</span>
-    </div>""", unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="footer">'
+        f'<span>Ascent Capital · Pre-Rebalance Analysis</span>'
+        f'<span>{date.today().strftime("%B %d, %Y")} · For discussion purposes only</span>'
+        f'</div>',
+        unsafe_allow_html=True)
