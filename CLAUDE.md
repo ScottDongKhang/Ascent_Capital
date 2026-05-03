@@ -12,10 +12,11 @@ Modular Python quant research and trading platform. Data → features → alpha 
 ascent/
   config/       settings.py (Config, APIKeys, UniverseConfig, BacktestConfig), types.py (AgentOutput)
                 us_equity_universe.json — 901 S&P 500 + S&P 400 symbols with GICS sectors
-  data/         ingest (yahoo, fred, simulated, fundamentals, earnings, analyst), normalize, store (parquet, point_in_time), universe
+  data/         ingest (yahoo, fred, simulated, fundamentals, earnings, analyst, options, insider, short_interest), normalize, store (parquet, point_in_time), universe
   features/     build_features (FeatureBuilder), feature_defs (all panel builders), targets
   alpha/        trend, meanrev, statarb, ml_sleeve (CPCV), stack (compositor)
                 fundamental, earnings, analyst — Tier 1 alpha sleeves
+                options_flow, insider, short_interest — Phase 6 sleeves
   portfolio/    optimizer — sector_constrained_weighted, _water_fill_cap, apply_bl_to_latest
                 covariance — Ledoit-Wolf shrinkage estimator
                 mv_optimizer — Black-Litterman posterior + MV optimization (scipy SLSQP)
@@ -38,6 +39,7 @@ memory/         r2r_interface (R2R HTTP + BM25 fallback)
 simulation/     mirofish_interface
 
 data_cache/     prices_live, macro_live, profiles, fundamentals, earnings, analyst_revisions
+                options_flow, insider_transactions (23k rows, 2013–2026), short_interest (900 syms)
                 ml_model_*.pkl, active_alpha_config.json, shadow_configs/, archived_configs/
 dashboard/      HTML dashboards, regime_signal.json, regime_labels.csv, agent_skill_scores.json
 outputs/
@@ -62,7 +64,7 @@ demo_app.py           Streamlit interactive demo (Tony Ngo)
 
 **Rebalance day**: same + pre-rebalance checklist → debate gate check → debate (if gated) → verdict gates execution → Alpaca orders → slippage tracking.
 
-`ascent/main.py` pipeline: data → normalize → regime fit → credit/yield features → alpha stack (8 sleeves) → BL weight refinement → SPY 200MA overlay → backtest → per-sleeve IC log → export.
+`ascent/main.py` pipeline: data → normalize → regime fit → credit/yield features → alpha stack (11 sleeves) → BL weight refinement → SPY 200MA overlay → backtest → per-sleeve IC log → export.
 
 ---
 
@@ -106,7 +108,7 @@ Config defaults: `top_n=15`, `max_weight=0.10`, `min_weight=0.02`, `rebalance_fr
 
 ## Agents
 
-**US Equities**: 901 symbols (S&P 500 + S&P 400), full 8-sleeve alpha stack, max 1 per sector, BL-refined weights, 12–20 positions.
+**US Equities**: 901 symbols (S&P 500 + S&P 400), full 11-sleeve alpha stack, max 1 per sector, BL-refined weights, 12–20 positions.
 
 **Macro**: TLT, IEF, UUP, GLD, PDBC, HYG, LQD, TIP, SGOV, BIL, DBB, KMLM. Trend-only. Regime-sized: crisis top_n=3/40%, stressed top_n=4/35%, else top_n=5/30%. Cache: `prices_macro.parquet`.
 
@@ -194,6 +196,9 @@ Cache names:
 - `fundamentals` — quarterly gross profitability, accruals, asset_growth (45-day filing lag)
 - `earnings` — earnings_dates surprise_pct (1-bday lag, ffill limit=63)
 - `analyst_revisions` — upgrades/downgrades net score (1-bday lag, 225k+ rows)
+- `options_flow` — IV skew + put/call ratio snapshot (today-only; append daily; useful after ~21 days)
+- `insider_transactions` — Form 4 open-market buys/sells (23k rows, 892 symbols, 2013–2026 backfill)
+- `short_interest` — shortPercentOfFloat + shortRatio (900 symbols; append daily; ffill 15 days)
 
 Never hide data provenance in cache name. Point-in-time joins via `as_of_join()` / `as_of_merge()`.
 
@@ -218,7 +223,7 @@ Streamlit interactive demo for Tony Ngo. Dark/gold aesthetic. Sidebar: regime, V
 5. `walk_forward_runner.py` not a production entrypoint — retained for self_improve Phase D only.
 6. Debate is advisory only.
 7. Approval gate for orders > 2% NAV.
-8. Sleeve floors: fundamental/earnings/analyst can never be perturbed below 2% by self-improve.
+8. Sleeve floors: fundamental/earnings/analyst ≥ 2%, options_flow/insider/short_interest ≥ 1% — enforced in both self_improve.py and shadow_promoter.py.
 
 ---
 
@@ -372,6 +377,14 @@ All codebase audits (Apr 17–18) complete. Third-pass found no new crash risks.
 - **ML_FEATURES**: iv_skew, insider_net_score, short_pct_float added (10 total)
 - Tests: 254 passing (231 + 23 new)
 - Open: Phase 7 autonomous research engine, Phase 8.3 hedge overlay (~May 13)
+
+### 2026-05-02 (Phase 6 cache seeding + insider fix)
+- Seeded short_interest: 900 rows/symbols (today snapshot, 357s)
+- Seeded options_flow: 47/50 symbols (today snapshot, 42s)
+- Diagnosed insider failure: yfinance Transaction column always empty; Text column has actual data
+- Fixed `ascent/data/ingest/insider.py`: prefer Text over Transaction, skip blank columns
+- Re-seeded insider_transactions: 23,166 rows, 892 symbols, date range 2013–2026 (360s)
+- Commits: e7fdf3f (Phase 6), a9c899a (insider fix)
 
 ### 2026-05-02 (Phase 5 — Black-Litterman MV Optimizer)
 - `ascent/portfolio/covariance.py` (new) — Ledoit-Wolf shrinkage via sklearn; sample fallback
