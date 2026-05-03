@@ -33,6 +33,14 @@ def _pit_macro(macro_df: pd.DataFrame, as_of_date: pd.Timestamp):
     return macro_df[macro_df["date"] <= as_of_date].copy()
 
 
+def _pit_slice(df, date_col: str, as_of_date: pd.Timestamp):
+    """Filter a DataFrame to rows where date_col <= as_of_date (point-in-time)."""
+    if df is None or df.empty:
+        return df
+    col = pd.to_datetime(df[date_col])
+    return df[col <= as_of_date].copy()
+
+
 def walk_forward_pipeline(
     train_days=None,
     purge_days=None,
@@ -117,12 +125,55 @@ def walk_forward_pipeline(
         profiles   = load_parquet("profiles")
         sector_map = dict(zip(profiles["symbol"], profiles["sector"]))
 
+    # Load all alpha data sources — point-in-time sliced per fold inside the loop.
+    # Date column names: fundamentals/options_flow/short_interest use "date";
+    # earnings/analyst_revisions/insider_transactions use "signal_date".
+    _ALPHA_CACHES = [
+        ("fundamentals",        "fundamentals",        "date"),
+        ("earnings",            "earnings",            "signal_date"),
+        ("analyst_revisions",   "analyst_revisions",   "signal_date"),
+        ("options_flow",        "options_flow",        "date"),
+        ("insider_transactions","insider_transactions", "signal_date"),
+        ("short_interest",      "short_interest",      "date"),
+    ]
+    _alpha_data = {}
+    print("\n[WF] Alpha data source availability:")
+    for label, cache, date_col in _ALPHA_CACHES:
+        if has_data(cache):
+            df_raw = load_parquet(cache)
+            df_raw[date_col] = pd.to_datetime(df_raw[date_col]).dt.tz_localize(None)
+            _alpha_data[label] = (df_raw, date_col)
+            dt_min = df_raw[date_col].min().date()
+            dt_max = df_raw[date_col].max().date()
+            print(f"  {label}: {len(df_raw):,} rows  [{dt_min} → {dt_max}]")
+        else:
+            _alpha_data[label] = (None, date_col)
+            print(f"  {label}: NOT IN CACHE — sleeve will be inactive")
+    print()
+
     full_builder = FeatureBuilder(price_df, macro_df)
     close_full   = full_builder.close
     open_full    = full_builder.open
     all_dates    = close_full.index
 
     historical_universe_df = build_historical_universe(strict=True)  # Bug 14 fix: exclude symbols with unknown addition dates
+
+    def _alpha_kwargs(as_of: pd.Timestamp) -> dict:
+        """Return point-in-time sliced alpha data kwargs for FeatureBuilder."""
+        df_f,  col_f  = _alpha_data["fundamentals"]
+        df_e,  col_e  = _alpha_data["earnings"]
+        df_a,  col_a  = _alpha_data["analyst_revisions"]
+        df_o,  col_o  = _alpha_data["options_flow"]
+        df_i,  col_i  = _alpha_data["insider_transactions"]
+        df_si, col_si = _alpha_data["short_interest"]
+        return dict(
+            fundamentals_df = _pit_slice(df_f,  col_f,  as_of),
+            earnings_df     = _pit_slice(df_e,  col_e,  as_of),
+            analyst_df      = _pit_slice(df_a,  col_a,  as_of),
+            options_df      = _pit_slice(df_o,  col_o,  as_of),
+            insider_df      = _pit_slice(df_i,  col_i,  as_of),
+            short_df        = _pit_slice(df_si, col_si, as_of),
+        )
 
     # FIX #4: walk-forward generates weights on the rebalance schedule, not daily.
     # Before: weights were generated for every market day, which is inconsistent
@@ -183,7 +234,8 @@ def walk_forward_pipeline(
             hist_macro  = _pit_macro(macro_df, test_date)
 
             try:
-                hist_builder  = FeatureBuilder(hist_prices, hist_macro)
+                hist_builder  = FeatureBuilder(hist_prices, hist_macro,
+                                               **_alpha_kwargs(test_date))
                 hist_features = hist_builder.compute_features()
                 try:
                     hist_targets = hist_builder.compute_targets(horizons=[TARGET_HORIZON])
@@ -268,7 +320,8 @@ def walk_forward_pipeline(
             pred_macro = pred_macro[pred_macro["date"] >= train_start].copy()
 
         try:
-            pred_builder  = FeatureBuilder(pred_prices, pred_macro)
+            pred_builder  = FeatureBuilder(pred_prices, pred_macro,
+                                           **_alpha_kwargs(test_date))
             hist_features = pred_builder.compute_features()
         except Exception as e:
             print("  Date %s: SKIP (feature error: %s)" % (test_date.strftime("%Y-%m-%d"), e))
