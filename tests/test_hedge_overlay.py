@@ -125,3 +125,13 @@ def test_non_unit_sum_weights_normalised_with_warning():
         hedged, meta = apply_hedge_overlay(weights, _make_regime("crisis", confidence=0.90))
     assert abs(sum(hedged.values()) - 1.0) < 1e-6, "Output must sum to 1.0 even if input didn't"
     assert len(w) == 1 and "Normalising" in str(w[0].message)
+
+
+def test_run_all_agents_imports_hedge_overlay():
+    """run_all_agents.py must import and call apply_hedge_overlay after orchestration."""
+    with open("run_all_agents.py") as f:
+        src = f.read()
+    assert "apply_hedge_overlay" in src, \
+        "run_all_agents.py must call apply_hedge_overlay after orchestration"
+    assert "hedge_overlay" in src, \
+        "run_all_agents.py must import from ascent.portfolio.hedge_overlay"
