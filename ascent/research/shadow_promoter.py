@@ -22,7 +22,15 @@ MIN_EDGE_FOR_PROMOTION = 0.05
 # Safety net: if a promoted variant has zeroed out an intentional sleeve,
 # restore it to at least this floor before writing to active config.
 # Mirrors MIN_SLEEVE_WEIGHTS in self_improve.py — both must stay in sync.
-_SLEEVE_FLOORS = {"trend": 0.10, "fundamental": 0.02, "earnings": 0.02, "analyst": 0.02}
+_SLEEVE_FLOORS = {
+    "trend":          0.10,
+    "fundamental":    0.02,
+    "earnings":       0.02,
+    "analyst":        0.02,
+    "options_flow":   0.01,
+    "insider":        0.01,
+    "short_interest": 0.01,
+}
 
 
 def _load_shadow_configs() -> list:

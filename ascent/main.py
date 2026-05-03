@@ -76,6 +76,21 @@ def _log_sleeve_ic(features: dict, targets: dict) -> None:
             sleeve_builders["analyst"] = lambda f: analyst_alpha(f)
         except Exception:
             pass
+        try:
+            from ascent.alpha.options_flow import options_flow_alpha
+            sleeve_builders["options_flow"] = lambda f: options_flow_alpha(f)
+        except Exception:
+            pass
+        try:
+            from ascent.alpha.insider import insider_alpha
+            sleeve_builders["insider"] = lambda f: insider_alpha(f)
+        except Exception:
+            pass
+        try:
+            from ascent.alpha.short_interest import short_interest_alpha
+            sleeve_builders["short_interest"] = lambda f: short_interest_alpha(f)
+        except Exception:
+            pass
 
         sleeve_ics: dict = {}
         for name, builder in sleeve_builders.items():
@@ -491,8 +506,34 @@ def run_pipeline(
         except Exception as _ae:
             print(f"[Alpha] Analyst load failed: {_ae}")
 
+    options_df = None
+    if _hd("options_flow"):
+        try:
+            options_df = _lp("options_flow")
+            print(f"[Alpha] Options flow loaded: {len(options_df)} rows")
+        except Exception as _oe:
+            print(f"[Alpha] Options load failed: {_oe}")
+
+    insider_df = None
+    if _hd("insider_transactions"):
+        try:
+            insider_df = _lp("insider_transactions")
+            print(f"[Alpha] Insider transactions loaded: {len(insider_df)} rows")
+        except Exception as _ie:
+            print(f"[Alpha] Insider load failed: {_ie}")
+
+    short_df = None
+    if _hd("short_interest"):
+        try:
+            short_df = _lp("short_interest")
+            print(f"[Alpha] Short interest loaded: {len(short_df)} rows")
+        except Exception as _se:
+            print(f"[Alpha] Short interest load failed: {_se}")
+
     builder  = FeatureBuilder(universe_df, macro_df, fundamentals_df=fundamentals_df,
-                               earnings_df=earnings_df, analyst_df=analyst_df)
+                               earnings_df=earnings_df, analyst_df=analyst_df,
+                               options_df=options_df, insider_df=insider_df,
+                               short_df=short_df)
     features = builder.compute_features()
     targets  = builder.compute_targets(horizons=[1, 5, 21])
 

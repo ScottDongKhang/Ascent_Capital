@@ -72,7 +72,7 @@ Default sleeve weights (stack.py `DEFAULT_ALPHA_WEIGHTS`):
 
 | Sleeve | Weight | Notes |
 |--------|--------|-------|
-| Trend | 50% | Cross-sectional momentum; skip-last-month `mom_252d - mom_21d` at 0.20 sub-weight |
+| Trend | 44% | Cross-sectional momentum; skip-last-month `mom_252d - mom_21d` at 0.20 sub-weight |
 | Stat-arb | 15% | Sector residuals; needs profiles.parquet |
 | Mean reversion | 5% | Short-term reversal (`zscore_20d`) |
 | ML (XGBoost) | 10% | CPCV C(6,2)=15 folds; 7 features: mom_skip1m, zscore_20d, high_52w_pct, mom_126d, vol_63d, earnings_surprise, analyst_revision |
@@ -80,6 +80,9 @@ Default sleeve weights (stack.py `DEFAULT_ALPHA_WEIGHTS`):
 | Fundamental | 5% | Gross profitability + accruals + asset growth + 52wk high; 45-day filing lag; cache: `fundamentals` |
 | Earnings (PEAD) | 5% | Cross-sectional z-score of earnings_surprise_pct; 1-bday lag; ffill limit=63; cache: `earnings` |
 | Analyst | 5% | Rolling 63-day net upgrade score; yfinance upgrades_downgrades; 1-bday lag; cache: `analyst_revisions` |
+| Options Flow | 2% | IV skew (OTM put IV − call IV) + put/call ratio; bearish → negative alpha; cache: `options_flow` |
+| Insider | 2% | Rolling 63-day net open-market purchase score (Form 4 via yfinance); 1-bday lag; cache: `insider_transactions` |
+| Short Interest | 2% | Short % of float cross-sectional z-score; high short → squeeze potential → positive alpha; cache: `short_interest` |
 
 Regime adjusts sleeve weights via `integration.py:regime_adjust_sleeve_weights()`. All sleeves cross-sectionally z-scored before blending.
 
@@ -253,7 +256,7 @@ All codebase audits (Apr 17–18) complete. Third-pass found no new crash risks.
 
 ## What is not built yet
 
-- **Phase 6 — New signals**: Options flow (IV skew, put/call ratio), SEC EDGAR insider transactions (Form 4), FINRA short interest (days-to-cover). Each ~1 day to build.
+- **Phase 6 — New signals**: ✅ Built. Options flow, insider transactions, short interest all live.
 - **Phase 7 — Autonomous research engine**: IC decay monitor → LLM hypothesis generator → auto-coder → CPCV backtest → shadow promotion. Week-long build.
 - **Phase 8.3 — Options hedge overlay**: Tail-risk hedge via SPX put spreads. Unblocks ~May 13 (30 days live data needed for sizing calibration).
 - **Phase 8.1 — VWAP execution**: Slice large orders across 8 intraday buckets proportional to historical volume profile.
@@ -354,6 +357,21 @@ All codebase audits (Apr 17–18) complete. Third-pass found no new crash risks.
 - Stack: trend 55% → 50%, analyst 5% added; analyst added to MIN_SLEEVE_WEIGHTS + _SLEEVE_FLOORS
 - ML: analyst_revision added to ML_FEATURES (7 total)
 - Tests: 216 passing
+
+### 2026-05-02 (Phase 6 — Options Flow, Insider, Short Interest signals)
+- **`ascent/data/ingest/options.py`** (new) — yfinance options chain; IV skew (OTM put IV − call IV) + put/call ratio; ffill 5 days; cache: `options_flow`
+- **`ascent/data/ingest/insider.py`** (new) — yfinance insider_transactions; open-market buys=+1/sells=−1; 1-bday lag; ~1–2yr backfill available; cache: `insider_transactions`
+- **`ascent/data/ingest/short_interest.py`** (new) — yfinance info shortPercentOfFloat + shortRatio; ffill 15 days; cache: `short_interest`
+- **`ascent/alpha/options_flow.py`** (new) — invert IV skew + PC ratio; cross-sectional z-score; bearish options activity → negative alpha
+- **`ascent/alpha/insider.py`** (new) — rolling 63d net purchase score; drops all-zero symbols; cross-sectional z-score
+- **`ascent/alpha/short_interest.py`** (new) — contrarian squeeze signal; cross-sectional z-score of short_pct_float
+- **Stack**: trend 50% → 44%; options_flow/insider/short_interest at 2% each; 11 sleeves total
+- **feature_defs**: added `build_options_panel`, `build_insider_panel`, `build_short_panel`; all wired into `build_all_features`
+- **FeatureBuilder**: added options_df, insider_df, short_df params; wired into main.py
+- **self_improve + shadow_promoter**: new floors (1%) added for all 3 new sleeves
+- **ML_FEATURES**: iv_skew, insider_net_score, short_pct_float added (10 total)
+- Tests: 254 passing (231 + 23 new)
+- Open: Phase 7 autonomous research engine, Phase 8.3 hedge overlay (~May 13)
 
 ### 2026-05-02 (Phase 5 — Black-Litterman MV Optimizer)
 - `ascent/portfolio/covariance.py` (new) — Ledoit-Wolf shrinkage via sklearn; sample fallback

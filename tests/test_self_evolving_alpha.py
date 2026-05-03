@@ -59,8 +59,8 @@ def test_stack_falls_back_to_defaults_when_no_config(tmp_path, monkeypatch):
     importlib.reload(stack_mod)
 
     loaded = stack_mod._load_active_alpha_weights()
-    assert abs(loaded.get("trend", 0) - 0.50) < 0.001, \
-        "without config file, trend should be default 0.50"
+    assert abs(loaded.get("trend", 0) - 0.44) < 0.001, \
+        "without config file, trend should be default 0.44"
 
 
 def test_stack_uses_regime_weights_when_regime_in_config(tmp_path, monkeypatch):

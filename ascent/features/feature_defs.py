@@ -321,6 +321,136 @@ def build_analyst_panel(
     return {"analyst_revision": rolling_score}
 
 
+def build_options_panel(
+    options_df: pd.DataFrame | None,
+    date_index: pd.DatetimeIndex,
+    symbols: list,
+) -> dict:
+    """
+    Convert long-format options flow data to daily wide panels.
+
+    Pivots iv_skew and put_call_ratio; forward-fills up to 5 days
+    (options data refreshes daily but may have gaps on non-trading sessions).
+
+    Returns {"iv_skew": DataFrame, "put_call_ratio": DataFrame} or {} if no data.
+    """
+    if options_df is None or options_df.empty:
+        return {}
+    required = {"symbol", "date"}
+    if not required.issubset(set(options_df.columns)):
+        return {}
+
+    clean_index = date_index.tz_localize(None) if date_index.tz is not None else date_index
+    result = {}
+
+    for col in ("iv_skew", "put_call_ratio"):
+        if col not in options_df.columns:
+            continue
+        sub = options_df[["symbol", "date", col]].copy()
+        sub["date"] = pd.to_datetime(sub["date"]).dt.tz_localize(None)
+        sub = sub.dropna(subset=[col])
+        if sub.empty:
+            continue
+        wide = sub.pivot_table(index="date", columns="symbol", values=col, aggfunc="last")
+        if wide.index.tz is not None:
+            wide.index = wide.index.tz_localize(None)
+        # Forward-fill gaps up to 5 days; data should refresh daily
+        wide = wide.reindex(clean_index).ffill(limit=5)
+        wide = wide.reindex(columns=symbols)
+        result[col] = wide
+
+    return result
+
+
+def build_insider_panel(
+    insider_df: pd.DataFrame | None,
+    date_index: pd.DatetimeIndex,
+    symbols: list,
+    window: int = 63,
+) -> dict:
+    """
+    Convert long-format insider transaction data to a rolling net-score panel.
+
+    Mirrors build_analyst_panel: rolling `window`-day sum of ±1 scores.
+    Positive = net insider buying over the window.
+
+    Returns {"insider_net_score": DataFrame(dates × symbols)} or {} if no data.
+    """
+    if insider_df is None or insider_df.empty:
+        return {}
+    required = {"symbol", "signal_date", "score"}
+    if not required.issubset(set(insider_df.columns)):
+        return {}
+
+    clean_index = date_index.tz_localize(None) if date_index.tz is not None else date_index
+
+    sym_series: dict = {}
+    for sym in symbols:
+        sub = insider_df[insider_df["symbol"] == sym].copy()
+        if sub.empty:
+            continue
+        sub["signal_date"] = pd.to_datetime(sub["signal_date"])
+        if sub["signal_date"].dt.tz is not None:
+            sub["signal_date"] = sub["signal_date"].dt.tz_localize(None)
+        sub = sub.dropna(subset=["score"]).sort_values("signal_date")
+        if sub.empty:
+            continue
+        s = sub.groupby("signal_date")["score"].sum()
+        s = s[~s.index.duplicated(keep="last")]
+        sym_series[sym] = s
+
+    if not sym_series:
+        return {}
+
+    wide = pd.DataFrame(sym_series)
+    if wide.index.tz is not None:
+        wide.index = wide.index.tz_localize(None)
+    wide = wide.reindex(clean_index, fill_value=0).fillna(0)
+    rolling_score = wide.rolling(window, min_periods=1).sum()
+    rolling_score = rolling_score.reindex(columns=symbols)
+    return {"insider_net_score": rolling_score}
+
+
+def build_short_panel(
+    short_df: pd.DataFrame | None,
+    date_index: pd.DatetimeIndex,
+    symbols: list,
+) -> dict:
+    """
+    Convert long-format short interest snapshots to daily wide panels.
+
+    Forward-fills up to 15 days (FINRA publishes bi-weekly; daily appends
+    smooth the time series but gaps are expected).
+
+    Returns {"short_pct_float": DataFrame, "short_ratio": DataFrame} or {} if no data.
+    """
+    if short_df is None or short_df.empty:
+        return {}
+    required = {"symbol", "date"}
+    if not required.issubset(set(short_df.columns)):
+        return {}
+
+    clean_index = date_index.tz_localize(None) if date_index.tz is not None else date_index
+    result = {}
+
+    for col in ("short_pct_float", "short_ratio"):
+        if col not in short_df.columns:
+            continue
+        sub = short_df[["symbol", "date", col]].copy()
+        sub["date"] = pd.to_datetime(sub["date"]).dt.tz_localize(None)
+        sub = sub.dropna(subset=[col])
+        if sub.empty:
+            continue
+        wide = sub.pivot_table(index="date", columns="symbol", values=col, aggfunc="last")
+        if wide.index.tz is not None:
+            wide.index = wide.index.tz_localize(None)
+        wide = wide.reindex(clean_index).ffill(limit=15)
+        wide = wide.reindex(columns=symbols)
+        result[col] = wide
+
+    return result
+
+
 # ── Feature Builder ────────────────────────────────────────────────────
 
 def build_all_features(
@@ -330,6 +460,9 @@ def build_all_features(
     macro_pivot: pd.DataFrame | None = None,
     earnings_df: pd.DataFrame | None = None,
     analyst_df: pd.DataFrame | None = None,
+    options_df: pd.DataFrame | None = None,
+    insider_df: pd.DataFrame | None = None,
+    short_df: pd.DataFrame | None = None,
 ) -> dict[str, pd.DataFrame]:
     """
     Build all features. Returns dict of {feature_name: DataFrame(dates × symbols)}.
@@ -410,5 +543,32 @@ def build_all_features(
         except Exception as _e:
             import logging as _log
             _log.getLogger(__name__).warning("analyst panel failed: %s", _e)
+
+    # Options flow panel (IV skew + put/call ratio)
+    if options_df is not None and not options_df.empty:
+        try:
+            op = build_options_panel(options_df, close.index, list(close.columns))
+            features.update(op)
+        except Exception as _e:
+            import logging as _log
+            _log.getLogger(__name__).warning("options panel failed: %s", _e)
+
+    # Insider transaction panel
+    if insider_df is not None and not insider_df.empty:
+        try:
+            ip = build_insider_panel(insider_df, close.index, list(close.columns))
+            features.update(ip)
+        except Exception as _e:
+            import logging as _log
+            _log.getLogger(__name__).warning("insider panel failed: %s", _e)
+
+    # Short interest panel
+    if short_df is not None and not short_df.empty:
+        try:
+            sp = build_short_panel(short_df, close.index, list(close.columns))
+            features.update(sp)
+        except Exception as _e:
+            import logging as _log
+            _log.getLogger(__name__).warning("short interest panel failed: %s", _e)
 
     return features

@@ -27,14 +27,17 @@ ACTIVE_CONFIG_PATH = Path("data_cache/active_alpha_config.json")
 
 # Match current stack.py defaults exactly
 DEFAULT_ALPHA_WEIGHTS = {
-    "trend":       0.50,
-    "meanrev":     0.05,
-    "statarb":     0.15,
-    "ml":          0.10,
-    "volatility":  0.05,
-    "fundamental": 0.05,
-    "earnings":    0.05,
-    "analyst":     0.05,
+    "trend":          0.44,
+    "meanrev":        0.05,
+    "statarb":        0.15,
+    "ml":             0.10,
+    "volatility":     0.05,
+    "fundamental":    0.05,
+    "earnings":       0.05,
+    "analyst":        0.05,
+    "options_flow":   0.02,
+    "insider":        0.02,
+    "short_interest": 0.02,
 }
 
 PERTURB_RANGE  = 0.10   # max +/- 10% per sleeve per variant
@@ -48,10 +51,13 @@ OOS_WINDOW     = 63     # trading days (for future real eval)
 # deliberately added (e.g. fundamental, earnings) but have small initial
 # weights that fall within the ±10% perturbation range.
 MIN_SLEEVE_WEIGHTS = {
-    "trend":       0.10,   # core signal — never drop below 10%
-    "fundamental": 0.02,   # tier-1 quant signal — floor at 2%
-    "earnings":    0.02,   # PEAD signal — floor at 2%
-    "analyst":     0.02,   # analyst revision signal — floor at 2%
+    "trend":          0.10,   # core signal — never drop below 10%
+    "fundamental":    0.02,   # tier-1 quant signal — floor at 2%
+    "earnings":       0.02,   # PEAD signal — floor at 2%
+    "analyst":        0.02,   # analyst revision signal — floor at 2%
+    "options_flow":   0.01,   # options sentiment — floor at 1%
+    "insider":        0.01,   # insider flow — floor at 1%
+    "short_interest": 0.01,   # short squeeze — floor at 1%
 }
 
 

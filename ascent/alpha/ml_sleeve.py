@@ -32,6 +32,9 @@ ML_FEATURES = [
     "vol_63d",             # ICIR=-0.209 — low-vol premium (negative IC = inverse signal)
     "earnings_surprise",   # event-driven; sparse fill → 0 when no recent event
     "analyst_revision",    # rolling 63d net upgrades; orthogonal to price momentum
+    "iv_skew",             # options-implied bearish/bullish skew; forward-fill 5d
+    "insider_net_score",   # rolling 63d net insider purchases; sparse
+    "short_pct_float",     # % of float short; forward-fill 15d
     # Excluded (ICIR < 0.1): mom_21d, mom_63d, vol_21d, vol_ratio_10_63,
     # rsi_14, macd_hist, dollar_vol_rank_21d
     # gross_profitability / accruals / asset_growth excluded: only ~5 quarters of
