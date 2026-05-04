@@ -178,7 +178,8 @@ def _load_regime(dates: list[str]) -> list[dict]:
     if REGIME_JSON.exists():
         with open(REGIME_JSON) as f:
             raw = json.load(f)
-        for r in raw:
+        rows = raw["series"] if isinstance(raw, dict) and "series" in raw else raw
+        for r in rows:
             regime_by_date[r["d"]] = r
         print(f"[Dashboard] Loaded {len(regime_by_date)} regime signals from JSON")
 
