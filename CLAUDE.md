@@ -11,25 +11,17 @@ Modular Python quant research and trading platform. Data → features → alpha 
 ```
 ascent/
   config/       settings.py (Config, APIKeys, UniverseConfig, BacktestConfig), types.py (AgentOutput)
-                us_equity_universe.json — 901 S&P 500 + S&P 400 symbols with GICS sectors
-  data/         ingest (yahoo, fred, simulated, fundamentals, earnings, analyst, options, insider, short_interest), normalize, store (parquet, point_in_time), universe
-  features/     build_features (FeatureBuilder), feature_defs (all panel builders), targets
-  alpha/        trend, meanrev, statarb, ml_sleeve (CPCV), stack (compositor)
-                fundamental, earnings, analyst — Tier 1 alpha sleeves
-                options_flow, insider, short_interest — Phase 6 sleeves
-  portfolio/    optimizer — sector_constrained_weighted, _water_fill_cap, apply_bl_to_latest
-                covariance — Ledoit-Wolf shrinkage estimator
-                mv_optimizer — Black-Litterman posterior + MV optimization (scipy SLSQP)
-                tc_aware_optimizer — TC-aware rebalancing (10bps kappa, 50bps deadband)
+  data/         ingest (yahoo, fred, simulated), normalize, store (parquet, point_in_time), universe
+  features/     build_features, feature_defs, targets
+  alpha/        trend, meanrev, statarb, ml_sleeve, stack
+  portfolio/    optimizer — sector_constrained_weighted, _water_fill_cap
   backtest/     engine, costs
-  research/     walk_forward_runner, walk_forward_lightweight, cpcv, self_improve, shadow_promoter
+  research/     walk_forward_runner, cpcv, self_improve
   regime/       engine, model, features, decision, integration, posture, breaks, particle_filter, types
   risk/         correlation_guard
   reporting/    market_memo, ic_brief_generator, blind_spot_detector, debrief, regime_narrative, catalyst_scanner
-  execution/    eod_runner, alpaca_broker, order_engine, kill_switch, run_log, slippage_tracker,
-                approval_server, cost_model, debate_gate
-  monitoring/   skill_tracker, forward_pnl_tracker, pre_rebalance_checklist, exit_alerts,
-                attribution, counterfactual_tracker, quant_context
+  execution/    eod_runner, alpaca_broker, order_engine, kill_switch, run_log, slippage_tracker, approval_server, cost_model
+  monitoring/   skill_tracker, forward_pnl_tracker, pre_rebalance_checklist, exit_alerts
   llm/          client.py — centralized Anthropic API wrapper
 
 agents/         us_equities, macro, international, alternatives
@@ -38,15 +30,11 @@ debate/         debate_runner, agents, judge, outcome_tracker
 memory/         r2r_interface (R2R HTTP + BM25 fallback)
 simulation/     mirofish_interface
 
-data_cache/     prices_live, macro_live, profiles, fundamentals, earnings, analyst_revisions
-                options_flow, insider_transactions (23k rows, 2013–2026), short_interest (900 syms)
-                ml_model_*.pkl, active_alpha_config.json, shadow_configs/, archived_configs/
+data_cache/     prices_live, macro_live, profiles, ml_model_*.pkl, active_alpha_config.json, shadow_configs/
 dashboard/      HTML dashboards, regime_signal.json, regime_labels.csv, agent_skill_scores.json
 outputs/
   debate_log/   verdict_YYYY-MM-DD.json, agent_credibility.json
-logs/           eod_log, slippage_log, self_improve_log, skill_scores_log, multi_agent_run,
-                us_equities_pnl, macro_pnl, international_pnl, alternatives_pnl,
-                attribution_log, sleeve_ic_log, kill_switch_state
+logs/           eod_log, slippage_log, self_improve_log, skill_scores_log, multi_agent_run, post_debate_portfolio,
                 snapshots/{agent_id}_weights_YYYY-MM-DD.json
 
 ascent/main.py        core pipeline entrypoint
@@ -60,45 +48,34 @@ demo_app.py           Streamlit interactive demo (Tony Ngo)
 
 **Command**: `python3 run_all_agents.py`
 
-**Non-rebalance day**: agents (parallel) → score counterfactuals → shadow promotion check → forward PnL → skill scores → orchestrator → write `merged_weights.json` → log. Stop.
+**Non-rebalance day**: agents (parallel) → forward PnL → skill scores → orchestrator → write `merged_weights.json` → log. Stop.
 
-**Rebalance day**: same + pre-rebalance checklist → debate gate check → debate (if gated) → verdict gates execution → Alpaca orders → slippage tracking.
+**Rebalance day**: same + pre-rebalance checklist → debate → verdict gates execution → Alpaca orders → slippage tracking.
 
-`ascent/main.py` pipeline: data → normalize → regime fit → credit/yield features → alpha stack (11 sleeves) → BL weight refinement → SPY 200MA overlay → backtest → per-sleeve IC log → export.
+`ascent/main.py` pipeline: data → normalize → regime fit → features → alpha stack → sector-constrained weights → SPY 200MA overlay → backtest → export.
 
 ---
 
 ## Alpha stack
 
-Default sleeve weights (stack.py `DEFAULT_ALPHA_WEIGHTS`):
-
 | Sleeve | Weight | Notes |
 |--------|--------|-------|
-| Trend | 44% | Cross-sectional momentum; skip-last-month `mom_252d - mom_21d` at 0.20 sub-weight |
+| Trend | 55% | Cross-sectional momentum |
 | Stat-arb | 15% | Sector residuals; needs profiles.parquet |
-| Mean reversion | 5% | Short-term reversal (`zscore_20d`) |
-| ML (XGBoost) | 10% | CPCV C(6,2)=15 folds; 7 features: mom_skip1m, zscore_20d, high_52w_pct, mom_126d, vol_63d, earnings_surprise, analyst_revision |
-| Volatility (vol-regime) | 5% | Signal = -(vol_trend_10d) / (vol_of_vol_21d); long declining+stable vol names |
-| Fundamental | 5% | Gross profitability + accruals + asset growth + 52wk high; 45-day filing lag; cache: `fundamentals` |
-| Earnings (PEAD) | 5% | Cross-sectional z-score of earnings_surprise_pct; 1-bday lag; ffill limit=63; cache: `earnings` |
-| Analyst | 5% | Rolling 63-day net upgrade score; yfinance upgrades_downgrades; 1-bday lag; cache: `analyst_revisions` |
-| Options Flow | 2% | IV skew (OTM put IV − call IV) + put/call ratio; bearish → negative alpha; cache: `options_flow` |
-| Insider | 2% | Rolling 63-day net open-market purchase score (Form 4 via yfinance); 1-bday lag; cache: `insider_transactions` |
-| Short Interest | 2% | Short % of float cross-sectional z-score; high short → squeeze potential → positive alpha; cache: `short_interest` |
+| Mean reversion | 5% | Short-term reversal |
+| ML (XGBoost) | 10% | CPCV-validated; cached to `ml_model_{agent_id}.pkl` |
+| Volatility (vol-regime) | 5% | Signal = -(vol_trend_10d) / (vol_of_vol_21d); long names with declining + stable vol |
+| Fundamental | 10% | Gross profitability + accruals + asset growth + 52wk high; 45-day filing lag; cache: `fundamentals` |
 
-Regime adjusts sleeve weights via `integration.py:regime_adjust_sleeve_weights()`. All sleeves cross-sectionally z-scored before blending.
+Regime adjusts sleeve weights via `integration.py:regime_adjust_sleeve_weights()`. All sleeves cross-sectionally z-scored before blending. ML sleeve: CPCV C(6,2)=15 folds, purge=5 bdays, embargo=5 bdays — disabled if <10 folds converge or p5 IC Sharpe < 0.
 
-ML sleeve: CPCV C(6,2)=15 folds, purge=5 bdays, embargo=5 bdays — disabled if <10 folds converge or p5 IC Sharpe < −0.05. Cap at top-300 symbols by data completeness (prevents OOM on 901-symbol universe).
-
-Distressed name filter: zeroes alpha for names with `mom_252d < -0.65` (down >65% YoY) post-blend in `stack.py`.
+New features added to `feature_defs.py`: `vol_of_vol_21d` (rolling std of 21d realized vol — low = stable regime), `vol_trend_10d` (10-day change in 21d realized vol — negative = declining). Combined into vol-regime sleeve in `stack.py`. Orthogonal to momentum; decays slowly because most funds screen on level of vol, not its trend+stability.
 
 ---
 
 ## Portfolio construction
 
 `sector_constrained_weighted()`: coverage check (< 80% → skip sector caps + warn) → rank alpha → `max_per_sector=1` → `_water_fill_cap()` (iterative, ≤50 iterations) → hard clamp + renorm. Post-condition: sum=1.0±tol, no position > max_weight.
-
-`apply_bl_to_latest()`: Black-Litterman refinement applied to the most recent date's weights only. Sector selection unchanged — BL re-optimizes the intra-portfolio weight allocation using Ledoit-Wolf covariance. Falls back silently if <126 days of price history or <3 names. TC-aware sizing available when current holdings provided (10bps kappa, 50bps deadband).
 
 Regime tightens max_weight: crisis → 0.08, calm_bull → 0.15. SPY 200MA overlay: SPY < 200MA → multiply weights × 0.70.
 
@@ -108,7 +85,7 @@ Config defaults: `top_n=15`, `max_weight=0.10`, `min_weight=0.02`, `rebalance_fr
 
 ## Agents
 
-**US Equities**: 901 symbols (S&P 500 + S&P 400), full 11-sleeve alpha stack, max 1 per sector, BL-refined weights, 12–20 positions.
+**US Equities**: 135 stocks, full alpha stack, max 1 per sector, 12–20 positions.
 
 **Macro**: TLT, IEF, UUP, GLD, PDBC, HYG, LQD, TIP, SGOV, BIL, DBB, KMLM. Trend-only. Regime-sized: crisis top_n=3/40%, stressed top_n=4/35%, else top_n=5/30%. Cache: `prices_macro.parquet`.
 
@@ -123,10 +100,9 @@ Config defaults: `top_n=15`, `max_weight=0.10`, `min_weight=0.02`, `rebalance_fr
 1. **Base by regime**: calm_bull US60/mac15/intl15/alt10; stressed US45/mac25/intl10/alt20; crisis US30/mac30/intl5/alt35.
 2. **Skill blend**: per-agent independently; negative Sharpe → zero; else 50% skill + 50% base.
 3. **Conviction bonus**: up to +15% when ≥2 agents share a name (conv > 0.3).
-4. **EM/commodity cap**: hard 20% cap on EM+commodity+gold after all blending.
-5. **Correlation guard**: 63-day cross-agent cap at 0.70 → halve smaller.
-6. **Thesis coherence**: symbol contradictions (UUP↔PDBC/GLD, VIXY↔SVXY) + 12 factor buckets / 6 pairs → 40% reduction.
-7. **Crisis veto**: us_regime=crisis → merged = 0.60×macro + 0.40×merged.
+4. **Correlation guard**: 63-day cross-agent cap at 0.70 → halve smaller.
+5. **Thesis coherence**: symbol-level contradictions (UUP↔PDBC/GLD, VIXY↔SVXY) + 12 factor buckets / 6 contradictory pairs → 40% reduction.
+6. **Crisis veto**: us_regime=crisis → merged = 0.60×macro + 0.40×merged.
 
 ---
 
@@ -134,13 +110,11 @@ Config defaults: `top_n=15`, `max_weight=0.10`, `min_weight=0.02`, `rebalance_fr
 
 HMM K=2–4 (best via walk-forward CV). Labels: `calm_bull`, `stressed`, `crisis`, `neutral`, `uncertain`. Hysteresis: enter 0.55 / exit 0.35 / min dwell 3d / entropy > 0.90 → uncertain. Particle filter: 500 particles SIR, reinitializes on batch refit. Emergency refit triggers: SPY −3%+VIX>30, 200MA cross, SPY/TLT corr flip, break z-score > 3.5. Refit every 5 days.
 
-Credit/yield features wired into regime: `credit_spread_chg_21d/level` (HYG/LQD), `yield_curve_slope/chg` (TLT/IEF) — leading indicators fetched alongside VIX in `main.py`.
-
 ---
 
 ## Debate layer
 
-Conditional — fires only when `debate_gate.py:should_run_debate()` returns True (regime entropy > 0.70, top position > 12%, VaR 99th < −3.5%, or catalyst detected). Advisory — never writes to alpha/portfolio/execution.
+Rebalance days only. Advisory — never writes to alpha/portfolio/execution.
 
 **Sequence**: score past verdicts → debrief → blind spot detection → catalyst scan → Monte Carlo sim → run agents → judge verdict.
 
@@ -156,17 +130,11 @@ Round 2 rebuttals: bull/bear/devil respond to each other before judge synthesize
 
 Verdict: `proceed` | `reduce_size` (Haiku adjusts weights) | `halt_and_review` (persists to `execution/halt_state.json`).
 
-Counterfactual tracking (`monitoring/counterfactual_tracker.py`): snaps quant vs debate weights at time of verdict; scores the counterfactual 10 days later to measure debate value-add. Scored daily in `run_all_agents.py`.
-
 ---
 
 ## Self-improve loop
 
 Weekly (Sunday 6AM). Generates 5 sleeve-weight variants, scores via real multi-fold OOS (`run_lightweight_oos()`). Shadow promotion if edge > 0.05 Sharpe, 30-day monitoring, auto-promoted by `shadow_promoter.py`. Per-regime variants written to `active_alpha_config.json` `by_regime` section. Stack reads live config on every run.
-
-**Sleeve floor protection**: `MIN_SLEEVE_WEIGHTS` in `self_improve.py` prevents any intentional sleeve from being perturbed to zero (trend: 10%, fundamental/earnings/analyst: 2%). `shadow_promoter._restore_sleeve_floors()` adds a second safety net before writing `active_alpha_config.json`.
-
-**Per-sleeve IC logging**: `_log_sleeve_ic()` in `main.py` computes IC per sleeve after every run and appends to `logs/sleeve_ic_log.jsonl` — enables early decay detection.
 
 ---
 
@@ -186,21 +154,7 @@ Config: always `get_config()`, never `Config()` directly.
 
 ## Data / caching
 
-Cache names:
-- `prices_live` — Yahoo live (never write simulated under this name)
-- `prices_simulated` — GBM fallback
-- `prices_live_fallback_simulated` — live-fetch failure fallback
-- `prices_macro` — macro agent ETF prices
-- `macro_live` / `macro_simulated` — FRED or fallback
-- `profiles` — sector metadata (GICS, 93% coverage on 901-symbol universe)
-- `fundamentals` — quarterly gross profitability, accruals, asset_growth (45-day filing lag)
-- `earnings` — earnings_dates surprise_pct (1-bday lag, ffill limit=63)
-- `analyst_revisions` — upgrades/downgrades net score (1-bday lag, 225k+ rows)
-- `options_flow` — IV skew + put/call ratio snapshot (today-only; append daily; useful after ~21 days)
-- `insider_transactions` — Form 4 open-market buys/sells (23k rows, 892 symbols, 2013–2026 backfill)
-- `short_interest` — shortPercentOfFloat + shortRatio (900 symbols; append daily; ffill 15 days)
-
-Never hide data provenance in cache name. Point-in-time joins via `as_of_join()` / `as_of_merge()`.
+Cache names: `prices_live` (Yahoo live), `prices_simulated` (GBM), `prices_live_fallback_simulated` (live-fetch failure), `prices_macro`, `macro_live/simulated`, `profiles` (sector metadata). Never hide data provenance in cache name. Point-in-time joins via `as_of_join()` / `as_of_merge()`.
 
 ---
 
@@ -214,21 +168,6 @@ Streamlit interactive demo for Tony Ngo. Dark/gold aesthetic. Sidebar: regime, V
 
 ---
 
-## Honest OOS record (updated 2026-05-02)
-
-**CAGR 41.66% | Sharpe 1.446 | Max DD -33.27% | Alpha +28.2% vs SPY**
-Jan 2020 – May 2026 | 160 folds | ~492 symbols (S&P 500 + REMOVED_STOCKS)
-
-Year-by-year: 2020 +74%, 2021 +8%, 2022 −3%, 2023 +24%, 2024 +81%, 2025 +69%, 2026 YTD +30%.
-
-**Methodology**: `walk_forward_runner.py`, `sp500_only=True`. All 6 alpha data sources PIT-sliced per fold. Earnings (2008+) and insider (2013+) contribute throughout; options/short_interest activate from 2026 forward. Analyst sleeve currently inactive (cache had 1 row/symbol — being re-seeded).
-
-**Caveats**: The 2020–2026 window was exceptionally strong for momentum (COVID recovery + AI mega-cap rally). SIVB/FRC missing from prices (minor — momentum would have exited early). S&P 400 excluded (Option B tracks their constituent history). Analyst sleeve was inactive during this run — re-run pending after re-seed.
-
-**Prior stale figure** (Sharpe 0.518, CAGR 12.35%): from 5-sleeve system on 135 symbols, now superseded.
-
----
-
 ## Integrity constraints
 
 1. No look-ahead bias — walk-forward uses `get_universe_on_date()` per fold; regime fitted on training slice only.
@@ -238,7 +177,6 @@ Year-by-year: 2020 +74%, 2021 +8%, 2022 −3%, 2023 +24%, 2024 +81%, 2025 +69%, 
 5. `walk_forward_runner.py` not a production entrypoint — retained for self_improve Phase D only.
 6. Debate is advisory only.
 7. Approval gate for orders > 2% NAV.
-8. Sleeve floors: fundamental/earnings/analyst ≥ 2%, options_flow/insider/short_interest ≥ 1% — enforced in both self_improve.py and shadow_promoter.py.
 
 ---
 
@@ -254,35 +192,41 @@ Python 3.12.13 Homebrew, venv at `.venv/`. Use `.venv/bin/python`. API keys via 
 
 ---
 
-## Current portfolio (as of May 2, 2026)
+## Current portfolio (as of April 2026)
 
-Last merged weights (2026-05-02): KMLM 9.7%, IFRA 8.7%, PDBC 8.2%, AMKR/FIX/VAL/VICR/VRT/WDC 5.6% each, CNC 5.4%, EWY 4.1%, VC 3.8%, DBA/EWC 3.3%, PVH 3.2%, TIP 2.2%, NUE 2.0%, XPO/APA 1.9%, AAXJ/EEM 1.5%, EWZ 1.2%.
-Next rebalance: ~May 6, 2026 (10-bday cadence from Apr 29). Live since April 1, 2026.
+Holdings (post-rebalance Apr 15): EWY 10.8%, PDBC 9.3%, CASY/CAT/EQIX/MPWR/TRGP 6% each, HYG/BIL/DBB/EWZ/EWT ~4.5–4.8%, NEM 4.4%, LQD/MRK/IFRA ~3–3.5%, VNQ/PAVE/AMZN/GOOGL ~2.3–2.9%, CB 1.9%, EWC 0.6%.
+Next rebalance: ~April 29, 2026. Live since April 1, 2026.
 
 ---
 
-## Known bugs — all fixed
+## Known bugs — audit status (2026-04-18)
 
-All codebase audits (Apr 17–18) complete. Third-pass found no new crash risks. Key fixed classes:
-- Empty weights guard (E1), DataFrame column checks (E2–E4), regime log (E5)
-- Debate None-safe access (D1–D2)
-- run_all_agents empty list/allocation/staleness guards (R1–R4)
-- iloc[-1] guards after .dropna() in all agent files
-- ML CPCV OOM: top-300 cap + X_all built once + pd.concat instead of .join (2026-05-02)
-- Hub _ROOT path fix: parents[3] → parents[2] (2026-05-02)
-- Optimizer sector fallback: SectorDataError → rank-weighted fallback (2026-05-02)
+All second-audit bugs now fixed. Third-pass audit found no new crashes (all remaining `iloc[-1]` accesses verified guarded).
+
+### Fixed 2026-04-17 (E1–E5, D1–D2, R1–R4)
+- eod_runner: empty weights guard, DataFrame.get(), cost features, dollar_volume column, regime log
+- debate_runner: None-safe weights, split generic except
+- run_all_agents: empty list guard, allocation source, regime staleness log, hasattr removal
+
+### Fixed 2026-04-18 (second audit)
+- **`debate/outcome_tracker.py`** — `future_navs[-1]` guard already in place; added `len(scores) > 0` guard in both `_rebuild_credibility` loops ✅
+- **`agents/international_agent.py`** — `len(uup) > 50` and `len(eem) > 200` guards added after `.dropna()` ✅
+- **`agents/alternatives_agent.py`** — `len(gld) > 200` guard added after `.dropna()` ✅
+- **`agents/macro_agent.py`** — already had `len(gld) > 200` guard ✅
+- **`orchestrator/central_intelligence.py`** — conviction bonus now logs when skipped ✅
+- **`ascent/research/self_improve.py`** — fallback to 0.518 now prints a warning ✅
 
 ---
 
 ## What is not built yet
 
-- **Phase 6 — New signals**: ✅ Built. Options flow, insider transactions, short interest all live.
-- **Phase 7 — Autonomous research engine**: IC decay monitor → LLM hypothesis generator → auto-coder → CPCV backtest → shadow promotion. Week-long build.
-- **Phase 8.3 — Options hedge overlay**: Tail-risk hedge via SPX put spreads. Unblocks ~May 13 (30 days live data needed for sizing calibration).
-- **Phase 8.1 — VWAP execution**: Slice large orders across 8 intraday buckets proportional to historical volume profile.
-- **Option B — Full S&P 400 constituent history**: The walk-forward runner currently uses `sp500_only=True` (restricts to S&P 500 ~500 names + REMOVED_STOCKS) because 807 of the 901 S&P 400 symbols have no real addition dates and all default to 2020-01-01. Including them inflates OOS returns by trading a forward-selected winner pool. Option B: source real S&P 400 constituent change history (add/remove dates) from a data provider or scrape the S&P 400 Wikipedia change log. Once addition dates are real, remove the `sp500_only` restriction and re-run. This unlocks the full 901-symbol universe for clean historical OOS evaluation.
-- **R2R semantic memory**: built but `R2R_API_KEY` not configured; BM25 fallback active.
-- **Live dashboard UI**: data files generated but no live render.
+- **Plans B2–D4**: ✅ All implemented (B2 enforce reduce_size, B3 regime staleness, C1–C3 outcome scoring + live Sharpe, D1–D4 quant context + extended thinking + prompt caching)
+- **Self-evolving alpha loop**: ✅ Full loop closed — stack.py reads active config, shadow promoter auto-promotes, per-regime variant generation, multi-fold OOS evaluation
+- **Phase 4 hedge overlay**: blocked until ~May 13, 2026 (30 days live)
+- **R2R semantic memory**: built but `R2R_API_KEY` not configured; BM25 fallback active
+- **Live dashboard UI**: data files generated but no live render
+- **Debate trigger condition**: debate should only fire on high-uncertainty days (catalyst present, regime entropy >0.70, position >12%, VaR 99th < -3.5%) — not on every rebalance
+- **Alpha signal improvements (backlog)**: (1) skip-last-month momentum: use mom_252d minus mom_21d instead of raw mom_252d; (2) analyst revision signal: yfinance `t.recommendations` as short-term catalyst; (3) neutralize earnings surprise beta to reduce momentum overlap; (4) expand universe to 50–100 Russell 1000 minus S&P 500 mid-caps
 
 ---
 
@@ -290,123 +234,144 @@ All codebase audits (Apr 17–18) complete. Third-pass found no new crash risks.
 
 ### 2026-04-09 to 2026-04-13 (summary)
 - Initial CLAUDE.md, env setup, 6 bug fixes, A4 survivorship bias hardening
-- Phase 1–3: skill staleness, sector error, persistent halt, async approval gate, Almgren-Chriss, CPCV ML sleeve, regime particle filter + emergency refit
-- 3 AI agent features: catalyst scanner, multi-turn debate, memory-augmented debate (93 tests)
-- Universe: removed 15 delisted, added 15 new (135 total at that point)
+- Phase 1 (skill staleness, sector error, persistent halt), Phase 2 (async approval gate, Almgren-Chriss), Phase 3 (CPCV ML sleeve, regime particle filter + emergency refit)
+- 3 AI agent features: catalyst scanner, multi-turn debate, memory-augmented debate (93 tests passing)
+- Universe: removed 15 delisted, added 15 new (135 total)
 
 ### 2026-04-14 (Tony Ngo demo — plan only)
 - Designed `demo_app.py` architecture; nothing built
 
 ### 2026-04-15 (first live rebalance)
-- Fixed 4 pre-rebalance bugs (yf.download race, hardcoded NAV, regime date key, ML targets)
+- Fixed 4 pre-rebalance bugs (yf.download race condition, hardcoded NAV, regime date key, ML targets)
 - Rebalance ran: verdict REDUCE_SIZE 0.88 confidence, 27 orders to Alpaca
-- Fixed full-liquidation 403 errors: added `close_position()` to `alpaca_broker.py`
+- Fixed full-liquidation 403 errors: added `close_position()` (DELETE /v2/positions/{symbol}) to `alpaca_broker.py`
 - Built `demo_app.py`: dark/gold Streamlit app with live LLM debate, round 2 rebuttals, scenario presets
 - Files: `alpaca_broker.py`, `eod_runner.py`, `pre_rebalance_checklist.py`, `main.py`, agent files, `demo_app.py`
 
 ### 2026-04-15 (demo polish + deployment prep)
-- Fixed How It Works tab (inline styles), updated portfolio preset, fixed live LLM mode
+- Fixed How It Works tab (Streamlit strips `<style>` blocks — rewrote with inline styles)
+- Updated portfolio preset to actual Apr 15 post-debate holdings (22 positions)
+- Fixed live LLM mode (missing `load_dotenv()`); removed password gate (trust-based sharing)
 - API key security: `st.secrets` on Streamlit Cloud, `.env` locally, both gitignored
 - Added `.streamlit/config.toml`, `secrets.toml.template`, updated `requirements.txt`
+- Files: `demo_app.py`, `.streamlit/config.toml`, `.streamlit/secrets.toml.template`, `.gitignore`, `requirements.txt`
+- Open: push to GitHub → deploy share.streamlit.io → send Tony the link; Phase 4 hedge overlay (~May 13); self-improve Phase D
 
-### 2026-04-16 (system upgrade planning + Plans A–D partial)
-- Diagnosed portfolio lagging SPY: 37% EM+commodity, stale regime, noise-only self-improve
-- Specced Plans A–D; committed 64 previously-untracked files; test baseline 110 passing
-- **A1 ✅** SPY benchmark in PnL log; **A2 ✅** per-agent PnL routing; **A3 ✅** attribution.py; **B1 ✅** 20% EM/commodity cap
-- Files: `attribution.py` (new), `forward_pnl_tracker.py`, `skill_tracker.py`, `central_intelligence.py`, `run_all_agents.py`
-- Tests: 117 passing
+### 2026-04-16 (system upgrade planning + partial execution)
+- Diagnosed why portfolio lags SPY: 37% EM+commodity, stale regime (March 19), self-improve using noise heuristic, verdicts never scored (wrong NAV source), debate agents arguing without quant data
+- Discussed quant+AI balance: debate should be a circuit breaker on edge cases only, not a daily veto of the quant model — added debate trigger condition to backlog
+- Specced 4-plan upgrade: A (monitoring), B (portfolio hardening), C (self-learning), D (LLM enhancement) — saved to `docs/superpowers/plans/`
+- Committed 64 untracked source files that were never in git (Phase 1–3 work, agent files, regime engine, llm client, etc.) — test suite now 110 passing clean baseline
+- Created worktree `feature/plans-a-d` for isolated implementation
+- **A1 ✅**: SPY benchmark in PnL log — `_log_holdings` writes `spy_return` + `alpha_vs_spy`; `run_forward_pnl_cycle` batch-fetches SPY; wired `_log_holdings` into all `main()` exit paths
+- **A2 ✅**: US equities PnL routed to `logs/us_equities_pnl.jsonl` (was `eod_log.jsonl`); `skill_tracker.py` reads from `PNL_LOGS` (single source of truth)
+- **A3 ✅**: `ascent/monitoring/attribution.py` — daily position-level P&L attribution, writes `logs/attribution_log.jsonl`, wired into `_log_holdings`
+- **B1 ✅**: `_cap_em_commodity()` in `orchestrator/central_intelligence.py` — hard 20% cap on EM+commodity+gold after all blending
+- B2–D4: specced, not yet implemented
+- Files: `ascent/monitoring/attribution.py` (new), `ascent/monitoring/forward_pnl_tracker.py`, `ascent/monitoring/skill_tracker.py`, `orchestrator/central_intelligence.py`, `run_all_agents.py`, `tests/test_plan_a.py` (new), `tests/test_plan_b.py` (new)
+- Test count: 117 passing on `feature/plans-a-d` branch
 
 ### 2026-04-16 (vol-regime alpha sleeve)
-- Added `vol_of_vol_21d`, `vol_trend_10d` features; volatility sleeve signal = -(vol_trend_10d)/(vol_of_vol_21d)
-- Enabled volatility sleeve at 5%; trend 70% → 65%
+- Added `vol_of_vol()` and `vol_trend()` to `ascent/features/feature_defs.py`; registered as `vol_of_vol_21d` and `vol_trend_10d` in `build_all_features()`
+- Rewired volatility sleeve in `ascent/alpha/stack.py`: signal = -(vol_trend_10d) / (vol_of_vol_21d); long names with declining AND stable vol — orthogonal to momentum
+- Enabled volatility sleeve at 5% weight; trend reduced 70% → 65%
+- Files: `ascent/features/feature_defs.py`, `ascent/alpha/stack.py`, `CLAUDE.md`
 
-### 2026-04-17 (bug hardening E1–E5, D1–D2, R1–R4)
-- 11 bugs fixed across execution, debate, runner layers. Tests: 144 passing.
+### 2026-04-17 (bug hardening — E1–E5, D1–D2, R1–R4)
+- Fixed 11 bugs across execution, debate, and runner layers
+- E1: empty weights guard in eod_runner (IndexError → ValueError with message)
+- E2: DataFrame.get() → column check + .tolist()
+- E3: cost features key guard before passing to order engine
+- E4: dollar_volume column check before pivot_table
+- E5: regime extraction failure now logged via log_error (not just print)
+- D1: None-safe weights access in debate_runner (or {} guard)
+- D2: split generic except into FileNotFoundError/ImportError/Exception
+- R1: empty list guard on regime_signal.json read
+- R2: allocation pulled from merged_weights.get("allocation") (static fallback + TODO)
+- R3: bare except in _is_regime_stale now logs exception details
+- R4: removed hasattr(ao, "n_positions") guard — n_positions is already a @property
+- Files: eod_runner.py, debate_runner.py, run_all_agents.py, tests/test_bug_hardening.py (new)
+- Tests: 144 passing
 
-### 2026-04-18 (second audit + Phase 1 firm architecture)
-- 6 second-audit bugs fixed; full third-pass — no new crash risks
-- `walk_forward_lightweight.py` (real OOS), `debate_gate.py` (conditional debate), `counterfactual_tracker.py`
-- Tests: 157 passing
+### 2026-04-18 (plans B2–D4 verified + second audit fixes)
+- Confirmed B2–D4 were already fully implemented (done in a prior session, not logged)
+- Fixed test_plan_d.py _make_prices helper: use len(idx) not n_days (breaks on non-business days like Saturdays)
+- Fixed 6 second-audit bugs: international_agent (uup/eem iloc guards after dropna), alternatives_agent (gld iloc guard), outcome_tracker (_rebuild_credibility division-by-zero × 2), orchestrator (conviction bonus skip log), self_improve (fallback warning print)
+- Full third-pass codebase audit: all remaining iloc[-1] accesses verified as guarded; no new crash risks found
+- All Python files pass ast.parse; 144 tests passing
+- Files: agents/international_agent.py, agents/alternatives_agent.py, debate/outcome_tracker.py, orchestrator/central_intelligence.py, ascent/research/self_improve.py, tests/test_plan_d.py, CLAUDE.md
+- Open: Phase 4 hedge overlay (blocked until ~May 13), debate trigger condition (high-uncertainty days only), R2R API key config
 
-### 2026-04-18/19 (self-evolving alpha loop + regime features)
-- **Plan A Tasks 1–3 ✅**: stack reads live config, shadow_promoter auto-promotes, per-regime variants
-- **Plan B Tasks 1–4 ✅**: credit/yield features in regime, walk_forward_lightweight multi-fold, A4 confirmed fixed
-- Files: `stack.py`, `shadow_promoter.py` (new), `self_improve.py`, `regime/features.py`, `walk_forward_lightweight.py`
+### 2026-04-18 (Phase 1 firm architecture — real OOS, conditional debate, memory wiring)
+- Built `ascent/research/walk_forward_lightweight.py` — real OOS scoring via pipeline (replaced heuristic in self_improve)
+- Built `ascent/execution/debate_gate.py` — conditional debate (entropy >0.70, top pos >12%, VaR <-3.5%, catalyst)
+- Built `ascent/monitoring/counterfactual_tracker.py` — quant vs debate weights snapshotted and scored 10 days later
+- Modified `debate/agents.py` `_build_context()` — actively queries R2R/BM25 memory for past verdicts in same regime
+- Modified `ascent/execution/eod_runner.py` — debate gated, verdict only defined inside `if _run_debate:` block
+- Modified `run_all_agents.py` — calls `score_pending_counterfactuals()` daily
+- Tests: 157 passing (Phase 1 closes)
+
+### 2026-04-18/19 (Plan A: self-evolving alpha loop + Plan B: regime + walk-forward)
+- **Plan A Task 1 ✅**: `ascent/alpha/stack.py` — `_load_active_alpha_weights(regime=)` reads `data_cache/active_alpha_config.json`; self-improve changes now hit live trading
+- **Plan A Task 2 ✅**: `ascent/research/shadow_promoter.py` — auto-promotion: expired shadows re-evaluated, winners written to `active_alpha_config.json`, losers archived to `data_cache/archived_configs/`; wired into `run_all_agents.py` daily
+- **Plan A Task 3 ✅**: `ascent/research/self_improve.py` — `_promote_regime_variant()` + `run_self_improve(current_regime=)`; Sunday call in `run_all_agents.py` passes current regime; system now learns stressed ≠ calm_bull weights
+- **Plan B Task 1 ✅**: `ascent/regime/features.py` — `_build_credit_yield_features()`: credit_spread_chg_21d/level (HYG/LQD), yield_curve_slope/chg (TLT/IEF); leading indicators for regime transitions
+- **Plan B Task 2 ✅**: `ascent/regime/engine.py` + `ascent/main.py` — `market_prices` param wired through engine; main.py fetches HYG/LQD/TLT/IEF alongside VIX
+- **Plan B Task 3 ✅**: `ascent/research/walk_forward_lightweight.py` — multi-fold expanding window (3–4 folds), 5-day purge + embargo, per-fold `get_universe_on_date()`, Sharpe across all fold returns
+- **Plan B Task 4 ✅**: A4 gap confirmed already fixed in `walk_forward_runner.py` (per-fold universe filter via `build_historical_universe()` already present)
+- Files: `ascent/alpha/stack.py`, `ascent/research/shadow_promoter.py` (new), `ascent/research/self_improve.py`, `ascent/regime/features.py`, `ascent/regime/engine.py`, `ascent/main.py`, `ascent/research/walk_forward_lightweight.py`, `run_all_agents.py`, `tests/test_self_evolving_alpha.py` (new), `tests/test_regime_features.py` (new), `tests/test_walkforward_institutional.py` (new)
 - Tests: 177 passing
+- Open: Phase 4 hedge overlay (blocked ~May 13), debate trigger condition, R2R API key
 
 ### 2026-04-19 (fundamental alpha — Tier 1 signals)
-- `fundamentals.py` ingest, `build_fundamental_panel()`, `fundamental.py` alpha sleeve
-- Stack: trend 65% → 55%, fundamental 10% added; fundamentals seeded: 675 rows, 135 symbols
+- **Task 1 ✅**: `ascent/data/ingest/fundamentals.py` (new) — yfinance quarterly fetcher with 45-day filing lag; `fetch_fundamentals()`, `save_fundamentals()`, `load_fundamentals()`; fixed `__main__` to use `get_config()` not nonexistent `get_current_universe()`
+- **Task 2 ✅**: `ascent/features/feature_defs.py` — `high_52w_pct()`, `build_fundamental_panel()` (gross_profitability, accruals, asset_growth with forward-fill); `ascent/alpha/fundamental.py` (new) — cross-sectional blend of 4 signals
+- **Task 3 ✅**: `ascent/alpha/stack.py` — `DEFAULT_ALPHA_WEIGHTS` updated: trend 0.65→0.55, fundamental 0.10 added; fundamental sleeve wired into `build_alpha_stack()`; `ascent/alpha/ml_sleeve.py` — 4 fundamental signals added to `ML_FEATURES`; `ascent/features/build_features.py` — `fundamentals_df=None` param, panel augmentation in `compute_features()`; `ascent/main.py` — loads fundamentals cache and passes to FeatureBuilder
+- Fundamentals cache seeded: 675 rows, 135 symbols
+- Fixed stale test assertion: `test_stack_falls_back_to_defaults_when_no_config` updated trend 0.65→0.55
+- Files: `ascent/data/ingest/fundamentals.py` (new), `ascent/alpha/fundamental.py` (new), `ascent/features/feature_defs.py`, `ascent/alpha/stack.py`, `ascent/alpha/ml_sleeve.py`, `ascent/features/build_features.py`, `ascent/main.py`, `tests/test_fundamental_alpha.py` (new), `tests/test_self_evolving_alpha.py`
 - Tests: 188 passing
 
 ### 2026-04-19 (PEAD earnings surprise alpha sleeve)
-- `earnings.py` ingest, `build_earnings_panel()`, `earnings.py` alpha sleeve
-- Stack: fundamental 10% → 5%, earnings 5% added; earnings seeded: 3,228 rows, 135 symbols
+- **Task 1 ✅**: `ascent/data/ingest/earnings.py` (new) — yfinance `earnings_dates` fetcher; 1-bday announcement lag via `pd.offsets.BDay(1)`; tz-strip on index; skips future rows (NaN Reported EPS); `fetch_earnings()`, `save_earnings()`, `load_earnings()`
+- **Task 2 ✅**: `ascent/features/feature_defs.py` — `build_earnings_panel()` (pivot surprise_pct wide, ffill limit=63, tz-strip); `build_all_features()` gains `earnings_df=None` param
+- **Task 3 ✅**: `ascent/alpha/earnings.py` (new) — `earnings_alpha()`: cross-sectional z-score of earnings_surprise; returns empty DF gracefully if feature absent
+- **Task 4 ✅**: `ascent/alpha/stack.py` — earnings=0.05 added, fundamental reduced 0.10→0.05 (total stays 1.0); earnings sleeve wired into `build_alpha_stack()`; `ascent/alpha/ml_sleeve.py` — earnings_surprise added to ML_FEATURES; `ascent/features/build_features.py` — earnings_df=None param + compute_features passes it through; `ascent/main.py` — loads earnings cache and passes to FeatureBuilder; `ascent/research/self_improve.py` — DEFAULT_ALPHA_WEIGHTS synced with stack.py
+- Earnings cache seeded: 3,228 rows, 135 symbols
+- Updated stale test: `test_fundamental_alpha.py::test_default_alpha_weights_include_fundamental` (0.10→0.05)
+- Files: `ascent/data/ingest/earnings.py` (new), `ascent/alpha/earnings.py` (new), `ascent/features/feature_defs.py`, `ascent/features/build_features.py`, `ascent/alpha/stack.py`, `ascent/alpha/ml_sleeve.py`, `ascent/main.py`, `ascent/research/self_improve.py`, `tests/test_earnings_alpha.py` (new), `tests/test_fundamental_alpha.py`
 - Tests: 202 passing
+- Open: Phase 4 hedge overlay (blocked ~May 13), R2R API key, debate trigger condition
 
 ### 2026-04-19 (pipeline bug fixes + integrity hardening)
-- Fixed bdate_range weekend crash, RegimeEngine config type, fundamental_panel tz mismatch
-- Synced self_improve DEFAULT_ALPHA_WEIGHTS with stack.py
+- Fixed bdate_range weekend crash in `ascent/main.py`: `pd.bdate_range(end="today", periods=1)` returns empty on weekends; replaced with explicit weekday rollback (`max(0, today.weekday() - 4)` days back → last Friday on weekends, same day on weekdays)
+- Fixed `RegimeEngine(cfg)` → `RegimeEngine(config=cfg.regime.to_engine_dict())` in `run_all_agents.py`; was passing full Config object, engine expects Optional[Dict]
+- Fixed `build_fundamental_panel()` timezone mismatch: `datetime64[us]` vs `datetime64[us, America/New_York]`; strip tz from both `date_index` and `wide.index` before reindex
+- Synced `self_improve.py` `DEFAULT_ALPHA_WEIGHTS` to match `stack.py` exactly (was missing fundamental and earnings sleeves from prior refactor)
+- Alpha overlap note (not fixed, tracked): trend (55%) + 52wk high (inside fundamental) + earnings surprise are all momentum-correlated; effective momentum exposure ~65–70%, not 55%. Backlog: skip-last-month momentum, neutralize earnings surprise beta
+- Files: `ascent/main.py`, `run_all_agents.py`, `ascent/features/feature_defs.py`, `ascent/research/self_improve.py`
+- Commits: `85aedfc` (fundamental alpha + pipeline fixes), `7d14d5e` (PEAD earnings sleeve)
 
-### 2026-04-23 (universe expansion + ML fix + self-improve sync)
-- **Universe**: 135 → 901 symbols (S&P 500 + S&P 400); `us_equity_universe.json`; 93% sector coverage
-- **mom_skip1m**: skip-last-month feature added; trend sub-weight 0.20
-- **Distressed filter**: zeroes alpha for mom_252d < −0.65
-- **Debate gate**: `should_run_debate()` wired into rebalance path
-- **ML sleeve**: trimmed to 6 ICIR>0.2 features; depth 4→3, estimators 200→100; CPCV now 15/15 folds, p5=−0.016, p50=+0.012 → sleeve enables
-- **self_improve**: MIN_SHARPE_EDGE 0.10→0.05; per-regime block reuses current_sharpe
+### 2026-04-23 (universe expansion + ML sleeve fix + self-improve sync)
+- **Universe**: expanded from 135 hand-picked to 901 symbols (S&P 500 + S&P 400) via Wikipedia scrape; stored in `ascent/config/us_equity_universe.json`; `_load_us_equity_symbols()` in `settings.py` now reads from JSON with 20-name seed fallback
+- **Profiles**: refreshed `profiles.parquet` for all 901 symbols — 93% sector coverage (838/901 with real labels); `data/universe.py` updated to load addition dates from JSON (merges with hardcoded dict, JSON wins)
+- **Hub**: `_FETCH_WORKERS` bumped 4→8 for faster parallel ingestion on 901-symbol universe
+- **mom_skip1m**: added skip-last-month momentum feature (`mom_252d - mom_21d`) to `feature_defs.py`; wired into `trend.py` at 0.20 weight; added to `ML_FEATURES`
+- **Distressed name filter**: zeroes alpha for names with `mom_252d < -0.65` (down >65% YoY) in `stack.py` post-composite blend
+- **Debate gate**: `should_run_debate()` wired into `run_all_agents.py` rebalance path; `verdict` now initialized to `{}` when gate returns False — fixed `NoneType.get()` crash on skipped debates
+- **ML sleeve**: trimmed `ML_FEATURES` from 13 → 6 (kept only |ICIR|>0.2: mom_skip1m, zscore_20d, high_52w_pct, mom_126d, vol_63d, earnings_surprise); reduced `max_depth 4→3`, `n_estimators 200→100`; added `reg_alpha=0.1, reg_lambda=1.0`; `_stack_features` now cross-sectionally z-scores before stacking; p5 guard relaxed 0→−0.05
+- **ML sleeve validation**: CPCV on full 6-year history (1,584 days, 120 symbols) → 15/15 folds, p5=−0.016, p50=+0.012 → **sleeve now enables**; was disabled every run due to noisy features + insufficient data in prior diagnostics
+- **self_improve sync**: `MIN_SHARPE_EDGE` corrected 0.10→0.05 (matches design spec); stale docstring fixed; per-regime block now reuses `current_sharpe` instead of re-fetching with hardcoded 0.518 fallback
+- Files: `ascent/config/settings.py`, `ascent/config/us_equity_universe.json` (new), `ascent/data/universe.py`, `ascent/data/hub.py`, `ascent/features/feature_defs.py`, `ascent/alpha/trend.py`, `ascent/alpha/stack.py`, `ascent/alpha/ml_sleeve.py`, `ascent/research/self_improve.py`, `run_all_agents.py`, `tests/test_phase3_hardening.py`, `tests/test_fundamental_alpha.py`
 - Tests: 202 passing
+- Open: analyst revision signal, R2R API key, neutralize earnings surprise beta
 
-### 2026-05-01 (self-learning hardening — sleeve floor protection + per-sleeve IC)
-- **Root cause**: generate_variants() zeroed fundamental/earnings (both at 0.05) via ±0.10 perturbation; shadow_promoter wrote zeroed config with no guard
-- **Fix 1**: MIN_SLEEVE_WEIGHTS floor in self_improve.py (trend 10%, fundamental/earnings 2%)
-- **Fix 2**: _restore_sleeve_floors() in shadow_promoter.py as second safety net
-- **Fix 3**: walk_forward_lightweight now scores fundamental+earnings alpha per fold
-- **Fix 4**: _log_sleeve_ic() in main.py — daily per-sleeve IC to sleeve_ic_log.jsonl
-- Updated 3 tests. Tests: 202 passing.
-
-### 2026-05-02 (dry run debugging + 3 bug fixes)
-- ML CPCV OOM: top-300 cap + X_all built once + pd.concat (was .join hangs)
-- Hub _ROOT path: parents[3] → parents[2] (manifest written to wrong dir)
-- Optimizer sector fallback: SectorDataError → rank-weighted fallback (CLAUDE.md constraint #4)
-- max_workers restored: 1 → len(agent_tasks)
-- Dry run result: 23 positions, all 8 sleeves loaded, IC t-stat=2.83, equity $105,237
-- Files: `ml_sleeve.py`, `hub.py`, `optimizer.py`, `run_all_agents.py`
-
-### 2026-05-02 (analyst revision alpha sleeve)
-- `analyst.py` ingest (225k rows, 899 symbols), `build_analyst_panel()`, `analyst.py` alpha sleeve
-- Stack: trend 55% → 50%, analyst 5% added; analyst added to MIN_SLEEVE_WEIGHTS + _SLEEVE_FLOORS
-- ML: analyst_revision added to ML_FEATURES (7 total)
-- Tests: 216 passing
-
-### 2026-05-02 (Phase 6 — Options Flow, Insider, Short Interest signals)
-- **`ascent/data/ingest/options.py`** (new) — yfinance options chain; IV skew (OTM put IV − call IV) + put/call ratio; ffill 5 days; cache: `options_flow`
-- **`ascent/data/ingest/insider.py`** (new) — yfinance insider_transactions; open-market buys=+1/sells=−1; 1-bday lag; ~1–2yr backfill available; cache: `insider_transactions`
-- **`ascent/data/ingest/short_interest.py`** (new) — yfinance info shortPercentOfFloat + shortRatio; ffill 15 days; cache: `short_interest`
-- **`ascent/alpha/options_flow.py`** (new) — invert IV skew + PC ratio; cross-sectional z-score; bearish options activity → negative alpha
-- **`ascent/alpha/insider.py`** (new) — rolling 63d net purchase score; drops all-zero symbols; cross-sectional z-score
-- **`ascent/alpha/short_interest.py`** (new) — contrarian squeeze signal; cross-sectional z-score of short_pct_float
-- **Stack**: trend 50% → 44%; options_flow/insider/short_interest at 2% each; 11 sleeves total
-- **feature_defs**: added `build_options_panel`, `build_insider_panel`, `build_short_panel`; all wired into `build_all_features`
-- **FeatureBuilder**: added options_df, insider_df, short_df params; wired into main.py
-- **self_improve + shadow_promoter**: new floors (1%) added for all 3 new sleeves
-- **ML_FEATURES**: iv_skew, insider_net_score, short_pct_float added (10 total)
-- Tests: 254 passing (231 + 23 new)
-- Open: Phase 7 autonomous research engine, Phase 8.3 hedge overlay (~May 13)
-
-### 2026-05-02 (Phase 6 cache seeding + insider fix)
-- Seeded short_interest: 900 rows/symbols (today snapshot, 357s)
-- Seeded options_flow: 47/50 symbols (today snapshot, 42s)
-- Diagnosed insider failure: yfinance Transaction column always empty; Text column has actual data
-- Fixed `ascent/data/ingest/insider.py`: prefer Text over Transaction, skip blank columns
-- Re-seeded insider_transactions: 23,166 rows, 892 symbols, date range 2013–2026 (360s)
-- Commits: e7fdf3f (Phase 6), a9c899a (insider fix)
-
-### 2026-05-02 (Phase 5 — Black-Litterman MV Optimizer)
-- `ascent/portfolio/covariance.py` (new) — Ledoit-Wolf shrinkage via sklearn; sample fallback
-- `ascent/portfolio/mv_optimizer.py` (new) — BL posterior + scipy SLSQP MV opt; view conf ∝ |z|/3
-- `ascent/portfolio/tc_aware_optimizer.py` (new) — TC-aware trade sizing, 10bps kappa, 50bps deadband
-- `apply_bl_to_latest()` in optimizer.py — replaces last-date weights with BL; preserves sector selection
-- `ascent/main.py` — calls apply_bl_to_latest after sector_constrained_weighted
-- Tests: 231 passing (216 + 15 new)
-- Open: Phase 6 signals, Phase 8.3 hedge overlay (~May 13)
+### 2026-05-03 (Phase 4 hedge overlay)
+- **Phase 4 ✅**: `ascent/portfolio/hedge_overlay.py` — `compute_hedge_weight()` + `apply_hedge_overlay()` pure functions; VIXY sized 0–8% by regime × confidence; existing VIXY stripped before overlay; weights always sum to 1.0
+- Wired into `run_all_agents.py` after orchestration, before `merged_weights.json` write; logs to `logs/hedge_log.jsonl`; try/except so failures don't abort runner
+- `scripts/evaluate_hedge.py` — historical evaluation script; reads `regime_labels.csv` + `ascent_daily_ledger.csv`, fetches VIXY via yfinance, prints max drawdown / Sharpe / CAGR with vs without hedge
+- README rewritten to reflect full current architecture (committed separately)
+- Evaluation finding: over the backtest ledger the hedge slightly worsened drawdown and Sharpe; hedge-drawdown correlation was +0.26 (should be negative) — regime calibration issue, hedge fires when confidence is low so position is too small when regime actually turns; revisit after more live data
+- Tests: 265 passing
+- Files: `ascent/portfolio/hedge_overlay.py` (new), `tests/test_hedge_overlay.py` (new), `run_all_agents.py`, `scripts/evaluate_hedge.py` (new)
+- Open: AI-native improvements, R2R API key, neutralize earnings surprise beta
