@@ -1,8 +1,6 @@
 """
 ascent/regime/posture.py
-Converts regime engine output -> plain-English posture for 20in20 demo.
-
-Drop this file into ascent/regime/posture.py — no changes to existing files needed.
+Converts regime engine output -> plain-English posture description.
 """
 from __future__ import annotations
 from dataclasses import dataclass

@@ -479,7 +479,7 @@ class RegimeEngine:
 
     def save_for_intel(self, dashboard_dir: str = "dashboard") -> None:
         """
-        Write regime_labels.csv in the exact schema run_20in20.py expects.
+        Write regime_labels.csv and regime_signal.json to dashboard dir.
         Call after engine.fit(), regardless of run mode.
 
         Writes: dashboard/regime_labels.csv with columns [date, label, ...]

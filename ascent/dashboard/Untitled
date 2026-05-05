@@ -1,1 +1,0 @@
-find . -name "*.html" | grep -v node_modules | grep -v .venv

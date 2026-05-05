@@ -4,7 +4,7 @@ Parametric scenario shock simulator for Ascent Capital.
 
 Takes current portfolio weights and applies predefined shock scenarios.
 Computes first-order portfolio impact (no Monte Carlo — pure shock arithmetic).
-Writes to outputs/20in20/scenarios_YYYY-MM-DD.json.
+Writes to outputs/scenarios/scenarios_YYYY-MM-DD.json.
 
 No external dependencies — uses weights already computed by the orchestrator.
 
@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Dict, List
 import numpy as np
 
-OUTPUT_DIR = Path("outputs/20in20")
+OUTPUT_DIR = Path("outputs/scenarios")
 
 SCENARIOS = {
     "em_risk_off": {
