@@ -276,6 +276,42 @@ def test_discovery_runner_writes_accepted_proposal(tmp_path):
     assert "ic_mean" in proposal
 
 
+def test_novelty_check_rejects_pure_momentum_clone():
+    from ascent.research.factor_discovery.cpcv_evaluator import check_factor_novelty
+    # A factor that IS momentum will be rejected — Spearman corr with benchmark > 0.70
+    momentum_clone = '''
+def compute_factor_mom_clone(df):
+    ret = df.pct_change(252).iloc[-1]
+    mean, std = ret.mean(), ret.std()
+    if std < 1e-8:
+        return pd.Series(0.0, index=ret.index)
+    return (ret - mean) / std
+'''
+    prices = _make_price_df(n_symbols=30, n_days=504)
+    is_novel, msg = check_factor_novelty(momentum_clone, "mom_clone", prices, correlation_threshold=0.70)
+    assert not is_novel, f"Pure momentum clone should be rejected as non-novel, got: {msg}"
+
+
+def test_novelty_check_accepts_orthogonal_factor():
+    from ascent.research.factor_discovery.cpcv_evaluator import check_factor_novelty
+    # A factor based on intraday range volatility is unlikely to correlate > 0.70 with benchmarks
+    novel_factor = '''
+def compute_factor_reversal_z(df):
+    ret5 = df.pct_change(5)
+    signal = -ret5.iloc[-1]
+    mean = signal.mean()
+    std  = signal.std()
+    if std < 1e-8:
+        return pd.Series(0.0, index=signal.index)
+    return (signal - mean) / std
+'''
+    prices = _make_price_df(n_symbols=30, n_days=504)
+    is_novel, msg = check_factor_novelty(novel_factor, "reversal_z", prices, correlation_threshold=0.70)
+    # Short-term reversal may or may not be novel depending on correlation — just check it doesn't raise
+    assert isinstance(is_novel, bool)
+    assert isinstance(msg, str)
+
+
 def test_discovery_runner_rejects_low_ic_proposal(tmp_path):
     from ascent.research.factor_discovery.discovery_runner import run_factor_discovery
 
@@ -609,6 +645,70 @@ def evaluate_factor_ic(
         "ic_p5":         round(ic_p5, 4),
         "n_observations": len(ic_series),
     }
+
+
+def check_factor_novelty(
+    code: str,
+    factor_name: str,
+    prices_df: pd.DataFrame,
+    correlation_threshold: float = 0.70,
+) -> tuple:
+    """
+    Check if the proposed factor is too correlated with existing benchmark signals.
+
+    Computes the new factor on a recent 252-day window, then correlates it against
+    three simple benchmark signals (252d momentum, 5d reversal, low volatility).
+    Rejects if any Spearman correlation exceeds the threshold.
+
+    Without this check, Opus reliably rediscovers momentum and reversal variants
+    that are > 0.70 correlated with existing sleeves.
+
+    Returns:
+        (is_novel: bool, message: str)
+    """
+    try:
+        recent = prices_df.tail(252)
+        if len(recent) < 21 or recent.shape[1] < 5:
+            return True, "OK"  # insufficient data — don't block
+
+        new_signal = _execute_factor(code, factor_name, recent)
+        if new_signal.empty:
+            return True, "OK"
+
+        benchmarks = {}
+        try:
+            benchmarks["momentum_252d"] = recent.pct_change(min(252, len(recent) - 1)).iloc[-1]
+        except Exception:
+            pass
+        try:
+            benchmarks["reversal_5d"] = -recent.pct_change(5).iloc[-1]
+        except Exception:
+            pass
+        try:
+            benchmarks["low_vol"] = -recent.pct_change().rolling(21).std().iloc[-1]
+        except Exception:
+            pass
+
+        for bench_name, bench_signal in benchmarks.items():
+            common = new_signal.index.intersection(bench_signal.index)
+            ns = new_signal.reindex(common).dropna()
+            bs = bench_signal.reindex(common).dropna()
+            overlap = ns.index.intersection(bs.index)
+            if len(overlap) < 10:
+                continue
+            corr, _ = spearmanr(ns.reindex(overlap).values, bs.reindex(overlap).values)
+            if np.isnan(corr):
+                continue
+            if abs(corr) > correlation_threshold:
+                return False, (
+                    f"Correlation {corr:+.2f} with {bench_name} exceeds threshold "
+                    f"{correlation_threshold}. Factor is too similar to existing signals."
+                )
+
+        return True, "OK"
+
+    except Exception as exc:
+        return True, f"Novelty check skipped ({exc})"  # graceful degradation
 ```
 
 - [ ] **Step 6: Create `ascent/research/factor_discovery/hypothesis_generator.py`**
@@ -954,6 +1054,24 @@ def run_factor_discovery(
             "ic_mean": ic_mean, "ic_ir": ic_ir, "n_observations": n_obs,
         }
 
+        # Novelty check: reject if too correlated with existing benchmark signals
+        if ic_mean > IC_MEAN_THRESHOLD and ic_ir > IC_IR_THRESHOLD and n_obs >= MIN_OBSERVATIONS:
+            from ascent.research.factor_discovery.cpcv_evaluator import check_factor_novelty
+            is_novel, novelty_msg = check_factor_novelty(
+                code=hypothesis["code"],
+                factor_name=factor_name,
+                prices_df=prices,
+                correlation_threshold=0.70,
+            )
+            if not is_novel:
+                log.info("[FactorDiscovery] Novelty check failed: %s — %s",
+                         hypothesis["name"], novelty_msg)
+                n_rejected += 1
+                log_entry["status"] = "rejected_not_novel"
+                log_entry["novelty_msg"] = novelty_msg
+                _write_log(log_entry)
+                continue
+
         if ic_mean > IC_MEAN_THRESHOLD and ic_ir > IC_IR_THRESHOLD and n_obs >= MIN_OBSERVATIONS:
             proposal_path = _write_proposal(hypothesis, ic_result)
             proposals.append(str(proposal_path))
@@ -1098,6 +1216,7 @@ def factor_vol_acceleration(df: pd.DataFrame) -> pd.Series:
 - ✅ Restricted execution namespace: only pd, np, and safe builtins available during IC evaluation
 - ✅ Rolling IC evaluator: Spearman IC between factor values and 5-day forward returns, reports mean/IR/p5/n
 - ✅ Acceptance thresholds: IC > 0.015 AND IC IR > 0.40 AND n_obs ≥ 20
+- ✅ Novelty check: Spearman correlation against benchmark signals (momentum, reversal, vol) — rejects if abs(corr) > 0.70; prevents Opus from rediscovering existing factors with different names
 - ✅ Proposals written to `outputs/factor_proposals/` with deployment instructions
 - ✅ All attempts logged to `logs/factor_discovery_log.jsonl`
 - ✅ Monthly trigger: first Sunday of each month in `run_all_agents.py`

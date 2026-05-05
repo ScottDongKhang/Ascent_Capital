@@ -478,6 +478,8 @@ git commit -m "feat(memory): FinMem-style post-trade reflection — structured l
 
 **Problem:** The self-improve loop perturbs sleeve weights randomly — it explores weight space without any theory about *why* a particular weighting should work. In stressed markets, maybe quality/fundamental signals should dominate; in calm bull markets, momentum should. AlphaAgent (arxiv:2502.16789) generates code hypotheses and rejects duplicates via AST comparison. For Ascent's weight-space search, the analogous improvement is: (1) have the LLM generate regime-aware narrative hypotheses about what should work, (2) translate them to weight biases, and (3) reject hypotheses that are too similar to each other (by cosine similarity of their bias vectors). This makes the 5 weekly variants explore meaningfully different hypotheses rather than 5 nearly-identical perturbations of the status quo.
 
+**Known limitation:** Haiku will likely converge on textbook factor intuitions ("quality beats momentum in stress," "momentum dominates in bull markets") rather than novel exploration, because these dominate its training data. The cosine deduplication reduces repetition within a single run but doesn't eliminate the training-data prior across runs. **Monitor after 4 weeks:** if guided variants consistently underperform random perturbation by > 0.03 Sharpe, disable the LLM proposer and instead increase `N_VARIANTS` (5 → 10) and `PERTURB_RANGE` (0.03 → 0.06) in `self_improve.py`. The cosine deduplication logic in `factor_proposer.py` still has value for random variants, so the module isn't wasted even if the LLM step is removed.
+
 **Files:**
 - Create: `ascent/research/factor_proposer.py`
 - Create: `tests/test_factor_proposer.py`
@@ -1203,13 +1205,27 @@ _PRICE_CACHE: Dict[str, Any] = {}
 
 
 def _fetch_prices_cached(symbols: List[str]) -> Dict[str, Any]:
-    """Fetch price series for symbols, using in-process cache."""
+    """Fetch price series for symbols, using in-process cache. Hard 5s timeout."""
     import pandas as pd
+    import concurrent.futures
     missing = [s for s in symbols if s not in _PRICE_CACHE]
     if missing:
         try:
             import yfinance as yf
-            raw = yf.download(missing, period="2y", auto_adjust=True, progress=False)
+
+            def _download():
+                return yf.download(missing, period="2y", auto_adjust=True, progress=False)
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(_download)
+                try:
+                    raw = future.result(timeout=5)
+                except concurrent.futures.TimeoutError:
+                    log.warning("[AgentTools] Price fetch timed out after 5s")
+                    for sym in missing:
+                        _PRICE_CACHE[sym] = pd.Series(dtype=float)
+                    return {s: _PRICE_CACHE[s] for s in symbols}
+
             if isinstance(raw.columns, pd.MultiIndex):
                 close = raw["Close"]
             else:

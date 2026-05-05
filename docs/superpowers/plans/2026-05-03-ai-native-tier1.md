@@ -31,6 +31,8 @@
 
 **Problem:** Ascent's fundamental sleeve (`ascent/alpha/fundamental.py`) uses raw accounting ratios as cross-sectional z-scores. It has no reasoning — it doesn't know *why* a particular gross profitability trend matters for a specific company. Chicago Booth (2407.17866) showed that GPT-4 with a structured 6-step CoT prompt achieves 60.35% earnings direction accuracy vs. 52.71% for human analysts, generating 12% annual alpha. The key: anonymize inputs so the model can't recall company history from training data.
 
+**Model note:** The Chicago Booth study used GPT-4. This implementation uses Haiku, which has a meaningful reasoning gap on financial tasks. At 3% sleeve weight the cost of a near-zero IC signal is bounded — but track IC explicitly from day one. If `llm_fundamental` shows mean IC < 0.01 after 30 trading days of signals, reduce the weight or disable the sleeve. The signal logging step below makes this measurable.
+
 **Files:**
 - Create: `ascent/alpha/llm_fundamental.py`
 - Create: `tests/test_llm_fundamental_alpha.py`
@@ -369,6 +371,26 @@ def llm_fundamental_alpha(
     return (scores - scores.mean()) / std
 ```
 
+- [ ] **Step 3b: Add signal logging to `llm_fundamental_alpha()` for IC tracking**
+
+In `llm_fundamental.py`, add the following block immediately after `if cache_dirty: _save_cache(cache)`:
+
+```python
+    # Log signals to jsonl for IC tracking (enables sleeve quality audit after 30+ trading days)
+    if raw_scores:
+        import json as _json
+        _sig_path = Path("logs/llm_fundamental_signals.jsonl")
+        _sig_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(_sig_path, "a") as _f:
+            _f.write(_json.dumps({
+                "date": str(as_of.date()),
+                "n_symbols": len(raw_scores),
+                "scores": {k: round(v, 4) for k, v in raw_scores.items()},
+            }) + "\n")
+```
+
+This file enables a future IC audit: load `logs/llm_fundamental_signals.jsonl`, align with realized 5-day returns, compute Spearman IC. If mean IC < 0.01 after 30 entries, reduce sleeve weight.
+
 - [ ] **Step 4: Add `llm_fundamental` sleeve to `ascent/alpha/stack.py`**
 
 Find `DEFAULT_ALPHA_WEIGHTS` at line ~16. Change `"trend": 0.44` to `"trend": 0.41` and add the new sleeve:
@@ -447,7 +469,9 @@ git commit -m "feat(alpha): CoT LLM fundamental signal — Chicago Booth 6-step 
 
 ## Task B: Slippage-Adjusted IC Feedback Loop
 
-**Problem:** Ascent generates signals, fills orders via Alpaca, and logs slippage to `logs/slippage_log.jsonl`. But this data never feeds back into signal quality evaluation. The self-improve loop scores variants by OOS Sharpe but ignores whether high-turnover variants are paying more in market impact. This task closes that loop: compute gross IC vs slippage-adjusted net IC weekly, write the drag coefficient to `active_alpha_config.json`, and have the self-improve loop use it as a penalty.
+**Problem:** Ascent generates signals, fills orders via Alpaca, and logs slippage to `logs/slippage_log.jsonl`. But this data never feeds back into signal quality evaluation. The self-improve loop scores variants by OOS Sharpe but ignores whether high-turnover variants are paying more in market impact. This task closes the measurement loop: compute gross IC vs slippage-adjusted net IC weekly, and write the drag coefficient to `active_alpha_config.json`.
+
+**Important constraint:** `MIN_FILLS = 50`. With 10 fills the Spearman IC estimate has a standard error of ~0.3, making the drag coefficient useless noise that would destabilize self-improve scoring. Accept that this module is a **passive logger until ~July 2026** (when ~60 fills will have accumulated). The drag coefficient is NOT read by self-improve scoring until then — that wiring is a separate TODO left for when sufficient data exists.
 
 **Files:**
 - Create: `ascent/monitoring/slippage_ic_feedback.py`
@@ -467,7 +491,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 
-def _write_slippage_log(path: Path, n: int = 25):
+def _write_slippage_log(path: Path, n: int = 80):
     path.parent.mkdir(parents=True, exist_ok=True)
     rows = []
     base = pd.Timestamp("2026-04-01")
@@ -503,8 +527,8 @@ def test_compute_returns_dict(tmp_path):
     slip_path = tmp_path / "logs" / "slippage_log.jsonl"
     pnl_path  = tmp_path / "logs" / "us_equities_pnl.jsonl"
     syms = [f"SYM{i:02d}" for i in range(10)]
-    _write_slippage_log(slip_path, n=30)
-    _write_pnl_log(pnl_path, syms, n_days=40)
+    _write_slippage_log(slip_path, n=80)  # above MIN_FILLS=50
+    _write_pnl_log(pnl_path, syms, n_days=90)
 
     with patch("ascent.monitoring.slippage_ic_feedback.SLIPPAGE_LOG", slip_path):
         with patch("ascent.monitoring.slippage_ic_feedback.PNL_LOGS",
@@ -519,7 +543,7 @@ def test_compute_returns_dict(tmp_path):
 def test_insufficient_fills_returns_zero_drag(tmp_path):
     from ascent.monitoring.slippage_ic_feedback import compute_slippage_ic_drag
     slip_path = tmp_path / "logs" / "slippage_log.jsonl"
-    _write_slippage_log(slip_path, n=3)  # below MIN_FILLS=10
+    _write_slippage_log(slip_path, n=3)  # below MIN_FILLS=50
 
     with patch("ascent.monitoring.slippage_ic_feedback.SLIPPAGE_LOG", slip_path):
         with patch("ascent.monitoring.slippage_ic_feedback.PNL_LOGS", {}):
@@ -585,8 +609,9 @@ Slippage-adjusted IC feedback loop.
 Weekly: reads slippage_log.jsonl + agent PnL logs, computes gross IC
 vs net-of-slippage IC, writes drag coefficient to active_alpha_config.json.
 
-The self-improve loop reads slippage_feedback.slippage_ic_drag when scoring
-variants — high-turnover variants are penalized proportionally.
+This module is a passive logger until ~60 fills accumulate (MIN_FILLS=50).
+Self-improve integration is a future TODO — do not wire the drag coefficient
+into self-improve scoring until sufficient data exists.
 """
 from __future__ import annotations
 
@@ -609,7 +634,10 @@ PNL_LOGS     = {
     "alternatives":  Path("logs/alternatives_pnl.jsonl"),
 }
 ACTIVE_CONFIG_PATH = Path("data_cache/active_alpha_config.json")
-MIN_FILLS = 10
+MIN_FILLS = 50
+# NOTE: Do not wire slippage_ic_drag into self-improve scoring until >= 60 fills
+# have accumulated (expected ~July 2026). With fewer fills the Spearman IC estimate
+# has SE ~0.3, making the drag coefficient noise rather than signal.
 
 
 def _load_jsonl(path: Path) -> list:
@@ -769,6 +797,8 @@ git commit -m "feat(monitoring): slippage-adjusted IC feedback loop — weekly d
 
 **Problem:** Debate agents argue with the same confidence regardless of how they've actually performed in the current regime. The bull agent might be wrong 70% of the time in stressed regimes but still argues with the same certainty as in calm bull periods. The `outcome_tracker.py` already tracks per-agent, per-regime accuracy in `outputs/debate_log/agent_credibility.json`. This task injects that track record into each agent's system prompt so they self-calibrate.
 
+**Dormant infrastructure note:** `min_samples = 10` is intentional. With 3 debates the accuracy estimate is near-meaningless. As of May 2026 there are 1–2 scored debates total; this feature will produce empty track records for almost every agent/regime combination until ~August 2026. The code is correct and will activate as data accumulates — do not lower the threshold.
+
 **Files:**
 - Modify: `debate/outcome_tracker.py` — add `get_agent_regime_accuracy()` helper
 - Modify: `debate/agents.py` — add `_get_agent_track_record()`, inject into system prompts
@@ -784,7 +814,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 
-def _write_credibility(path: Path, bull_stressed=0.35, bear_stressed=0.72, n=8):
+def _write_credibility(path: Path, bull_stressed=0.35, bear_stressed=0.72, n=12):
     path.parent.mkdir(parents=True, exist_ok=True)
     cred = {
         "by_regime": {
@@ -813,9 +843,9 @@ def test_get_agent_regime_accuracy_returns_float(tmp_path):
 def test_get_agent_regime_accuracy_none_for_missing(tmp_path):
     from debate.outcome_tracker import get_agent_regime_accuracy
     cred_path = tmp_path / "agent_credibility.json"
-    _write_credibility(cred_path, n=2)  # below min sample count of 3
+    _write_credibility(cred_path, n=5)  # below min sample count of 10
     with patch("debate.outcome_tracker.CREDIBILITY_PATH", cred_path):
-        acc = get_agent_regime_accuracy("bull", "crisis")  # no crisis data
+        acc = get_agent_regime_accuracy("bull", "stressed")  # n=5 < min_samples=10
     assert acc is None
 
 
@@ -887,7 +917,7 @@ Add this function after the `load_credibility_context()` function (around line 2
 
 ```python
 def get_agent_regime_accuracy(agent_name: str, regime: str,
-                               min_samples: int = 3) -> Optional[float]:
+                               min_samples: int = 10) -> Optional[float]:
     """
     Return per-agent accuracy in a specific regime, or None if insufficient data.
 
@@ -895,6 +925,8 @@ def get_agent_regime_accuracy(agent_name: str, regime: str,
         agent_name:  "bull", "bear", "devil", or "regime_specialist"
         regime:      Regime label string, e.g. "stressed", "calm_bull"
         min_samples: Minimum number of scored debates required to return a value.
+                     Set to 10 — with fewer debates the accuracy estimate is noise.
+                     Expect this to return None for all agents until ~August 2026.
 
     Returns:
         Float accuracy in [0, 1], or None if no data / too few samples.
@@ -904,7 +936,7 @@ def get_agent_regime_accuracy(agent_name: str, regime: str,
     accuracy   = cred.get("by_regime", {}).get(regime_key, {}).get(agent_name)
     n_samples  = cred.get("sample_counts", {}).get(regime_key, {}).get(agent_name, 0)
     if accuracy is None or n_samples < min_samples:
-        return None
+        return None  # returns None for nearly all queries until ~August 2026
     return float(accuracy)
 ```
 
@@ -940,8 +972,8 @@ def _get_agent_track_record(agent_name: str, regime: str) -> str:
         regime_key = str(regime).lower()
         accuracy   = cred.get("by_regime", {}).get(regime_key, {}).get(agent_name)
         n          = cred.get("sample_counts", {}).get(regime_key, {}).get(agent_name, 0)
-        if accuracy is None or n < 3:
-            return ""
+        if accuracy is None or n < 10:
+            return ""  # dormant until ~August 2026
         warning = (
             " Calibrate confidence DOWN — your historical accuracy here is below 50%."
             if accuracy < 0.50 else
