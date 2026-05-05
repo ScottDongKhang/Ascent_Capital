@@ -250,8 +250,31 @@ Coverage: data integrity, leakage detection, walk-forward splits, alpha sleeves,
 
 ## Planned (Not Yet Built)
 
-- **AI-native Tier 1**: LLM-guided fundamental alpha re-ranking; slippage IC feedback loop; regime-aware debate personas
-- **AI-native Tier 2**: FinMem-style reflection agent; LLM hypothesis generation for self-improve; tool-capable debate agents
-- **AI-native Tier 3**: Autonomous factor discovery — Opus proposes Python factor code, AST-validated, CPCV-evaluated, human-reviewed before promotion
-- **Analyst revision signal**: `yfinance` recommendations as short-term catalyst (backlog)
-- **Earnings surprise beta neutralization**: reduce momentum overlap in PEAD sleeve (backlog)
+Plans at `docs/superpowers/plans/`.
+
+### AI-Native Tier 1 — Signal quality and self-calibration
+
+**Task A — CoT LLM fundamental alpha** (`ascent/alpha/llm_fundamental.py`): sends anonymized quarterly financial ratios to Claude Haiku using a 6-step structured CoT prompt (Chicago Booth 2407.17866). Returns a cross-sectional z-scored Series cached by (symbol, quarter_end). Wired into the alpha stack at 3%; trend reduced from 55% to 52%. Signals logged to `logs/llm_fundamental_signals.jsonl` for IC tracking — if mean IC < 0.01 after 30 trading days, reduce or disable. Note: the original study used GPT-4; Haiku has a meaningful reasoning gap on financial tasks.
+
+**Task B — Slippage-adjusted IC feedback** (`ascent/monitoring/slippage_ic_feedback.py`): reads `slippage_log.jsonl` and agent PnL logs weekly, computes Spearman IC on gross vs net-of-slippage returns, writes drag coefficient to `active_alpha_config.json`. `MIN_FILLS = 50` — this module is a passive logger until ~60 fills accumulate (~July 2026). Self-improve integration is a deferred TODO pending sufficient data.
+
+**Task C — Regime-conditional debate personas** (`debate/outcome_tracker.py`, `debate/agents.py`): injects each agent's historical accuracy in the current regime into its system prompt. `min_samples = 10` — returns empty for all agent/regime pairs until ~August 2026 when enough scored debates accumulate. Dormant infrastructure; activates over time without code changes.
+
+### AI-Native Tier 2 — Institutional memory and tool-capable reasoning
+
+**Task D — FinMem-style reflection agent** (`memory/reflection_agent.py`): after each verdict is scored (14 days post-decision), Haiku reads the outcome and writes a structured lesson — what the losing side missed, how to calibrate confidence in this regime. Lessons stored in `memory/reflections.jsonl`, injected into future debate context via `_build_context()`. Limitation: reflection is inferred from NAV change, not position-level attribution — lessons can be directionally wrong when an unrelated position drove the loss.
+
+**Task E — LLM-guided hypothesis generation** (`ascent/research/factor_proposer.py`): Haiku proposes regime-aware weight narratives; cosine-similarity deduplication (threshold 0.85) rejects near-identical proposals. Wired into `generate_variants()` in `self_improve.py` with random fallback. Known limitation: Haiku converges on textbook factor intuitions (momentum in bull, quality in stress) from training data rather than genuinely novel exploration. If guided variants underperform random perturbation by > 0.03 Sharpe over 4 weeks, disable the LLM proposer and widen random search instead.
+
+**Task F — Tool-capable debate agents** (`debate/agent_tools.py`): equips bear and devil's advocate with four domain tools — `get_sector_concentration`, `get_var_estimate`, `get_position_momentum`, `get_regime_conditional_stats`. Requires a `tool_completion()` loop in `ascent/llm/client.py`. Tools use a 5-second hard timeout on yfinance fetches. Bear and devil's advocate call tools before making quantitative claims; fallback to standard `generate_structured` on failure.
+
+### AI-Native Tier 3 — Autonomous factor discovery
+
+**Task G — Factor discovery pipeline** (`ascent/research/factor_discovery/`): Claude Opus proposes novel alpha factors as Python code from economic first principles → AST validator enforces structural and security constraints (no imports, no exec/eval, no file I/O, whitelist-only builtins) → rolling Spearman IC evaluator scores on real price data in a restricted execution sandbox → novelty check rejects factors with Spearman correlation > 0.70 against existing benchmark signals (momentum, reversal, vol) → accepted proposals written to `outputs/factor_proposals/` for human review. Nothing auto-deploys. Monthly cadence (first Sunday of each month). Human reviews, edits, and manually merges approved factors into `feature_defs.py`.
+
+Acceptance thresholds: IC mean > 0.015 AND IC IR > 0.40 AND n_observations ≥ 20.
+
+### Backlog
+
+- **Analyst revision signal**: `yfinance` recommendations as short-term catalyst
+- **Earnings surprise beta neutralization**: reduce momentum overlap in PEAD sleeve
