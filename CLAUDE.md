@@ -222,11 +222,13 @@ All second-audit bugs now fixed. Third-pass audit found no new crashes (all rema
 
 - **Plans B2–D4**: ✅ All implemented (B2 enforce reduce_size, B3 regime staleness, C1–C3 outcome scoring + live Sharpe, D1–D4 quant context + extended thinking + prompt caching)
 - **Self-evolving alpha loop**: ✅ Full loop closed — stack.py reads active config, shadow promoter auto-promotes, per-regime variant generation, multi-fold OOS evaluation
-- **Phase 4 hedge overlay**: blocked until ~May 13, 2026 (30 days live)
+- **Phase 4 hedge overlay**: ✅ Built (`ascent/portfolio/hedge_overlay.py`); evaluation showed positive drawdown correlation — revisit after more live data (~May 13+)
+- **AI-native Tier 1**: planned, not yet built — `docs/superpowers/plans/2026-05-03-ai-native-tier1.md` (CoT LLM fundamental, slippage IC feedback, regime personas)
+- **AI-native Tier 2**: planned, not yet built — `docs/superpowers/plans/2026-05-03-ai-native-tier2.md` (FinMem reflection, LLM hypothesis generation, tool-capable agents)
+- **AI-native Tier 3**: planned, not yet built — `docs/superpowers/plans/2026-05-03-ai-native-tier3.md` (autonomous factor discovery pipeline)
 - **R2R semantic memory**: built but `R2R_API_KEY` not configured; BM25 fallback active
 - **Live dashboard UI**: data files generated but no live render
-- **Debate trigger condition**: debate should only fire on high-uncertainty days (catalyst present, regime entropy >0.70, position >12%, VaR 99th < -3.5%) — not on every rebalance
-- **Alpha signal improvements (backlog)**: (1) skip-last-month momentum: use mom_252d minus mom_21d instead of raw mom_252d; (2) analyst revision signal: yfinance `t.recommendations` as short-term catalyst; (3) neutralize earnings surprise beta to reduce momentum overlap; (4) expand universe to 50–100 Russell 1000 minus S&P 500 mid-caps
+- **Alpha signal backlog**: (1) analyst revision signal (`yfinance t.recommendations`); (2) neutralize earnings surprise beta; (3) debate trigger condition already wired — high-uncertainty days only
 
 ---
 
@@ -375,3 +377,11 @@ All second-audit bugs now fixed. Third-pass audit found no new crashes (all rema
 - Tests: 265 passing
 - Files: `ascent/portfolio/hedge_overlay.py` (new), `tests/test_hedge_overlay.py` (new), `run_all_agents.py`, `scripts/evaluate_hedge.py` (new)
 - Open: AI-native improvements, R2R API key, neutralize earnings surprise beta
+
+### 2026-05-04 (AI-native planning — Tiers 1, 2, 3)
+- Plans only — no code written this session
+- **Tier 1** plan saved to `docs/superpowers/plans/2026-05-03-ai-native-tier1.md` (written prior session): Task A — CoT LLM fundamental alpha sleeve (`ascent/alpha/llm_fundamental.py`, Chicago Booth 6-step CoT, Haiku, cached by quarter, 3% weight, trend 0.44→0.41); Task B — slippage-adjusted IC feedback loop (`ascent/monitoring/slippage_ic_feedback.py`, Spearman IC gross vs net, drag coefficient to `active_alpha_config.json`, Sunday run); Task C — regime-conditional debate personas (`debate/outcome_tracker.get_agent_regime_accuracy()` + `debate/agents._get_agent_track_record()`, per-agent historical accuracy injected into system prompts)
+- **Tier 2** plan saved to `docs/superpowers/plans/2026-05-03-ai-native-tier2.md`: Task D — FinMem-style reflection agent (`memory/reflection_agent.py`, scored verdicts → structured lessons → `memory/reflections.jsonl` → injected into `_build_context()`); Task E — LLM-guided hypothesis generation (`ascent/research/factor_proposer.py`, Haiku proposes regime-aware weight narratives, cosine-similarity deduplication, `generate_variants()` updated to call proposer first, random fallback); Task F — tool-capable debate agents (`debate/agent_tools.py` + `ascent/llm/client.tool_completion()`, bear and devil's advocate get 4 tools: `get_sector_concentration`, `get_var_estimate`, `get_position_momentum`, `get_regime_conditional_stats`)
+- **Tier 3** plan saved to `docs/superpowers/plans/2026-05-03-ai-native-tier3.md`: Task G — autonomous factor discovery pipeline (`ascent/research/factor_discovery/`): Opus proposes factor code → AST validator (blocks imports/exec/file I/O/dangerous builtins, whitelist-only namespace) → rolling IC evaluator (Spearman IC, restricted exec sandbox) → accepted proposals written to `outputs/factor_proposals/` → human reviews and manually merges; monthly trigger first Sunday of month
+- Files touched: `docs/superpowers/plans/2026-05-03-ai-native-tier2.md` (new), `docs/superpowers/plans/2026-05-03-ai-native-tier3.md` (new), `CLAUDE.md`
+- Open: execute Tier 1 next (start with Task A LLM fundamental → Task B slippage IC → Task C personas), then Tier 2, then Tier 3; R2R API key still not configured; neutralize earnings surprise beta still in backlog
