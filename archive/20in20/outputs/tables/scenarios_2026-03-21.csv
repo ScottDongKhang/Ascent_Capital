@@ -1,6 +1,0 @@
-scenario,description,severity,horizon_days,pnl_est,most_exposed
-RATES_SPIKE,"Sudden spike in long-end rates — duration assets sell off, growth/tech multiple compression, financials mixed.",moderate,5,-0.0303,"SPY, QQQ, IWM, XLK, XLF, XLE"
-TECH_UNWIND,"Rotation out of mega-cap tech — Nasdaq-led selloff, momentum unwind, defensive sectors outperform.",moderate,5,-0.0266,"SPY, QQQ, IWM, XLK, XLF, XLE"
-EM_RISK_OFF,"Global risk-off driven by EM stress — capital flight from emerging markets, USD strengthens, commodities drop.",moderate,5,-0.0179,"EEM, VWO, AAXJ, EWS, EWT, V"
-USD_UP,"Sharp USD appreciation — hurts EM assets and multinationals, benefits USD-denominated safe havens.",mild,5,-0.0105,"EEM, VWO, AAXJ, EWS, EWT"
-COMMODITY_SHOCK,"Oil/commodity spike — inflation re-acceleration fear, consumer margins squeezed, energy sector outperforms.",mild,5,-0.0008,"TLT, IEF, UUP, GLD, USO, AMZN"

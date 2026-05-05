@@ -6,3 +6,4 @@
 {"date": "2026-04-22", "nav": 107983.02, "return": 0.008314, "agent_id": "us_equities", "source": "forward_pnl_tracker", "timestamp": "2026-04-22T21:23:05.800878"}
 {"date": "2026-04-22", "nav": 108880.8, "return": 0.008314, "agent_id": "us_equities", "source": "forward_pnl_tracker", "timestamp": "2026-04-22T21:34:57.778359"}
 {"date": "2026-04-22", "nav": 109786.04, "return": 0.008314, "agent_id": "us_equities", "source": "forward_pnl_tracker", "timestamp": "2026-04-22T22:48:03.595312"}
+{"date": "2026-04-23", "nav": 110072.07, "return": 0.002605, "agent_id": "us_equities", "source": "forward_pnl_tracker", "timestamp": "2026-04-23T20:20:02.193370"}

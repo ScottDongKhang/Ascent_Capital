@@ -1,30 +1,30 @@
 {
-  "generated_at": "2026-04-22T22:48:03.598412",
-  "skill_score_as_of": "2026-04-22",
+  "generated_at": "2026-05-02T00:31:24.071154",
+  "skill_score_as_of": "2026-05-02",
   "agents": {
     "us_equities": {
       "skill_score": null,
-      "n_days": 2,
+      "n_days": 3,
       "status": "insufficient_data",
-      "latest_date": "2026-04-22T00:00:00"
+      "latest_date": "2026-04-23T00:00:00"
     },
     "macro": {
       "skill_score": null,
-      "n_days": 10,
+      "n_days": 11,
       "status": "warming_up",
-      "latest_date": "2026-04-22T00:00:00"
+      "latest_date": "2026-04-23T00:00:00"
     },
     "international": {
       "skill_score": null,
-      "n_days": 11,
+      "n_days": 12,
       "status": "warming_up",
-      "latest_date": "2026-04-22T00:00:00"
+      "latest_date": "2026-04-23T00:00:00"
     },
     "alternatives": {
       "skill_score": null,
-      "n_days": 11,
+      "n_days": 12,
       "status": "warming_up",
-      "latest_date": "2026-04-22T00:00:00"
+      "latest_date": "2026-04-23T00:00:00"
     }
   }
 }
