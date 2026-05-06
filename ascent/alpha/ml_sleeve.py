@@ -53,29 +53,30 @@ def _ml_cache_path(agent_id: str = "us_equities") -> Path:
 def _load_cached_model(agent_id: str = "us_equities"):
     """
     Load cached XGBoost model if it exists.
-    Returns (model, train_date) or (None, None).
+    Returns (model, train_date, feature_names) or (None, None, None).
     """
     cache_path = _ml_cache_path(agent_id)
     if not cache_path.exists():
-        return None, None
+        return None, None, None
     try:
         with open(cache_path, "rb") as f:
             cached = pickle.load(f)
         model = cached["model"]
         train_date = cached["train_date"]
-        return model, train_date
+        feature_names = cached.get("feature_names", None)
+        return model, train_date, feature_names
     except Exception as e:
         print(f"[ML] Cache load failed ({e}), will retrain")
-        return None, None
+        return None, None, None
 
 
-def _save_cached_model(model, train_date, agent_id: str = "us_equities"):
-    """Persist trained model with its training date."""
+def _save_cached_model(model, train_date, feature_names, agent_id: str = "us_equities"):
+    """Persist trained model with its training date and feature list."""
     cache_path = _ml_cache_path(agent_id)
     os.makedirs(cache_path.parent, exist_ok=True)
     with open(cache_path, "wb") as f:
-        pickle.dump({"model": model, "train_date": train_date}, f)
-    print(f"[ML] Saved model cache to {cache_path} (trained on {train_date})")
+        pickle.dump({"model": model, "train_date": train_date, "feature_names": feature_names}, f)
+    print(f"[ML] Saved model cache to {cache_path} (trained on {train_date}, {len(feature_names)} features)")
 
 
 def _is_cache_fresh(cached_train_date, current_date) -> bool:
@@ -179,16 +180,18 @@ def build_ml_alpha(
     X_pred = pred_data[available].values
 
     # ── Cache check: skip training if model is fresh enough ──────────────────
-    cached_model, cached_train_date = _load_cached_model(agent_id)
+    cached_model, cached_train_date, cached_features = _load_cached_model(agent_id)
 
     if cached_model is not None and cached_train_date is not None:
-        if _is_cache_fresh(cached_train_date, predict_end):
+        feature_mismatch = cached_features is not None and list(cached_features) != list(available)
+        if _is_cache_fresh(cached_train_date, predict_end) and not feature_mismatch:
             days_since = len(pd.bdate_range(pd.Timestamp(cached_train_date), pd.Timestamp(predict_end))) - 1
             print(f"[ML] Using cached model (trained {days_since} bdays ago on {cached_train_date}, agent={agent_id})")
             model = cached_model
         else:
             days_since = len(pd.bdate_range(pd.Timestamp(cached_train_date), pd.Timestamp(predict_end))) - 1
-            print(f"[ML] Cache stale ({days_since} bdays old), retraining (agent={agent_id})")
+            reason = "feature set changed" if feature_mismatch else f"cache stale ({days_since} bdays old)"
+            print(f"[ML] Cache invalid ({reason}), retraining (agent={agent_id})")
             model = None
     else:
         print(f"[ML] No cache found, training fresh model (agent={agent_id})")
@@ -214,7 +217,7 @@ def build_ml_alpha(
             random_state=42,
         )
         model.fit(X_train, y_train)
-        _save_cached_model(model, train_end, agent_id)
+        _save_cached_model(model, train_end, available, agent_id)
 
         log.info(
             "ML sleeve: trained on %d rows, predicting %d dates, %d symbols",
@@ -238,7 +241,13 @@ def build_ml_alpha(
 
 # ── CPCV helpers ──────────────────────────────────────────────────────────────
 
-_SPARSE_FILL_ZERO = {"earnings_surprise"}  # event-driven features: NaN = no recent event → 0
+_SPARSE_FILL_ZERO = {
+    "earnings_surprise",   # NaN = no recent EPS release → 0
+    "analyst_revision",    # NaN = no upgrade/downgrade in window → 0
+    "iv_skew",             # NaN = no options data for symbol → 0
+    "insider_net_score",   # NaN = no insider trades in window → 0
+    "short_pct_float",     # NaN = no short interest data → 0
+}
 
 
 def _stack_features(features: dict, available: list) -> pd.DataFrame:
@@ -381,13 +390,20 @@ def build_ml_alpha_cpcv(
     # ── Fast path: use cached model if fresh (skip full CPCV) ─────────────────
     # CPCV (15 folds) only runs every ML_RETRAIN_INTERVAL_DAYS business days.
     # On intervening days, score using the cached production model directly.
-    _cached_model, _cached_train_date = _load_cached_model(agent_id)
-    if _cached_model is not None and _cached_train_date is not None:
+    _cached_model, _cached_train_date, _cached_features = _load_cached_model(agent_id)
+    _feature_mismatch = _cached_features is not None and list(_cached_features) != list(available)
+    if _cached_model is not None and _cached_train_date is not None and not _feature_mismatch:
         if _is_cache_fresh(_cached_train_date, dates[-1]):
             days_old = len(pd.bdate_range(pd.Timestamp(_cached_train_date), dates[-1])) - 1
             print(f"[ML-CPCV] Cache fresh ({days_old}d old) — scoring with cached model, skipping CPCV")
             X_all = _stack_features(features, available)
             if X_all.empty:
+                log.warning(
+                    "[ML-CPCV] fast-path X_all empty — available=%s; "
+                    "feature shapes: %s",
+                    available,
+                    {k: features[k].shape if hasattr(features[k], "shape") else type(features[k]) for k in available if k in features},
+                )
                 return pd.DataFrame()
             preds = _cached_model.predict(X_all[available].values)
             pred_series = pd.Series(preds, index=X_all.index)
@@ -522,6 +538,7 @@ def build_ml_alpha_cpcv(
             pickle.dump({
                 "model": final_model,
                 "train_date": str(dates[-1])[:10],
+                "feature_names": available,
                 "cpcv_meta": {
                     "sharpe_p5": sharpe_p5,
                     "sharpe_p50": sharpe_p50,

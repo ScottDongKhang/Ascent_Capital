@@ -12,7 +12,7 @@ execution/merged_weights.json.
 """
 from __future__ import annotations
 
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Union
 
 from ascent.regime.types import RegimeLabel, RegimeSignal
 
@@ -47,7 +47,7 @@ def compute_hedge_weight(label: RegimeLabel, confidence: float) -> float:
 
 def apply_hedge_overlay(
     weights: Dict[str, float],
-    regime_signal: Optional[RegimeSignal],
+    regime_signal: Optional[Union[RegimeSignal, str]],
 ) -> Tuple[Dict[str, float], Dict]:
     """
     Apply tail hedge overlay to a portfolio weights dict.
@@ -59,13 +59,26 @@ def apply_hedge_overlay(
 
     Args:
         weights:       {symbol: weight}, must sum to ~1.0
-        regime_signal: Current RegimeSignal from regime engine, or None
+        regime_signal: Current RegimeSignal from regime engine, a plain regime
+                       label string (from AgentOutput.regime_signal), or None.
+                       When a string is passed, confidence defaults to 0.7.
 
     Returns:
         (hedged_weights, metadata) where hedged_weights sums to 1.0 and
         metadata contains hedge_weight, regime_label, confidence, vixy_before,
         vixy_after for logging.
     """
+    # Resolve label and confidence from whatever caller passes in
+    if regime_signal is None:
+        _label: Optional[RegimeLabel] = None
+        _confidence: float = 0.0
+    elif isinstance(regime_signal, str):
+        _label = RegimeLabel.from_str(regime_signal)
+        _confidence = 0.7  # string carries no probability info; use moderate default
+    else:
+        _label = regime_signal.label
+        _confidence = regime_signal.confidence
+
     vixy_before = weights.get("VIXY", 0.0)
 
     # Validate input weights sum to ~1.0
@@ -81,17 +94,17 @@ def apply_hedge_overlay(
         vixy_before = weights.get("VIXY", 0.0)
 
     no_change_meta = {
-        "hedge_weight":  0.0,
-        "regime_label":  regime_signal.label.value if regime_signal else "unknown",
-        "confidence":    regime_signal.confidence if regime_signal else 0.0,
-        "vixy_before":   vixy_before,
-        "vixy_after":    vixy_before,
+        "hedge_weight": 0.0,
+        "regime_label": _label.value if _label else "unknown",
+        "confidence":   _confidence,
+        "vixy_before":  vixy_before,
+        "vixy_after":   vixy_before,
     }
 
-    if regime_signal is None:
+    if _label is None:
         return dict(weights), no_change_meta
 
-    hedge_weight = compute_hedge_weight(regime_signal.label, regime_signal.confidence)
+    hedge_weight = compute_hedge_weight(_label, _confidence)
 
     if hedge_weight < 0.005:
         return dict(weights), no_change_meta
@@ -111,8 +124,8 @@ def apply_hedge_overlay(
 
     meta = {
         "hedge_weight": hedge_weight,
-        "regime_label": regime_signal.label.value,
-        "confidence":   regime_signal.confidence,
+        "regime_label": _label.value,
+        "confidence":   _confidence,
         "vixy_before":  vixy_before,
         "vixy_after":   hedge_weight,
     }

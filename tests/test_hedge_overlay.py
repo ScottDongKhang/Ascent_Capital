@@ -127,6 +127,27 @@ def test_non_unit_sum_weights_normalised_with_warning():
     assert len(w) == 1 and "Normalising" in str(w[0].message)
 
 
+def test_string_regime_signal_accepted():
+    """apply_hedge_overlay must handle plain string regime labels (from AgentOutput.regime_signal)."""
+    from ascent.portfolio.hedge_overlay import apply_hedge_overlay
+    weights = _make_weights()
+    # 'crisis' string → should add VIXY (confidence defaults to 0.7)
+    hedged, meta = apply_hedge_overlay(weights, "crisis")
+    assert hedged["VIXY"] > 0.0, "String 'crisis' must trigger hedge"
+    assert abs(sum(hedged.values()) - 1.0) < 1e-6
+    assert meta["regime_label"] == "crisis"
+    assert meta["confidence"] == 0.7
+
+    # 'calm_bull' string → no hedge
+    hedged2, meta2 = apply_hedge_overlay(weights, "calm_bull")
+    assert meta2["hedge_weight"] == 0.0
+    assert abs(sum(hedged2.values()) - 1.0) < 1e-6
+
+    # Unknown string → falls back to uncertain → no hedge
+    hedged3, meta3 = apply_hedge_overlay(weights, "garbage_regime")
+    assert meta3["hedge_weight"] == 0.0
+
+
 def test_run_all_agents_imports_hedge_overlay():
     """run_all_agents.py must import and call apply_hedge_overlay after orchestration."""
     with open("run_all_agents.py") as f:

@@ -16,6 +16,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime
 from pathlib import Path
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from ascent.data.store.parquet import has_data, load_parquet
 from ascent.portfolio.optimizer import SectorDataError
 

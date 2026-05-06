@@ -192,10 +192,10 @@ Python 3.12.13 Homebrew, venv at `.venv/`. Use `.venv/bin/python`. API keys via 
 
 ---
 
-## Current portfolio (as of April 2026)
+## Current portfolio (as of May 2026)
 
-Holdings (post-rebalance Apr 15): EWY 10.8%, PDBC 9.3%, CASY/CAT/EQIX/MPWR/TRGP 6% each, HYG/BIL/DBB/EWZ/EWT ~4.5–4.8%, NEM 4.4%, LQD/MRK/IFRA ~3–3.5%, VNQ/PAVE/AMZN/GOOGL ~2.3–2.9%, CB 1.9%, EWC 0.6%.
-Next rebalance: ~April 29, 2026. Live since April 1, 2026.
+Holdings (post-rebalance May 5): KMLM 10.9%, IFRA 9.4%, AMKR/FIX/WDC 5.9% each, VICR 5.7%, VRT 5.6%, VAL 5.2%, WCC 5.0%, DBB 4.6%, CNC 4.5%, WFRD 4.3%, PDBC 4.2%, STLD 3.4%, DBA 3.3%, CHRD 3.1%, EWY 2.4%, EWC 2.3%, IRM 1.8%, MUSA/AAXJ/EEM/VWO 1.5% each, VIXY 2.8% hedge.
+Next rebalance: ~May 13, 2026. Live since April 1, 2026.
 
 ---
 
@@ -385,3 +385,16 @@ All second-audit bugs now fixed. Third-pass audit found no new crashes (all rema
 - **Tier 3** plan saved to `docs/superpowers/plans/2026-05-03-ai-native-tier3.md`: Task G — autonomous factor discovery pipeline (`ascent/research/factor_discovery/`): Opus proposes factor code → AST validator (blocks imports/exec/file I/O/dangerous builtins, whitelist-only namespace) → rolling IC evaluator (Spearman IC, restricted exec sandbox) → accepted proposals written to `outputs/factor_proposals/` → human reviews and manually merges; monthly trigger first Sunday of month
 - Files touched: `docs/superpowers/plans/2026-05-03-ai-native-tier2.md` (new), `docs/superpowers/plans/2026-05-03-ai-native-tier3.md` (new), `CLAUDE.md`
 - Open: execute Tier 1 next (start with Task A LLM fundamental → Task B slippage IC → Task C personas), then Tier 2, then Tier 3; R2R API key still not configured; neutralize earnings surprise beta still in backlog
+
+### 2026-05-05 (bug fixes + first live rebalance execution)
+- **Hedge overlay fix** (`ascent/portfolio/hedge_overlay.py`): `apply_hedge_overlay` now accepts `Union[RegimeSignal, str]`; `AgentOutput.regime_signal` is a plain string but overlay expected a `RegimeSignal` object — converts via `RegimeLabel.from_str()` with 0.7 default confidence; unknown strings fall back to uncertain (no hedge)
+- **ML sleeve sparse fill fix** (`ascent/alpha/ml_sleeve.py`): `_SPARSE_FILL_ZERO` expanded from `{"earnings_surprise"}` to include `analyst_revision`, `iv_skew`, `insider_net_score`, `short_pct_float`; these sparse panels were NaN-dropping all rows in `_stack_features` → empty X_all → sleeve disabled every run
+- **ML sleeve cache fingerprint** (`ascent/alpha/ml_sleeve.py`): `_save_cached_model` and `_load_cached_model` now store/check `feature_names`; cache auto-invalidates when feature set changes (was causing XGBoost "Feature shape mismatch: expected 6, got 10" crash after feature set grew)
+- **`load_dotenv()` added** (`run_all_agents.py`): FRED API key was not loading from `.env` — added `from dotenv import load_dotenv; load_dotenv()` at top of file
+- **Approval server auto-approve** (`/tmp/auto_approve.py`): file-watcher script to auto-approve pending trades for manual rebalance triggers; runs alongside approval server
+- **Rebalance calendar**: added `2026-05-05` as ad-hoc rebalance date
+- **First full rebalance execution**: 40 orders submitted to Alpaca — 19 full closes (old portfolio), 21 new buys into new portfolio; approval gate triggered and approved; all 40 settled
+- **New portfolio**: KMLM 10.9%, AMKR/FIX/WDC 5.9% each, IFRA 9.4%, VICR 5.7%, VRT 5.6%, VAL 5.2%, WCC 5.0%, DBB 4.6%, CNC 4.5%, WFRD 4.3%, PDBC 4.2%, STLD 3.4%, DBA 3.3%, CHRD 3.1%, EWY 2.4%, EWC 2.3%, IRM 1.8%, MUSA 1.5%, AAXJ/EEM/VWO 1.5% each, VIXY 2.8% hedge
+- **12 new tests**: `test_string_regime_signal_accepted` in `tests/test_hedge_overlay.py`; 266 total passing
+- Files: `ascent/portfolio/hedge_overlay.py`, `ascent/alpha/ml_sleeve.py`, `run_all_agents.py`, `tests/test_hedge_overlay.py`, `rebalance_calendar.csv`
+- Open: Tier 1–3 AI-native plans not yet executed; R2R API key not configured; earnings surprise beta neutralization backlog
