@@ -88,11 +88,11 @@ Apply this to `README.md`, any dashboard HTML that shows these numbers, and the 
 
 ## Task 0B: Disagreement Score via Cosine Similarity on Reasoning Traces
 
-**Problem:** The debate system has no way to know whether its agents are actually disagreeing or just paraphrasing each other. A bull and bear that use different words to arrive at the same conclusion are not providing independent information — the judge is being given the illusion of debate. Tajik et al. (2026, "Disagreement as Data: Reasoning Trace Analytics in Multi-Agent Systems," LAK 2026, arXiv:2601.12618) showed that cosine similarity between agent reasoning traces is a reliable proxy for genuine epistemic divergence. The key insight: treat disagreement score as a signal, not noise. When agents converge semantically, that is itself informative — it means the portfolio state is unambiguous and the judge should bias toward caution rather than assuming consensus validates a proceed verdict.
+**Problem:** The debate system has no way to know whether its agents are actually disagreeing or just paraphrasing each other. A bull and bear that use different words to arrive at the same conclusion are not providing independent information — the judge is being given the illusion of debate. Cosine similarity on TF-IDF vectors is a lightweight vocabulary-overlap proxy for this: agents that are making genuinely different arguments will use different domain terms; agents that have converged will cluster around the same vocabulary. The score is a monitoring signal, not a precision instrument — it is most useful as a longitudinal metric (tracking whether disagreement rises or falls over time) rather than a per-debate decision input.
 
-This task also serves as the primary validation metric for Task 0.2 (private info subsets). If implementing `_build_agent_context()` does not lower the mean disagreement score over time, the subsets are not producing real divergence and the design needs to be revisited.
+**Primary use case — validation metric for Task 0.2:** If implementing `_build_agent_context()` does not lower the mean disagreement score over time, the private context subsets are not producing real divergence and the design needs to be revisited. Without this metric, Task 0.2 is unverifiable.
 
-**Source:** Tajik, S. et al. (2026). "Disagreement as Data: Reasoning Trace Analytics in Multi-Agent Systems." LAK 2026. arXiv:2601.12618.
+**Limitation:** TF-IDF measures vocabulary overlap, not epistemic divergence. Two agents can genuinely disagree using heavily overlapping financial vocabulary ("momentum", "risk", "regime", "concentration" appear in all debate responses). The score is directionally useful in aggregate but too noisy to drive individual verdict decisions. The judge injection is therefore **informational only** — it surfaces the score for awareness, not as a verdict override.
 
 **Files:**
 
@@ -173,11 +173,14 @@ def test_judge_prompt_includes_score():
     from debate.disagreement_scorer import format_disagreement_for_judge
     prompt_fragment = format_disagreement_for_judge(disagreement_score=0.72)
     assert "0.28" in prompt_fragment or "0.72" in prompt_fragment, \
-        "Judge prompt must include the similarity or disagreement value"
+        "Judge note must include the similarity or disagreement value"
     assert "consensus" in prompt_fragment.lower() or "similar" in prompt_fragment.lower(), \
-        "Judge prompt must mention consensus or similarity"
-    assert "reduce_size" in prompt_fragment or "halt" in prompt_fragment or "caution" in prompt_fragment.lower(), \
-        "Judge prompt must recommend caution on high-consensus debates"
+        "Judge note must mention consensus or similarity"
+    # Must NOT instruct the judge to change verdict direction — informational only
+    assert "reduce_size" not in prompt_fragment, \
+        "Judge note must not prescribe a verdict — it is observational context only"
+    assert "halt_and_review" not in prompt_fragment, \
+        "Judge note must not prescribe a verdict — it is observational context only"
 
 
 def test_empty_or_short_traces_handled_gracefully():
@@ -210,13 +213,14 @@ Formula: disagreement_score = 1 - mean([sim(bull,bear), sim(bull,devil), sim(bea
   1.0 = maximum disagreement (agents are talking about completely different things)
   0.0 = pure consensus (agents are paraphrasing each other)
 
-Gate thresholds:
-  < 0.30  genuine disagreement — proceed normally
-  0.30–0.70  moderate convergence — judge notes it
-  > 0.70  soft consensus — judge biases toward reduce_size / halt_and_review
+Interpretation labels (for logging and monitoring — NOT verdict overrides):
+  < 0.30  genuine_disagreement   — agents are using distinct vocabulary
+  0.30–0.70  moderate_convergence — partial vocabulary overlap
+  > 0.70  soft_consensus         — agents are largely talking about the same things
 
-Source: Tajik et al. (2026) "Disagreement as Data: Reasoning Trace Analytics
-in Multi-Agent Systems." LAK 2026. arXiv:2601.12618.
+The score is surfaced to the judge as an informational note only.
+The judge is not instructed to change its verdict based on this score —
+TF-IDF vocabulary overlap is too coarse a proxy to drive individual decisions.
 """
 from __future__ import annotations
 
@@ -340,42 +344,27 @@ def interpret_disagreement(score: float) -> str:
 
 def format_disagreement_for_judge(disagreement_score: float) -> str:
     """
-    Format the disagreement score as a paragraph for injection into the
-    judge's system prompt.
+    Format the disagreement score as an informational note for the judge.
+
+    This is observational context only — the judge is NOT instructed to
+    change its verdict direction based on this score. TF-IDF vocabulary
+    overlap is too coarse a proxy to override the judge's synthesis of
+    the actual arguments.
 
     Args:
         disagreement_score: Value from compute_disagreement_score() — 1=max disagreement.
 
     Returns:
-        A plain-text paragraph the judge reads before synthesizing a verdict.
+        A short informational line the judge can use as context.
     """
     similarity = round(1.0 - disagreement_score, 2)
     label      = interpret_disagreement(disagreement_score)
 
-    if label == "soft_consensus":
-        guidance = (
-            "IMPORTANT: The agents are semantically similar — this debate reflects soft consensus, "
-            "not genuine disagreement. Do NOT treat agreement as validation. "
-            "Bias your verdict toward reduce_size or halt_and_review unless there is a strong "
-            "independent quantitative reason to proceed."
-        )
-    elif label == "moderate_convergence":
-        guidance = (
-            "Note: Agent reasoning traces show moderate convergence. "
-            "Weight the quant sanity checks more heavily than agent arguments when synthesizing."
-        )
-    else:
-        guidance = (
-            "Agent reasoning traces are semantically distinct — genuine disagreement is present. "
-            "Synthesize arguments on their merits."
-        )
-
     return (
-        f"Semantic similarity between agent reasoning traces: {similarity:.2f} "
-        f"(0.0 = fully distinct, 1.0 = identical). "
-        f"Disagreement score: {disagreement_score:.2f}. "
-        f"Interpretation: {label.replace('_', ' ')}. "
-        f"{guidance}"
+        f"[Monitoring] Agent trace similarity: {similarity:.2f} "
+        f"(0.0 = fully distinct vocabulary, 1.0 = identical). "
+        f"Disagreement score: {disagreement_score:.2f} ({label.replace('_', ' ')}). "
+        f"This is an observational metric — use your judgment on the arguments themselves."
     )
 ```
 
@@ -462,7 +451,7 @@ Expected: All tests pass (≥266).
 ```bash
 git add debate/disagreement_scorer.py tests/test_disagreement_scorer.py \
         debate/debate_runner.py debate/judge.py
-git commit -m "feat(debate): disagreement score via cosine similarity on reasoning traces (Tajik et al. 2026)"
+git commit -m "feat(debate): disagreement score via TF-IDF cosine similarity on reasoning traces — monitoring metric for debate divergence and Task 0.2 validation"
 ```
 
 ---

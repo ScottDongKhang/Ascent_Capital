@@ -418,11 +418,10 @@ All audits complete through third pass. No outstanding crash risks. Pipeline run
 ### 2026-05-08 (Task 0B — disagreement score plan)
 - Added Task 0B to `docs/superpowers/plans/2026-05-03-ai-native-tier1.md` between Task 0 and Task A
 - Task 0B: `debate/disagreement_scorer.py` — pairwise TF-IDF cosine similarity on agent reasoning traces; `disagreement_score = 1 - mean(pairwise sims)`; pure numpy, no external API
-- Gate thresholds: <0.30 genuine disagreement, 0.30–0.70 moderate convergence, >0.70 soft consensus (judge biases to reduce_size/halt)
-- Score written to every verdict JSON; judge receives formatted prompt fragment on soft consensus
-- Also serves as validation metric for Task 0.2 private context subsets — if mean score doesn't drop after `_build_agent_context()` goes live, section builder design needs revisiting
+- Score written to every verdict JSON; judge receives score as informational note only (not a verdict override — TF-IDF vocabulary overlap is too coarse to drive individual decisions)
+- Primary use: longitudinal validation metric for Task 0.2 — mean score tracked weekly; if it doesn't drop after `_build_agent_context()` goes live, section builder design needs revisiting
+- Removed unverifiable Tajik et al. (2026) arXiv citation from plan; removed directional bias from judge injection; updated test assertions to confirm no verdict prescription
 - 7 tests specified in `tests/test_disagreement_scorer.py`; 10 implementation steps
-- Source: Tajik et al. (2026), arXiv:2601.12618
-- README updated: Task 0B entry added to Planned section
+- README updated: Task 0B entry reflects monitoring-only framing
 - Files: `docs/superpowers/plans/2026-05-03-ai-native-tier1.md`, `README.md`, `CLAUDE.md`
 - Open: all Tier 1–3 tasks still unexecuted; R2R API key not configured
