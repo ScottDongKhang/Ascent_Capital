@@ -476,6 +476,8 @@ git commit -m "feat(memory): FinMem-style post-trade reflection — structured l
 
 ## Task E: LLM-Guided Factor Hypothesis Generation
 
+> **Dependency on Tier 1 self-modification gate:** This task depends on the `SELF_MODIFY_ENABLED` flag added in Tier 1 Task 0.1. The guided proposer must also respect this flag — if `SELF_MODIFY_ENABLED = False`, `generate_variants()` should return an empty list rather than running. Do not implement Task E until that flag and guard are in place.
+
 **Problem:** The self-improve loop perturbs sleeve weights randomly — it explores weight space without any theory about *why* a particular weighting should work. In stressed markets, maybe quality/fundamental signals should dominate; in calm bull markets, momentum should. AlphaAgent (arxiv:2502.16789) generates code hypotheses and rejects duplicates via AST comparison. For Ascent's weight-space search, the analogous improvement is: (1) have the LLM generate regime-aware narrative hypotheses about what should work, (2) translate them to weight biases, and (3) reject hypotheses that are too similar to each other (by cosine similarity of their bias vectors). This makes the 5 weekly variants explore meaningfully different hypotheses rather than 5 nearly-identical perturbations of the status quo.
 
 **Known limitation:** Haiku will likely converge on textbook factor intuitions ("quality beats momentum in stress," "momentum dominates in bull markets") rather than novel exploration, because these dominate its training data. The cosine deduplication reduces repetition within a single run but doesn't eliminate the training-data prior across runs. **Monitor after 4 weeks:** if guided variants consistently underperform random perturbation by > 0.03 Sharpe, disable the LLM proposer and instead increase `N_VARIANTS` (5 → 10) and `PERTURB_RANGE` (0.03 → 0.06) in `self_improve.py`. The cosine deduplication logic in `factor_proposer.py` still has value for random variants, so the module isn't wasted even if the LLM step is removed.
@@ -818,7 +820,15 @@ def generate_variants(base_config: dict, n: int = N_VARIANTS, regime: str = None
     Generate N variant configs. If regime is provided, tries LLM-guided hypothesis
     generation first. Falls back to random perturbation if LLM is unavailable.
     Weights are renormalized to sum to 1 after perturbation.
+
+    Returns empty list immediately if SELF_MODIFY_ENABLED is False — the guided
+    proposer must not run while self-modification is gated (see Task 0.1).
     """
+    # Respect the kill switch — no variants generated while gate is closed
+    if not SELF_MODIFY_ENABLED:
+        log.info("[SelfImprove] SELF_MODIFY_ENABLED=False — generate_variants returning []")
+        return []
+
     base_weights   = base_config.get("alpha_weights", DEFAULT_ALPHA_WEIGHTS)
     active_sleeves = dict(base_weights)
 

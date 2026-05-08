@@ -402,3 +402,15 @@ All audits complete through third pass. No outstanding crash risks. Pipeline run
 - Portfolio: -2.53% vs SPY -0.31%; NAV $104,815; worst: VICR -6.8%
 - FRED retry fix pushed to GitHub (commit 1f29101)
 - Open: Tier 1–3 AI-native plans deferred to next week (usage limit)
+
+### 2026-05-08 (plan hardening — Tier 1/2/3 revisions)
+- Applied practitioner/ML reviewer feedback to all three AI-native implementation plans
+- **Tier 1 Task 0 added**: three prerequisite fixes before any Tier 1 tasks execute
+  - 0.1: `SELF_MODIFY_ENABLED = False` kill switch in `self_improve.py`; activation condition: +OOS Sharpe for 30 consecutive trading days on flat config
+  - 0.2: private debate context subsets per agent — `_build_agent_context()` using section-level builders keyed to actual `portfolio_state` fields; corrected a flawed keyword-filter design that would have produced nearly identical context for all agents
+  - 0.3: explicit `+` sign prefix standard for CAGR/Sharpe/Alpha in README and all outputs
+- **Tier 2 Task E**: added dependency note on `SELF_MODIFY_ENABLED`; `generate_variants()` returns `[]` when gate is closed
+- **Tier 3**: added `⚠ Do not begin until:` warning block with three gate conditions and IC threshold rationale
+- README updated: `+` sign prefixes on walk-forward table, self-modify gate documented, private context subsets documented in debate section, Planned section rewritten to reflect plan revisions
+- Files: `docs/superpowers/plans/2026-05-03-ai-native-tier1.md`, `docs/superpowers/plans/2026-05-03-ai-native-tier2.md`, `docs/superpowers/plans/2026-05-03-ai-native-tier3.md`, `README.md`, `CLAUDE.md`
+- Open: Tier 1–3 execution still pending; R2R API key not configured; earnings surprise beta neutralization backlog

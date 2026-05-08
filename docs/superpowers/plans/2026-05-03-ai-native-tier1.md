@@ -27,6 +27,65 @@
 
 ---
 
+## Task 0: Prerequisite Fixes
+
+These three items must be addressed before any Tier 1 tasks are implemented. They close gaps that could make the AI-native additions unsafe or misleading.
+
+### 0.1 Self-Modification Kill Switch
+
+**Why:** The self-improve loop can modify `active_alpha_config.json`, which feeds directly into live trading weights. This must be gated until the system demonstrates positive OOS Sharpe for 30 consecutive trading days on a flat (unmodified) config. Without that baseline, self-modification may be improving noise rather than signal.
+
+**Change:** Add the following constant to `ascent/research/self_improve.py` at the top of the file (after imports):
+
+```python
+# Hard gate on self-modification. Keep False until OOS Sharpe is positive
+# for 30 consecutive trading days on a flat config. Set to True only
+# after that condition is confirmed manually.
+SELF_MODIFY_ENABLED = False
+```
+
+Then add the following guard at the top of `run_self_improve()`:
+
+```python
+def run_self_improve(...):
+    if not SELF_MODIFY_ENABLED:
+        log.info("[SelfImprove] SELF_MODIFY_ENABLED=False — skipping self-modification run")
+        return {}
+    ...
+```
+
+The loop is not removed — it is gated. When triggered, it exits early and logs the reason. This preserves the implementation for when the activation condition is met.
+
+**Activation condition:** Enable only when OOS Sharpe has been positive for 30 consecutive trading days on a flat config (no prior self-improve changes active). This condition must be verified manually — check `logs/self_improve_log.jsonl` and the walk-forward record — before setting `SELF_MODIFY_ENABLED = True`.
+
+### 0.2 Private Information Subsets Per Debate Agent
+
+**Why:** Giving all agents identical full context reduces adversarial debate quality. Each agent should argue from a different epistemic position. Information asymmetry forces agents to reason from their specific evidence base rather than re-interpreting the same data with slightly different emphasis.
+
+**Change:** Implement context partitioning in `debate/agents.py` as a new `_build_agent_context(portfolio_state, agent_role)` function. Each agent receives only the following subset of portfolio context:
+
+| Agent | Receives | Withholds |
+|-------|----------|-----------|
+| Bull | Weights, momentum signals, fundamental/earnings data, allocation | Concentration stats, VaR, regime entropy |
+| Bear | Weights, concentration stats, regime label, allocation | Momentum signals (prevents anchoring on uptrends) |
+| Devil's Advocate | Weights, regime entropy + confidence, Monte Carlo tail, allocation | Individual momentum and fundamental signals |
+| Regime Specialist | Regime label + entropy, macro indicators only | All position-level data |
+
+No agent sees the full context. The function **composes section-level builders** targeting the actual keys in `portfolio_state` (`"weights"`, `"us_regime"`, `"metadata"`, `"allocation"`) — it does not filter a pre-rendered text blob. This is implemented before the track record injection step — see Step 3b in Task C below.
+
+### 0.3 README Clarity: Explicit Sign Prefix on Performance Numbers
+
+**Why:** CAGR of 12.35% and Sharpe of 0.518 can be misread as negative values in tables or terminal output if formatting is ambiguous. Public reviewers and stakeholders (e.g., Tony Ngo demo) may misinterpret unlabeled numbers.
+
+**Standard:** Wherever the README or any output displays backtested performance metrics, use explicit `+` sign prefixes:
+- `+12.4% CAGR` (not `12.4% CAGR`)
+- `+0.52 Sharpe` (not `0.52 Sharpe`)
+- `+0.68% Alpha vs SPY` (not `0.68%`)
+
+Apply this to `README.md`, any dashboard HTML that shows these numbers, and the `outputs/20in20/` report templates. Negative numbers already carry their sign; only positive numbers need the explicit `+`.
+
+---
+
 ## Task A: CoT LLM Fundamental Alpha Signal
 
 **Problem:** Ascent's fundamental sleeve (`ascent/alpha/fundamental.py`) uses raw accounting ratios as cross-sectional z-scores. It has no reasoning — it doesn't know *why* a particular gross profitability trend matters for a specific company. Chicago Booth (2407.17866) showed that GPT-4 with a structured 6-step CoT prompt achieves 60.35% earnings direction accuracy vs. 52.71% for human analysts, generating 12% annual alpha. The key: anonymize inputs so the model can't recall company history from training data.
@@ -951,6 +1010,177 @@ def _load_credibility() -> dict:
             pass
     return {}
 ```
+
+- [ ] **Step 3b: Implement private information subsets per debate agent (Task 0.2)**
+
+This step implements the context partitioning described in Task 0.2. The previous approach (filtering `portfolio_state` keys by keyword) was incorrect — `portfolio_state` has keys like `"weights"`, `"us_regime"`, and `"date"`, not `"momentum"` or `"var_estimate"`. The correct approach is to build each agent's context from scratch using section-level builders that extract only the relevant data from what `portfolio_state` actually contains.
+
+Add the following to `debate/agents.py`, **after** the existing `_build_context()` function:
+
+```python
+# ── Section builders — each extracts one topic from portfolio_state ───────────
+
+def _section_weights(ps: dict) -> str:
+    weights = ps.get("weights", {})
+    if not weights:
+        return ""
+    sorted_w = sorted(weights.items(), key=lambda x: -x[1])
+    lines = ["Current positions (by weight):"]
+    for sym, w in sorted_w[:15]:
+        lines.append(f"  {sym}: {w:.1%}")
+    if ps.get("n_positions"):
+        lines.append(f"Total positions: {ps['n_positions']}")
+    return "\n".join(lines)
+
+
+def _section_momentum(ps: dict) -> str:
+    """Momentum signals from alpha_scores in metadata, if present."""
+    meta = ps.get("metadata", {})
+    alpha = meta.get("alpha_scores", {})
+    if not alpha:
+        return "(Momentum data not available — alpha_scores not in metadata)"
+    mom_keys = [k for k in alpha if "mom" in k.lower() or "trend" in k.lower()]
+    if not mom_keys:
+        return "(No momentum signals found in alpha_scores)"
+    lines = ["Momentum signals (cross-sectional z-scores):"]
+    for k in sorted(mom_keys)[:5]:
+        lines.append(f"  {k}: {alpha[k]}")
+    return "\n".join(lines)
+
+
+def _section_fundamental(ps: dict) -> str:
+    """Fundamental and earnings data from metadata alpha_scores."""
+    meta = ps.get("metadata", {})
+    alpha = meta.get("alpha_scores", {})
+    fund_keys = [k for k in alpha if any(x in k.lower()
+                 for x in ("fundamental", "earnings", "profitability", "accrual"))]
+    if not fund_keys:
+        return "(Fundamental/earnings signals not available in metadata)"
+    lines = ["Fundamental signals:"]
+    for k in sorted(fund_keys)[:5]:
+        lines.append(f"  {k}: {alpha[k]}")
+    return "\n".join(lines)
+
+
+def _section_concentration(ps: dict) -> str:
+    """Top positions and max-weight stats derived from weights."""
+    weights = ps.get("weights", {})
+    if not weights:
+        return ""
+    vals = sorted(weights.values(), reverse=True)
+    top1 = vals[0] if vals else 0
+    top3 = sum(vals[:3]) if len(vals) >= 3 else sum(vals)
+    lines = [
+        f"Concentration stats:",
+        f"  Largest position: {top1:.1%}",
+        f"  Top-3 combined:   {top3:.1%}",
+        f"  N positions:      {len(weights)}",
+    ]
+    return "\n".join(lines)
+
+
+def _section_regime(ps: dict) -> str:
+    """Regime label, macro regime, and entropy if present."""
+    lines = []
+    if ps.get("us_regime"):
+        lines.append(f"US regime: {ps['us_regime']}")
+    if ps.get("macro_regime"):
+        lines.append(f"Macro regime: {ps['macro_regime']}")
+    meta = ps.get("metadata", {})
+    if meta.get("regime_entropy") is not None:
+        lines.append(f"Regime entropy: {meta['regime_entropy']:.3f}")
+    if meta.get("regime_confidence") is not None:
+        lines.append(f"Regime confidence: {meta['regime_confidence']:.2f}")
+    return "\n".join(lines) if lines else "(Regime data not available)"
+
+
+def _section_macro(ps: dict) -> str:
+    """Macro indicator snapshot from metadata."""
+    meta = ps.get("metadata", {})
+    macro = meta.get("macro_snapshot", {})
+    if not macro:
+        return "(Macro snapshot not in metadata)"
+    lines = ["Macro indicators:"]
+    for k, v in list(macro.items())[:8]:
+        lines.append(f"  {k}: {v}")
+    return "\n".join(lines)
+
+
+def _section_tail(ps: dict) -> str:
+    """Monte Carlo tail scenarios from metadata."""
+    meta = ps.get("metadata", {})
+    mc = meta.get("monte_carlo", {})
+    if not mc:
+        return "(Monte Carlo data not in metadata)"
+    lines = ["Monte Carlo tail scenarios:"]
+    for k in ("p5", "p10", "p50", "p90", "p95"):
+        if k in mc:
+            lines.append(f"  {k}: {mc[k]:+.2%}")
+    return "\n".join(lines)
+
+
+def _section_allocation(ps: dict) -> str:
+    alloc = ps.get("allocation", {})
+    if not alloc:
+        return ""
+    lines = ["Capital allocation by agent:"]
+    for agent_id, pct in alloc.items():
+        lines.append(f"  {agent_id}: {pct:.1%}")
+    return "\n".join(lines)
+
+
+# ── Agent context assembler ────────────────────────────────────────────────────
+
+_AGENT_SECTIONS = {
+    # Bull sees the bull case: momentum, fundamental quality, earnings strength
+    # Deliberately withholds: concentration, VaR, regime entropy
+    "bull": [_section_weights, _section_momentum, _section_fundamental, _section_allocation],
+
+    # Bear sees the risk picture: concentration, regime stress, sector breakdown
+    # Deliberately withholds: momentum (to avoid anchoring on uptrends)
+    # VaR is NOT pre-computed here — bear agent has tool access (Task F, Tier 2)
+    "bear": [_section_weights, _section_concentration, _section_regime, _section_allocation],
+
+    # Devil's advocate sees the systemic risks: regime entropy + tail scenarios
+    # Deliberately withholds: individual momentum signals and fundamentals
+    "devil": [_section_weights, _section_regime, _section_tail, _section_allocation],
+
+    # Regime specialist sees only macro and regime state — no position-level data
+    # Deliberately withholds: individual weights and alpha scores
+    "regime_specialist": [_section_regime, _section_macro],
+}
+
+
+def _build_agent_context(portfolio_state: dict, agent_role: str) -> str:
+    """
+    Build an agent-specific context string from portfolio_state.
+
+    Each role receives a different view of the portfolio (see Task 0.2).
+    No agent sees the full context — information asymmetry is enforced
+    by composing only the relevant section builders per role.
+
+    Falls back to _build_context() for unknown roles so existing behavior
+    is preserved if a new agent type is added without updating this map.
+    """
+    builders = _AGENT_SECTIONS.get(agent_role)
+    if builders is None:
+        return _build_context(portfolio_state)  # safe fallback
+
+    date_str = portfolio_state.get("date", "unknown")
+    sections = [f"[{agent_role.upper()} VIEW — {date_str}]"]
+    for builder in builders:
+        try:
+            block = builder(portfolio_state)
+            if block:
+                sections.append(block)
+        except Exception:
+            pass
+    return "\n\n".join(sections)
+```
+
+Then update each `run_X_agent()` function to call `_build_agent_context(portfolio_state, "bull")` etc. instead of `_build_context(portfolio_state)`. This step must be done **before** the track record injection in Step 4 so that the track record is appended to the already-filtered context string.
+
+**Why this design works:** Each section builder extracts data from the keys `portfolio_state` actually has (`"weights"`, `"us_regime"`, `"metadata"`, `"allocation"`). The sections composing each agent's view are chosen to match what that agent should — and should not — see. Unknown roles fall back to the full context so adding a new debate agent never silently breaks.
 
 - [ ] **Step 4: Add `_get_agent_track_record()` to `debate/agents.py`**
 

@@ -4,6 +4,8 @@
 
 **Goal:** Build an autonomous factor discovery pipeline where Claude Opus proposes new alpha signals as Python code, an AST validator enforces structural and security constraints, a lightweight CPCV-style IC evaluator scores them on real historical data, and accepted proposals land in a human review queue for final approval before deployment.
 
+> **⚠ Do not begin Tier 3 until:** (1) OOS Sharpe is positive on a flat config for 30 consecutive trading days, (2) info subsets are live and showing measurable divergence between agents, (3) you have read Constitutional AI (Anthropic, 2022) and FinMem (arxiv:2311.13743). Factor discovery is the highest-cost, highest-risk task in this roadmap. Even hedge funds with 20 quants find 1–2 real factors per year. The IC thresholds in this plan (mean > 0.015, IR > 0.40) are intentionally conservative — do not lower them.
+
 **Architecture:** One new subsystem at `ascent/research/factor_discovery/`. Four modules with a clean linear pipeline: hypothesis_generator (Opus proposes code) → code_validator (AST safety + novelty check) → cpcv_evaluator (IC scoring on real prices) → discovery_runner (orchestrates the loop, writes accepted proposals to `outputs/factor_proposals/`). Human reviews the queue and manually adds approved factors to `ascent/features/feature_defs.py`. The system never auto-deploys generated code — the human is the final gate.
 
 **Tech Stack:** Python 3.12, Claude Opus (`claude-opus-4-6`) for hypothesis generation, existing `ascent/llm/client.py`, existing price/fundamental data caches, `ast` module (stdlib), `scipy.stats.spearmanr` (installed), `ascent/research/cpcv.py`.

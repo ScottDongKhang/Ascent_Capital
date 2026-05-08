@@ -12,8 +12,8 @@ Evaluated on honest expanding-window walk-forward OOS (January 2020 – April 20
 
 | Metric | Value |
 |--------|-------|
-| CAGR | ~12.4% |
-| Sharpe | ~0.52 |
+| CAGR | ~+12.4% |
+| Sharpe | ~+0.52 |
 | Alpha vs SPY | ~+0.68% annualized |
 | Evaluation window | Jan 2020 – Apr 2026 |
 
@@ -183,6 +183,8 @@ Runs on high-uncertainty rebalance days only (gated by `execution/debate_gate.py
 
 Round 2: bull/bear/devil respond to each other before judge synthesizes. Blind spot detector reads all prior verdicts, identifies systematic failure patterns, injects `blind_spot_context` into every session. Outcome tracker scores past verdicts against realized NAV.
 
+**Private context subsets:** each agent receives a different view of the portfolio — bull sees momentum and fundamental signals; bear sees concentration and regime stress; devil's advocate sees regime entropy and Monte Carlo tail; regime specialist sees macro indicators only. No agent sees the full context. Implemented via `_build_agent_context()` in `debate/agents.py`.
+
 **Verdict**: `proceed` | `reduce_size` (Haiku reweights) | `halt_and_review` (persists to `execution/halt_state.json`)
 
 ---
@@ -190,6 +192,8 @@ Round 2: bull/bear/devil respond to each other before judge synthesizes. Blind s
 ## Self-Improving Alpha
 
 Weekly (Sunday 6 AM). Generates 5 sleeve-weight variants via bounded perturbation, scores each on real multi-fold expanding-window OOS via `walk_forward_lightweight.py`. Winners with edge > 0.05 Sharpe enter a 30-day shadow period. `shadow_promoter.py` auto-promotes survivors to `active_alpha_config.json` with per-regime variants. The alpha stack reads this file live on every run.
+
+**Gate:** `SELF_MODIFY_ENABLED = False` in `ascent/research/self_improve.py`. The loop exists but exits early until OOS Sharpe is positive for 30 consecutive trading days on a flat config. This prevents self-modification from compounding on noise before a clean baseline is established. Set to `True` only after manually verifying that condition in `logs/self_improve_log.jsonl`.
 
 ---
 
@@ -254,27 +258,36 @@ Coverage: data integrity, leakage detection, walk-forward splits, alpha sleeves,
 
 Plans at `docs/superpowers/plans/`.
 
-### AI-Native Tier 1 — Signal quality and self-calibration
+### AI-Native Tier 1 — Prerequisites + signal quality + self-calibration
+
+**Task 0 — Prerequisite fixes (must land before Tasks A–C):**
+- Self-modification kill switch: `SELF_MODIFY_ENABLED = False` in `self_improve.py` — loop is gated until +OOS Sharpe for 30 consecutive trading days on a flat config (see Self-Improving Alpha section above)
+- Private debate context subsets: `_build_agent_context()` in `debate/agents.py` — each agent sees a different slice of the portfolio (already documented in Debate Layer section above)
+- Performance display standard: `+` sign prefix on all CAGR/Sharpe/Alpha figures in README and dashboard output
 
 **Task A — CoT LLM fundamental alpha** (`ascent/alpha/llm_fundamental.py`): sends anonymized quarterly financial ratios to Claude Haiku using a 6-step structured CoT prompt (Chicago Booth 2407.17866). Returns a cross-sectional z-scored Series cached by (symbol, quarter_end). Wired into the alpha stack at 3%; trend reduced from 55% to 52%. Signals logged to `logs/llm_fundamental_signals.jsonl` for IC tracking — if mean IC < 0.01 after 30 trading days, reduce or disable. Note: the original study used GPT-4; Haiku has a meaningful reasoning gap on financial tasks.
 
-**Task B — Slippage-adjusted IC feedback** (`ascent/monitoring/slippage_ic_feedback.py`): reads `slippage_log.jsonl` and agent PnL logs weekly, computes Spearman IC on gross vs net-of-slippage returns, writes drag coefficient to `active_alpha_config.json`. `MIN_FILLS = 50` — this module is a passive logger until ~60 fills accumulate (~July 2026). Self-improve integration is a deferred TODO pending sufficient data.
+**Task B — Slippage-adjusted IC feedback** (`ascent/monitoring/slippage_ic_feedback.py`): reads `slippage_log.jsonl` and agent PnL logs weekly, computes Spearman IC on gross vs net-of-slippage returns, writes drag coefficient to `active_alpha_config.json`. `MIN_FILLS = 50` — passive logger until ~60 fills accumulate (~July 2026). Self-improve integration is a deferred TODO pending sufficient data.
 
-**Task C — Regime-conditional debate personas** (`debate/outcome_tracker.py`, `debate/agents.py`): injects each agent's historical accuracy in the current regime into its system prompt. `min_samples = 10` — returns empty for all agent/regime pairs until ~August 2026 when enough scored debates accumulate. Dormant infrastructure; activates over time without code changes.
+**Task C — Regime-conditional debate personas** (`debate/outcome_tracker.py`, `debate/agents.py`): injects each agent's historical accuracy in the current regime into its system prompt. `min_samples = 10` — returns empty for all agent/regime pairs until ~August 2026. Dormant infrastructure; activates over time without code changes.
 
 ### AI-Native Tier 2 — Institutional memory and tool-capable reasoning
 
+> Depends on Tier 1 Task 0 (`SELF_MODIFY_ENABLED` gate). Task E's `generate_variants()` returns `[]` while the gate is closed.
+
 **Task D — FinMem-style reflection agent** (`memory/reflection_agent.py`): after each verdict is scored (14 days post-decision), Haiku reads the outcome and writes a structured lesson — what the losing side missed, how to calibrate confidence in this regime. Lessons stored in `memory/reflections.jsonl`, injected into future debate context via `_build_context()`. Limitation: reflection is inferred from NAV change, not position-level attribution — lessons can be directionally wrong when an unrelated position drove the loss.
 
-**Task E — LLM-guided hypothesis generation** (`ascent/research/factor_proposer.py`): Haiku proposes regime-aware weight narratives; cosine-similarity deduplication (threshold 0.85) rejects near-identical proposals. Wired into `generate_variants()` in `self_improve.py` with random fallback. Known limitation: Haiku converges on textbook factor intuitions (momentum in bull, quality in stress) from training data rather than genuinely novel exploration. If guided variants underperform random perturbation by > 0.03 Sharpe over 4 weeks, disable the LLM proposer and widen random search instead.
+**Task E — LLM-guided hypothesis generation** (`ascent/research/factor_proposer.py`): Haiku proposes regime-aware weight narratives; cosine-similarity deduplication (threshold 0.85) rejects near-identical proposals. Wired into `generate_variants()` in `self_improve.py` with random fallback. `SELF_MODIFY_ENABLED` gate applies — no variants generated while closed. Known limitation: Haiku converges on textbook factor intuitions from training data rather than genuinely novel exploration. If guided variants underperform random perturbation by > 0.03 Sharpe over 4 weeks, disable the LLM proposer and widen random search instead.
 
-**Task F — Tool-capable debate agents** (`debate/agent_tools.py`): equips bear and devil's advocate with four domain tools — `get_sector_concentration`, `get_var_estimate`, `get_position_momentum`, `get_regime_conditional_stats`. Requires a `tool_completion()` loop in `ascent/llm/client.py`. Tools use a 5-second hard timeout on yfinance fetches. Bear and devil's advocate call tools before making quantitative claims; fallback to standard `generate_structured` on failure.
+**Task F — Tool-capable debate agents** (`debate/agent_tools.py`): equips bear and devil's advocate with four domain tools — `get_sector_concentration`, `get_var_estimate`, `get_position_momentum`, `get_regime_conditional_stats`. Requires a `tool_completion()` loop in `ascent/llm/client.py`. Tools use a 5-second hard timeout on yfinance fetches. Fallback to `generate_structured` on failure.
 
 ### AI-Native Tier 3 — Autonomous factor discovery
 
-**Task G — Factor discovery pipeline** (`ascent/research/factor_discovery/`): Claude Opus proposes novel alpha factors as Python code from economic first principles → AST validator enforces structural and security constraints (no imports, no exec/eval, no file I/O, whitelist-only builtins) → rolling Spearman IC evaluator scores on real price data in a restricted execution sandbox → novelty check rejects factors with Spearman correlation > 0.70 against existing benchmark signals (momentum, reversal, vol) → accepted proposals written to `outputs/factor_proposals/` for human review. Nothing auto-deploys. Monthly cadence (first Sunday of each month). Human reviews, edits, and manually merges approved factors into `feature_defs.py`.
+> **Do not begin until:** OOS Sharpe is positive for 30 consecutive trading days, private debate context subsets are live and showing measurable divergence between agents, and you have read Constitutional AI (Anthropic, 2022) and FinMem (arxiv:2311.13743). Even hedge funds with 20 quants find 1–2 real factors per year.
 
-Acceptance thresholds: IC mean > 0.015 AND IC IR > 0.40 AND n_observations ≥ 20.
+**Task G — Factor discovery pipeline** (`ascent/research/factor_discovery/`): Claude Opus proposes novel alpha factors as Python code from economic first principles → AST validator enforces structural and security constraints (no imports, no exec/eval, no file I/O, whitelist-only builtins) → rolling Spearman IC evaluator scores on real price data in a restricted execution sandbox → novelty check rejects factors with Spearman correlation > 0.70 against existing benchmark signals → accepted proposals written to `outputs/factor_proposals/` for human review. Nothing auto-deploys. Monthly cadence (first Sunday of each month).
+
+Acceptance thresholds: IC mean > +0.015 AND IC IR > +0.40 AND n_observations ≥ 20. Do not lower these.
 
 ### Backlog
 
