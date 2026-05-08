@@ -212,7 +212,9 @@ def test_run_self_improve_writes_regime_config(tmp_path, monkeypatch):
     import numpy as np
     import pandas as pd
     from datetime import date
+    import ascent.research.self_improve as si_mod
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(si_mod, "SELF_MODIFY_ENABLED", True)
     (tmp_path / "data_cache").mkdir()
     (tmp_path / "logs").mkdir()
 

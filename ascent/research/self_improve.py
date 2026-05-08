@@ -14,12 +14,20 @@ Usage:
 """
 
 import json
+import logging
 import os
 import copy
 import random
 import numpy as np
 from datetime import date, datetime, timedelta
 from pathlib import Path
+
+# Hard gate on self-modification. Keep False until OOS Sharpe is positive
+# for 30 consecutive trading days on a flat config. Set to True only
+# after that condition is confirmed manually.
+SELF_MODIFY_ENABLED = False
+
+log = logging.getLogger(__name__)
 
 LOG_PATH          = Path("logs/self_improve_log.jsonl")
 SHADOW_DIR        = Path("data_cache/shadow_configs")
@@ -215,6 +223,10 @@ def _promote_regime_variant(weights: dict, regime: str, oos_sharpe: float, edge:
 
 def run_self_improve(current_regime: str = None):
     """Main entry point for the weekly self-improve loop."""
+    if not SELF_MODIFY_ENABLED:
+        log.warning("[SelfImprove] SELF_MODIFY_ENABLED=False — skipping self-modification run")
+        return []
+
     print(f"\n{'='*60}")
     print(f"[SelfImprove] Darwinian signal optimization | {date.today()}")
     print(f"{'='*60}")
