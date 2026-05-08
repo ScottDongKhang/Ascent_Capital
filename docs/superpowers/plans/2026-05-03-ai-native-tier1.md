@@ -86,6 +86,391 @@ Apply this to `README.md`, any dashboard HTML that shows these numbers, and the 
 
 ---
 
+## Task 0B: Disagreement Score via Cosine Similarity on Reasoning Traces
+
+**Problem:** The debate system has no way to know whether its agents are actually disagreeing or just paraphrasing each other. A bull and bear that use different words to arrive at the same conclusion are not providing independent information — the judge is being given the illusion of debate. Tajik et al. (2026, "Disagreement as Data: Reasoning Trace Analytics in Multi-Agent Systems," LAK 2026, arXiv:2601.12618) showed that cosine similarity between agent reasoning traces is a reliable proxy for genuine epistemic divergence. The key insight: treat disagreement score as a signal, not noise. When agents converge semantically, that is itself informative — it means the portfolio state is unambiguous and the judge should bias toward caution rather than assuming consensus validates a proceed verdict.
+
+This task also serves as the primary validation metric for Task 0.2 (private info subsets). If implementing `_build_agent_context()` does not lower the mean disagreement score over time, the subsets are not producing real divergence and the design needs to be revisited.
+
+**Source:** Tajik, S. et al. (2026). "Disagreement as Data: Reasoning Trace Analytics in Multi-Agent Systems." LAK 2026. arXiv:2601.12618.
+
+**Files:**
+
+| Action | File | Responsibility |
+|--------|------|----------------|
+| Create | `debate/disagreement_scorer.py` | TF-IDF vectors, pairwise cosine similarity, disagreement score |
+| Create | `tests/test_disagreement_scorer.py` | Full test suite |
+| Modify | `debate/agents.py` | Return reasoning trace alongside verdict text |
+| Modify | `debate/judge.py` | Accept disagreement score, inject into system prompt |
+| Modify | `debate/debate_runner.py` | Compute score after Round 2, pass to judge, write to verdict JSON |
+
+---
+
+- [ ] **Step 1: Write failing tests**
+
+```python
+# tests/test_disagreement_scorer.py
+import pytest
+import json
+from pathlib import Path
+from unittest.mock import patch
+
+
+def test_identical_texts_score_zero_disagreement():
+    from debate.disagreement_scorer import compute_disagreement_score
+    text = "The portfolio is overweight technology with high momentum and strong fundamentals."
+    score = compute_disagreement_score(text, text, text)
+    assert score < 0.05, f"Identical texts should score near 0 disagreement, got {score:.4f}"
+
+
+def test_completely_different_texts_score_high_disagreement():
+    from debate.disagreement_scorer import compute_disagreement_score
+    bull  = "Strong momentum signals across technology and industrials. Earnings beats confirm the bull thesis. Proceed."
+    bear  = "Credit spreads widening. Concentration risk in cyclicals. VaR estimate elevated. Reduce position size immediately."
+    devil = "Regime entropy approaching threshold. Correlation matrix suggests macro shock exposure. Monte Carlo p5 is alarming."
+    score = compute_disagreement_score(bull, bear, devil)
+    assert score > 0.40, f"Substantively different texts should score >0.40 disagreement, got {score:.4f}"
+
+
+def test_returns_float_between_zero_and_one():
+    from debate.disagreement_scorer import compute_disagreement_score
+    score = compute_disagreement_score("alpha beta gamma", "delta epsilon zeta", "eta theta iota")
+    assert isinstance(score, float)
+    assert 0.0 <= score <= 1.0, f"Score must be in [0, 1], got {score}"
+
+
+def test_pairwise_computation_correct():
+    from debate.disagreement_scorer import compute_disagreement_score, pairwise_similarities
+    bull  = "momentum quality earnings growth"
+    bear  = "risk drawdown concentration volatility"
+    devil = "entropy correlation regime uncertainty"
+    sims  = pairwise_similarities(bull, bear, devil)
+    assert isinstance(sims, dict)
+    for key in ("bull_bear", "bull_devil", "bear_devil"):
+        assert key in sims, f"Missing key: {key}"
+        assert 0.0 <= sims[key] <= 1.0, f"{key} similarity out of range: {sims[key]}"
+    expected_score = 1.0 - (sims["bull_bear"] + sims["bull_devil"] + sims["bear_devil"]) / 3.0
+    score = compute_disagreement_score(bull, bear, devil)
+    assert abs(score - expected_score) < 1e-6, "Score must equal 1 - mean(pairwise similarities)"
+
+
+def test_verdict_json_includes_disagreement_score(tmp_path):
+    verdict_path = tmp_path / "verdict_2026-05-08.json"
+    verdict_data = {
+        "date": "2026-05-08",
+        "verdict": {"recommendation": "proceed", "reasoning": "test"},
+        "disagreement_score": 0.62,
+        "pairwise_similarities": {"bull_bear": 0.30, "bull_devil": 0.45, "bear_devil": 0.38},
+    }
+    verdict_path.write_text(json.dumps(verdict_data))
+    loaded = json.loads(verdict_path.read_text())
+    assert "disagreement_score" in loaded, "verdict JSON must include disagreement_score"
+    assert isinstance(loaded["disagreement_score"], float)
+    assert "pairwise_similarities" in loaded
+
+
+def test_judge_prompt_includes_score():
+    from debate.disagreement_scorer import format_disagreement_for_judge
+    prompt_fragment = format_disagreement_for_judge(disagreement_score=0.72)
+    assert "0.28" in prompt_fragment or "0.72" in prompt_fragment, \
+        "Judge prompt must include the similarity or disagreement value"
+    assert "consensus" in prompt_fragment.lower() or "similar" in prompt_fragment.lower(), \
+        "Judge prompt must mention consensus or similarity"
+    assert "reduce_size" in prompt_fragment or "halt" in prompt_fragment or "caution" in prompt_fragment.lower(), \
+        "Judge prompt must recommend caution on high-consensus debates"
+
+
+def test_empty_or_short_traces_handled_gracefully():
+    from debate.disagreement_scorer import compute_disagreement_score
+    # Should not raise — degenerate inputs return 0.0 (no information)
+    score = compute_disagreement_score("", "", "")
+    assert score == 0.0
+    score = compute_disagreement_score("a", "b", "c")
+    assert 0.0 <= score <= 1.0
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+```bash
+cd "/Users/scott/Downloads/ascent capital v2 up to phase 5.1"
+.venv/bin/pytest tests/test_disagreement_scorer.py -v 2>&1 | head -15
+```
+Expected: `ModuleNotFoundError: No module named 'debate.disagreement_scorer'`
+
+- [ ] **Step 3: Create `debate/disagreement_scorer.py`**
+
+```python
+"""
+debate/disagreement_scorer.py
+
+Measures semantic disagreement between debate agent reasoning traces
+using TF-IDF cosine similarity (pure numpy — no external embedding API).
+
+Formula: disagreement_score = 1 - mean([sim(bull,bear), sim(bull,devil), sim(bear,devil)])
+  1.0 = maximum disagreement (agents are talking about completely different things)
+  0.0 = pure consensus (agents are paraphrasing each other)
+
+Gate thresholds:
+  < 0.30  genuine disagreement — proceed normally
+  0.30–0.70  moderate convergence — judge notes it
+  > 0.70  soft consensus — judge biases toward reduce_size / halt_and_review
+
+Source: Tajik et al. (2026) "Disagreement as Data: Reasoning Trace Analytics
+in Multi-Agent Systems." LAK 2026. arXiv:2601.12618.
+"""
+from __future__ import annotations
+
+import math
+import re
+import logging
+from collections import Counter
+from typing import Dict, Tuple
+
+log = logging.getLogger(__name__)
+
+# Stop words to strip before building TF-IDF vectors
+_STOP_WORDS = frozenset({
+    "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for",
+    "of", "with", "is", "are", "was", "were", "be", "been", "being",
+    "have", "has", "had", "do", "does", "did", "will", "would", "could",
+    "should", "may", "might", "this", "that", "these", "those", "i", "we",
+    "you", "it", "its", "our", "their", "as", "by", "from", "not", "no",
+})
+
+
+def _tokenize(text: str) -> list:
+    """Lowercase, strip punctuation, remove stop words."""
+    tokens = re.findall(r"[a-z]+", text.lower())
+    return [t for t in tokens if t not in _STOP_WORDS and len(t) > 1]
+
+
+def _tfidf_vector(tokens: list, vocab: list) -> list:
+    """
+    Compute a TF-IDF-weighted vector over the shared vocabulary.
+    TF = term count / total tokens. IDF is not computed cross-document
+    (single-document context) so this reduces to normalized TF.
+    Returns a list of floats indexed by vocab position.
+    """
+    if not tokens:
+        return [0.0] * len(vocab)
+    counts = Counter(tokens)
+    total  = len(tokens)
+    vocab_index = {w: i for i, w in enumerate(vocab)}
+    vec = [0.0] * len(vocab)
+    for word, count in counts.items():
+        if word in vocab_index:
+            vec[vocab_index[word]] = count / total
+    return vec
+
+
+def _normalize(vec: list) -> list:
+    """L2-normalize a vector. Returns zero vector if norm is near zero."""
+    norm = math.sqrt(sum(x * x for x in vec))
+    if norm < 1e-9:
+        return vec
+    return [x / norm for x in vec]
+
+
+def _cosine(a: list, b: list) -> float:
+    """Dot product of two L2-normalized vectors."""
+    return max(0.0, min(1.0, sum(x * y for x, y in zip(a, b))))
+
+
+def pairwise_similarities(
+    bull_text: str,
+    bear_text: str,
+    devil_text: str,
+) -> Dict[str, float]:
+    """
+    Compute cosine similarity between all three pairs of reasoning traces.
+
+    Returns dict with keys: bull_bear, bull_devil, bear_devil.
+    Each value is in [0, 1] where 1 = identical vocabulary distribution.
+    """
+    bull_tokens  = _tokenize(bull_text)
+    bear_tokens  = _tokenize(bear_text)
+    devil_tokens = _tokenize(devil_text)
+
+    # Build shared vocabulary from union of all tokens
+    vocab = sorted(set(bull_tokens) | set(bear_tokens) | set(devil_tokens))
+
+    if not vocab:
+        return {"bull_bear": 0.0, "bull_devil": 0.0, "bear_devil": 0.0}
+
+    bull_vec  = _normalize(_tfidf_vector(bull_tokens,  vocab))
+    bear_vec  = _normalize(_tfidf_vector(bear_tokens,  vocab))
+    devil_vec = _normalize(_tfidf_vector(devil_tokens, vocab))
+
+    return {
+        "bull_bear":  round(_cosine(bull_vec, bear_vec),  4),
+        "bull_devil": round(_cosine(bull_vec, devil_vec), 4),
+        "bear_devil": round(_cosine(bear_vec, devil_vec), 4),
+    }
+
+
+def compute_disagreement_score(
+    bull_text: str,
+    bear_text: str,
+    devil_text: str,
+) -> float:
+    """
+    Compute the aggregate disagreement score across all three agent pairs.
+
+    Returns:
+        Float in [0, 1].
+        1.0 = maximum disagreement (fully distinct reasoning traces)
+        0.0 = pure consensus (agents are semantically identical)
+    """
+    if not any([bull_text.strip(), bear_text.strip(), devil_text.strip()]):
+        return 0.0
+
+    sims  = pairwise_similarities(bull_text, bear_text, devil_text)
+    mean_sim = (sims["bull_bear"] + sims["bull_devil"] + sims["bear_devil"]) / 3.0
+    return round(1.0 - mean_sim, 4)
+
+
+def interpret_disagreement(score: float) -> str:
+    """Return a human-readable label for a disagreement score."""
+    if score < 0.30:
+        return "genuine_disagreement"
+    if score < 0.70:
+        return "moderate_convergence"
+    return "soft_consensus"
+
+
+def format_disagreement_for_judge(disagreement_score: float) -> str:
+    """
+    Format the disagreement score as a paragraph for injection into the
+    judge's system prompt.
+
+    Args:
+        disagreement_score: Value from compute_disagreement_score() — 1=max disagreement.
+
+    Returns:
+        A plain-text paragraph the judge reads before synthesizing a verdict.
+    """
+    similarity = round(1.0 - disagreement_score, 2)
+    label      = interpret_disagreement(disagreement_score)
+
+    if label == "soft_consensus":
+        guidance = (
+            "IMPORTANT: The agents are semantically similar — this debate reflects soft consensus, "
+            "not genuine disagreement. Do NOT treat agreement as validation. "
+            "Bias your verdict toward reduce_size or halt_and_review unless there is a strong "
+            "independent quantitative reason to proceed."
+        )
+    elif label == "moderate_convergence":
+        guidance = (
+            "Note: Agent reasoning traces show moderate convergence. "
+            "Weight the quant sanity checks more heavily than agent arguments when synthesizing."
+        )
+    else:
+        guidance = (
+            "Agent reasoning traces are semantically distinct — genuine disagreement is present. "
+            "Synthesize arguments on their merits."
+        )
+
+    return (
+        f"Semantic similarity between agent reasoning traces: {similarity:.2f} "
+        f"(0.0 = fully distinct, 1.0 = identical). "
+        f"Disagreement score: {disagreement_score:.2f}. "
+        f"Interpretation: {label.replace('_', ' ')}. "
+        f"{guidance}"
+    )
+```
+
+- [ ] **Step 4: Extract reasoning traces in `debate/agents.py`**
+
+Each `run_X_agent()` function currently returns a raw string. To feed traces to the scorer, the runner needs the full response text. No changes are needed to the return type — `debate_runner.py` already captures the return value. The trace **is** the full agent response string.
+
+In `debate/debate_runner.py`, after collecting Round 2 responses, capture them by name before passing to the judge:
+
+```python
+    # After Round 2 completes — capture traces for disagreement scoring
+    bull_trace  = round2_bull   if round2 else round1_bull
+    bear_trace  = round2_bear   if round2 else round1_bear
+    devil_trace = round2_devil  if round2 else round1_devil
+```
+
+Variable names will match whatever the runner uses — search for where `run_bull_agent`, `run_bear_agent`, and `run_devils_advocate` results are stored and assign them to `bull_trace`, `bear_trace`, `devil_trace`.
+
+- [ ] **Step 5: Compute disagreement score and pass to judge in `debate/debate_runner.py`**
+
+After capturing traces (Step 4), add:
+
+```python
+    # Compute disagreement score from reasoning traces
+    try:
+        from debate.disagreement_scorer import (
+            compute_disagreement_score, pairwise_similarities, format_disagreement_for_judge
+        )
+        _sims = pairwise_similarities(bull_trace, bear_trace, devil_trace)
+        _disagreement_score = compute_disagreement_score(bull_trace, bear_trace, devil_trace)
+        _disagreement_context = format_disagreement_for_judge(_disagreement_score)
+        log.info("[Debate] disagreement_score=%.3f (%s)",
+                 _disagreement_score, "genuine" if _disagreement_score < 0.30 else
+                 "moderate" if _disagreement_score < 0.70 else "soft_consensus")
+    except Exception as _de:
+        log.warning("[Debate] Disagreement scoring failed: %s", _de)
+        _sims = {}
+        _disagreement_score = None
+        _disagreement_context = ""
+```
+
+- [ ] **Step 6: Inject into judge system prompt in `debate/judge.py`**
+
+Find the judge's `run_judge()` or equivalent function. Add a `disagreement_context: str = ""` parameter. Append it to the system prompt before the call:
+
+```python
+def run_judge(portfolio_state, bull_arg, bear_arg, devil_arg,
+              quant_check, disagreement_context: str = "") -> dict:
+    system_prompt = """You are the Judge..."""
+    if disagreement_context:
+        system_prompt += f"\n\n{disagreement_context}"
+    ...
+```
+
+Then update the call site in `debate_runner.py` to pass `disagreement_context=_disagreement_context`.
+
+- [ ] **Step 7: Write `disagreement_score` to verdict JSON in `debate/debate_runner.py`**
+
+Find where the verdict dict is assembled (search for `"recommendation"` or `"verdict"` dict construction). Add:
+
+```python
+    verdict["disagreement_score"]       = _disagreement_score
+    verdict["pairwise_similarities"]    = _sims
+```
+
+If `_disagreement_score` is `None` (scorer failed), these keys still write to the JSON as `null` — that is correct and queryable.
+
+- [ ] **Step 8: Run all tests**
+
+```bash
+.venv/bin/pytest tests/test_disagreement_scorer.py -v
+```
+Expected: All 7 tests PASS.
+
+- [ ] **Step 9: Full suite check**
+
+```bash
+.venv/bin/pytest tests/ -q --tb=short 2>&1 | tail -8
+```
+Expected: All tests pass (≥266).
+
+- [ ] **Step 10: Commit**
+
+```bash
+git add debate/disagreement_scorer.py tests/test_disagreement_scorer.py \
+        debate/debate_runner.py debate/judge.py
+git commit -m "feat(debate): disagreement score via cosine similarity on reasoning traces (Tajik et al. 2026)"
+```
+
+---
+
+**Validation note — use as metric for Task 0.2:** After implementing private info subsets (`_build_agent_context()` in Task 0.2 / Step 3b of Task C), track mean `disagreement_score` across debates weekly. If the score does not drop compared to the pre-Task-0.2 baseline, the private context subsets are not producing real divergence and the section builder design needs to be revisited. Add `mean_disagreement_score` as a field in `dashboard/agent_skill_scores.json` so it surfaces in the dashboard automatically.
+
+---
+
 ## Task A: CoT LLM Fundamental Alpha Signal
 
 **Problem:** Ascent's fundamental sleeve (`ascent/alpha/fundamental.py`) uses raw accounting ratios as cross-sectional z-scores. It has no reasoning — it doesn't know *why* a particular gross profitability trend matters for a specific company. Chicago Booth (2407.17866) showed that GPT-4 with a structured 6-step CoT prompt achieves 60.35% earnings direction accuracy vs. 52.71% for human analysts, generating 12% annual alpha. The key: anonymize inputs so the model can't recall company history from training data.
