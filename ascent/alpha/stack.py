@@ -14,17 +14,18 @@ from ascent.alpha.ml_sleeve import build_ml_alpha, build_ml_alpha_cpcv
 log = logging.getLogger(__name__)
 
 DEFAULT_ALPHA_WEIGHTS = {
-    "trend":         0.44,
-    "meanrev":       0.05,
-    "volatility":    0.05,
-    "statarb":       0.15,
-    "ml":            0.10,
-    "fundamental":   0.05,
-    "earnings":      0.05,
-    "analyst":       0.05,
-    "options_flow":  0.02,
-    "insider":       0.02,
-    "short_interest": 0.02,
+    "trend":           0.41,
+    "meanrev":         0.05,
+    "volatility":      0.05,
+    "statarb":         0.15,
+    "ml":              0.10,
+    "fundamental":     0.05,
+    "llm_fundamental": 0.03,
+    "earnings":        0.05,
+    "analyst":         0.05,
+    "options_flow":    0.02,
+    "insider":         0.02,
+    "short_interest":  0.02,
 }
 
 def _load_active_alpha_weights(regime: str = None) -> dict:
@@ -178,6 +179,20 @@ def build_alpha_stack(features, alpha_weights=None, regime_signal=None, agent_id
             log.debug("earnings alpha returned empty — cache absent or no recent surprises")
     except Exception as exc:
         log.error("earnings alpha failed: %s", exc)
+    # LLM Fundamental sleeve (Chicago Booth 6-step CoT via Haiku)
+    if alpha_weights.get("llm_fundamental", 0) > 0:
+        try:
+            from ascent.alpha.llm_fundamental import llm_fundamental_alpha
+            from ascent.data.store.parquet import has_data as _hd, load_parquet as _lp
+            _fund_df = _lp("fundamentals") if _hd("fundamentals") else None
+            _llm_fund = llm_fundamental_alpha(_fund_df)
+            if not _llm_fund.empty:
+                alphas["llm_fundamental"] = _llm_fund
+                log.info("[Stack] LLM fundamental sleeve: %d symbols", len(_llm_fund))
+            else:
+                log.debug("[Stack] LLM fundamental sleeve returned empty — cache absent or API unavailable")
+        except Exception as _e:
+            log.warning("[Stack] LLM fundamental sleeve failed: %s", _e)
     try:
         from ascent.alpha.analyst import analyst_alpha
         anl = analyst_alpha(features)
