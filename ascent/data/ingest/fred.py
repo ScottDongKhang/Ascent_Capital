@@ -31,6 +31,8 @@ def fetch_series(
     series_id: str,
     start_date: str = "2015-01-01",
     end_date: Optional[str] = None,
+    retries: int = 3,
+    backoff_base: float = 2.0,
 ) -> pd.DataFrame:
     """Fetch a single FRED series."""
     cfg = get_config()
@@ -49,8 +51,19 @@ def fetch_series(
     if end_date:
         params["observation_end"] = end_date
 
-    resp = requests.get(url, params=params, timeout=30)
-    resp.raise_for_status()
+    last_exc: Exception = RuntimeError("no attempts made")
+    for attempt in range(retries):
+        try:
+            resp = requests.get(url, params=params, timeout=30)
+            resp.raise_for_status()
+            break
+        except Exception as exc:
+            last_exc = exc
+            if attempt < retries - 1:
+                wait = backoff_base ** attempt
+                time.sleep(wait)
+    else:
+        raise last_exc
     data = resp.json()
 
     obs = data.get("observations", [])
