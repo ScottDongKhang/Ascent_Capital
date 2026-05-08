@@ -16,9 +16,12 @@ Usage:
 """
 
 import json
+import logging
 import os
 from datetime import date, datetime
 from pathlib import Path
+
+log = logging.getLogger(__name__)
 
 from debate.agents import (
     run_bull_agent, run_bear_agent, run_devils_advocate, run_regime_specialist, run_quant_sanity_check,
@@ -291,9 +294,30 @@ def run_debate(portfolio_state: dict = None, run_date: date = None, as_of_date=N
         "regime_specialist_rebuttal": regime_r2,
     }
 
+    # Compute disagreement score from reasoning traces
+    try:
+        from debate.disagreement_scorer import (
+            compute_disagreement_score, pairwise_similarities, format_disagreement_for_judge
+        )
+        _bull_trace  = bull_r2  if bull_r2  and not bull_r2.startswith("Bull rebuttal failed")  else bull
+        _bear_trace  = bear_r2  if bear_r2  and not bear_r2.startswith("Bear rebuttal failed")  else bear
+        _devil_trace = devil_r2 if devil_r2 and not devil_r2.startswith("Devil's advocate rebuttal failed") else devil
+        _sims = pairwise_similarities(_bull_trace, _bear_trace, _devil_trace)
+        _disagreement_score = compute_disagreement_score(_bull_trace, _bear_trace, _devil_trace)
+        _disagreement_context = format_disagreement_for_judge(_disagreement_score)
+        log.info("[Debate] disagreement_score=%.3f", _disagreement_score)
+    except Exception as _de:
+        log.warning("[Debate] Disagreement scoring failed: %s", _de)
+        _sims = {}
+        _disagreement_score = None
+        _disagreement_context = ""
+
     # Judge synthesizes all rounds
     print("[Debate] Judge synthesizing verdict...")
-    verdict = run_judge(bull, bear, devil, portfolio_state, regime_arg=regime_arg, quant_check=quant_check, round2_args=round2_args)
+    verdict = run_judge(bull, bear, devil, portfolio_state, regime_arg=regime_arg, quant_check=quant_check, round2_args=round2_args, disagreement_context=_disagreement_context)
+
+    verdict["disagreement_score"]    = _disagreement_score
+    verdict["pairwise_similarities"] = _sims
 
     print(f"\n[Debate] VERDICT: {verdict['recommendation'].upper()} "
           f"(confidence: {verdict.get('confidence', '?')})")

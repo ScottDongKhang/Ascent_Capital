@@ -22,6 +22,7 @@ def run_judge(
     regime_arg: str = "",
     quant_check: str = "",
     round2_args: dict = None,
+    disagreement_context: str = "",
 ) -> dict:
     """
     Synthesize all debate arguments into a single verdict.
@@ -77,6 +78,8 @@ def run_judge(
         '    "reasoning": "one paragraph explaining your decision"\n'
         "}"
     )
+    if disagreement_context:
+        system_prompt += f"\n\n{disagreement_context}"
 
     try:
         raw = extended_thinking_completion(
