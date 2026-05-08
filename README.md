@@ -34,7 +34,7 @@ cp .env.example .env   # set ANTHROPIC_API_KEY, ALPACA_API_KEY, ALPACA_SECRET_KE
 # Core pipeline only (single agent, no orchestration)
 .venv/bin/python -m ascent.main
 
-# Tests (265 tests)
+# Tests (266 tests)
 .venv/bin/pytest tests/ -v
 ```
 
@@ -119,11 +119,13 @@ Seven sleeves blended into a composite cross-sectional score. All sleeves z-scor
 |--------|---------------|--------|
 | Trend | 55% | Cross-sectional momentum; skip-last-month variant (`mom_252d − mom_21d`) |
 | Stat-arb | 15% | Sector-residual mean reversion; requires `profiles.parquet` |
-| ML (XGBoost) | 10% | CPCV C(6,2)=15 folds, 5-day purge + embargo; 6 features selected by IC/IR |
+| ML (XGBoost) | 10% | CPCV C(6,2)=15 folds, 5-day purge + embargo; 6 features selected by IC/IR; p5 IC Sharpe > −0.05 |
 | Mean Reversion | 5% | Short-term reversal |
 | Volatility | 5% | Long names with declining and stable vol: `−(vol_trend_10d / vol_of_vol_21d)` |
 | Fundamental | 5% | Gross profitability, accruals, asset growth, 52-week high; 45-day filing lag |
 | Earnings | 5% | PEAD — cross-sectional z-score of reported vs expected EPS; 1-bday announcement lag |
+| Analyst | sparse | Analyst revision signal; loaded from cache if present, zero-filled otherwise |
+| Insider | sparse | Insider net transaction score; loaded from cache if present, zero-filled otherwise |
 
 Distressed filter: zeroes alpha for `mom_252d < −0.65` after blending.
 
@@ -229,7 +231,7 @@ Config defaults: `top_n=15`, `max_weight=0.10`, `min_weight=0.02`, `rebalance_fr
 ## Testing
 
 ```bash
-.venv/bin/pytest tests/ -v                   # 265 tests
+.venv/bin/pytest tests/ -v                   # 266 tests
 .venv/bin/pytest tests/ -k leakage           # Look-ahead / leakage tests
 .venv/bin/pytest tests/ -k walkforward       # Walk-forward split integrity
 .venv/bin/pytest tests/ -k regime            # Regime system

@@ -60,16 +60,17 @@ demo_app.py           Streamlit interactive demo (Tony Ngo)
 
 | Sleeve | Weight | Notes |
 |--------|--------|-------|
-| Trend | 55% | Cross-sectional momentum |
+| Trend | 55% | Cross-sectional momentum; skip-last-month variant (`mom_252d − mom_21d`) at 0.20 sub-weight |
 | Stat-arb | 15% | Sector residuals; needs profiles.parquet |
 | Mean reversion | 5% | Short-term reversal |
-| ML (XGBoost) | 10% | CPCV-validated; cached to `ml_model_{agent_id}.pkl` |
-| Volatility (vol-regime) | 5% | Signal = -(vol_trend_10d) / (vol_of_vol_21d); long names with declining + stable vol |
-| Fundamental | 10% | Gross profitability + accruals + asset growth + 52wk high; 45-day filing lag; cache: `fundamentals` |
+| ML (XGBoost) | 10% | CPCV C(6,2)=15 folds, purge=5 bdays, embargo=5 bdays; 6 features by IC/IR; p5 guard > −0.05 |
+| Volatility | 5% | `−(vol_trend_10d / vol_of_vol_21d)`; long names with declining + stable vol |
+| Fundamental | 5% | Gross profitability, accruals, asset growth, 52wk high; 45-day filing lag |
+| Earnings (PEAD) | 5% | Cross-sectional z-score of reported vs expected EPS; 1-bday announcement lag |
+| Analyst | variable | Analyst revision signal; sparse — loaded if cache present |
+| Insider | variable | Insider net transaction score; sparse — loaded if cache present |
 
-Regime adjusts sleeve weights via `integration.py:regime_adjust_sleeve_weights()`. All sleeves cross-sectionally z-scored before blending. ML sleeve: CPCV C(6,2)=15 folds, purge=5 bdays, embargo=5 bdays — disabled if <10 folds converge or p5 IC Sharpe < 0.
-
-New features added to `feature_defs.py`: `vol_of_vol_21d` (rolling std of 21d realized vol — low = stable regime), `vol_trend_10d` (10-day change in 21d realized vol — negative = declining). Combined into vol-regime sleeve in `stack.py`. Orthogonal to momentum; decays slowly because most funds screen on level of vol, not its trend+stability.
+Distressed filter: zeroes alpha for `mom_252d < −0.65` after blending. All sleeves cross-sectionally z-scored before blending. Weights are regime-adaptive via `data_cache/active_alpha_config.json` (updated weekly by self-improve loop). ML sleeve disabled if <10 folds converge or p5 IC Sharpe < −0.05.
 
 ---
 
@@ -85,7 +86,7 @@ Config defaults: `top_n=15`, `max_weight=0.10`, `min_weight=0.02`, `rebalance_fr
 
 ## Agents
 
-**US Equities**: 135 stocks, full alpha stack, max 1 per sector, 12–20 positions.
+**US Equities**: 901 symbols (S&P 500 + S&P 400, loaded from `ascent/config/us_equity_universe.json`); full alpha stack; max 1 per sector; 12–20 positions.
 
 **Macro**: TLT, IEF, UUP, GLD, PDBC, HYG, LQD, TIP, SGOV, BIL, DBB, KMLM. Trend-only. Regime-sized: crisis top_n=3/40%, stressed top_n=4/35%, else top_n=5/30%. Cache: `prices_macro.parquet`.
 
@@ -102,7 +103,8 @@ Config defaults: `top_n=15`, `max_weight=0.10`, `min_weight=0.02`, `rebalance_fr
 3. **Conviction bonus**: up to +15% when ≥2 agents share a name (conv > 0.3).
 4. **Correlation guard**: 63-day cross-agent cap at 0.70 → halve smaller.
 5. **Thesis coherence**: symbol-level contradictions (UUP↔PDBC/GLD, VIXY↔SVXY) + 12 factor buckets / 6 contradictory pairs → 40% reduction.
-6. **Crisis veto**: us_regime=crisis → merged = 0.60×macro + 0.40×merged.
+6. **EM + commodity cap**: hard 20% aggregate on EM+commodity+gold after all blending.
+7. **Crisis veto**: us_regime=crisis → merged = 0.60×macro + 0.40×merged.
 
 ---
 
@@ -192,43 +194,31 @@ Python 3.12.13 Homebrew, venv at `.venv/`. Use `.venv/bin/python`. API keys via 
 
 ---
 
-## Current portfolio (as of May 2026)
+## Current portfolio (as of May 7, 2026)
 
-Holdings (post-rebalance May 5): KMLM 10.9%, IFRA 9.4%, AMKR/FIX/WDC 5.9% each, VICR 5.7%, VRT 5.6%, VAL 5.2%, WCC 5.0%, DBB 4.6%, CNC 4.5%, WFRD 4.3%, PDBC 4.2%, STLD 3.4%, DBA 3.3%, CHRD 3.1%, EWY 2.4%, EWC 2.3%, IRM 1.8%, MUSA/AAXJ/EEM/VWO 1.5% each, VIXY 2.8% hedge.
-Next rebalance: ~May 13, 2026. Live since April 1, 2026.
+Post-rebalance May 5 holdings (40 orders, full liquidation of Apr 15 portfolio):
+KMLM 10.9%, IFRA 9.4%, AMKR/FIX/WDC 5.9% each, VICR 5.7%, VRT 5.6%, VAL 5.2%, WCC 5.0%, DBB 4.6%, CNC 4.5%, WFRD 4.3%, PDBC 4.2%, STLD 3.4%, DBA 3.3%, CHRD 3.1%, EWY 2.4%, EWC 2.3%, IRM 1.8%, MUSA/AAXJ/EEM/VWO 1.5% each, VIXY 2.8% hedge.
+
+NAV: ~$104,815 (May 7). Next rebalance: ~May 13, 2026. Live since April 1, 2026.
+
+Skill scores: all agents still warming up (need 63 days). Regime: calm_bull (refitted May 7 after 5-day stale period).
 
 ---
 
-## Known bugs — audit status (2026-04-18)
+## Known bugs — audit status (2026-05-07)
 
-All second-audit bugs now fixed. Third-pass audit found no new crashes (all remaining `iloc[-1]` accesses verified guarded).
-
-### Fixed 2026-04-17 (E1–E5, D1–D2, R1–R4)
-- eod_runner: empty weights guard, DataFrame.get(), cost features, dollar_volume column, regime log
-- debate_runner: None-safe weights, split generic except
-- run_all_agents: empty list guard, allocation source, regime staleness log, hasattr removal
-
-### Fixed 2026-04-18 (second audit)
-- **`debate/outcome_tracker.py`** — `future_navs[-1]` guard already in place; added `len(scores) > 0` guard in both `_rebuild_credibility` loops ✅
-- **`agents/international_agent.py`** — `len(uup) > 50` and `len(eem) > 200` guards added after `.dropna()` ✅
-- **`agents/alternatives_agent.py`** — `len(gld) > 200` guard added after `.dropna()` ✅
-- **`agents/macro_agent.py`** — already had `len(gld) > 200` guard ✅
-- **`orchestrator/central_intelligence.py`** — conviction bonus now logs when skipped ✅
-- **`ascent/research/self_improve.py`** — fallback to 0.518 now prints a warning ✅
+All audits complete through third pass. No outstanding crash risks. Pipeline runs clean.
 
 ---
 
 ## What is not built yet
 
-- **Plans B2–D4**: ✅ All implemented (B2 enforce reduce_size, B3 regime staleness, C1–C3 outcome scoring + live Sharpe, D1–D4 quant context + extended thinking + prompt caching)
-- **Self-evolving alpha loop**: ✅ Full loop closed — stack.py reads active config, shadow promoter auto-promotes, per-regime variant generation, multi-fold OOS evaluation
-- **Phase 4 hedge overlay**: ✅ Built (`ascent/portfolio/hedge_overlay.py`); evaluation showed positive drawdown correlation — revisit after more live data (~May 13+)
 - **AI-native Tier 1**: planned, not yet built — `docs/superpowers/plans/2026-05-03-ai-native-tier1.md` (CoT LLM fundamental, slippage IC feedback, regime personas)
 - **AI-native Tier 2**: planned, not yet built — `docs/superpowers/plans/2026-05-03-ai-native-tier2.md` (FinMem reflection, LLM hypothesis generation, tool-capable agents)
 - **AI-native Tier 3**: planned, not yet built — `docs/superpowers/plans/2026-05-03-ai-native-tier3.md` (autonomous factor discovery pipeline)
 - **R2R semantic memory**: built but `R2R_API_KEY` not configured; BM25 fallback active
 - **Live dashboard UI**: data files generated but no live render
-- **Alpha signal backlog**: (1) analyst revision signal (`yfinance t.recommendations`); (2) neutralize earnings surprise beta; (3) debate trigger condition already wired — high-uncertainty days only
+- **Alpha signal backlog**: neutralize earnings surprise beta momentum overlap; analyst revision signal
 
 ---
 
@@ -398,3 +388,17 @@ All second-audit bugs now fixed. Third-pass audit found no new crashes (all rema
 - **12 new tests**: `test_string_regime_signal_accepted` in `tests/test_hedge_overlay.py`; 266 total passing
 - Files: `ascent/portfolio/hedge_overlay.py`, `ascent/alpha/ml_sleeve.py`, `run_all_agents.py`, `tests/test_hedge_overlay.py`, `rebalance_calendar.csv`
 - Open: Tier 1–3 AI-native plans not yet executed; R2R API key not configured; earnings surprise beta neutralization backlog
+
+### 2026-05-06
+- Daily run (non-rebalance): all 4 agents completed, 0 symbol fetch failures
+- FRED: 4 series (T10Y2Y, CPIAUCSL, UNRATE, DCOILWTICO) failed with HTTP 500 — fixed with retry logic
+- Fixed `ascent/data/ingest/fred.py`: `fetch_series()` now retries 3× with exponential backoff (1s, 2s) on any exception
+- Portfolio: +1.12% vs SPY +1.39%; NAV $106,202; regime stressed (5 days since last fit)
+- PDBC↔KMLM correlation (0.81) flagged by guard — KMLM halved; recurring pattern
+
+### 2026-05-07
+- Daily run (non-rebalance): all 4 agents completed, pipeline clean
+- Regime refitted at startup (was 5 days stale) → calm_bull; FRED all 10 series loaded clean
+- Portfolio: -2.53% vs SPY -0.31%; NAV $104,815; worst: VICR -6.8%
+- FRED retry fix pushed to GitHub (commit 1f29101)
+- Open: Tier 1–3 AI-native plans deferred to next week (usage limit)
