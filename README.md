@@ -34,7 +34,7 @@ cp .env.example .env   # set ANTHROPIC_API_KEY, ALPACA_API_KEY, ALPACA_SECRET_KE
 # Core pipeline only (single agent, no orchestration)
 .venv/bin/python -m ascent.main
 
-# Tests (312 tests)
+# Tests (326 tests)
 .venv/bin/pytest tests/ -v
 ```
 
@@ -54,7 +54,7 @@ ascent/
   alpha/          trend, statarb, meanrev, ml_sleeve (CPCV), volatility, fundamental, earnings, stack
   portfolio/      sector_constrained_weighted, _water_fill_cap (iterative, ≤50 iterations)
   backtest/       engine, Almgren-Chriss cost model
-  research/       walk_forward_runner, walk_forward_lightweight, self_improve, shadow_promoter, cpcv
+  research/       walk_forward_runner, walk_forward_lightweight, self_improve, shadow_promoter, cpcv, factor_discovery/
   regime/         HMM engine (K=2–4), particle filter, emergency refit, posture mapping
   risk/           correlation_guard
   reporting/      blind_spot_detector, catalyst_scanner, debrief
@@ -72,8 +72,9 @@ simulation/       scenario_simulator (parametric shock + Monte Carlo percentiles
 data_cache/       Parquet caches, ml_model_*.pkl, active_alpha_config.json, shadow_configs/
 dashboard/        regime_signal.json, regime_labels.csv, agent_skill_scores.json
 outputs/
-  debate_log/     verdict_YYYY-MM-DD.json
-  scenarios/      scenario output JSON per rebalance
+  debate_log/       verdict_YYYY-MM-DD.json
+  scenarios/        scenario output JSON per rebalance
+  factor_proposals/ accepted discovery proposals (human review queue)
 logs/             PnL per agent, slippage, self_improve, skill_scores, multi_agent_run
 
 run_all_agents.py   Single daily entrypoint
@@ -238,13 +239,14 @@ Config defaults: `top_n=15`, `max_weight=0.10`, `min_weight=0.02`, `rebalance_fr
 ## Testing
 
 ```bash
-.venv/bin/pytest tests/ -v                   # 312 tests
+.venv/bin/pytest tests/ -v                   # 326 tests
 .venv/bin/pytest tests/ -k leakage           # Look-ahead / leakage tests
 .venv/bin/pytest tests/ -k walkforward       # Walk-forward split integrity
 .venv/bin/pytest tests/ -k regime            # Regime system
+.venv/bin/pytest tests/ -k factor_discovery  # Factor discovery pipeline
 ```
 
-Coverage: data integrity, leakage detection, walk-forward splits, alpha sleeves, portfolio constraints, regime system, execution safety, debate layer, orchestrator logic, self-improve loop, hedge overlay.
+Coverage: data integrity, leakage detection, walk-forward splits, alpha sleeves, portfolio constraints, regime system, execution safety, debate layer, orchestrator logic, self-improve loop, hedge overlay, factor discovery (templates, leakage scanner, CPCV evaluator, Harvey FDR, discovery runner).
 
 ---
 
@@ -286,24 +288,25 @@ Plans at `docs/superpowers/plans/`.
 
 ---
 
-## Planned
-
-### AI-Native Tier 3 — Autonomous factor discovery
-
-> **Gate conditions (all must be met):** `SELF_MODIFY_ENABLED = True` (30 days +OOS Sharpe), ≥63 days of regime labels, ≥50 fills in slippage IC log, PySR installed (`pip install pysr`). Earliest realistic start: ~July 2026.
+### AI-Native Tier 3 ✅ — Autonomous factor discovery
 
 **Path A — PySR symbolic regression** (`ascent/research/factor_discovery/pysr_engine.py`): genetic programming searches combinations of 10 pre-computed features (momentum, reversal, vol, z-score, 52wk high) and outputs human-readable mathematical expressions. No code generation — symbolic math on approved inputs only.
 
-**Path B — LLM template suggestion** (`ascent/research/factor_discovery/llm_suggester.py`): Haiku suggests JSON parameter sets for 5 pre-defined template families (momentum, reversion, volatility, quality, correlation). Returns `{"template": "momentum", "lookback": 120, "skip_days": 21}` — never Python code.
+**Path B — LLM template suggestion** (`ascent/research/factor_discovery/llm_suggester.py`): Haiku suggests JSON parameter sets for 5 pre-defined template families (Momentum, Reversion, Volatility, Quality, Correlation). Returns `{"template": "MomentumTemplate", "lookback": 120, "skip_days": 21}` — never Python code.
 
-**Validation** (`ascent/research/factor_discovery/regime_cpcv_evaluator.py`): per-regime Spearman IC with Harvey FDR correction. Thresholds: IC mean > +0.015 AND IC IR > +0.60 AND IC positive in every observed regime. At IR > 0.60, ~0.5 spurious acceptances/year from 50 candidates (vs ~3 at IR > 0.40).
+**Validation** (`ascent/research/factor_discovery/regime_cpcv_evaluator.py`): per-regime Spearman IC with Harvey FDR correction. Thresholds: IC mean ≥ +0.015 AND IC IR ≥ +0.60 AND IC positive in every observed regime. At IR > 0.60, ~0.5 spurious acceptances/year from 50 candidates (vs ~3 at IR > 0.40).
 
 **Safety** (`ascent/research/factor_discovery/leakage_scanner.py`): AST + regex for lookahead patterns (`datetime.now()`, `.shift(-N)`, `.tail(1)`, hard-coded future dates). Rejects any candidate that trips a check.
 
-Nothing auto-deploys. Accepted candidates written to `outputs/factor_proposals/` for human review. Monthly cadence (first Sunday of each month).
+Nothing auto-deploys. Accepted candidates written to `outputs/factor_proposals/` for human review. Monthly cadence (first Sunday of each month, wired into `run_all_agents.py`).
 
-### Backlog
+> **Pipeline is inactive until gate conditions are met (~July 2026):** `SELF_MODIFY_ENABLED = True` (30 consecutive days +OOS Sharpe), ≥63 days of live regime labels, ≥50 fills in slippage IC log.
 
+---
+
+## Backlog
+
+- **Tier 4 — Alternative data**: AI feature engineering from SEC EDGAR, Capitol Trades, Reddit, Google Trends, Wikipedia pageviews → numerical signal per stock per day; validated via Spearman IC + CPCV + Harvey FDR
+- **Event-driven agents**: wake on triggers (8-K filing, congressional trade, options spike) rather than fixed 1:45 PM schedule
 - **Earnings surprise beta neutralization**: reduce momentum overlap in PEAD sleeve
-- **Analyst revision signal**: `yfinance` recommendations as short-term catalyst
 - **R2R semantic memory**: built but `R2R_API_KEY` not configured; BM25 fallback active

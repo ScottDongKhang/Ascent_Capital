@@ -141,6 +141,14 @@ Verdict: `proceed` | `reduce_size` (Haiku adjusts weights) | `halt_and_review` (
 
 Weekly (Sunday 6AM). Generates 5 sleeve-weight variants, scores via real multi-fold OOS (`run_lightweight_oos()`). Shadow promotion if edge > 0.05 Sharpe, 30-day monitoring, auto-promoted by `shadow_promoter.py`. Per-regime variants written to `active_alpha_config.json` `by_regime` section. Stack reads live config on every run.
 
+`SELF_MODIFY_ENABLED = False` — exits early until OOS Sharpe is positive for 30 consecutive trading days on a flat config.
+
+## Factor discovery loop
+
+Monthly (first Sunday of each month, wired into `run_all_agents.py`). Two paths: PySR symbolic regression on pre-computed features (Path A) + Haiku suggests JSON template params (Path B). Both evaluated via per-regime Spearman IC with Harvey FDR correction (IC mean ≥ 0.015, IC IR ≥ 0.60, IC positive in every observed regime). Accepted proposals written to `outputs/factor_proposals/` for human review — nothing auto-deploys.
+
+Gate conditions (~July 2026): `SELF_MODIFY_ENABLED = True`, ≥63 days live regime labels, ≥50 slippage fills.
+
 ---
 
 ## Execution
@@ -219,6 +227,8 @@ All audits complete through third pass. No outstanding crash risks. Pipeline run
 - **AI-native Tier 1**: ✅ built — `ascent/alpha/llm_fundamental.py`, `ascent/monitoring/slippage_ic_feedback.py`, `debate/disagreement_scorer.py`, private context subsets in `debate/agents.py`
 - **AI-native Tier 2**: ✅ built — `memory/reflection_agent.py`, `ascent/research/factor_proposer.py`, `debate/agent_tools.py`, `tool_completion()` in `ascent/llm/client.py`
 - **AI-native Tier 3**: ✅ built — `ascent/research/factor_discovery/` (PySR + LLM templates, per-regime CPCV, Harvey FDR); pipeline inactive until gate conditions met (~July 2026)
+- **AI-native Tier 4** (next): alternative data ingestion (SEC EDGAR, Capitol Trades, Reddit PRAW, Google Trends, Wikipedia pageviews) → AI converts raw text to numerical signal per stock per day; validated via Spearman IC + CPCV + Harvey FDR; not yet planned
+- **Event-driven agents**: agents that wake on triggers (8-K filing, congressional trade, options spike) rather than fixed 1:45 PM schedule; not yet planned
 - **R2R semantic memory**: built but `R2R_API_KEY` not configured; BM25 fallback active
 - **Live dashboard UI**: data files generated but no live render
 - **Alpha signal backlog**: neutralize earnings surprise beta momentum overlap; analyst revision signal
