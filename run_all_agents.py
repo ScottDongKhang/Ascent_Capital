@@ -376,6 +376,17 @@ def main():
                 pass
             print(f"[Runner] Running self-improve (regime={_current_regime})")
             run_self_improve(current_regime=_current_regime)
+
+            # Slippage IC feedback — runs alongside self-improve on Sundays
+            try:
+                from ascent.monitoring.slippage_ic_feedback import run_slippage_ic_feedback
+                _slip_metrics = run_slippage_ic_feedback(lookback_days=90)
+                print(f"[SlippageIC] drag={_slip_metrics['slippage_ic_drag']:.4f} "
+                      f"gross_ic={_slip_metrics['gross_ic']:.4f} "
+                      f"net_ic={_slip_metrics['net_ic']:.4f} "
+                      f"fills={_slip_metrics['n_fills']}")
+            except Exception as _se:
+                print(f"[SlippageIC] Feedback skipped: {_se}")
     except Exception as e:
         print(f"[Runner] Self-improve failed: {type(e).__name__}: {e}")
 
