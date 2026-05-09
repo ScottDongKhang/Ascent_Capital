@@ -214,7 +214,7 @@ All audits complete through third pass. No outstanding crash risks. Pipeline run
 ## What is not built yet
 
 - **AI-native Tier 1**: planned, not yet built — `docs/superpowers/plans/2026-05-03-ai-native-tier1.md` (CoT LLM fundamental, slippage IC feedback, regime personas)
-- **AI-native Tier 2**: planned, not yet built — `docs/superpowers/plans/2026-05-03-ai-native-tier2.md` (FinMem reflection, LLM hypothesis generation, tool-capable agents)
+- **AI-native Tier 2**: ✅ built — `memory/reflection_agent.py`, `ascent/research/factor_proposer.py`, `debate/agent_tools.py`, `tool_completion()` in `ascent/llm/client.py`
 - **AI-native Tier 3**: planned, not yet built — `docs/superpowers/plans/2026-05-03-ai-native-tier3.md` (autonomous factor discovery pipeline)
 - **R2R semantic memory**: built but `R2R_API_KEY` not configured; BM25 fallback active
 - **Live dashboard UI**: data files generated but no live render
@@ -435,3 +435,11 @@ All audits complete through third pass. No outstanding crash risks. Pipeline run
 - Branch `feature/ai-native-tier1` merged to main and pushed; 292 tests passing (up from 266)
 - Files: `ascent/alpha/llm_fundamental.py` (new), `ascent/monitoring/slippage_ic_feedback.py` (new), `debate/disagreement_scorer.py` (new), `ascent/research/self_improve.py`, `ascent/alpha/stack.py`, `debate/agents.py`, `debate/outcome_tracker.py`, `debate/judge.py`, `debate/debate_runner.py`, `run_all_agents.py`, + 4 new test files
 - Open: Tier 2 and Tier 3 plans not yet executed; R2R API key not configured; `signal_score` in slippage IC uses price impact (not alpha score) — revisit before MIN_FILLS reached
+
+### 2026-05-08 (AI-native Tier 2 execution)
+- **Task D ✅**: `memory/reflection_agent.py` — FinMem-style post-trade reflection; Haiku reads scored verdicts, writes structured lessons to `memory/reflections.jsonl`; idempotent dedup via `verdict_date`; injected into `_build_context()` per regime; wired into `run_all_agents.py` daily (independent try/except, not gated on scoring); 6 tests
+- **Task E ✅**: `ascent/research/factor_proposer.py` — LLM-guided hypothesis generation; Haiku proposes regime-aware narratives with weight biases; cosine-similarity deduplication (threshold 0.85); iterative floor enforcement (trend ≥5%); `generate_variants()` uses proposer when regime known, falls back to `_random_variants()`; `SELF_MODIFY_ENABLED=False` guard respected; 6 tests
+- **Task F ✅**: `debate/agent_tools.py` — 4 domain tools (sector concentration, VaR, position momentum, regime stats); `execute_tool` dispatcher never raises; `ascent/llm/client.py` — `tool_completion()` with Anthropic tool-use loop, `max_tool_calls` guard, `generate_structured` fallback; `run_bear_agent` and `run_devils_advocate` use tool_completion as primary path; 8 tests
+- Branch `feature/ai-native-tier2` merged to main and pushed; 312 tests passing (up from 292)
+- Files: `memory/reflection_agent.py` (new), `ascent/research/factor_proposer.py` (new), `debate/agent_tools.py` (new), `ascent/llm/client.py`, `ascent/research/self_improve.py`, `debate/agents.py`, `run_all_agents.py`, + 3 new test files
+- Open: Tier 3 (autonomous factor discovery) not yet started; R2R API key not configured; slippage IC signal_score revisit before MIN_FILLS; `SELF_MODIFY_ENABLED` activation requires 30 consecutive days +OOS Sharpe
