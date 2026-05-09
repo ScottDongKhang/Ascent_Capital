@@ -164,7 +164,7 @@ def test_default_alpha_weights_include_fundamental():
     assert "fundamental" in DEFAULT_ALPHA_WEIGHTS
     # fundamental reduced from 0.10 to 0.05 to make room for earnings sleeve
     assert abs(DEFAULT_ALPHA_WEIGHTS["fundamental"] - 0.05) < 0.001
-    assert abs(DEFAULT_ALPHA_WEIGHTS["trend"] - 0.44) < 0.001
+    assert abs(DEFAULT_ALPHA_WEIGHTS["trend"] - 0.41) < 0.001
     assert abs(sum(DEFAULT_ALPHA_WEIGHTS.values()) - 1.0) < 0.01
 
 

@@ -25,6 +25,42 @@ CREDIBILITY_PATH = Path("outputs/debate_log/agent_credibility.json")
 OUTCOME_WINDOW_DAYS = 14  # days after verdict to measure outcome
 
 
+# ── Credibility loader ───────────────────────────────────────────────────────
+
+def _load_credibility() -> dict:
+    """Load agent_credibility.json. Returns empty dict on any failure."""
+    if CREDIBILITY_PATH.exists():
+        try:
+            return json.loads(CREDIBILITY_PATH.read_text())
+        except Exception:
+            pass
+    return {}
+
+
+def get_agent_regime_accuracy(agent_name: str, regime: str,
+                               min_samples: int = 10) -> Optional[float]:
+    """
+    Return per-agent accuracy in a specific regime, or None if insufficient data.
+
+    Args:
+        agent_name:  "bull", "bear", "devil", or "regime_specialist"
+        regime:      Regime label string, e.g. "stressed", "calm_bull"
+        min_samples: Minimum number of scored debates required to return a value.
+                     Set to 10 — with fewer debates the accuracy estimate is noise.
+                     Expect this to return None for all agents until ~August 2026.
+
+    Returns:
+        Float accuracy in [0, 1], or None if no data / too few samples.
+    """
+    cred = _load_credibility()
+    regime_key = str(regime).lower()
+    accuracy   = cred.get("by_regime", {}).get(regime_key, {}).get(agent_name)
+    n_samples  = cred.get("sample_counts", {}).get(regime_key, {}).get(agent_name, 0)
+    if accuracy is None or n_samples < min_samples:
+        return None
+    return float(accuracy)
+
+
 # ── NAV loader ────────────────────────────────────────────────────────────────
 
 def _load_nav_series() -> dict:

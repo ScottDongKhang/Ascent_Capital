@@ -14,6 +14,7 @@ Usage:
 """
 
 import json
+import logging
 import os
 import copy
 import random
@@ -21,23 +22,31 @@ import numpy as np
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+# Hard gate on self-modification. Keep False until OOS Sharpe is positive
+# for 30 consecutive trading days on a flat config. Set to True only
+# after that condition is confirmed manually.
+SELF_MODIFY_ENABLED = False
+
+log = logging.getLogger(__name__)
+
 LOG_PATH          = Path("logs/self_improve_log.jsonl")
 SHADOW_DIR        = Path("data_cache/shadow_configs")
 ACTIVE_CONFIG_PATH = Path("data_cache/active_alpha_config.json")
 
 # Match current stack.py defaults exactly
 DEFAULT_ALPHA_WEIGHTS = {
-    "trend":          0.44,
-    "meanrev":        0.05,
-    "statarb":        0.15,
-    "ml":             0.10,
-    "volatility":     0.05,
-    "fundamental":    0.05,
-    "earnings":       0.05,
-    "analyst":        0.05,
-    "options_flow":   0.02,
-    "insider":        0.02,
-    "short_interest": 0.02,
+    "trend":           0.41,
+    "meanrev":         0.05,
+    "statarb":         0.15,
+    "ml":              0.10,
+    "volatility":      0.05,
+    "fundamental":     0.05,
+    "llm_fundamental": 0.03,
+    "earnings":        0.05,
+    "analyst":         0.05,
+    "options_flow":    0.02,
+    "insider":         0.02,
+    "short_interest":  0.02,
 }
 
 PERTURB_RANGE  = 0.10   # max +/- 10% per sleeve per variant
@@ -215,6 +224,10 @@ def _promote_regime_variant(weights: dict, regime: str, oos_sharpe: float, edge:
 
 def run_self_improve(current_regime: str = None):
     """Main entry point for the weekly self-improve loop."""
+    if not SELF_MODIFY_ENABLED:
+        log.warning("[SelfImprove] SELF_MODIFY_ENABLED=False — skipping self-modification run")
+        return []
+
     print(f"\n{'='*60}")
     print(f"[SelfImprove] Darwinian signal optimization | {date.today()}")
     print(f"{'='*60}")

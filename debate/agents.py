@@ -14,8 +14,40 @@ Uses claude-haiku-4-5-20251001 (HAIKU_MODEL) for regime specialist.
 Quant sanity checker uses no LLM.
 """
 
+import logging
+
 from ascent.llm.client import generate_structured, DEFAULT_MODEL as DEBATE_MODEL, HAIKU_MODEL
 from debate.outcome_tracker import load_credibility_context
+
+log = logging.getLogger(__name__)
+
+
+def _get_agent_track_record(agent_name: str, regime: str) -> str:
+    """Return formatted track record for injection into agent system prompts.
+    Returns empty string when no data available (dormant until ~August 2026)."""
+    try:
+        from debate.outcome_tracker import CREDIBILITY_PATH
+        import json as _json
+        if not CREDIBILITY_PATH.exists():
+            return ""
+        cred       = _json.loads(CREDIBILITY_PATH.read_text())
+        regime_key = str(regime).lower()
+        accuracy   = cred.get("by_regime", {}).get(regime_key, {}).get(agent_name)
+        n          = cred.get("sample_counts", {}).get(regime_key, {}).get(agent_name, 0)
+        if accuracy is None or n < 10:
+            return ""
+        warning = (
+            " Calibrate confidence DOWN — your historical accuracy here is below 50%."
+            if accuracy < 0.50 else
+            " Your track record here is solid."
+        )
+        return (
+            f"\nYOUR TRACK RECORD in {regime.upper()} regime: "
+            f"{accuracy:.0%} accuracy over {n} debates.{warning}"
+        )
+    except Exception as _exc:
+        log.debug("[Debate] _get_agent_track_record(%s, %s) failed: %s", agent_name, regime, _exc)
+        return ""
 
 
 def _build_context(portfolio_state: dict) -> str:
@@ -75,10 +107,147 @@ def _build_context(portfolio_state: dict) -> str:
     return "\n".join(lines)
 
 
+# ── Section builders — each extracts one topic from portfolio_state ───────────
+
+def _section_weights(ps: dict) -> str:
+    weights = ps.get("weights", {})
+    if not weights:
+        return ""
+    sorted_w = sorted(weights.items(), key=lambda x: -x[1])
+    lines = ["Current positions (by weight):"]
+    for sym, w in sorted_w[:15]:
+        lines.append(f"  {sym}: {w:.1%}")
+    if ps.get("n_positions"):
+        lines.append(f"Total positions: {ps['n_positions']}")
+    return "\n".join(lines)
+
+
+def _section_momentum(ps: dict) -> str:
+    meta = ps.get("metadata", {})
+    alpha = meta.get("alpha_scores", {})
+    if not alpha:
+        return "(Momentum data not available — alpha_scores not in metadata)"
+    mom_keys = [k for k in alpha if "mom" in k.lower() or "trend" in k.lower()]
+    if not mom_keys:
+        return "(No momentum signals found in alpha_scores)"
+    lines = ["Momentum signals (cross-sectional z-scores):"]
+    for k in sorted(mom_keys)[:5]:
+        lines.append(f"  {k}: {alpha[k]}")
+    return "\n".join(lines)
+
+
+def _section_fundamental(ps: dict) -> str:
+    meta = ps.get("metadata", {})
+    alpha = meta.get("alpha_scores", {})
+    fund_keys = [k for k in alpha if any(x in k.lower()
+                 for x in ("fundamental", "earnings", "profitability", "accrual"))]
+    if not fund_keys:
+        return "(Fundamental/earnings signals not available in metadata)"
+    lines = ["Fundamental signals:"]
+    for k in sorted(fund_keys)[:5]:
+        lines.append(f"  {k}: {alpha[k]}")
+    return "\n".join(lines)
+
+
+def _section_concentration(ps: dict) -> str:
+    weights = ps.get("weights", {})
+    if not weights:
+        return ""
+    vals = sorted(weights.values(), reverse=True)
+    top1 = vals[0] if vals else 0
+    top3 = sum(vals[:3]) if len(vals) >= 3 else sum(vals)
+    lines = [
+        "Concentration stats:",
+        f"  Largest position: {top1:.1%}",
+        f"  Top-3 combined:   {top3:.1%}",
+        f"  N positions:      {len(weights)}",
+    ]
+    return "\n".join(lines)
+
+
+def _section_regime(ps: dict) -> str:
+    lines = []
+    if ps.get("us_regime"):
+        lines.append(f"US regime: {ps['us_regime']}")
+    if ps.get("macro_regime"):
+        lines.append(f"Macro regime: {ps['macro_regime']}")
+    meta = ps.get("metadata", {})
+    if meta.get("regime_entropy") is not None:
+        lines.append(f"Regime entropy: {meta['regime_entropy']:.3f}")
+    if meta.get("regime_confidence") is not None:
+        lines.append(f"Regime confidence: {meta['regime_confidence']:.2f}")
+    return "\n".join(lines) if lines else "(Regime data not available)"
+
+
+def _section_macro(ps: dict) -> str:
+    meta = ps.get("metadata", {})
+    macro = meta.get("macro_snapshot", {})
+    if not macro:
+        return "(Macro snapshot not in metadata)"
+    lines = ["Macro indicators:"]
+    for k, v in list(macro.items())[:8]:
+        lines.append(f"  {k}: {v}")
+    return "\n".join(lines)
+
+
+def _section_tail(ps: dict) -> str:
+    meta = ps.get("metadata", {})
+    mc = meta.get("monte_carlo", {})
+    if not mc:
+        return "(Monte Carlo data not in metadata)"
+    lines = ["Monte Carlo tail scenarios:"]
+    for k in ("p5", "p10", "p50", "p90", "p95"):
+        if k in mc:
+            lines.append(f"  {k}: {mc[k]:+.2%}")
+    return "\n".join(lines)
+
+
+def _section_allocation(ps: dict) -> str:
+    alloc = ps.get("allocation", {})
+    if not alloc:
+        return ""
+    lines = ["Capital allocation by agent:"]
+    for agent_id, pct in alloc.items():
+        lines.append(f"  {agent_id}: {pct:.1%}")
+    return "\n".join(lines)
+
+
+# ── Agent context assembler ────────────────────────────────────────────────────
+
+_AGENT_SECTIONS = {
+    "bull": [_section_weights, _section_momentum, _section_fundamental, _section_allocation],
+    "bear": [_section_weights, _section_concentration, _section_regime, _section_allocation],
+    "devils_advocate": [_section_weights, _section_regime, _section_tail, _section_allocation],
+    "regime_specialist": [_section_regime, _section_macro],
+}
+
+
+def _build_agent_context(portfolio_state: dict, agent_role: str) -> str:
+    """
+    Build agent-specific context — no agent sees the full portfolio state.
+    Falls back to _build_context() for unknown roles.
+    """
+    builders = _AGENT_SECTIONS.get(agent_role)
+    if builders is None:
+        return _build_context(portfolio_state)
+
+    date_str = portfolio_state.get("date", "unknown")
+    sections = [f"[{agent_role.upper()} VIEW — {date_str}]"]
+    for builder in builders:
+        try:
+            block = builder(portfolio_state)
+            if block:
+                sections.append(block)
+        except Exception as _exc:
+            log.debug("[Debate] Section builder %s failed: %s", builder.__name__, _exc)
+    return "\n\n".join(sections)
+
+
 def run_bull_agent(portfolio_state: dict) -> str:
-    context      = _build_context(portfolio_state)
-    regime       = portfolio_state.get("us_regime")
+    context      = _build_agent_context(portfolio_state, "bull")
+    regime       = portfolio_state.get("us_regime", "unknown")
     cred_context = load_credibility_context(regime)
+    track_record = _get_agent_track_record("bull", regime)
     user_prompt  = f"Portfolio context:\n{context}"
     if cred_context:
         user_prompt += f"\n\n{cred_context}"
@@ -89,7 +258,8 @@ def run_bull_agent(portfolio_state: dict) -> str:
             "the strongest case FOR executing the proposed trades as-is. Reference specific "
             "positions, the current regime, and momentum signals. Be specific and data-driven. "
             "You have been given historical accuracy data for each debater — use it to "
-            "understand where the bear and devil tend to over-warn. Keep your argument under 200 words."
+            f"understand where the bear and devil tend to over-warn. Keep your argument under 200 words."
+            f"{track_record}"
         ),
         user_prompt=user_prompt,
         model=DEBATE_MODEL,
@@ -99,9 +269,10 @@ def run_bull_agent(portfolio_state: dict) -> str:
 
 
 def run_bear_agent(portfolio_state: dict) -> str:
-    context      = _build_context(portfolio_state)
-    regime       = portfolio_state.get("us_regime")
+    context      = _build_agent_context(portfolio_state, "bear")
+    regime       = portfolio_state.get("us_regime", "unknown")
     cred_context = load_credibility_context(regime)
+    track_record = _get_agent_track_record("bear", regime)
     user_prompt  = f"Portfolio context:\n{context}"
     if cred_context:
         user_prompt += f"\n\n{cred_context}"
@@ -112,7 +283,8 @@ def run_bear_agent(portfolio_state: dict) -> str:
             "for REDUCING risk or WAITING. Identify the weakest positions, concentration risks, "
             "regime fragility, or macro headwinds. Be specific. "
             "You have been given historical accuracy data — use it to calibrate how often "
-            "your past warnings were correct in this regime. Keep under 200 words."
+            f"your past warnings were correct in this regime. Keep under 200 words."
+            f"{track_record}"
         ),
         user_prompt=user_prompt,
         model=DEBATE_MODEL,
@@ -122,7 +294,7 @@ def run_bear_agent(portfolio_state: dict) -> str:
 
 
 def run_devils_advocate(portfolio_state: dict) -> str:
-    context = _build_context(portfolio_state)
+    context = _build_agent_context(portfolio_state, "devils_advocate")
 
     # Add scenario numbers if available
     scenario_summary = portfolio_state.get("scenario_summary", "")
@@ -139,8 +311,9 @@ def run_devils_advocate(portfolio_state: dict) -> str:
             )
         scenario_context = "\n".join(lines)
 
-    regime       = portfolio_state.get("us_regime")
+    regime       = portfolio_state.get("us_regime", "unknown")
     cred_context = load_credibility_context(regime)
+    track_record = _get_agent_track_record("devils_advocate", regime)
     user_prompt  = f"Portfolio context:\n{context}"
     if scenario_context:
         user_prompt += f"\n{scenario_context}"
@@ -158,7 +331,8 @@ def run_devils_advocate(portfolio_state: dict) -> str:
             "You also have historical accuracy data — use it to understand when your "
             "past warnings were prescient vs. over-cautious. "
             "Think about: earnings surprises, geopolitical events, liquidity gaps, "
-            "correlation breakdowns. Be specific. Keep under 150 words."
+            f"correlation breakdowns. Be specific. Keep under 150 words."
+            f"{track_record}"
         ),
         user_prompt=user_prompt,
         model=DEBATE_MODEL,
@@ -243,6 +417,7 @@ def run_regime_specialist(portfolio_state: dict) -> str:
                     sorted(weights.items(), key=lambda x: -x[1]))
     )
 
+    track_record = _get_agent_track_record("regime_specialist", regime)
     try:
         return generate_structured(
             system_prompt=(
@@ -252,7 +427,8 @@ def run_regime_specialist(portfolio_state: dict) -> str:
                 "proposed portfolio construction appropriate? Is sizing right? "
                 "Are the right factors represented? "
                 "Be specific about the regime label and what it demands. "
-                "Keep under 150 words."
+                f"Keep under 150 words."
+                f"{track_record}"
             ),
             user_prompt=f"Regime context:\n{context}\n\nIs this portfolio right for this regime?",
             model=HAIKU_MODEL,
