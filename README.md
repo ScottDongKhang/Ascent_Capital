@@ -34,7 +34,7 @@ cp .env.example .env   # set ANTHROPIC_API_KEY, ALPACA_API_KEY, ALPACA_SECRET_KE
 # Core pipeline only (single agent, no orchestration)
 .venv/bin/python -m ascent.main
 
-# Tests (266 tests)
+# Tests (312 tests)
 .venv/bin/pytest tests/ -v
 ```
 
@@ -115,17 +115,20 @@ Signal at close `t`; trade at open `t+1`. SPY < 200-day MA → multiply all weig
 
 Seven sleeves blended into a composite cross-sectional score. All sleeves z-scored before blending. Weights are regime-adaptive and updated weekly by the self-improve loop via `data_cache/active_alpha_config.json`.
 
-| Sleeve | Default Weight | Signal |
-|--------|---------------|--------|
-| Trend | 55% | Cross-sectional momentum; skip-last-month variant (`mom_252d − mom_21d`) |
+| Sleeve | Weight | Signal |
+|--------|--------|--------|
+| Trend | 41% | Cross-sectional momentum; skip-last-month variant (`mom_252d − mom_21d`) at 0.20 sub-weight |
 | Stat-arb | 15% | Sector-residual mean reversion; requires `profiles.parquet` |
 | ML (XGBoost) | 10% | CPCV C(6,2)=15 folds, 5-day purge + embargo; 6 features selected by IC/IR; p5 IC Sharpe > −0.05 |
 | Mean Reversion | 5% | Short-term reversal |
 | Volatility | 5% | Long names with declining and stable vol: `−(vol_trend_10d / vol_of_vol_21d)` |
 | Fundamental | 5% | Gross profitability, accruals, asset growth, 52-week high; 45-day filing lag |
 | Earnings | 5% | PEAD — cross-sectional z-score of reported vs expected EPS; 1-bday announcement lag |
-| Analyst | sparse | Analyst revision signal; loaded from cache if present, zero-filled otherwise |
-| Insider | sparse | Insider net transaction score; loaded from cache if present, zero-filled otherwise |
+| Analyst | 5% | Analyst revision signal; zero-filled if cache absent |
+| LLM Fundamental | 3% | Chicago Booth 6-step CoT via Claude Haiku; cached by (symbol, quarter_end); 45-day filing lag |
+| Options Flow | 2% | Options sentiment score; zero-filled if cache absent |
+| Insider | 2% | Insider net transaction score; zero-filled if cache absent |
+| Short Interest | 2% | Short squeeze signal; zero-filled if cache absent |
 
 Distressed filter: zeroes alpha for `mom_252d < −0.65` after blending.
 
@@ -235,7 +238,7 @@ Config defaults: `top_n=15`, `max_weight=0.10`, `min_weight=0.02`, `rebalance_fr
 ## Testing
 
 ```bash
-.venv/bin/pytest tests/ -v                   # 266 tests
+.venv/bin/pytest tests/ -v                   # 312 tests
 .venv/bin/pytest tests/ -k leakage           # Look-ahead / leakage tests
 .venv/bin/pytest tests/ -k walkforward       # Walk-forward split integrity
 .venv/bin/pytest tests/ -k regime            # Regime system
@@ -254,44 +257,53 @@ Coverage: data integrity, leakage detection, walk-forward splits, alpha sleeves,
 
 ---
 
-## Planned (Not Yet Built)
+## Built — AI-Native Features
 
 Plans at `docs/superpowers/plans/`.
 
-### AI-Native Tier 1 — Prerequisites + signal quality + self-calibration
+### AI-Native Tier 1 ✅ — Signal quality + self-calibration
 
-**Task 0 — Prerequisite fixes (must land before Tasks A–C):**
-- Self-modification kill switch: `SELF_MODIFY_ENABLED = False` in `self_improve.py` — loop is gated until +OOS Sharpe for 30 consecutive trading days on a flat config (see Self-Improving Alpha section above)
-- Private debate context subsets: `_build_agent_context()` in `debate/agents.py` — each agent sees a different slice of the portfolio (already documented in Debate Layer section above)
-- Performance display standard: `+` sign prefix on all CAGR/Sharpe/Alpha figures in README and dashboard output
+**Task 0 — Infrastructure prerequisites:**
+- `SELF_MODIFY_ENABLED = False` kill switch in `self_improve.py` — gated until +OOS Sharpe for 30 consecutive trading days on a flat config
+- `_build_agent_context()` in `debate/agents.py` — each agent receives a private context slice: bull sees momentum/fundamental, bear sees concentration/regime stress, devil's advocate sees regime entropy/Monte Carlo tail, regime specialist sees macro only
+- `+` sign prefix standard on all CAGR/Sharpe/Alpha figures
 
-**Task 0B — Disagreement score** (`debate/disagreement_scorer.py`): measures vocabulary-overlap disagreement between agent reasoning traces using TF-IDF cosine similarity (pure numpy, no external API). Formula: `1 - mean([sim(bull,bear), sim(bull,devil), sim(bear,devil)])`. Score and pairwise similarities written to every verdict JSON. Judge receives the score as an **informational note only** — it is not a verdict override (TF-IDF overlap is too coarse to reliably distinguish genuine epistemic divergence from shared financial vocabulary). Primary use: longitudinal validation metric for Task 0.2 — if `mean_disagreement_score` does not drop after `_build_agent_context()` goes live, the private context subsets are not producing real divergence.
+**Task 0B — Disagreement score** (`debate/disagreement_scorer.py`): TF-IDF cosine similarity across agent reasoning traces. `disagreement_score = 1 - mean(pairwise_sims)`. Written to every verdict JSON as an informational note — not a verdict override. Used to validate that private context subsets are producing real divergence over time.
 
-**Task A — CoT LLM fundamental alpha** (`ascent/alpha/llm_fundamental.py`): sends anonymized quarterly financial ratios to Claude Haiku using a 6-step structured CoT prompt (Chicago Booth 2407.17866). Returns a cross-sectional z-scored Series cached by (symbol, quarter_end). Wired into the alpha stack at 3%; trend reduced from 55% to 52%. Signals logged to `logs/llm_fundamental_signals.jsonl` for IC tracking — if mean IC < 0.01 after 30 trading days, reduce or disable. Note: the original study used GPT-4; Haiku has a meaningful reasoning gap on financial tasks.
+**Task A — CoT LLM fundamental alpha** (`ascent/alpha/llm_fundamental.py`): Chicago Booth 6-step CoT via Claude Haiku on anonymized quarterly ratios. Cached by (symbol, quarter_end). Wired into alpha stack at 3%; trend reduced 44%→41%. IC logged to `logs/llm_fundamental_signals.jsonl`.
 
-**Task B — Slippage-adjusted IC feedback** (`ascent/monitoring/slippage_ic_feedback.py`): reads `slippage_log.jsonl` and agent PnL logs weekly, computes Spearman IC on gross vs net-of-slippage returns, writes drag coefficient to `active_alpha_config.json`. `MIN_FILLS = 50` — passive logger until ~60 fills accumulate (~July 2026). Self-improve integration is a deferred TODO pending sufficient data.
+**Task B — Slippage-adjusted IC feedback** (`ascent/monitoring/slippage_ic_feedback.py`): Spearman IC gross vs net-of-slippage, computed weekly. `MIN_FILLS = 50` — passive logger until ~July 2026.
 
-**Task C — Regime-conditional debate personas** (`debate/outcome_tracker.py`, `debate/agents.py`): injects each agent's historical accuracy in the current regime into its system prompt. `min_samples = 10` — returns empty for all agent/regime pairs until ~August 2026. Dormant infrastructure; activates over time without code changes.
+**Task C — Regime-conditional debate personas**: each agent's historical verdict accuracy in the current regime injected into its system prompt via `debate/outcome_tracker.py`. `min_samples = 10` — dormant until ~August 2026; activates automatically as verdicts accumulate.
 
-### AI-Native Tier 2 — Institutional memory and tool-capable reasoning
+### AI-Native Tier 2 ✅ — Institutional memory + tool-capable reasoning
 
-> Depends on Tier 1 Task 0 (`SELF_MODIFY_ENABLED` gate). Task E's `generate_variants()` returns `[]` while the gate is closed.
+**Task D — FinMem reflection agent** (`memory/reflection_agent.py`): after each verdict is scored (14 days post-decision), Haiku writes a structured lesson to `memory/reflections.jsonl`. Injected into future debate context filtered by regime. Limitation: inferred from NAV change, not position-level attribution.
 
-**Task D — FinMem-style reflection agent** (`memory/reflection_agent.py`): after each verdict is scored (14 days post-decision), Haiku reads the outcome and writes a structured lesson — what the losing side missed, how to calibrate confidence in this regime. Lessons stored in `memory/reflections.jsonl`, injected into future debate context via `_build_context()`. Limitation: reflection is inferred from NAV change, not position-level attribution — lessons can be directionally wrong when an unrelated position drove the loss.
+**Task E — LLM-guided hypothesis generation** (`ascent/research/factor_proposer.py`): Haiku proposes regime-aware sleeve weight narratives with cosine-similarity deduplication (threshold 0.85). Wired into `generate_variants()` with random fallback. `SELF_MODIFY_ENABLED` gate applies.
 
-**Task E — LLM-guided hypothesis generation** (`ascent/research/factor_proposer.py`): Haiku proposes regime-aware weight narratives; cosine-similarity deduplication (threshold 0.85) rejects near-identical proposals. Wired into `generate_variants()` in `self_improve.py` with random fallback. `SELF_MODIFY_ENABLED` gate applies — no variants generated while closed. Known limitation: Haiku converges on textbook factor intuitions from training data rather than genuinely novel exploration. If guided variants underperform random perturbation by > 0.03 Sharpe over 4 weeks, disable the LLM proposer and widen random search instead.
+**Task F — Tool-capable debate agents** (`debate/agent_tools.py`): bear and devil's advocate call four domain tools — `get_sector_concentration`, `get_var_estimate`, `get_position_momentum`, `get_regime_conditional_stats` — via Anthropic tool-use loop in `ascent/llm/client.py`. 5-second yfinance timeout; fallback to `generate_structured`.
 
-**Task F — Tool-capable debate agents** (`debate/agent_tools.py`): equips bear and devil's advocate with four domain tools — `get_sector_concentration`, `get_var_estimate`, `get_position_momentum`, `get_regime_conditional_stats`. Requires a `tool_completion()` loop in `ascent/llm/client.py`. Tools use a 5-second hard timeout on yfinance fetches. Fallback to `generate_structured` on failure.
+---
+
+## Planned
 
 ### AI-Native Tier 3 — Autonomous factor discovery
 
-> **Do not begin until:** OOS Sharpe is positive for 30 consecutive trading days, private debate context subsets are live and showing measurable divergence between agents, and you have read Constitutional AI (Anthropic, 2022) and FinMem (arxiv:2311.13743). Even hedge funds with 20 quants find 1–2 real factors per year.
+> **Gate conditions (all must be met):** `SELF_MODIFY_ENABLED = True` (30 days +OOS Sharpe), ≥63 days of regime labels, ≥50 fills in slippage IC log, PySR installed (`pip install pysr`). Earliest realistic start: ~July 2026.
 
-**Task G — Factor discovery pipeline** (`ascent/research/factor_discovery/`): Claude Opus proposes novel alpha factors as Python code from economic first principles → AST validator enforces structural and security constraints (no imports, no exec/eval, no file I/O, whitelist-only builtins) → rolling Spearman IC evaluator scores on real price data in a restricted execution sandbox → novelty check rejects factors with Spearman correlation > 0.70 against existing benchmark signals → accepted proposals written to `outputs/factor_proposals/` for human review. Nothing auto-deploys. Monthly cadence (first Sunday of each month).
+**Path A — PySR symbolic regression** (`ascent/research/factor_discovery/pysr_engine.py`): genetic programming searches combinations of 10 pre-computed features (momentum, reversal, vol, z-score, 52wk high) and outputs human-readable mathematical expressions. No code generation — symbolic math on approved inputs only.
 
-Acceptance thresholds: IC mean > +0.015 AND IC IR > +0.40 AND n_observations ≥ 20. Do not lower these.
+**Path B — LLM template suggestion** (`ascent/research/factor_discovery/llm_suggester.py`): Haiku suggests JSON parameter sets for 5 pre-defined template families (momentum, reversion, volatility, quality, correlation). Returns `{"template": "momentum", "lookback": 120, "skip_days": 21}` — never Python code.
+
+**Validation** (`ascent/research/factor_discovery/regime_cpcv_evaluator.py`): per-regime Spearman IC with Harvey FDR correction. Thresholds: IC mean > +0.015 AND IC IR > +0.60 AND IC positive in every observed regime. At IR > 0.60, ~0.5 spurious acceptances/year from 50 candidates (vs ~3 at IR > 0.40).
+
+**Safety** (`ascent/research/factor_discovery/leakage_scanner.py`): AST + regex for lookahead patterns (`datetime.now()`, `.shift(-N)`, `.tail(1)`, hard-coded future dates). Rejects any candidate that trips a check.
+
+Nothing auto-deploys. Accepted candidates written to `outputs/factor_proposals/` for human review. Monthly cadence (first Sunday of each month).
 
 ### Backlog
 
-- **Analyst revision signal**: `yfinance` recommendations as short-term catalyst
 - **Earnings surprise beta neutralization**: reduce momentum overlap in PEAD sleeve
+- **Analyst revision signal**: `yfinance` recommendations as short-term catalyst
+- **R2R semantic memory**: built but `R2R_API_KEY` not configured; BM25 fallback active

@@ -60,15 +60,18 @@ demo_app.py           Streamlit interactive demo (Tony Ngo)
 
 | Sleeve | Weight | Notes |
 |--------|--------|-------|
-| Trend | 55% | Cross-sectional momentum; skip-last-month variant (`mom_252d − mom_21d`) at 0.20 sub-weight |
+| Trend | 41% | Cross-sectional momentum; skip-last-month variant (`mom_252d − mom_21d`) at 0.20 sub-weight |
 | Stat-arb | 15% | Sector residuals; needs profiles.parquet |
-| Mean reversion | 5% | Short-term reversal |
 | ML (XGBoost) | 10% | CPCV C(6,2)=15 folds, purge=5 bdays, embargo=5 bdays; 6 features by IC/IR; p5 guard > −0.05 |
+| Mean reversion | 5% | Short-term reversal |
 | Volatility | 5% | `−(vol_trend_10d / vol_of_vol_21d)`; long names with declining + stable vol |
 | Fundamental | 5% | Gross profitability, accruals, asset growth, 52wk high; 45-day filing lag |
 | Earnings (PEAD) | 5% | Cross-sectional z-score of reported vs expected EPS; 1-bday announcement lag |
-| Analyst | variable | Analyst revision signal; sparse — loaded if cache present |
-| Insider | variable | Insider net transaction score; sparse — loaded if cache present |
+| Analyst | 5% | Analyst revision signal; sparse — zero-filled if cache absent |
+| LLM Fundamental | 3% | Chicago Booth 6-step CoT via Haiku; cached by (symbol, quarter_end); 45-day filing lag |
+| Options Flow | 2% | Options sentiment; sparse — zero-filled if cache absent |
+| Insider | 2% | Insider net transaction score; sparse — zero-filled if cache absent |
+| Short Interest | 2% | Short squeeze signal; sparse — zero-filled if cache absent |
 
 Distressed filter: zeroes alpha for `mom_252d < −0.65` after blending. All sleeves cross-sectionally z-scored before blending. Weights are regime-adaptive via `data_cache/active_alpha_config.json` (updated weekly by self-improve loop). ML sleeve disabled if <10 folds converge or p5 IC Sharpe < −0.05.
 
