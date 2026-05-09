@@ -1,10 +1,13 @@
 """ascent/alpha/fundamental.py
 
-Fundamental alpha sleeve — four academically-validated signals:
+Fundamental alpha sleeve — three accounting quality signals:
   gross_profitability (Novy-Marx 2013)  — long high GP/Assets
   accruals            (Sloan 1996)       — long low (inverted)
   asset_growth        (Cooper 2008)      — long low (inverted)
-  high_52w_pct        (George/Hwang 2004)— long near 52-week high
+
+52-week high removed: it is a price momentum signal, not a fundamental.
+Keeping it here caused ~20% momentum double-counting with the trend sleeve.
+Returns empty DataFrame when fundamental cache is absent (sleeve skipped by stack).
 """
 from __future__ import annotations
 import logging
@@ -22,25 +25,14 @@ def _cs_zscore(df: pd.DataFrame) -> pd.DataFrame:
 
 def fundamental_alpha(features: dict) -> pd.DataFrame:
     """
-    Build fundamental alpha composite. Returns DataFrame(dates × symbols).
-    Degrades gracefully to 52wk-high-only if fundamentals absent.
+    Build fundamental alpha composite: gross_profitability, accruals, asset_growth.
+    Returns empty DataFrame when fundamental data is absent — stack skips and renormalizes.
     """
     close = features.get("close")
     if close is None or close.empty:
         return pd.DataFrame()
 
     components = []
-
-    h52 = features.get("high_52w_pct")
-    if h52 is None:
-        h52 = close / close.rolling(252, min_periods=63).max()
-    try:
-        components.append(_cs_zscore(
-            h52.reindex(close.index).reindex(columns=close.columns)
-        ))
-        log.info("fundamental_alpha: 52-week high loaded")
-    except Exception as e:
-        log.warning("fundamental_alpha: 52wk high failed: %s", e)
 
     for key, invert in [("gross_profitability", False), ("accruals", True), ("asset_growth", True)]:
         if key in features:

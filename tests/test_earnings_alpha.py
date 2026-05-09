@@ -241,6 +241,54 @@ def test_feature_builder_compute_includes_earnings_surprise():
     assert "earnings_surprise" in features
 
 
+def test_earnings_alpha_neutralizes_momentum_when_available():
+    """Residuals after OLS on mom_126d should have lower correlation with mom than raw signal."""
+    from ascent.alpha.earnings import earnings_alpha
+
+    np.random.seed(7)
+    dates = pd.bdate_range("2025-01-01", periods=60)
+    syms = ["A", "B", "C", "D", "E", "F", "G", "H"]
+
+    # Construct surprise = 0.5 * momentum + noise  (strong momentum beta)
+    mom_data = np.random.randn(60, len(syms))
+    noise = np.random.randn(60, len(syms)) * 0.3
+    surprise_data = 0.5 * mom_data + noise
+
+    mom_df = pd.DataFrame(mom_data, index=dates, columns=syms)
+    surprise_df = pd.DataFrame(surprise_data, index=dates, columns=syms)
+
+    raw_result = earnings_alpha({"earnings_surprise": surprise_df})
+    neutralized_result = earnings_alpha({"earnings_surprise": surprise_df, "mom_126d": mom_df})
+
+    # Both should be non-empty DataFrames
+    assert not raw_result.empty
+    assert not neutralized_result.empty
+
+    # Flatten and measure cross-sectional correlation with momentum
+    mom_flat = mom_df.values.flatten()
+    raw_corr = np.corrcoef(raw_result.values.flatten(), mom_flat)[0, 1]
+    neut_corr = np.corrcoef(neutralized_result.values.flatten(), mom_flat)[0, 1]
+
+    # Neutralized signal must have lower absolute momentum correlation
+    assert abs(neut_corr) < abs(raw_corr), (
+        f"Neutralization failed: |neut_corr|={abs(neut_corr):.3f} >= |raw_corr|={abs(raw_corr):.3f}"
+    )
+
+
+def test_earnings_alpha_falls_back_gracefully_without_mom():
+    """Returns valid z-scored output when mom_126d is absent."""
+    from ascent.alpha.earnings import earnings_alpha
+
+    dates = pd.bdate_range("2025-01-01", periods=10)
+    syms = ["X", "Y", "Z"]
+    surprise_df = pd.DataFrame(np.random.randn(10, 3), index=dates, columns=syms)
+
+    result = earnings_alpha({"earnings_surprise": surprise_df})
+    assert not result.empty
+    assert result.shape == (10, 3)
+    assert not result.isnull().any().any()
+
+
 def test_self_improve_default_weights_match_stack():
     """self_improve.DEFAULT_ALPHA_WEIGHTS matches stack.DEFAULT_ALPHA_WEIGHTS."""
     from ascent.alpha.stack import DEFAULT_ALPHA_WEIGHTS as stack_weights

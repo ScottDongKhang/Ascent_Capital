@@ -138,12 +138,12 @@ def test_high_52w_pct_feature():
 
 def test_fundamental_alpha_builds_composite():
     from ascent.alpha.fundamental import fundamental_alpha
-    from ascent.features.feature_defs import build_fundamental_panel, high_52w_pct
+    from ascent.features.feature_defs import build_fundamental_panel
     syms = ["AAPL", "MSFT", "GOOGL"]
     close = _make_close(syms)
     fund_df = _make_fundamentals_df(syms)
     panel = build_fundamental_panel(fund_df, close.index, syms)
-    features = {"close": close, "high_52w_pct": high_52w_pct(close)}
+    features = {"close": close}
     features.update(panel)
     result = fundamental_alpha(features)
     assert not result.empty
@@ -153,8 +153,9 @@ def test_fundamental_alpha_builds_composite():
 def test_fundamental_alpha_works_without_fundamentals():
     from ascent.alpha.fundamental import fundamental_alpha
     close = _make_close()
+    # No accounting data → sleeve returns empty (stack skips and renormalizes)
     result = fundamental_alpha({"close": close})
-    assert not result.empty
+    assert result.empty
 
 
 # ── Task 3 tests ───────────────────────────────────────────────────────────────
