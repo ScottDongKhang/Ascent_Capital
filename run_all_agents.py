@@ -372,6 +372,16 @@ def main():
     except Exception as e:
         print(f"[Runner] Shadow promotion failed: {type(e).__name__}: {e}")
 
+    def _get_current_regime() -> str:
+        try:
+            import json as _gj
+            _gsig = _gj.loads(open("dashboard/regime_signal.json").read())
+            if isinstance(_gsig, list):
+                _gsig = _gsig[-1] if _gsig else {}
+            return str(_gsig.get("label", "unknown")).lower()
+        except Exception:
+            return "unknown"
+
     # Self-improve: runs on Sundays with current regime
     try:
         import calendar as _cal
@@ -405,6 +415,23 @@ def main():
                 print(f"[SlippageIC] Feedback skipped: {_se}")
     except Exception as e:
         print(f"[Runner] Self-improve failed: {type(e).__name__}: {e}")
+
+    # Factor discovery — first Sunday of each month only
+    try:
+        from datetime import date as _fdate
+        _ftoday = _fdate.today()
+        if _ftoday.weekday() == 6 and _ftoday.day <= 7:
+            from ascent.research.factor_discovery.discovery_runner import run_factor_discovery
+            _disc_regime = _get_current_regime()
+            print(f"[FactorDiscovery] Monthly run — regime={_disc_regime}")
+            _disc = run_factor_discovery(n_candidates=5, regime=_disc_regime)
+            print(
+                f"[FactorDiscovery] Done: {_disc['n_accepted']} accepted, "
+                f"{_disc['n_rejected']} rejected. "
+                f"Proposals: outputs/factor_proposals/"
+            )
+    except Exception as _de:
+        print(f"[FactorDiscovery] Monthly run skipped: {_de}")
 
     # ── Step 5: Run orchestrator (reads fresh skill scores written above) ─────
     merged_weights = run_orchestrator(agent_outputs)
