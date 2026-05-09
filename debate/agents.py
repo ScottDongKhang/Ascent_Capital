@@ -97,6 +97,18 @@ def _build_context(portfolio_state: dict) -> str:
         except Exception:
             pass
 
+    # Post-trade reflections — structured lessons from past outcomes in this regime
+    regime_for_reflection = portfolio_state.get("us_regime", "unknown")
+    try:
+        from memory.reflection_agent import load_recent_reflections, format_reflections_for_context
+        recent_reflections = load_recent_reflections(regime=regime_for_reflection, n=3)
+        reflection_text = format_reflections_for_context(recent_reflections)
+        if reflection_text:
+            lines.append("")
+            lines.append(reflection_text)
+    except Exception:
+        pass
+
     quant_ctx = portfolio_state.get("quant_context")
     if quant_ctx and isinstance(quant_ctx, dict):
         summary = quant_ctx.get("summary_text", "")
