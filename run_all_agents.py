@@ -353,13 +353,15 @@ def main():
         n_scored = score_pending_verdicts()
         if n_scored:
             print(f"[OutcomeTracker] Scored {n_scored} verdict(s)")
-            # Reflect on newly-scored outcomes
-            from memory.reflection_agent import reflect_on_new_outcomes
-            n_reflected = reflect_on_new_outcomes()
-            if n_reflected:
-                print(f"[Reflection] Wrote {n_reflected} new lesson(s) to memory/reflections.jsonl")
     except Exception as _oe:
         print(f"[OutcomeTracker] Scoring skipped: {_oe}")
+    try:
+        from memory.reflection_agent import reflect_on_new_outcomes
+        n_reflected = reflect_on_new_outcomes()
+        if n_reflected:
+            print(f"[Reflection] Wrote {n_reflected} new lesson(s) to memory/reflections.jsonl")
+    except Exception as _re:
+        print(f"[Reflection] Skipped: {_re}")
 
     # Daily shadow promotion check (only acts on expired shadows)
     try:

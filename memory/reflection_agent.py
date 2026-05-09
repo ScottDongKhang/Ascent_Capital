@@ -74,8 +74,8 @@ def _load_reflected_dates() -> set:
                 row = json.loads(line)
                 if "verdict_date" in row:
                     dates.add(row["verdict_date"])
-    except Exception:
-        pass
+    except Exception as exc:
+        log.warning("[Reflection] Could not read reflections file: %s", exc)
     return dates
 
 
@@ -131,10 +131,11 @@ def reflect_on_verdict(verdict_path: Path) -> Optional[Dict]:
         if start == -1 or end == 0:
             return None
         parsed = json.loads(raw[start:end])
-        parsed["date"]         = str(date_str)
-        parsed["verdict_date"] = str(date_str)
-        parsed["nav_change"]   = round(nav_change, 4)
-        parsed["correct"]      = correct
+        parsed["date"]             = str(date_str)
+        parsed["verdict_date"]     = str(date_str)
+        parsed["nav_change"]       = round(nav_change, 4)
+        parsed["correct"]          = correct
+        parsed["wrong_agent_type"] = wrong_agent
         parsed.setdefault("regime", regime)
         return parsed
     except Exception as exc:
