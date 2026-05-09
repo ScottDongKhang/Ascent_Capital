@@ -122,7 +122,7 @@ def generate_variants(base_config: dict, n: int = N_VARIANTS, regime: str = None
                 random_count = n - len(guided)
                 return guided + _random_variants(active_sleeves, n=random_count)
         except Exception as exc:
-            print(f"[SelfImprove] LLM hypothesis generation failed ({exc}), using random perturbation")
+            log.warning("[SelfImprove] LLM hypothesis generation failed (%s), using random perturbation", exc)
 
     return _random_variants(active_sleeves, n=n)
 
