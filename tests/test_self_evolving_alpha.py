@@ -197,10 +197,12 @@ def test_shadow_promoter_archives_weak_expired(tmp_path, monkeypatch):
 
 def test_generate_variants_produces_valid_weights():
     """generate_variants must produce N variants, each summing to 1.0."""
+    from unittest.mock import patch
     from ascent.research.self_improve import generate_variants
     base = {"alpha_weights": {"trend": 0.65, "meanrev": 0.05,
                                "statarb": 0.15, "ml": 0.10, "volatility": 0.05}}
-    variants = generate_variants(base, n=5)
+    with patch("ascent.research.self_improve.SELF_MODIFY_ENABLED", True):
+        variants = generate_variants(base, n=5)
     assert len(variants) == 5
     for v in variants:
         total = sum(v["alpha_weights"].values())

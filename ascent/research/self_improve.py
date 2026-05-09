@@ -91,14 +91,44 @@ def _save_active_config(config: dict):
 
 # ── Variant generation ─────────────────────────────────────────────────────────
 
-def generate_variants(base_config: dict, n: int = N_VARIANTS) -> list:
+def generate_variants(base_config: dict, n: int = N_VARIANTS, regime: str = None) -> list:
     """
     Generate N variant configs by perturbing sleeve weights within safe bounds.
+
+    When regime is provided, first attempts LLM-guided hypothesis generation via
+    factor_proposer. Falls back to random perturbation if LLM is unavailable or
+    produces fewer variants than requested.
+
     Weights are renormalized to sum to 1 after perturbation.
-    All 7 sleeves are perturbed: trend, meanrev, statarb, ml, volatility, fundamental, earnings.
     """
-    base_weights = base_config.get("alpha_weights", DEFAULT_ALPHA_WEIGHTS)
-    active_sleeves = {k: v for k, v in base_weights.items()}
+    # Respect the kill switch -- no variants generated while gate is closed
+    if not SELF_MODIFY_ENABLED:
+        log.info("[SelfImprove] SELF_MODIFY_ENABLED=False -- generate_variants returning []")
+        return []
+
+    base_weights   = base_config.get("alpha_weights", DEFAULT_ALPHA_WEIGHTS)
+    active_sleeves = dict(base_weights)
+
+    # Try LLM-guided hypothesis generation when regime is known
+    if regime:
+        try:
+            from ascent.research.factor_proposer import propose_hypotheses, generate_guided_variants
+            hypotheses = propose_hypotheses(regime=regime, current_weights=active_sleeves, n=n)
+            if hypotheses:
+                guided = generate_guided_variants(active_sleeves, hypotheses, perturb_range=0.03)
+                if len(guided) >= n:
+                    return guided[:n]
+                # Top up with random variants if guided produced fewer than n
+                random_count = n - len(guided)
+                return guided + _random_variants(active_sleeves, n=random_count)
+        except Exception as exc:
+            log.warning("[SelfImprove] LLM hypothesis generation failed (%s), using random perturbation", exc)
+
+    return _random_variants(active_sleeves, n=n)
+
+
+def _random_variants(active_sleeves: dict, n: int) -> list:
+    """Generate n random weight perturbation variants (original behavior)."""
     variants = []
 
     for i in range(n):
@@ -235,7 +265,7 @@ def run_self_improve(current_regime: str = None):
     active = _load_active_config()
     print(f"[SelfImprove] Active alpha weights: {active.get('alpha_weights', {})}")
 
-    variants = generate_variants(active, n=N_VARIANTS)
+    variants = generate_variants(active, n=N_VARIANTS, regime=current_regime)
     print(f"[SelfImprove] Generated {len(variants)} variants\n")
 
     results = []

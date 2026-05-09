@@ -347,6 +347,22 @@ def main():
     except Exception as e:
         print(f"[Runner] Counterfactual scoring failed: {type(e).__name__}: {e}")
 
+    # Score pending verdicts (runs daily, NOP if no verdicts old enough)
+    try:
+        from debate.outcome_tracker import score_pending_verdicts
+        n_scored = score_pending_verdicts()
+        if n_scored:
+            print(f"[OutcomeTracker] Scored {n_scored} verdict(s)")
+    except Exception as _oe:
+        print(f"[OutcomeTracker] Scoring skipped: {_oe}")
+    try:
+        from memory.reflection_agent import reflect_on_new_outcomes
+        n_reflected = reflect_on_new_outcomes()
+        if n_reflected:
+            print(f"[Reflection] Wrote {n_reflected} new lesson(s) to memory/reflections.jsonl")
+    except Exception as _re:
+        print(f"[Reflection] Skipped: {_re}")
+
     # Daily shadow promotion check (only acts on expired shadows)
     try:
         from ascent.research.shadow_promoter import run_shadow_promotion

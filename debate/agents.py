@@ -16,7 +16,7 @@ Quant sanity checker uses no LLM.
 
 import logging
 
-from ascent.llm.client import generate_structured, DEFAULT_MODEL as DEBATE_MODEL, HAIKU_MODEL
+from ascent.llm.client import generate_structured, tool_completion, DEFAULT_MODEL as DEBATE_MODEL, HAIKU_MODEL
 from debate.outcome_tracker import load_credibility_context
 
 log = logging.getLogger(__name__)
@@ -96,6 +96,18 @@ def _build_context(portfolio_state: dict) -> str:
                 lines.append(memory_text)
         except Exception:
             pass
+
+    # Post-trade reflections — structured lessons from past outcomes in this regime
+    regime_for_reflection = portfolio_state.get("us_regime", "unknown")
+    try:
+        from memory.reflection_agent import load_recent_reflections, format_reflections_for_context
+        recent_reflections = load_recent_reflections(regime=regime_for_reflection, n=3)
+        reflection_text = format_reflections_for_context(recent_reflections)
+        if reflection_text:
+            lines.append("")
+            lines.append(reflection_text)
+    except Exception:
+        pass
 
     quant_ctx = portfolio_state.get("quant_context")
     if quant_ctx and isinstance(quant_ctx, dict):
@@ -276,21 +288,43 @@ def run_bear_agent(portfolio_state: dict) -> str:
     user_prompt  = f"Portfolio context:\n{context}"
     if cred_context:
         user_prompt += f"\n\n{cred_context}"
-    user_prompt += "\n\nMake the bear case against these trades."
-    return generate_structured(
-        system_prompt=(
-            "You are the Bear Analyst at Ascent Capital. Your job is to argue "
-            "for REDUCING risk or WAITING. Identify the weakest positions, concentration risks, "
-            "regime fragility, or macro headwinds. Be specific. "
-            "You have been given historical accuracy data — use it to calibrate how often "
-            f"your past warnings were correct in this regime. Keep under 200 words."
-            f"{track_record}"
-        ),
-        user_prompt=user_prompt,
-        model=DEBATE_MODEL,
-        temperature=0.6,
-        use_cache=True,
+    user_prompt += (
+        "\n\nMake the bear case against these trades. "
+        "Use the available tools to verify sector concentrations, VaR, and momentum "
+        "before making quantitative claims."
     )
+    try:
+        from debate.agent_tools import DEBATE_TOOLS, execute_tool
+        return tool_completion(
+            system_prompt=(
+                "You are the Bear Analyst at Ascent Capital. Your job is to argue "
+                "for REDUCING risk or WAITING. Identify the weakest positions, concentration risks, "
+                "regime fragility, or macro headwinds. Use the provided tools to compute "
+                "sector concentration, VaR, and momentum BEFORE making claims -- do not guess "
+                "at numbers you can look up. Be specific. "
+                "You have been given historical accuracy data -- use it to calibrate how often "
+                "your past warnings were correct in this regime. Keep under 200 words."
+                f"{track_record}"
+            ),
+            user_prompt=user_prompt,
+            tools=DEBATE_TOOLS,
+            tool_executor=execute_tool,
+            model=DEBATE_MODEL,
+            max_tokens=800,
+            max_tool_calls=2,
+        )
+    except Exception as e:
+        log.warning("[Bear] Tool completion failed (%s), falling back to generate_structured", e)
+        return generate_structured(
+            system_prompt=(
+                "You are the Bear Analyst at Ascent Capital. Argue for reducing risk. "
+                "Be specific. Keep under 200 words."
+            ),
+            user_prompt=user_prompt,
+            model=DEBATE_MODEL,
+            temperature=0.6,
+            use_cache=True,
+        )
 
 
 def run_devils_advocate(portfolio_state: dict) -> str:
@@ -321,24 +355,40 @@ def run_devils_advocate(portfolio_state: dict) -> str:
         user_prompt += f"\n\n{cred_context}"
     user_prompt += "\n\nWhat is the most dangerous blind spot? Use the scenario numbers."
 
-    return generate_structured(
-        system_prompt=(
-            "You are the Devil's Advocate at Ascent Capital. Your job is to "
-            "find the SINGLE most dangerous assumption in the current portfolio construction. "
-            "What could go catastrophically wrong that the quant signals would NOT catch? "
-            "You have been given Monte Carlo scenario analysis showing worst-case portfolio "
-            "impacts. Use these numbers to make a specific, quantified argument. "
-            "You also have historical accuracy data — use it to understand when your "
-            "past warnings were prescient vs. over-cautious. "
-            "Think about: earnings surprises, geopolitical events, liquidity gaps, "
-            f"correlation breakdowns. Be specific. Keep under 150 words."
-            f"{track_record}"
-        ),
-        user_prompt=user_prompt,
-        model=DEBATE_MODEL,
-        temperature=0.7,
-        use_cache=True,
+    _da_system_prompt = (
+        "You are the Devil's Advocate at Ascent Capital. Your job is to "
+        "find the SINGLE most dangerous assumption in the current portfolio construction. "
+        "What could go catastrophically wrong that the quant signals would NOT catch? "
+        "You have been given Monte Carlo scenario analysis showing worst-case portfolio "
+        "impacts. Use these numbers to make a specific, quantified argument. "
+        "You also have historical accuracy data — use it to understand when your "
+        "past warnings were prescient vs. over-cautious. "
+        "Use the available tools to look up sector concentration, VaR, and momentum data "
+        "to make quantitative arguments. "
+        "Think about: earnings surprises, geopolitical events, liquidity gaps, "
+        f"correlation breakdowns. Be specific. Keep under 150 words."
+        f"{track_record}"
     )
+    try:
+        from debate.agent_tools import DEBATE_TOOLS, execute_tool
+        return tool_completion(
+            system_prompt=_da_system_prompt,
+            user_prompt=user_prompt,
+            tools=DEBATE_TOOLS,
+            tool_executor=execute_tool,
+            model=DEBATE_MODEL,
+            max_tokens=800,
+            max_tool_calls=2,
+        )
+    except Exception as e:
+        log.warning("[DevilsAdvocate] Tool completion failed (%s), falling back to generate_structured", e)
+        return generate_structured(
+            system_prompt=_da_system_prompt,
+            user_prompt=user_prompt,
+            model=DEBATE_MODEL,
+            temperature=0.7,
+            use_cache=True,
+        )
 
 
 # ── Regime specialist ──────────────────────────────────────────────────────────
