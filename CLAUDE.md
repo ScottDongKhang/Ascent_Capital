@@ -425,3 +425,13 @@ All audits complete through third pass. No outstanding crash risks. Pipeline run
 - README updated: Task 0B entry reflects monitoring-only framing
 - Files: `docs/superpowers/plans/2026-05-03-ai-native-tier1.md`, `README.md`, `CLAUDE.md`
 - Open: all Tier 1–3 tasks still unexecuted; R2R API key not configured
+
+### 2026-05-08 (AI-native Tier 1 execution)
+- **Task 0 ✅**: `SELF_MODIFY_ENABLED = False` kill switch in `ascent/research/self_improve.py`; `run_self_improve()` returns `[]` early with `log.warning()` when gate is closed
+- **Task 0B ✅**: `debate/disagreement_scorer.py` — TF-IDF cosine similarity scorer; wired into `debate_runner.py` (computes after Round 2, writes to verdict JSON) and `debate/judge.py` (`disagreement_context` param, informational-only); 7 tests
+- **Task A ✅**: `ascent/alpha/llm_fundamental.py` — Chicago Booth 6-step CoT, Haiku, cached by (symbol, quarter_end), 45-day filing lag, z-scored output, IC logging to `logs/llm_fundamental_signals.jsonl`; wired into `stack.py` at 3%, trend 0.44→0.41; `self_improve.py` synced; 8 tests
+- **Task B ✅**: `ascent/monitoring/slippage_ic_feedback.py` — Spearman IC gross vs net-of-slippage, MIN_FILLS=50, passive logger until ~July 2026; wired into `run_all_agents.py` Sunday block; 5 tests
+- **Task C ✅**: `debate/outcome_tracker.py` — `get_agent_regime_accuracy()` with `min_samples=10`; `debate/agents.py` — 8 section builders, `_build_agent_context()`, `_get_agent_track_record()`, track records injected into all 4 agent system prompts; private context subsets per agent enforced; 6 tests
+- Branch `feature/ai-native-tier1` merged to main and pushed; 292 tests passing (up from 266)
+- Files: `ascent/alpha/llm_fundamental.py` (new), `ascent/monitoring/slippage_ic_feedback.py` (new), `debate/disagreement_scorer.py` (new), `ascent/research/self_improve.py`, `ascent/alpha/stack.py`, `debate/agents.py`, `debate/outcome_tracker.py`, `debate/judge.py`, `debate/debate_runner.py`, `run_all_agents.py`, + 4 new test files
+- Open: Tier 2 and Tier 3 plans not yet executed; R2R API key not configured; `signal_score` in slippage IC uses price impact (not alpha score) — revisit before MIN_FILLS reached
