@@ -176,6 +176,108 @@ def extended_thinking_completion(
             time.sleep(2 ** attempt)
 
 
+def tool_completion(
+    system_prompt: str,
+    user_prompt: str,
+    tools: list,
+    tool_executor,
+    model: str = DEFAULT_MODEL,
+    max_tokens: int = 2000,
+    max_tool_calls: int = 3,
+) -> str:
+    """
+    Execute an LLM call with Anthropic tool use, running the tool loop until
+    stop_reason == 'end_turn' or max_tool_calls is reached.
+
+    Args:
+        system_prompt:  System instructions for the agent.
+        user_prompt:    Initial user message.
+        tools:          List of Anthropic tool schema dicts (name, description, input_schema).
+        tool_executor:  Callable(tool_name: str, tool_inputs: dict) -> str result.
+        model:          Anthropic model string.
+        max_tokens:     Max output tokens per call.
+        max_tool_calls: Maximum number of tool call iterations before forcing a final response.
+
+    Returns:
+        The agent's final text response after all tool calls.
+    """
+    _check_api_key()
+    client   = _get_client()
+    messages = [{"role": "user", "content": user_prompt}]
+
+    for _iteration in range(max_tool_calls + 1):
+        kwargs = dict(
+            model=model,
+            max_tokens=max_tokens,
+            tools=tools,
+            messages=messages,
+            system=system_prompt,
+        )
+        for attempt in range(_MAX_RETRIES):
+            try:
+                resp = client.messages.create(**kwargs)
+                break
+            except Exception as e:
+                if attempt == _MAX_RETRIES - 1:
+                    raise
+                wait = 2 ** attempt
+                log.warning("[LLM/Tools] Attempt %d failed (%s), retry in %ds", attempt + 1, e, wait)
+                time.sleep(wait)
+
+        if resp.stop_reason == "end_turn":
+            text_parts = [
+                block.text for block in resp.content
+                if getattr(block, "type", "") == "text"
+            ]
+            return "\n".join(text_parts)
+
+        if resp.stop_reason == "tool_use":
+            tool_use_blocks = [b for b in resp.content if getattr(b, "type", "") == "tool_use"]
+            if not tool_use_blocks:
+                break
+
+            assistant_content = []
+            for block in resp.content:
+                block_type = getattr(block, "type", "")
+                if block_type == "tool_use":
+                    assistant_content.append({
+                        "type":  "tool_use",
+                        "id":    block.id,
+                        "name":  block.name,
+                        "input": block.input,
+                    })
+                elif block_type == "text":
+                    assistant_content.append({"type": "text", "text": block.text})
+
+            messages.append({"role": "assistant", "content": assistant_content})
+
+            tool_results = []
+            for block in tool_use_blocks:
+                result = tool_executor(block.name, block.input)
+                tool_results.append({
+                    "type":        "tool_result",
+                    "tool_use_id": block.id,
+                    "content":     str(result),
+                })
+            messages.append({"role": "user", "content": tool_results})
+
+        else:
+            text_parts = [
+                block.text for block in resp.content
+                if getattr(block, "type", "") == "text"
+            ]
+            return "\n".join(text_parts) if text_parts else f"[Stopped: {resp.stop_reason}]"
+
+    try:
+        text_parts = [
+            block.text for block in resp.content
+            if getattr(block, "type", "") == "text"
+        ]
+        return "\n".join(text_parts) if text_parts else "[Tool loop: max iterations reached]"
+    except Exception:
+        return "[Tool loop: max iterations reached]"
+
+
 if __name__ == "__main__":
     try:
         result = chat_completion(
