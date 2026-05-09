@@ -218,7 +218,7 @@ All audits complete through third pass. No outstanding crash risks. Pipeline run
 
 - **AI-native Tier 1**: ✅ built — `ascent/alpha/llm_fundamental.py`, `ascent/monitoring/slippage_ic_feedback.py`, `debate/disagreement_scorer.py`, private context subsets in `debate/agents.py`
 - **AI-native Tier 2**: ✅ built — `memory/reflection_agent.py`, `ascent/research/factor_proposer.py`, `debate/agent_tools.py`, `tool_completion()` in `ascent/llm/client.py`
-- **AI-native Tier 3**: plan rewritten (research-backed) — `docs/superpowers/plans/2026-05-03-ai-native-tier3.md`; PySR symbolic regression + LLM template suggestions + Harvey FDR correction; gate conditions not yet met
+- **AI-native Tier 3**: ✅ built — `ascent/research/factor_discovery/` (PySR + LLM templates, per-regime CPCV, Harvey FDR); pipeline inactive until gate conditions met (~July 2026)
 - **R2R semantic memory**: built but `R2R_API_KEY` not configured; BM25 fallback active
 - **Live dashboard UI**: data files generated but no live render
 - **Alpha signal backlog**: neutralize earnings surprise beta momentum overlap; analyst revision signal
@@ -454,3 +454,18 @@ All audits complete through third pass. No outstanding crash risks. Pipeline run
 - Gate conditions for Tier 3 execution: SELF_MODIFY_ENABLED (30 days +OOS), 63 days regime labels, MIN_FILLS=50 in slippage IC, PySR installed, CPCV control validation
 - Files: `docs/superpowers/plans/2026-05-03-ai-native-tier3.md`, `CLAUDE.md`
 - Open: Tier 3 execution blocked on gate conditions (~July 2026); R2R API key not configured; slippage IC signal_score revisit before MIN_FILLS
+
+### 2026-05-09 (AI-native Tier 3 execution)
+- **Task G ✅**: `ascent/research/factor_discovery/` — autonomous factor discovery pipeline (7 files, 14 tests)
+  - `feature_templates.py` — 5 template families (Momentum, Reversion, Volatility, Quality, Correlation); LLM fills params via JSON; no code injection
+  - `leakage_scanner.py` — AST + regex lookahead detector; rejects `.tail(1)`, `datetime.now()`, `.shift(-N)`, future dates in subscripts
+  - `regime_cpcv_evaluator.py` — per-regime Spearman IC evaluator; Harvey FDR threshold IC_mean ≥ 0.015 AND IC_IR ≥ 0.60; reports IC per regime
+  - `llm_suggester.py` — Haiku proposes template + params as JSON; returns None on failure; zero code risk
+  - `pysr_engine.py` — PySR symbolic regression on pre-computed feature panel; graceful fallback if pysr not installed
+  - `discovery_runner.py` — orchestrates both paths; acceptance gate: Harvey FDR + IC_min_regime > 0.01 + n_obs ≥ 20; proposals written to `outputs/factor_proposals/`; nothing auto-deploys
+  - `__init__.py` — package marker
+- PySR installed: `pip install pysr`
+- Monthly trigger wired into `run_all_agents.py`: first Sunday of each month (day ≤ 7); `_get_current_regime()` helper added
+- 326 tests passing (up from 312)
+- Files: `ascent/research/factor_discovery/` (7 new files), `tests/test_factor_discovery.py` (new), `run_all_agents.py`
+- Open: gate conditions for Tier 3 activation still ~July 2026 (SELF_MODIFY_ENABLED, 63d regime labels, MIN_FILLS=50); R2R API key not configured
