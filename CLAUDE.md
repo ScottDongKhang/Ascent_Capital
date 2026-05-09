@@ -213,9 +213,9 @@ All audits complete through third pass. No outstanding crash risks. Pipeline run
 
 ## What is not built yet
 
-- **AI-native Tier 1**: planned, not yet built — `docs/superpowers/plans/2026-05-03-ai-native-tier1.md` (CoT LLM fundamental, slippage IC feedback, regime personas)
+- **AI-native Tier 1**: ✅ built — `ascent/alpha/llm_fundamental.py`, `ascent/monitoring/slippage_ic_feedback.py`, `debate/disagreement_scorer.py`, private context subsets in `debate/agents.py`
 - **AI-native Tier 2**: ✅ built — `memory/reflection_agent.py`, `ascent/research/factor_proposer.py`, `debate/agent_tools.py`, `tool_completion()` in `ascent/llm/client.py`
-- **AI-native Tier 3**: planned, not yet built — `docs/superpowers/plans/2026-05-03-ai-native-tier3.md` (autonomous factor discovery pipeline)
+- **AI-native Tier 3**: plan rewritten (research-backed) — `docs/superpowers/plans/2026-05-03-ai-native-tier3.md`; PySR symbolic regression + LLM template suggestions + Harvey FDR correction; gate conditions not yet met
 - **R2R semantic memory**: built but `R2R_API_KEY` not configured; BM25 fallback active
 - **Live dashboard UI**: data files generated but no live render
 - **Alpha signal backlog**: neutralize earnings surprise beta momentum overlap; analyst revision signal
@@ -443,3 +443,11 @@ All audits complete through third pass. No outstanding crash risks. Pipeline run
 - Branch `feature/ai-native-tier2` merged to main and pushed; 312 tests passing (up from 292)
 - Files: `memory/reflection_agent.py` (new), `ascent/research/factor_proposer.py` (new), `debate/agent_tools.py` (new), `ascent/llm/client.py`, `ascent/research/self_improve.py`, `debate/agents.py`, `run_all_agents.py`, + 3 new test files
 - Open: Tier 3 (autonomous factor discovery) not yet started; R2R API key not configured; slippage IC signal_score revisit before MIN_FILLS; `SELF_MODIFY_ENABLED` activation requires 30 consecutive days +OOS Sharpe
+
+### 2026-05-08 (Tier 3 plan research + rewrite)
+- Researched academic and industry techniques for autonomous factor discovery (AlphaAgent arXiv:2502.16789, QuantaAlpha arXiv:2602.07085, Harvey/Liu/Zhu FDR correction, PySR symbolic regression, Grinold & Kahn Fundamental Law)
+- Core finding: free-form LLM code generation unreliable; every system with real excess returns used strict structural constraints
+- **Tier 3 plan rewritten** (`docs/superpowers/plans/2026-05-03-ai-native-tier3.md`): primary path = PySR symbolic regression on pre-computed features; secondary = LLM suggests JSON template params for 5 template families (no code injection); IC IR threshold raised 0.40→0.60 (Harvey FDR: at 0.60, ~0.5 spurious acceptances/year from 50 candidates); per-regime CPCV gate (IC_min_regime > 0.01 in every observed regime); leakage scanner (AST + regex for lookahead patterns); 7 new files, 14 tests
+- Gate conditions for Tier 3 execution: SELF_MODIFY_ENABLED (30 days +OOS), 63 days regime labels, MIN_FILLS=50 in slippage IC, PySR installed, CPCV control validation
+- Files: `docs/superpowers/plans/2026-05-03-ai-native-tier3.md`, `CLAUDE.md`
+- Open: Tier 3 execution blocked on gate conditions (~July 2026); R2R API key not configured; slippage IC signal_score revisit before MIN_FILLS
