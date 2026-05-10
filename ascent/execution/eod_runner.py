@@ -31,6 +31,34 @@ from ascent.execution.order_engine import compute_orders, summarise_orders
 LARGE_TRADE_THRESHOLD_PCT = 2.0  # % of portfolio NAV
 
 
+def get_event_positions_today() -> dict[str, float]:
+    """
+    Return {symbol: net_direction} (+1 long, -1 short) for filled event trades today.
+    Used by run_eod to subtract event positions before sizing daily rebalance orders.
+    """
+    import json
+    from pathlib import Path
+    log_path = Path("logs/event_trades.jsonl")
+    if not log_path.exists():
+        return {}
+    today_str = date.today().isoformat()
+    net: dict[str, float] = {}
+    try:
+        with open(log_path) as f:
+            for line in f:
+                t = json.loads(line)
+                if t.get("timestamp", "")[:10] != today_str:
+                    continue
+                if t.get("status") not in ("submitted", "filled"):
+                    continue
+                sym = t.get("symbol", "")
+                direction = 1.0 if t.get("direction") == "buy" else -1.0
+                net[sym] = net.get(sym, 0.0) + direction
+    except Exception:
+        pass
+    return {k: v for k, v in net.items() if v != 0.0}
+
+
 def run_eod(dry_run: bool = False, as_of_date: str = None):
     today = as_of_date or date.today().isoformat()
     print(f"\n{'='*60}")
@@ -180,6 +208,19 @@ def run_eod(dry_run: bool = False, as_of_date: str = None):
             )
             print("[EOD] Done — no trades submitted.")
             return
+
+        # Subtract today's event positions so the daily rebalance doesn't double-buy
+        event_positions = get_event_positions_today()
+        if event_positions:
+            nav_est = float(portfolio_value) if portfolio_value else 100_000.0
+            from ascent.execution.event_runner import MAX_EVENT_PCT
+            for sym, net_dir in event_positions.items():
+                event_weight = net_dir * MAX_EVENT_PCT  # approximate weight adjustment
+                if sym in target_weights.index:
+                    target_weights[sym] = max(0.0, target_weights[sym] - event_weight)
+            if target_weights.sum() > 0:
+                target_weights /= target_weights.sum()
+            print(f"[EOD] Adjusted for {len(event_positions)} event position(s) today")
 
         orders, diff_df = compute_orders(
             target_weights=target_weights,

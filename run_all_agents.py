@@ -227,6 +227,25 @@ def main():
     print(f"# Mode:  {'DRY RUN' if dry_run else 'LIVE'}")
     print(f"{'#'*60}\n")
 
+    # ── Step 0a: Start event agent background thread (market hours, weekdays) ──
+    _event_thread = None
+    try:
+        from datetime import datetime as _dt
+        import pytz as _pytz
+        _et = _pytz.timezone("America/New_York")
+        _now_et = _dt.now(_et)
+        _hour, _minute = _now_et.hour, _now_et.minute
+        _is_weekday = today.weekday() < 5
+        _in_market_hours = _is_weekday and (9, 30) <= (_hour, _minute) <= (15, 45)
+        if _in_market_hours:
+            from agents.event_agent import start_event_agent_thread
+            _event_thread = start_event_agent_thread()
+            print("[EventAgent] Background thread started")
+        else:
+            print("[EventAgent] Outside market hours — thread not started")
+    except Exception as _evt_e:
+        print(f"[EventAgent] Failed to start: {_evt_e}")
+
     # ── Step 0: Centralized data ingestion — runs before all agents ──────────
     # Fetches all symbols (all universes) in one parallel pass. Agents read
     # from cache instead of calling yfinance individually. If the hub fails,
@@ -426,6 +445,16 @@ def main():
                       f"fills={_slip_metrics['n_fills']}")
             except Exception as _se:
                 print(f"[SlippageIC] Feedback skipped: {_se}")
+
+            # Event trade IC — weekly measurement
+            try:
+                from ascent.execution.event_runner import compute_event_ic
+                _eic = compute_event_ic(lookback_days=20)
+                if _eic.get("n_trades", 0) > 0:
+                    print(f"[EventIC] ic_5d={_eic.get('ic_5d')} ic_10d={_eic.get('ic_10d')} "
+                          f"ic_20d={_eic.get('ic_20d')} n={_eic['n_trades']}")
+            except Exception as _eic_e:
+                print(f"[EventIC] Skipped: {_eic_e}")
     except Exception as e:
         print(f"[Runner] Self-improve failed: {type(e).__name__}: {e}")
 
