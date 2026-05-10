@@ -227,11 +227,28 @@ All audits complete through third pass. No outstanding crash risks. Pipeline run
 - **AI-native Tier 1**: ✅ built — `ascent/alpha/llm_fundamental.py`, `ascent/monitoring/slippage_ic_feedback.py`, `debate/disagreement_scorer.py`, private context subsets in `debate/agents.py`
 - **AI-native Tier 2**: ✅ built — `memory/reflection_agent.py`, `ascent/research/factor_proposer.py`, `debate/agent_tools.py`, `tool_completion()` in `ascent/llm/client.py`
 - **AI-native Tier 3**: ✅ built — `ascent/research/factor_discovery/` (PySR + LLM templates, per-regime CPCV, Harvey FDR); pipeline inactive until gate conditions met (~July 2026)
-- **AI-native Tier 4** (next): alternative data ingestion (SEC EDGAR, Capitol Trades, Reddit PRAW, Google Trends, Wikipedia pageviews) → AI converts raw text to numerical signal per stock per day; validated via Spearman IC + CPCV + Harvey FDR; not yet planned
-- **Event-driven agents**: agents that wake on triggers (8-K filing, congressional trade, options spike) rather than fixed 1:45 PM schedule; not yet planned
+- **AI-native Tier 4** (next): alternative data ingestion — planned in `docs/superpowers/plans/2026-05-10-plan4-alternative-data-pipeline.md`
+- **Event-driven agents**: planned in `docs/superpowers/plans/2026-05-10-plan3-event-driven-architecture.md`
 - **R2R semantic memory**: built but `R2R_API_KEY` not configured; BM25 fallback active
-- **Live dashboard UI**: data files generated but no live render
-- **Alpha signal backlog**: neutralize earnings surprise beta momentum overlap; analyst revision signal
+- **Live dashboard UI**: planned in `docs/superpowers/plans/2026-05-10-plan6-realtime-infrastructure.md`
+- **Alpha signal backlog**: analyst revision signal (earnings surprise beta now fixed — see 2026-05-09 log)
+
+### Institutional roadmap (Plans 1–7, written 2026-05-10)
+
+Seven sequenced plans taking Ascent to institutional and YC-ready state. Each has a complete spec in `docs/superpowers/plans/`:
+
+| Plan | File | What it adds |
+|------|------|--------------|
+| Plan 1 | `2026-05-10-plan1-factor-risk-model.md` | Barra-style factor risk model; portfolio factor exposure decomposition; factor-explained vs. idiosyncratic attribution |
+| Plan 2 | `2026-05-10-plan2-portfolio-construction.md` | cvxpy MVO optimizer; Black-Litterman quant+LLM blending; regime-conditional covariance; TC-aware objective |
+| Plan 3 | `2026-05-10-plan3-event-driven-architecture.md` | EDGAR 8-K listener; Capitol Trades; options anomaly scanner; event trade execution (0.5% NAV cap) |
+| Plan 4 | `2026-05-10-plan4-alternative-data-pipeline.md` | SEC full-text (10-K/10-Q); earnings transcripts; Reddit sentiment; Google Trends; IC validation gate |
+| Plan 5 | `2026-05-10-plan5-execution-excellence.md` | TWAP executor; implementation shortfall decomposition; capacity model; intraday rebalance triggers |
+| Plan 6 | `2026-05-10-plan6-realtime-infrastructure.md` | Alpaca WebSocket streaming; TimescaleDB; live operator dashboard; monthly PDF investor reports |
+| Plan 7 | `2026-05-10-plan7-live-track-record.md` | Immutable audit trail (hash chain); GIPS performance presentation; risk disclosures; 12-month live track record |
+
+**Suggested order:** Plan 1 → Plan 3 (parallel with Plan 2) → Plan 2 → Plan 4 → Plan 5 → Plan 6 → Plan 7 infrastructure → real capital deployment → 12-month accumulation.
+**Timeline to YC-ready:** ~18–24 months from Plan 1 start.
 
 ---
 
@@ -479,3 +496,22 @@ All audits complete through third pass. No outstanding crash risks. Pipeline run
 - 326 tests passing (up from 312)
 - Files: `ascent/research/factor_discovery/` (7 new files), `tests/test_factor_discovery.py` (new), `run_all_agents.py`
 - Open: gate conditions for Tier 3 activation still ~July 2026 (SELF_MODIFY_ENABLED, 63d regime labels, MIN_FILLS=50); R2R API key not configured
+
+### 2026-05-09 (momentum overlap fix)
+- **Earnings sleeve**: `ascent/alpha/earnings.py` — per-date OLS regression of `earnings_surprise` on `mom_126d`; residuals z-scored; removes momentum beta before PEAD signal is used; falls back cleanly when `mom_126d` absent
+- **Fundamental sleeve**: `ascent/alpha/fundamental.py` — removed `high_52w_pct` (price momentum signal, not accounting quality); sleeve now = `gross_profitability + accruals + asset_growth` only; returns empty DataFrame when no fundamental data (no 52wk-high fallback rescuing it with momentum exposure)
+- Two test fixes (`test_fundamental_alpha_works_without_fundamentals` → assert empty; `test_fundamental_alpha_builds_composite` → removed high_52w_pct from features) + two new tests (momentum neutralization effectiveness, graceful no-mom fallback)
+- Tests: 328 passing (up from 326)
+- Files: `ascent/alpha/earnings.py`, `ascent/alpha/fundamental.py`, `tests/test_earnings_alpha.py`, `tests/test_fundamental_alpha.py`
+
+### 2026-05-10 (institutional roadmap — Plans 1–7)
+- Wrote 7 detailed implementation plans for taking Ascent to institutional and YC-ready state
+- Plan 1: Factor risk model (Barra-style) — 18 tests, 8 tasks
+- Plan 2: Portfolio construction overhaul (cvxpy MVO, Black-Litterman, regime covariance) — 20 tests, 5 tasks
+- Plan 3: Event-driven architecture (EDGAR, Capitol Trades, options anomaly) — 16 tests, 8 tasks
+- Plan 4: Alternative data pipeline (SEC full-text, earnings transcripts, Reddit, Google Trends) — 20 tests, 7 tasks
+- Plan 5: Execution excellence (TWAP, implementation shortfall, capacity model) — 16 tests, 5 tasks
+- Plan 6: Real-time infrastructure (TimescaleDB, WebSocket streaming, live dashboard, monthly PDF report) — 14 tests, 8 tasks
+- Plan 7: Live track record + compliance (immutable audit trail, GIPS performance, risk disclosures, methodology doc) — 12 tests, 8 tasks
+- Files: 7 new plan files in `docs/superpowers/plans/`, `CLAUDE.md` updated
+- Open: Plan 1 is next; Plans 3 and 4 can proceed in parallel; Plan 7 infrastructure should start immediately (audit trail captures all live trades from this point forward)
