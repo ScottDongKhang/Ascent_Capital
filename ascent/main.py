@@ -23,7 +23,10 @@ from ascent.data.normalize.prices import normalize_prices, normalize_macro, pivo
 from ascent.data.store.parquet import save_parquet, load_parquet, has_data, validate_cache
 from ascent.features.build_features import FeatureBuilder
 from ascent.alpha.stack import build_alpha_stack
-from ascent.portfolio.optimizer import top_n_equal_weight, rank_weighted, sector_constrained_weighted, apply_bl_to_latest
+from ascent.portfolio.optimizer import (
+    top_n_equal_weight, rank_weighted, sector_constrained_weighted,
+    sector_constrained_weighted_mvo, apply_bl_to_latest,
+)
 from ascent.backtest.engine import BacktestEngine
 from ascent.research.evaluation import format_metrics
 
@@ -574,6 +577,51 @@ def run_pipeline(
         sector_map = dict(zip(_prof["symbol"], _prof["sector"]))
         print("[Portfolio] Sector constraint: max 1 per sector")
 
+    # ── MVO on the latest rebalance date; rank-weight for historical dates ──────
+    opt_method = "rank_weight_fallback"
+    last_alpha_row = alpha.iloc[-1].dropna() if not alpha.empty else pd.Series(dtype=float)
+
+    # Build factor covariance for the last date (Plan 1 integration)
+    mvo_covariance = None
+    try:
+        from ascent.risk.covariance_model import build_factor_covariance_matrix
+        last_date_str = str(alpha.index[-1].date()) if not alpha.empty else None
+        if last_date_str:
+            weights_for_cov = pd.Series(
+                np.ones(len(last_alpha_row)) / max(len(last_alpha_row), 1),
+                index=last_alpha_row.index,
+            )
+            cov_result = build_factor_covariance_matrix(weights_for_cov, last_date_str)
+            if cov_result and cov_result.get("full") is not None:
+                mvo_covariance = cov_result["full"]
+    except Exception as _cov_e:
+        print(f"[Portfolio] Factor covariance unavailable: {_cov_e}")
+
+    # Get LLM alpha for BL blending (sparse — zero-fill missing symbols)
+    llm_alpha_latest = None
+    try:
+        from ascent.alpha.llm_fundamental import llm_fundamental_alpha
+        _llm_df = llm_fundamental_alpha(features)
+        if not _llm_df.empty:
+            llm_alpha_latest = _llm_df.iloc[-1].dropna()
+    except Exception:
+        pass
+
+    # MVO on latest date
+    mvo_weights_latest, opt_method = sector_constrained_weighted_mvo(
+        alpha_scores=last_alpha_row,
+        regime_label=regime_signal.label.value if regime_signal else "calm_bull",
+        covariance=mvo_covariance,
+        factor_constraints=None,   # Plan 2 wires in; constraints per-symbol not per-date
+        current_weights=None,
+        sector_map=sector_map,
+        n=cfg.backtest.top_n,
+        max_weight=cfg.backtest.max_weight,
+        llm_alpha=llm_alpha_latest,
+    )
+    print(f"[Portfolio] Optimization method: {opt_method}")
+
+    # Historical dates: rank-weighting (MVO is single-period, not a panel optimizer)
     target_weights = sector_constrained_weighted(
         alpha,
         n=cfg.backtest.top_n,
@@ -583,19 +631,13 @@ def run_pipeline(
         regime_signal=None,
     )
 
-    # ── Black-Litterman weight refinement (latest date only) ──────────────────
-    # BL replaces rank-weighted allocation for live trading while keeping
-    # the sector-constrained stock selection intact.
-    try:
-        target_weights = apply_bl_to_latest(
-            target_weights=target_weights,
-            price_df=builder.close,   # already pivoted (dates × symbols)
-            alpha=alpha,
-            current_holdings=None,    # no prior holdings on cold start
-            max_weight=cfg.backtest.max_weight,
-        )
-    except Exception as _bl_e:
-        print(f"[Portfolio] BL step skipped: {_bl_e}")
+    # Overwrite the last date with MVO weights if successful
+    if not mvo_weights_latest.empty and not target_weights.empty:
+        last_dt = target_weights.index[-1]
+        target_weights.loc[last_dt] = 0.0
+        for sym, w in mvo_weights_latest.items():
+            if sym in target_weights.columns:
+                target_weights.loc[last_dt, sym] = float(w)
 
     warmup = 252 + 21
     if len(target_weights) > warmup:

@@ -3,9 +3,17 @@ Ascent Capital — Portfolio Optimizer
 Converts alpha scores into portfolio target weights.
 """
 from __future__ import annotations
+import logging
 import pandas as pd
 import numpy as np
 from typing import Optional
+
+try:
+    from ascent.portfolio.mvo_optimizer import optimize_mvo
+except Exception:
+    optimize_mvo = None  # type: ignore[assignment]
+
+log = logging.getLogger(__name__)
 
 
 def apply_bl_to_latest(
@@ -286,6 +294,152 @@ def enforce_constraints(
     if gross > max_gross and gross > 0:
         w = w * (max_gross / gross)
     return w
+
+
+def sector_constrained_weighted_mvo(
+    alpha_scores: pd.Series,
+    regime_label: str = "calm_bull",
+    covariance: Optional[np.ndarray] = None,
+    factor_constraints: Optional[list] = None,
+    current_weights: Optional[pd.Series] = None,
+    sector_map: Optional[dict] = None,
+    n: int = 15,
+    top_n: Optional[int] = None,  # alias for n
+    max_weight: float = 0.10,
+    min_weight: float = 0.02,
+    risk_aversion: float = 1.0,
+    turnover_penalty: float = 0.002,
+    llm_alpha: Optional[pd.Series] = None,
+) -> tuple[pd.Series, str]:
+    """
+    MVO-based portfolio construction with sector pre-screening.
+
+    Returns (weights_series, optimization_method) where optimization_method
+    is "mvo" or "rank_weight_fallback".
+
+    Sequence:
+      1. Sector pre-screening: keep best name per sector from top-N pool
+      2. BL blending: adjust alpha with LLM views if available
+      3. MVO: cvxpy optimization on screened universe
+      4. Fallback: if MVO fails, use rank-weighting
+    """
+    if top_n is not None:
+        n = top_n
+    if sector_map is None:
+        sector_map = {}
+
+    row = alpha_scores.dropna()
+    if row.empty:
+        return pd.Series(dtype=float), "rank_weight_fallback"
+
+    # ── Step 1: sector pre-screening ─────────────────────────────────────────
+    ranked = row.sort_values(ascending=False)
+    pool_size = min(n * 3, len(ranked))
+    top_candidates = ranked.iloc[:pool_size]
+
+    known_count = sum(
+        1 for sym in top_candidates.index
+        if _normalize_sector(sector_map.get(sym, "")) is not None
+    )
+    coverage = known_count / len(top_candidates) if len(top_candidates) > 0 else 0.0
+
+    if coverage >= 0.80:
+        selected = []
+        sector_count: dict = {}
+        for sym in ranked.index:
+            sec = _normalize_sector(sector_map.get(sym, ""))
+            bucket = sec if sec is not None else f"__unknown_{sym}__"
+            if sector_count.get(bucket, 0) < 1:
+                selected.append(sym)
+                sector_count[bucket] = sector_count.get(bucket, 0) + 1
+            if len(selected) >= n:
+                break
+        alpha_screened = ranked.reindex(selected).dropna()
+    else:
+        alpha_screened = ranked.iloc[:n]
+
+    if alpha_screened.empty:
+        return pd.Series(dtype=float), "rank_weight_fallback"
+
+    # ── Step 2: Black-Litterman blending ─────────────────────────────────────
+    from ascent.portfolio.black_litterman import black_litterman_views, get_blending_weight
+    try:
+        if llm_alpha is not None and not llm_alpha.empty:
+            # Use default tau unless we have a measured IC IR
+            tau = get_blending_weight(0.0)  # conservative until IC IR is measured
+            alpha_bl = black_litterman_views(alpha_screened, llm_alpha, tau=tau)
+        else:
+            alpha_bl = alpha_screened
+    except Exception as _bl_exc:
+        log.warning("[MVO] BL blending failed: %s", _bl_exc)
+        alpha_bl = alpha_screened
+
+    # ── Step 3: slice covariance to screened universe ─────────────────────────
+    cov_screened = None
+    if covariance is not None and covariance.shape[0] == len(alpha_screened):
+        cov_screened = covariance
+
+    # ── Step 4: slice factor constraints to screened universe ─────────────────
+    fc_screened = None
+    if factor_constraints:
+        screened_syms = alpha_screened.index.tolist()
+        fc_screened = []
+        for fc in factor_constraints:
+            # Each fc["loadings_vector"] is aligned to the full symbol list.
+            # We need to know what symbols that corresponds to — constraints
+            # carry a "symbols" key when built by build_factor_constraints().
+            # If missing, skip the constraint rather than crash.
+            fc_syms = fc.get("symbols")
+            if fc_syms is not None:
+                idx = [i for i, s in enumerate(fc_syms) if s in screened_syms]
+                if idx:
+                    new_bvec = np.zeros(len(screened_syms))
+                    for j, i in enumerate(idx):
+                        pos = screened_syms.index(fc_syms[i])
+                        new_bvec[pos] = fc["loadings_vector"][i]
+                    fc_screened.append({
+                        "loadings_vector": new_bvec,
+                        "lb": fc.get("lb"),
+                        "ub": fc.get("ub"),
+                        "factor": fc.get("factor"),
+                    })
+
+    # ── Step 5: MVO ──────────────────────────────────────────────────────────
+    if optimize_mvo is None:
+        log.warning("[MVO] optimize_mvo not available — falling back to rank-weight")
+        scores = alpha_screened - alpha_screened.min() + 1e-8
+        rw = _water_fill_cap(scores, max_weight)
+        rw[rw < 0.001] = 0.0
+        if rw.sum() > 0:
+            rw /= rw.sum()
+        return rw, "rank_weight_fallback"
+    try:
+        mvo_weights = optimize_mvo(
+            alpha_scores=alpha_bl,
+            covariance=cov_screened,
+            current_weights=current_weights,
+            factor_constraints=fc_screened,
+            risk_aversion=risk_aversion,
+            turnover_penalty=turnover_penalty,
+            max_weight=max_weight,
+            min_weight=min_weight,
+            top_n=len(alpha_bl),
+        )
+    except Exception as _mvo_exc:
+        log.warning("[MVO] optimize_mvo raised: %s", _mvo_exc)
+        mvo_weights = None
+
+    if mvo_weights is not None and not mvo_weights.empty:
+        return mvo_weights, "mvo"
+
+    # ── Fallback: rank-weighting on screened universe ─────────────────────────
+    log.warning("[MVO] Falling back to rank-weight for this rebalance")
+    scores = alpha_screened - alpha_screened.min() + 1e-8
+    rw = _water_fill_cap(scores, max_weight)
+    rw[rw < 0.001] = 0.0
+    if rw.sum() > 0:
+        rw /= rw.sum()
+    return rw, "rank_weight_fallback"
 
 
 def sector_constrained_weighted(
