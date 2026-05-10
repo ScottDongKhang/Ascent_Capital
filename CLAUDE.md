@@ -528,3 +528,13 @@ Seven sequenced plans taking Ascent to institutional and YC-ready state. Each ha
 - **Tests**: `tests/test_factor_risk_model.py` — 18 tests, all passing; full suite 346 passing (up from 328)
 - Files: `ascent/risk/factor_data.py` (new), `ascent/risk/factor_model.py` (new), `ascent/risk/covariance_model.py` (new), `ascent/risk/factor_exposure.py` (new), `ascent/risk/factor_constraints.py` (new), `tests/test_factor_risk_model.py` (new), `ascent/monitoring/attribution.py`, `debate/agents.py`, `run_all_agents.py`
 - Open: Plan 2 (cvxpy MVO) is next; Plans 3–7 queued
+
+### 2026-05-10 (Plan 2 — Portfolio Construction Overhaul ✅)
+- **Task 1 ✅**: `ascent/portfolio/mvo_optimizer.py` — cvxpy MVO; maximize w'α - λ(w'Σw) - κ‖w-w_prev‖₁; CLARABEL solver with SCS fallback; diagonal proxy when covariance unavailable; infeasible → None
+- **Task 2 ✅**: `ascent/portfolio/black_litterman.py` — BL posterior blending quant prior with LLM view; proper matrix formula when covariance available; shrinkage fallback otherwise; `get_blending_weight()` maps IC IR → tau
+- **Task 3 ✅**: `ascent/portfolio/regime_covariance.py` — per-regime sample covariance (calm_bull/stressed/crisis); confidence-weighted blend; Ledoit-Wolf fallback when < 63 obs
+- **Task 4 ✅**: `ascent/portfolio/optimizer.py` — `sector_constrained_weighted_mvo()` as primary path; sector pre-screening → BL blending → MVO → rank-weight fallback; returns (weights, optimization_method)
+- **Task 5 ✅**: `ascent/main.py` — MVO on latest rebalance date using Plan 1 factor covariance; LLM alpha for BL blending; historical dates use rank-weight; optimization_method logged
+- **Tests**: 20 new tests (19 pass, 1 skipped); full suite 366 passing (up from 346)
+- Files: `ascent/portfolio/mvo_optimizer.py` (new), `ascent/portfolio/black_litterman.py` (new), `ascent/portfolio/regime_covariance.py` (new), `ascent/portfolio/optimizer.py`, `ascent/main.py`, `tests/test_mvo_optimizer.py` (new), `tests/test_black_litterman.py` (new)
+- Open: Plan 3 (event-driven architecture) is next; Plans 4–7 queued
