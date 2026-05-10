@@ -47,6 +47,7 @@ DEFAULT_ALPHA_WEIGHTS = {
     "options_flow":    0.02,
     "insider":         0.02,
     "short_interest":  0.02,
+    "altdata":         0.00,   # zero until first source passes IC gate
 }
 
 PERTURB_RANGE  = 0.10   # max +/- 10% per sleeve per variant

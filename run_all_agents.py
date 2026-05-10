@@ -475,6 +475,62 @@ def main():
     except Exception as _de:
         print(f"[FactorDiscovery] Monthly run skipped: {_de}")
 
+    # Altdata validation — first Sunday of each month (same trigger as factor discovery)
+    try:
+        from datetime import date as _adate
+        _atoday = _adate.today()
+        if _atoday.weekday() == 6 and _atoday.day <= 7:
+            from ascent.data.validate.altdata_validator import run_altdata_validation
+            from ascent.data.ingest.sec_filings import load_sec_signals
+            from ascent.data.ingest.earnings_transcripts import load_transcript_signals
+            from ascent.data.ingest.reddit_sentiment import load_reddit_signals
+            from ascent.data.ingest.google_trends import load_trends_signals
+            from ascent.data.store.parquet import load_parquet as _lp_alt, has_data as _hd_alt
+            import pandas as _pd_alt
+
+            _alt_sources = {}
+            for _src_name, _loader in [
+                ("sec",         load_sec_signals),
+                ("transcripts", load_transcript_signals),
+                ("reddit",      load_reddit_signals),
+                ("trends",      load_trends_signals),
+            ]:
+                try:
+                    _panel = _loader()
+                    if not _panel.empty:
+                        _alt_sources[_src_name] = _panel
+                except Exception:
+                    pass
+
+            if _alt_sources:
+                _alt_prices = _lp_alt("prices_live") if _hd_alt("prices_live") else _pd_alt.DataFrame()
+                try:
+                    _alt_regime = _pd_alt.read_csv(
+                        "dashboard/regime_labels.csv", index_col=0, parse_dates=True
+                    ).iloc[:, 0]
+                except Exception:
+                    _alt_regime = _pd_alt.Series(dtype=str)
+                _alt_results = run_altdata_validation(_alt_sources, _alt_prices, _alt_regime)
+                _alt_accepted = [r["source"] for r in _alt_results if r["status"] == "accepted"]
+                print(f"[AltdataValidation] {len(_alt_accepted)} accepted: {_alt_accepted}")
+            else:
+                print("[AltdataValidation] No cached altdata panels found — run ingest first")
+    except Exception as _ae:
+        print(f"[AltdataValidation] Monthly run skipped: {_ae}")
+
+    # Google Trends weekly refresh — every Sunday (rate-limited; capped at 50 symbols)
+    try:
+        from datetime import date as _gdate
+        if _gdate.today().weekday() == 6:
+            from ascent.data.ingest.google_trends import update_trends_signals
+            from ascent.config.settings import get_config as _gcfg
+            _g_syms = list(_gcfg().universe.symbols)[:50]
+            print(f"[GoogleTrends] Weekly refresh for {len(_g_syms)} symbols")
+            update_trends_signals(_g_syms)
+            print("[GoogleTrends] Weekly refresh complete")
+    except Exception as _ge:
+        print(f"[GoogleTrends] Weekly refresh skipped: {_ge}")
+
     # ── Step 5: Run orchestrator (reads fresh skill scores written above) ─────
     merged_weights = run_orchestrator(agent_outputs)
 

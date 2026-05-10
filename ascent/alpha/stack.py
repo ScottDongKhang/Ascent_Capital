@@ -26,6 +26,7 @@ DEFAULT_ALPHA_WEIGHTS = {
     "options_flow":    0.02,
     "insider":         0.02,
     "short_interest":  0.02,
+    "altdata":         0.00,   # zero until first source passes IC gate
 }
 
 def _load_active_alpha_weights(regime: str = None) -> dict:
@@ -233,6 +234,18 @@ def build_alpha_stack(features, alpha_weights=None, regime_signal=None, agent_id
             log.debug("short interest alpha returned empty — cache absent or no data")
     except Exception as exc:
         log.error("short interest alpha failed: %s", exc)
+    # Alternative data sleeve — active only when sources pass IC gate
+    if alpha_weights.get("altdata", 0) > 0:
+        try:
+            from ascent.alpha.altdata_alpha import altdata_alpha
+            alt = altdata_alpha(features=features)
+            if alt is not None and not alt.empty:
+                alphas["altdata"] = alt
+                log.info("[Stack] altdata sleeve loaded shape=%s", alt.shape)
+            else:
+                log.debug("[Stack] altdata sleeve returned empty — no validated sources")
+        except Exception as exc:
+            log.warning("[Stack] altdata sleeve failed: %s", exc)
     loaded = list(alphas.keys())
     skipped = [k for k in alpha_weights if k not in loaded]
     print(f"[alpha_stack] loaded={loaded}  skipped={skipped}")
