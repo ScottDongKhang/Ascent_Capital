@@ -515,3 +515,16 @@ Seven sequenced plans taking Ascent to institutional and YC-ready state. Each ha
 - Plan 7: Live track record + compliance (immutable audit trail, GIPS performance, risk disclosures, methodology doc) — 12 tests, 8 tasks
 - Files: 7 new plan files in `docs/superpowers/plans/`, `CLAUDE.md` updated
 - Open: Plan 1 is next; Plans 3 and 4 can proceed in parallel; Plan 7 infrastructure should start immediately (audit trail captures all live trades from this point forward)
+
+### 2026-05-10 (Plan 1 — Factor Risk Model ✅)
+- **Task 1 ✅**: `ascent/risk/factor_data.py` — Fama-French 5 + UMD downloader; incremental cache (`data_cache/factor_returns.parquet`); stale if > 1 day; `update_factor_data()` + `get_factor_returns(start, end)`
+- **Task 2 ✅**: `ascent/risk/factor_model.py` — rolling OLS loadings; vectorized one `np.linalg.lstsq` per date across all symbols; `BETA_COLS = [beta_mkt, beta_smb, beta_hml, beta_rmw, beta_cma, beta_umd]`; incremental update (last 5 bdays); graceful fallback to most recent date
+- **Task 3 ✅**: `ascent/risk/covariance_model.py` — Σ = B·F·B' + D; Ledoit-Wolf shrinkage on residuals; `build_factor_covariance_matrix()`, `portfolio_variance()`, `factor_variance_decomposition()`
+- **Task 4 ✅**: `ascent/risk/factor_exposure.py` — w'B portfolio tilt; soft bounds; `export_factor_exposures()` → `dashboard/factor_exposures.json`; `format_exposure_context()` for debate
+- **Task 5 ✅**: `ascent/risk/factor_constraints.py` — regime-aware constraint dicts for Plan 2 MVO; crisis tightest, calm_bull standard
+- **Task 6 ✅**: `ascent/monitoring/attribution.py` — `compute_factor_pnl()` added; `factor_pnl` + `idiosyncratic_pnl` in every attribution log entry
+- **Task 7 ✅**: `debate/agents.py` — `_section_factor_exposures()` added; devil's advocate is sole recipient of factor exposure context
+- **Wiring**: `run_all_agents.py` — Step 0b updates factor data + loadings at startup; Step 5c exports factor exposures after orchestration
+- **Tests**: `tests/test_factor_risk_model.py` — 18 tests, all passing; full suite 346 passing (up from 328)
+- Files: `ascent/risk/factor_data.py` (new), `ascent/risk/factor_model.py` (new), `ascent/risk/covariance_model.py` (new), `ascent/risk/factor_exposure.py` (new), `ascent/risk/factor_constraints.py` (new), `tests/test_factor_risk_model.py` (new), `ascent/monitoring/attribution.py`, `debate/agents.py`, `run_all_agents.py`
+- Open: Plan 2 (cvxpy MVO) is next; Plans 3–7 queued
