@@ -538,3 +538,15 @@ Seven sequenced plans taking Ascent to institutional and YC-ready state. Each ha
 - **Tests**: 20 new tests (19 pass, 1 skipped); full suite 366 passing (up from 346)
 - Files: `ascent/portfolio/mvo_optimizer.py` (new), `ascent/portfolio/black_litterman.py` (new), `ascent/portfolio/regime_covariance.py` (new), `ascent/portfolio/optimizer.py`, `ascent/main.py`, `tests/test_mvo_optimizer.py` (new), `tests/test_black_litterman.py` (new)
 - Open: Plan 3 (event-driven architecture) is next; Plans 4–7 queued
+
+### 2026-05-10 (Plan 3 — Event-Driven Architecture ✅)
+- **Task 1 ✅**: `ascent/data/ingest/edgar_listener.py` — EDGAR RSS polling for 8-K/8-K/A; text extractor (4K chars); CIK→symbol map; seen-filings dedup across restarts
+- **Task 2 ✅**: `ascent/alpha/event_alpha.py` — Haiku 8-K classifier with 5 few-shot examples; rule-based congressional trade classifier (conviction=0.4, 30-45d lag); rule-based options anomaly classifier (IV z-score + put/call z-score thresholds)
+- **Task 3 ✅**: `ascent/data/ingest/capitol_trades.py` — House/Senate eFD API client; filters to universe; dedup against seen cache
+- **Task 4 ✅**: `ascent/data/ingest/options_scanner.py` — Alpaca options chain scanner; Welford online IV baseline; graceful disable when API unavailable
+- **Task 5 ✅**: `ascent/execution/event_runner.py` — `EVENT_TRADING_ENABLED=False` kill switch; 0.5% NAV cap; conviction × urgency sizing; limit orders; approval gate for > 1% NAV; weekly Spearman IC tracking
+- **Task 6 ✅**: `agents/event_agent.py` — daemon thread; EDGAR every 5min, options every 15min, Capitol Trades every 60min; max 1 trade per symbol per day; exits at 16:10 ET
+- **Task 7 ✅**: `ascent/execution/eod_runner.py` — `get_event_positions_today()` subtracts filled event positions from rebalance sizing; `run_all_agents.py` starts thread at market open, computes event IC on Sundays
+- **Tests**: 16 tests, all passing; full suite 382 passing (up from 366)
+- Files: 7 new files, 2 modified + `logs/event_trades.jsonl`
+- Open: Plans 4–7 queued; `EVENT_TRADING_ENABLED` stays False until 30-day paper validation (~July 2026)
