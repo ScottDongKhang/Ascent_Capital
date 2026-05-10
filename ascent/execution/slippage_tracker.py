@@ -15,6 +15,12 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
+try:
+    from ascent.execution.implementation_shortfall import compute_is, _DECISION_PRICES
+except Exception:
+    compute_is       = None  # type: ignore[assignment]
+    _DECISION_PRICES = {}    # type: ignore[assignment]
+
 SLIPPAGE_LOG_PATH = Path("logs/slippage_log.jsonl")
 
 
@@ -110,7 +116,7 @@ def compute_slippage(
         else:
             slippage_bps = (signal_price - fill_price) / signal_price * 10_000
 
-        records.append({
+        record = {
             "run_date":     run_date.isoformat(),
             "symbol":       sym,
             "side":         side,
@@ -119,7 +125,20 @@ def compute_slippage(
             "fill_price":   round(fill_price, 4),
             "slippage_bps": round(slippage_bps, 2),
             "filled_at":    fill.get("filled_at"),
-        })
+        }
+        # Add IS decomposition if decision price was recorded
+        if compute_is is not None and sym in _DECISION_PRICES:
+            try:
+                is_result = compute_is(
+                    symbol=sym,
+                    fill_records=[{"fill_price": fill_price, "shares": int(qty)}],
+                    eod_price=fill_price,
+                    side=side,
+                )
+                record["is_breakdown"] = is_result
+            except Exception:
+                pass
+        records.append(record)
 
     return records
 
@@ -190,3 +209,51 @@ def track_slippage(
         )
     else:
         print("[Slippage] No matched fills against signal prices")
+
+
+def fill_quality_report(lookback_days: int = 63) -> dict:
+    """
+    Summarize fill quality over trailing lookback_days.
+    Returns mean IS components, TWAP vs market order comparison, and by-sleeve breakdown.
+    """
+    from datetime import timedelta
+    cutoff = (datetime.now() - timedelta(days=lookback_days)).date().isoformat()
+
+    records = []
+    if SLIPPAGE_LOG_PATH.exists():
+        with open(SLIPPAGE_LOG_PATH) as f:
+            for line in f:
+                try:
+                    row = json.loads(line)
+                    if row.get("run_date", "") >= cutoff:
+                        records.append(row)
+                except Exception:
+                    pass
+
+    if not records:
+        return {
+            "n_trades": 0, "mean_is_bps": None, "mean_delay_cost_bps": None,
+            "mean_market_impact_bps": None, "mean_opportunity_cost_bps": None,
+            "twap_vs_market_order_comparison": {}, "by_sleeve": {},
+        }
+
+    def _safe_mean(vals):
+        v = [x for x in vals if x is not None]
+        return round(sum(v) / len(v), 2) if v else None
+
+    bps_vals      = [r.get("slippage_bps") for r in records]
+    is_total      = [r.get("is_breakdown", {}).get("total_is_bps") for r in records]
+    is_delay      = [r.get("is_breakdown", {}).get("delay_cost_bps") for r in records]
+    is_impact     = [r.get("is_breakdown", {}).get("market_impact_bps") for r in records]
+    is_opp        = [r.get("is_breakdown", {}).get("opportunity_cost_bps") for r in records]
+
+    return {
+        "n_trades":                      len(records),
+        "mean_slippage_bps":             _safe_mean(bps_vals),
+        "mean_is_bps":                   _safe_mean(is_total),
+        "mean_delay_cost_bps":           _safe_mean(is_delay),
+        "mean_market_impact_bps":        _safe_mean(is_impact),
+        "mean_opportunity_cost_bps":     _safe_mean(is_opp),
+        "twap_vs_market_order_comparison": {},  # populated when TWAP live
+        "by_sleeve":                     {},    # populated when sleeve tags added to log
+    }

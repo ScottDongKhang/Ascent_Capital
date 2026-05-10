@@ -27,8 +27,38 @@ from ascent.execution.alpaca_broker import (
 )
 from ascent.execution.order_engine import compute_orders, summarise_orders
 
+try:
+    from ascent.execution.intraday_trigger import check_intraday_triggers, execute_intraday_adjustment
+except Exception:
+    check_intraday_triggers      = None  # type: ignore[assignment]
+    execute_intraday_adjustment  = None  # type: ignore[assignment]
+
 # Task 8: large-trade approval threshold
 LARGE_TRADE_THRESHOLD_PCT = 2.0  # % of portfolio NAV
+
+
+def run_intraday_trigger_check(portfolio_state: dict = None, market_data: dict = None) -> list:
+    """
+    Evaluate and execute intraday triggers. Called at 12:00 PM and 14:30 PM ET.
+    portfolio_state: {"weights": dict, "nav": float, "drawdown": float}
+    market_data: {"spy_intraday_return": float, "vix": float}
+    Returns list of trigger results (empty = no action taken).
+    """
+    if check_intraday_triggers is None:
+        return []
+    portfolio_state = portfolio_state or {}
+    market_data     = market_data     or {}
+    try:
+        triggers = check_intraday_triggers(portfolio_state, market_data)
+        results  = []
+        for trigger in triggers:
+            result = execute_intraday_adjustment(trigger, portfolio_state.get("weights", {}))
+            results.append(result)
+            log.warning("[EODRunner] Intraday trigger executed: %s", trigger.get("type"))
+        return results
+    except Exception as e:
+        log.warning("[EODRunner] Intraday trigger check failed: %s", e)
+        return []
 
 
 def get_event_positions_today() -> dict[str, float]:

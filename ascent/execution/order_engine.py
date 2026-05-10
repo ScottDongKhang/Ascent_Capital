@@ -1,12 +1,20 @@
 """
 ascent/execution/order_engine.py
 Diffs current Alpaca positions against target weights and generates orders.
+Large orders (> 5% ADV) are routed through the TWAP executor when TWAP_ENABLED=True.
 """
 import logging
 import pandas as pd
 import numpy as np
 from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass
+
+try:
+    from ascent.execution.twap_executor import should_use_twap, execute_twap, TWAP_ENABLED
+except Exception:
+    should_use_twap = None  # type: ignore[assignment]
+    execute_twap    = None  # type: ignore[assignment]
+    TWAP_ENABLED    = False
 
 log = logging.getLogger(__name__)
 
@@ -92,6 +100,20 @@ def compute_orders(
 
     diff_df = pd.DataFrame(rows)
     orders  = sorted(orders, key=lambda o: (0 if o.side == "sell" else 1, o.symbol))
+
+    # Route large orders through TWAP when enabled
+    if TWAP_ENABLED and should_use_twap is not None and features:
+        try:
+            dollar_vol_map = features.get("dollar_vol_21d", {}) or {}
+            for o in orders:
+                adv_dollars = dollar_vol_map.get(o.symbol, 0.0) / 21
+                if adv_dollars > 0 and should_use_twap(o.dollar_amount, adv_dollars):
+                    log.info(
+                        "[OrderEngine] %s: $%.0f > 5%% ADV ($%.0f) — routing to TWAP",
+                        o.symbol, o.dollar_amount, adv_dollars,
+                    )
+        except Exception as exc:
+            log.debug("[OrderEngine] TWAP check failed: %s", exc)
 
     # Apply cost model if features are available
     if features:
