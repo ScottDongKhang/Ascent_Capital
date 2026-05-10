@@ -263,6 +263,19 @@ def main():
     except ImportError:
         pass
 
+    # ── Step 0b: Factor data + loadings update ───────────────────────────────
+    try:
+        from ascent.risk.factor_data import update_factor_data
+        update_factor_data()
+    except Exception as _fde:
+        print(f"[FactorData] Update skipped: {_fde}")
+
+    try:
+        from ascent.risk.factor_model import update_factor_loadings
+        update_factor_loadings()
+    except Exception as _fle:
+        print(f"[FactorModel] Loadings update skipped: {_fle}")
+
     # ── Step 1: Run all agents in parallel ───────────────────────────────────
     agent_tasks = [
         ("us_equities", run_us_equities_agent),
@@ -475,6 +488,15 @@ def main():
 
     except Exception as _hedge_e:
         print(f"[Hedge] Overlay skipped: {_hedge_e}")
+
+    # ── Step 5c: Export factor exposures to dashboard ────────────────────────
+    try:
+        import pandas as _pd
+        from ascent.risk.factor_exposure import export_factor_exposures
+        _fw = _pd.Series({k: float(v) for k, v in merged_weights.items()})
+        export_factor_exposures(_fw, today)
+    except Exception as _fe:
+        print(f"[FactorExposure] Export skipped: {_fe}")
 
     # ── Step 6: Write merged weights to file ──────────────────────────────────
     weights_path = Path("execution/merged_weights.json")

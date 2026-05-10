@@ -224,12 +224,29 @@ def _section_allocation(ps: dict) -> str:
     return "\n".join(lines)
 
 
+def _section_factor_exposures(ps: dict) -> str:
+    """Factor exposure context — devil's advocate only."""
+    try:
+        import pandas as pd
+        from datetime import date
+        from ascent.risk.factor_exposure import format_exposure_context
+        weights_raw = ps.get("weights", {})
+        if not weights_raw:
+            return ""
+        weights = pd.Series({k: float(v) for k, v in weights_raw.items()})
+        as_of = ps.get("as_of_date", date.today().isoformat())
+        ctx = format_exposure_context(weights, as_of)
+        return ctx if ctx else ""
+    except Exception:
+        return ""
+
+
 # ── Agent context assembler ────────────────────────────────────────────────────
 
 _AGENT_SECTIONS = {
     "bull": [_section_weights, _section_momentum, _section_fundamental, _section_allocation],
     "bear": [_section_weights, _section_concentration, _section_regime, _section_allocation],
-    "devils_advocate": [_section_weights, _section_regime, _section_tail, _section_allocation],
+    "devils_advocate": [_section_weights, _section_regime, _section_tail, _section_factor_exposures, _section_allocation],
     "regime_specialist": [_section_regime, _section_macro],
 }
 

@@ -13,7 +13,9 @@ import json
 import math
 from datetime import date, datetime
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Optional
+
+import pandas as pd
 
 ATTRIBUTION_LOG = Path("logs/attribution_log.jsonl")
 
@@ -37,6 +39,49 @@ def _fetch_returns(symbols: List[str]) -> Dict[str, float]:
     except Exception as e:
         print(f"[Attribution] Price fetch failed: {e}")
         return {}
+
+
+def compute_factor_pnl(
+    positions: List[Dict],
+    run_date: date,
+    factor_returns_today: Optional[Dict] = None,
+) -> Dict:
+    """
+    Split daily P&L into factor-explained vs. idiosyncratic.
+
+    factor_returns_today: {factor_name: float} for today's factor returns.
+    If None or factor model unavailable, returns nulls (never raises).
+    """
+    try:
+        weights = pd.Series({p["symbol"]: float(p.get("weight", 0)) for p in positions})
+        from ascent.risk.factor_exposure import compute_portfolio_exposures
+        from ascent.risk.factor_data import get_factor_returns
+
+        exposures = compute_portfolio_exposures(weights, run_date)
+
+        if factor_returns_today is None:
+            fr = get_factor_returns(
+                start_date=str(run_date),
+                end_date=str(run_date),
+            )
+            if not fr.empty and len(fr):
+                factor_returns_today = fr.iloc[0].to_dict()
+
+        if factor_returns_today is None:
+            return {"factor_pnl": None, "idiosyncratic_pnl": None}
+
+        factor_pnl = sum(
+            float(exposures.get(f"beta_{k.lower().replace('-', '_')}", 0.0))
+            * float(v)
+            for k, v in factor_returns_today.items()
+            if k != "RF"
+        )
+        return {"factor_pnl": round(factor_pnl, 6), "idiosyncratic_pnl": None}
+
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning("[Attribution] Factor P&L failed: %s", exc)
+        return {"factor_pnl": None, "idiosyncratic_pnl": None}
 
 
 def run_attribution(positions: List[Dict], run_date: date) -> Dict:
@@ -74,12 +119,16 @@ def run_attribution(positions: List[Dict], run_date: date) -> Dict:
     top_contributors = [c for c in contribs_sorted if c["contribution"] > 0][:5]
     top_drags        = [c for c in reversed(contribs_sorted) if c["contribution"] < 0][:5]
 
+    factor_split = compute_factor_pnl(positions, run_date)
+
     report = {
         "date":             run_date.isoformat(),
         "timestamp":        datetime.now().isoformat(),
         "portfolio_return": round(port_ret, 6),
         "spy_return":       round(spy_ret, 6),
         "alpha_vs_spy":     round(alpha, 6),
+        "factor_pnl":       factor_split.get("factor_pnl"),
+        "idiosyncratic_pnl": factor_split.get("idiosyncratic_pnl"),
         "n_positions":      len(positions),
         "top_contributors": top_contributors,
         "top_drags":        top_drags,
