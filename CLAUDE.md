@@ -65,13 +65,14 @@ demo_app.py           Streamlit interactive demo (Tony Ngo)
 | ML (XGBoost) | 10% | CPCV C(6,2)=15 folds, purge=5 bdays, embargo=5 bdays; 6 features by IC/IR; p5 guard > −0.05 |
 | Mean reversion | 5% | Short-term reversal |
 | Volatility | 5% | `−(vol_trend_10d / vol_of_vol_21d)`; long names with declining + stable vol |
-| Fundamental | 5% | Gross profitability, accruals, asset growth, 52wk high; 45-day filing lag |
-| Earnings (PEAD) | 5% | Cross-sectional z-score of reported vs expected EPS; 1-bday announcement lag |
+| Fundamental | 5% | Gross profitability, accruals, asset growth; 45-day filing lag; momentum-neutral |
+| Earnings (PEAD) | 5% | Cross-sectional z-score of EPS surprise; OLS momentum-beta residual; 1-bday lag |
 | Analyst | 5% | Analyst revision signal; sparse — zero-filled if cache absent |
 | LLM Fundamental | 3% | Chicago Booth 6-step CoT via Haiku; cached by (symbol, quarter_end); 45-day filing lag |
 | Options Flow | 2% | Options sentiment; sparse — zero-filled if cache absent |
 | Insider | 2% | Insider net transaction score; sparse — zero-filled if cache absent |
 | Short Interest | 2% | Short squeeze signal; sparse — zero-filled if cache absent |
+| Alt Data | 0% | IC-validated alternative data (SEC 10-K, transcripts, Reddit, Google Trends); 0% until first source passes IC gate |
 
 Distressed filter: zeroes alpha for `mom_252d < −0.65` after blending. All sleeves cross-sectionally z-scored before blending. Weights are regime-adaptive via `data_cache/active_alpha_config.json` (updated weekly by self-improve loop). ML sleeve disabled if <10 folds converge or p5 IC Sharpe < −0.05.
 
@@ -79,7 +80,11 @@ Distressed filter: zeroes alpha for `mom_252d < −0.65` after blending. All sle
 
 ## Portfolio construction
 
-`sector_constrained_weighted()`: coverage check (< 80% → skip sector caps + warn) → rank alpha → `max_per_sector=1` → `_water_fill_cap()` (iterative, ≤50 iterations) → hard clamp + renorm. Post-condition: sum=1.0±tol, no position > max_weight.
+`sector_constrained_weighted_mvo()` is the primary path (Plan 2): sector pre-screening → Black-Litterman blending (quant prior + LLM views) → cvxpy MVO (objective: `w'α - λΣ - κ‖w-w_prev‖₁`, CLARABEL solver, SCS fallback) → rank-weight fallback if infeasible.
+
+`sector_constrained_weighted()` (rank-weight fallback): coverage check (< 80% → skip sector caps + warn) → rank alpha → `max_per_sector=1` → `_water_fill_cap()` (iterative, ≤50 iterations) → hard clamp + renorm.
+
+BL blending weight from IC IR: IR < 0.30 → tau=0.05, IR < 0.60 → tau=0.10, else tau=0.15.
 
 Regime tightens max_weight: crisis → 0.08, calm_bull → 0.15. SPY 200MA overlay: SPY < 200MA → multiply weights × 0.70.
 
@@ -155,6 +160,12 @@ Gate conditions (~July 2026): `SELF_MODIFY_ENABLED = True`, ≥63 days live regi
 
 Kill switch: SOFT_WARN 8% (log+proceed), HARD_STOP 15% (abort). Alternatives: 12%. State in `logs/kill_switch_state.json`. Large trades (> 2% NAV) → `execution/pending_approvals.json`, async wait via `threading.Event`, 30-min timeout. Almgren-Chriss cost model: blocks > 10% ADV, warns > 5% ADV. Post-fill: slippage logged to `logs/slippage_log.jsonl`.
 
+**Plan 5 additions (execution excellence):**
+- `twap_executor.py`: TWAP_ENABLED=False kill switch; orders > 5% ADV routed to equal-spaced child limit orders; Almgren-Chriss optimal window sizing
+- `implementation_shortfall.py`: IS decomposition — delay cost / market impact / opportunity cost in bps; logged to `slippage_log.jsonl` backwards-compatibly
+- `capacity_model.py`: max AUM per sleeve before signal decay from market impact; informational only; weekly log to `logs/capacity_log.jsonl`
+- `intraday_trigger.py`: three triggers (SPY −3%+VIX>30, drawdown ≥12%, event urgency on top-5); checked at 12:00 PM and 14:30 PM ET; adjustments logged to `logs/intraday_adjustments.jsonl`
+
 Config: always `get_config()`, never `Config()` directly.
 
 ---
@@ -227,28 +238,31 @@ All audits complete through third pass. No outstanding crash risks. Pipeline run
 - **AI-native Tier 1**: ✅ built — `ascent/alpha/llm_fundamental.py`, `ascent/monitoring/slippage_ic_feedback.py`, `debate/disagreement_scorer.py`, private context subsets in `debate/agents.py`
 - **AI-native Tier 2**: ✅ built — `memory/reflection_agent.py`, `ascent/research/factor_proposer.py`, `debate/agent_tools.py`, `tool_completion()` in `ascent/llm/client.py`
 - **AI-native Tier 3**: ✅ built — `ascent/research/factor_discovery/` (PySR + LLM templates, per-regime CPCV, Harvey FDR); pipeline inactive until gate conditions met (~July 2026)
-- **AI-native Tier 4** (next): alternative data ingestion — planned in `docs/superpowers/plans/2026-05-10-plan4-alternative-data-pipeline.md`
-- **Event-driven agents**: planned in `docs/superpowers/plans/2026-05-10-plan3-event-driven-architecture.md`
+- **AI-native Tier 4 (Plan 4)**: ✅ built — `ascent/data/ingest/sec_filings.py`, `earnings_transcripts.py`, `reddit_sentiment.py`, `google_trends.py`; `ascent/alpha/altdata_alpha.py`; `ascent/data/validate/altdata_validator.py`; IC gate identical to factor discovery; altdata sleeve at 0% until first source validated
+- **Event-driven agents (Plan 3)**: ✅ built — EDGAR RSS listener, 8-K Haiku classifier, Capitol Trades, options anomaly scanner, event daemon thread, `EVENT_TRADING_ENABLED=False`
+- **Execution excellence (Plan 5)**: ✅ built — TWAP executor, IS decomposition, capacity model, intraday triggers (all kill-switched off pending paper validation)
+- **Factor risk model (Plan 1)**: ✅ built — FF5+UMD, Ledoit-Wolf shrinkage Σ, factor exposure bounds, regime-aware constraints for MVO
+- **Portfolio construction overhaul (Plan 2)**: ✅ built — cvxpy MVO, Black-Litterman, regime covariance
 - **R2R semantic memory**: built but `R2R_API_KEY` not configured; BM25 fallback active
 - **Live dashboard UI**: planned in `docs/superpowers/plans/2026-05-10-plan6-realtime-infrastructure.md`
-- **Alpha signal backlog**: analyst revision signal (earnings surprise beta now fixed — see 2026-05-09 log)
+- **Live track record + compliance**: planned in `docs/superpowers/plans/2026-05-10-plan7-live-track-record.md`
 
 ### Institutional roadmap (Plans 1–7, written 2026-05-10)
 
 Seven sequenced plans taking Ascent to institutional and YC-ready state. Each has a complete spec in `docs/superpowers/plans/`:
 
-| Plan | File | What it adds |
-|------|------|--------------|
-| Plan 1 | `2026-05-10-plan1-factor-risk-model.md` | Barra-style factor risk model; portfolio factor exposure decomposition; factor-explained vs. idiosyncratic attribution |
-| Plan 2 | `2026-05-10-plan2-portfolio-construction.md` | cvxpy MVO optimizer; Black-Litterman quant+LLM blending; regime-conditional covariance; TC-aware objective |
-| Plan 3 | `2026-05-10-plan3-event-driven-architecture.md` | EDGAR 8-K listener; Capitol Trades; options anomaly scanner; event trade execution (0.5% NAV cap) |
-| Plan 4 | `2026-05-10-plan4-alternative-data-pipeline.md` | SEC full-text (10-K/10-Q); earnings transcripts; Reddit sentiment; Google Trends; IC validation gate |
-| Plan 5 | `2026-05-10-plan5-execution-excellence.md` | TWAP executor; implementation shortfall decomposition; capacity model; intraday rebalance triggers |
-| Plan 6 | `2026-05-10-plan6-realtime-infrastructure.md` | Alpaca WebSocket streaming; TimescaleDB; live operator dashboard; monthly PDF investor reports |
-| Plan 7 | `2026-05-10-plan7-live-track-record.md` | Immutable audit trail (hash chain); GIPS performance presentation; risk disclosures; 12-month live track record |
+| Plan | Status | File | What it adds |
+|------|--------|------|--------------|
+| Plan 1 | ✅ Done | `2026-05-10-plan1-factor-risk-model.md` | Barra-style factor risk model; portfolio factor exposure decomposition; factor-explained vs. idiosyncratic attribution |
+| Plan 2 | ✅ Done | `2026-05-10-plan2-portfolio-construction.md` | cvxpy MVO optimizer; Black-Litterman quant+LLM blending; regime-conditional covariance; TC-aware objective |
+| Plan 3 | ✅ Done | `2026-05-10-plan3-event-driven-architecture.md` | EDGAR 8-K listener; Capitol Trades; options anomaly scanner; event trade execution (0.5% NAV cap) |
+| Plan 4 | ✅ Done | `2026-05-10-plan4-alternative-data-pipeline.md` | SEC full-text (10-K/10-Q); earnings transcripts; Reddit sentiment; Google Trends; IC validation gate |
+| Plan 5 | ✅ Done | `2026-05-10-plan5-execution-excellence.md` | TWAP executor; implementation shortfall decomposition; capacity model; intraday rebalance triggers |
+| Plan 6 | Planned | `2026-05-10-plan6-realtime-infrastructure.md` | Alpaca WebSocket streaming; TimescaleDB; live operator dashboard; monthly PDF investor reports |
+| Plan 7 | Planned | `2026-05-10-plan7-live-track-record.md` | Immutable audit trail (hash chain); GIPS performance presentation; risk disclosures; 12-month live track record |
 
-**Suggested order:** Plan 1 → Plan 3 (parallel with Plan 2) → Plan 2 → Plan 4 → Plan 5 → Plan 6 → Plan 7 infrastructure → real capital deployment → 12-month accumulation.
-**Timeline to YC-ready:** ~18–24 months from Plan 1 start.
+**Status:** Plans 1–5 complete (420 tests passing). Plans 6–7 are infrastructure/compliance — begin Plan 6 next.
+**Timeline to YC-ready:** ~12–18 months from now (~April 2027 if Plan 6 starts immediately).
 
 ---
 
@@ -550,3 +564,26 @@ Seven sequenced plans taking Ascent to institutional and YC-ready state. Each ha
 - **Tests**: 16 tests, all passing; full suite 382 passing (up from 366)
 - Files: 7 new files, 2 modified + `logs/event_trades.jsonl`
 - Open: Plans 4–7 queued; `EVENT_TRADING_ENABLED` stays False until 30-day paper validation (~July 2026)
+
+### 2026-05-10 (Plan 4 — Alternative Data Pipeline ✅)
+- **Task 1 ✅**: `ascent/data/ingest/sec_filings.py` — EDGAR 10-K/10-Q; `extract_mda_section()` regex boundary detection + fallback; Haiku 5-axis classifier (revenue_momentum, margin_trend, tone, liquidity_risk, guidance); 45-day filing lag; 90-day forward-fill; `update_sec_signals()` incremental cache
+- **Task 2 ✅**: `ascent/data/ingest/earnings_transcripts.py` — EDGAR 8-K Item 2.02; prepared remarks / Q&A splitter; Haiku tone/defensiveness/forward-confidence/quantitative_ratio classifier; 1-bday lag; 63-day ffill
+- **Task 3 ✅**: `ascent/data/ingest/reddit_sentiment.py` — PRAW mentions × 4 subreddits; TextBlob sentence sentiment; contrarian z-score (high retail excitement → bearish); credentials via REDDIT_CLIENT_ID/SECRET env vars; no user text stored
+- **Task 4 ✅**: `ascent/data/ingest/google_trends.py` — pytrends search velocity; rate-limited 1/5s; weekly Sunday refresh capped at 50 symbols; 1-day lag; compute_trends_signal() cross-sectional z-score of velocity
+- **Task 5 ✅**: `ascent/data/validate/altdata_validator.py` — IC gate: IC_mean ≥ 0.015, IC_IR ≥ 0.60, IC_min_regime > 0.010, n ≥ 20; `run_altdata_validation()` writes proposals to `outputs/altdata_proposals/` for human review; `register_altdata_source()` updates `active_alpha_config.json`
+- **Task 6 ✅**: `ascent/alpha/altdata_alpha.py` — IC-weighted combiner; reads `altdata_weights` from config; returns empty DataFrame when no sources active
+- `ascent/alpha/stack.py` — `altdata` sleeve added at 0.00 weight; `ascent/research/self_improve.py` synced
+- `run_all_agents.py` — monthly altdata validation (first Sunday); weekly Google Trends refresh
+- **Tests**: 23 tests, all passing; full suite 404 passing (up from 382)
+- Files: 6 new files, 3 modified; commit `f5c6873`
+- Open: Plans 6–7 queued; `EVENT_TRADING_ENABLED` stays False until ~July 2026; no altdata source yet validated (need 63+ days of live fills)
+
+### 2026-05-10 (Plan 5 — Execution Excellence ✅)
+- **Task 1 ✅**: `ascent/execution/twap_executor.py` — `TWAP_ENABLED=False` kill switch; `build_twap_schedule()` equal-spaced child orders (min 1 share/slice); `compute_twap_window()` Almgren-Chriss T*; `should_use_twap()` 5% ADV gate; `execute_twap()` submits limit orders via Alpaca; wired into `order_engine.py` at module level for patchability
+- **Task 2 ✅**: `ascent/execution/implementation_shortfall.py` — IS decomposition: delay cost (signal→arrival), market impact (arrival→fill), opportunity cost (unfilled); all in bps vs decision price; `log_is_record()` backward-compatible append to `slippage_log.jsonl`; `is_summary()` trailing-period stats
+- **Task 3 ✅**: `ascent/execution/capacity_model.py` — `estimate_market_impact()` η·σ·(X/ADV)^0.6; `compute_signal_breakeven_adv()` Grinold alpha vs impact; `compute_strategy_capacity()` per-sleeve max NAV; `capacity_report()` logs to `logs/capacity_log.jsonl`; informational only
+- **Task 4 ✅**: `ascent/execution/intraday_trigger.py` — 3 triggers: regime emergency (SPY −3%+VIX>30 → ×0.70 de-risk), drawdown pre-emption (≥12% → −20% exposure), event urgency (high-urgency event on top-5 position → 50% trim); `execute_intraday_adjustment()` logs to `logs/intraday_adjustments.jsonl`; `run_intraday_trigger_check()` entry point in `eod_runner.py`
+- **Task 5 ✅**: `slippage_tracker.py` — `compute_slippage()` now appends `is_breakdown` sub-dict when decision price is recorded; `fill_quality_report()` returns mean IS components + by-sleeve breakdown
+- **Tests**: 16 tests, all passing; full suite 420 passing (up from 404)
+- Files: 4 new, 4 modified; commit `71c60cb`
+- Open: Plans 6–7; TWAP_ENABLED stays False until paper validation (~July 2026); intraday triggers logged only (no live orders yet)
