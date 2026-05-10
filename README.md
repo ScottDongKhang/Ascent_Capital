@@ -1,41 +1,395 @@
 # Ascent Capital
 
-Modular systematic trading platform. Four specialist agents across US equities, macro, international, and alternatives — each running an independent alpha pipeline — feed a central orchestrator that applies skill-weighted capital allocation, cross-agent risk controls, and an LLM debate layer before submitting orders to Alpaca paper trading.
+> Institutional-grade quantitative trading platform — live on Alpaca paper trading since April 2026.
 
-Live since April 1, 2026.
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│                         Ascent Capital Stack                             │
+│                                                                          │
+│  Market Data ──► Data Layer ──► Alpha Engine ──► Portfolio Construction │
+│  Yahoo / FRED      (ingest,       (13 sleeves,     (MVO + BL, sector-   │
+│  EDGAR / Alt Data   normalize,     regime-adapt,    constrained,         │
+│  Options / Reddit   cache)         IC-validated)    risk-budgeted)       │
+│                                                                          │
+│        │                │                │                │             │
+│   Regime HMM      Factor Risk        LLM Debate        Execution        │
+│  (particle filter,  Model (FF5+UMD,  (Bull/Bear/DA/   (TWAP, IS,        │
+│   5 labels, auto-   Ledoit-Wolf Σ,   Judge, Opus)     approval gate)    │
+│   emergency refit)  factor P&L)                                          │
+└──────────────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
-## Walk-Forward Out-of-Sample Record
+## System Architecture
 
-Evaluated on honest expanding-window walk-forward OOS (January 2020 – April 2026). Every fold uses `get_universe_on_date(rebalance_date)` to exclude names outside their validity window at that date. Regime engine fitted on training slice only — no look-ahead.
+```
+python run_all_agents.py  (daily, 1:45 PM ET via launchd)
+│
+├─ Step 0: Factor data update + intraday trigger check
+│
+├─ 4 Specialist Agents (parallel, AgentScope)
+│   ├── US Equities  ── 901 symbols (S&P 500 + 400), full 13-sleeve alpha stack
+│   ├── Macro        ── 12 ETFs, trend-only, regime-sized
+│   ├── International── 12 ETFs, EM-aware (UUP > 50MA → 20% EM penalty)
+│   └── Alternatives ── 7 ETFs, VIXY hedge, kill switch at 12% drawdown
+│
+├─ Orchestrator  (skill-score capital allocation)
+│   ├── Regime base:   calm_bull US60/mac15/intl15/alt10
+│   │                  stressed  US45/mac25/intl10/alt20
+│   │                  crisis    US30/mac30/intl5/alt35
+│   ├── Skill blend:   50% skill + 50% base (negative Sharpe → zero)
+│   ├── Conviction bonus: +15% when ≥2 agents share a name
+│   ├── Correlation guard: 63-day cross-agent cap at 0.70
+│   ├── EM+commodity cap: hard 20% aggregate
+│   └── Crisis veto: 60% macro on crisis regime
+│
+├─ Debate Layer  (rebalance days only — advisory)
+│   ├── Blind spot detection + catalyst scan
+│   ├── Round 1: Bull / Bear / Devil's Advocate (Opus) + Regime + Quant
+│   ├── Round 2: Cross-rebuttals
+│   └── Judge → proceed / reduce_size / halt_and_review
+│
+└─ Execution
+    ├── Approval gate (>2% NAV)
+    ├── TWAP executor (>5% ADV, TWAP_ENABLED=False pending validation)
+    ├── Alpaca paper trading
+    └── IS decomposition + slippage tracking
+```
+
+---
+
+## Alpha Stack (13 Sleeves)
+
+| Sleeve | Weight | Signal Construction |
+|--------|-------:|---------------------|
+| Trend | 41% | Cross-sectional momentum; skip-last-month `mom_252d − mom_21d` at 0.20 sub-weight |
+| Stat-arb | 15% | Sector-residual mean reversion; needs `profiles.parquet` |
+| ML (XGBoost) | 10% | CPCV C(6,2)=15 folds, 5-day purge+embargo; 6 features by IC/IR; p5 guard > −0.05 |
+| Mean Reversion | 5% | Short-term reversal (z-score 20d) |
+| Volatility | 5% | Long declining+stable vol: `−vol_trend_10d / vol_of_vol_21d` |
+| Fundamental | 5% | Gross profitability + accruals + asset growth; 45-day lag; momentum-neutral |
+| Earnings PEAD | 5% | EPS surprise z-score; OLS momentum-beta residual; 1-bday lag |
+| Analyst | 5% | Revision signal; sparse — zero-filled when cache absent |
+| LLM Fundamental | 3% | Chicago Booth 6-step CoT via Claude Haiku; cached by (symbol, quarter) |
+| Options Flow | 2% | IV-adjusted sentiment; sparse |
+| Insider | 2% | Net transaction score; sparse |
+| Short Interest | 2% | Short squeeze signal; sparse |
+| Alt Data | 0% | IC-validated: SEC 10-K, transcripts, Reddit, Google Trends (0% until gate passed) |
+
+**Distressed filter:** zeroes alpha for names with `mom_252d < −0.65` (down >65% YoY).  
+**Regime-adaptive:** sleeve weights read from `data_cache/active_alpha_config.json`; updated weekly.
+
+---
+
+## Portfolio Construction
+
+```
+Cross-sectional alpha scores
+            │
+            ▼
+  Black-Litterman blending
+  (quant prior + LLM view, tau by IC IR)
+  IC IR < 0.30 → tau=0.05  │  0.30–0.60 → tau=0.10  │  >0.60 → tau=0.15
+            │
+            ▼
+  cvxpy MVO  (CLARABEL solver → SCS fallback → rank-weight fallback)
+  Objective: w'α − λ(w'Σw) − κ‖w − w_prev‖₁
+  Σ = B·F·B' + D  (FF5+UMD factor covariance + idiosyncratic)
+            │
+            ▼
+  Sector constraints  (max 1 per sector, fallback if coverage < 80%)
+            │
+            ▼
+  SPY 200MA overlay (×0.70 when SPY < 200MA)
+            │
+            ▼
+  VIXY hedge overlay (0–8% by regime × confidence)
+```
+
+---
+
+## Regime System
+
+```
+HMM  K=2–4  (walk-forward CV selects K)
+Labels: calm_bull | stressed | crisis | neutral | uncertain
+
+Hysteresis: enter 0.55 / exit 0.35 / min dwell 3 days
+Entropy > 0.90 → uncertain
+
+Particle filter: 500 particles SIR
+Emergency refit triggers:
+  • SPY −3% intraday AND VIX > 30
+  • SPY crosses 200-day MA
+  • SPY/TLT correlation sign flip
+  • Structural break z-score > 3.5
+  • > 5 days stale
+
+Leading indicators: credit spread (HYG/LQD), yield curve slope (TLT/IEF)
+```
+
+---
+
+## Debate Layer
+
+```
+Blind spot detector ──► Catalyst scanner ──► Monte Carlo (p5–p95)
+                                                    │
+              ┌─────────────────────────────────────┘
+              │              Round 1
+              ▼
+  ┌─────────────────────────────────────────────────────────┐
+  │  Bull (Opus)    Bear (Opus)    Devil's Advocate (Opus)  │
+  │  Regime Specialist (Haiku)    Quant Sanity (Python)     │
+  └─────────────────────────────────────────────────────────┘
+              │              Round 2
+              ▼        (cross-rebuttals)
+  ┌─────────────────────────────────────────────────────────┐
+  │  Bull rebuts Bear/DA | Bear rebuts Bull/DA | DA rebuts  │
+  └─────────────────────────────────────────────────────────┘
+              │
+              ▼
+         Judge (Opus)
+              │
+    ┌─────────┼──────────┐
+    ▼         ▼          ▼
+ proceed  reduce_size  halt_and_review
+            (Haiku        (skip + log
+          adjusts wts)   halt_state.json)
+
+Disagreement score: TF-IDF cosine (monitoring — not a verdict override)
+```
+
+---
+
+## Event-Driven Architecture
+
+```
+EDGAR RSS (5 min)        Capitol Trades (60 min)    Options Anomaly (15 min)
+       │                         │                          │
+       ▼                         ▼                          ▼
+  8-K Haiku            Rule-based classifier         IV z-score +
+  5 few-shot           conviction=0.4                put/call z-score
+  examples             30–45 day lag                 thresholds
+       │                         │                          │
+       └─────────────────────────┴──────────────────────────┘
+                                 │
+                    Event signal: direction × conviction × urgency
+                                 │
+                    Kill switch: EVENT_TRADING_ENABLED = False
+                    Size cap: 0.5% NAV per event trade
+                    Approval gate: >1% NAV
+                    IC tracked: weekly Spearman
+```
+
+---
+
+## Alternative Data Pipeline
+
+```
+SEC 10-K/10-Q     Earnings Transcripts    Reddit Mentions    Google Trends
+ Haiku 5-axis      Haiku 4-axis           PRAW + TextBlob    pytrends velocity
+ classifier        classifier             Contrarian z-score  Weekly, 1-day lag
+ 45-day lag        1-bday lag             Daily              Normalized 0–1
+ 90-day ffill      63-day ffill
+       │                 │                      │                    │
+       └─────────────────┴──────────────────────┴────────────────────┘
+                                   │
+                      IC Validation Gate (Harvey FDR)
+                      IC_mean ≥ 0.015 | IC_IR ≥ 0.60
+                      IC_min_regime > 0.010 | n_obs ≥ 20
+                                   │
+              Accepted → outputs/altdata_proposals/ (human review required)
+              Nothing auto-deploys into the live alpha stack
+```
+
+---
+
+## Execution Excellence
+
+```
+Signal generation @ 1:45 PM
+         │
+         ├─ Record decision price (IS tracking)
+         │
+         ▼
+  Almgren-Chriss cost model
+  Block >10% ADV | Warn >5% ADV | Unknown volume → log warning
+         │
+         ├── >5% ADV? ──► TWAP executor (kill switch: TWAP_ENABLED=False)
+         │               Almgren-Chriss optimal window
+         │               Child limit orders (bid±1tick, refreshed each slice)
+         │
+         └── ≤5% ADV? ──► Market order at close
+                                 │
+                     IS Decomposition (per fill):
+                     ┌────────────────────────────────┐
+                     │ delay_cost    signal→arrival   │
+                     │ market_impact arrival→fill     │
+                     │ opportunity   unfilled shares  │
+                     └────────────────────────────────┘
+                                 │
+                     Capacity model (weekly):
+                     max AUM per sleeve before signal decay
+```
+
+---
+
+## Intraday Triggers
+
+```
+12:00 PM ET  and  14:30 PM ET daily checks:
+
+(a) Regime emergency:
+    SPY < −3% intraday AND VIX > 30
+    → multiply all weights × 0.70 (de-risk)
+
+(b) Drawdown pre-emption:
+    drawdown ≥ 12% (soft warn threshold)
+    → reduce gross exposure by 20%
+
+(c) Event urgency:
+    high-urgency event in last 60 min for top-5 position
+    → 50% partial trim of flagged position
+
+All adjustments: TWAP urgency="high" (≤15 min window)
+Logged to: logs/intraday_adjustments.jsonl
+```
+
+---
+
+## Walk-Forward OOS Record
+
+> Honest out-of-sample: no look-ahead bias, per-fold universe filter via `get_universe_on_date()`, regime fitted on training slice only.
 
 | Metric | Value |
-|--------|-------|
-| CAGR | ~+12.4% |
-| Sharpe | ~+0.52 |
-| Alpha vs SPY | ~+0.68% annualized |
-| Evaluation window | Jan 2020 – Apr 2026 |
-
-These figures reflect the composite alpha stack and orchestrator logic as of the evaluation date. Ongoing self-improvement may cause the production configuration to diverge from the backtest configuration over time.
+|--------|------:|
+| Period | Jan 2020 – Apr 2026 |
+| CAGR | +12.35% |
+| Sharpe | +0.518 |
+| Alpha vs SPY | +0.68% |
+| Max Drawdown | −23.4% |
 
 ---
 
-## Quick Start
+## Live Track Record
+
+| Date | Event |
+|------|-------|
+| Apr 1, 2026 | Live paper trading begins |
+| Apr 15, 2026 | First rebalance: REDUCE_SIZE 0.88, 27 orders to Alpaca |
+| May 5, 2026 | Full portfolio rotation: 40 orders |
+| May 7, 2026 | NAV $104,815 | Regime: calm_bull |
+| May 10, 2026 | Plans 1–5 complete — 420 tests passing |
+
+**Current portfolio (May 2026):** KMLM, IFRA, AMKR, FIX, WDC, VICR, VRT, VAL, WCC, DBB, CNC, WFRD, PDBC, STLD, DBA, CHRD, EWY, EWC, IRM, MUSA + VIXY hedge.
+
+---
+
+## Self-Improve Loop
+
+```
+Sunday 6 AM:
+  LLM hypothesis generation (factor_proposer.py, Haiku)
+           +
+  Random perturbation (fallback)
+           │
+           ▼
+  5 sleeve-weight variants
+           │
+           ▼
+  Real multi-fold OOS scoring
+  (3–4 expanding folds, 5-day purge+embargo,
+   per-fold universe filter, Sharpe metric)
+           │
+  Edge > 0.05 Sharpe → 30-day shadow period
+           │
+  Shadow beats live after 30 days → auto-promote
+  (shadow_promoter.py → active_alpha_config.json)
+
+SELF_MODIFY_ENABLED = False
+Activates when: +OOS Sharpe for 30 consecutive trading days on flat config
+Expected gate: ~July 2026
+```
+
+---
+
+## Factor Discovery Loop
+
+```
+First Sunday of each month:
+
+Path A: PySR symbolic regression on pre-computed feature panel
+Path B: Claude Haiku proposes JSON template parameters
+
+        │
+        ▼
+  Leakage scanner (AST + regex — blocks lookahead patterns)
+        │
+        ▼
+  Per-regime Spearman IC evaluation (CPCV)
+  Harvey FDR gate:
+    IC_mean ≥ 0.015 | IC_IR ≥ 0.60 | IC_min_regime > 0.010
+        │
+  Accepted → outputs/factor_proposals/ (human review)
+  Nothing auto-deploys
+
+Gate conditions for live activation: ~July 2026
+```
+
+---
+
+## Institutional Roadmap
+
+| # | Plan | Status | What It Adds |
+|---|------|--------|--------------|
+| 1 | Factor Risk Model | ✅ Done | FF5+UMD rolling OLS, Ledoit-Wolf Σ, factor P&L |
+| 2 | Portfolio Construction | ✅ Done | cvxpy MVO, Black-Litterman, regime covariance |
+| 3 | Event-Driven Architecture | ✅ Done | EDGAR, Capitol Trades, options anomaly, event trades |
+| 4 | Alternative Data Pipeline | ✅ Done | SEC, transcripts, Reddit, Google Trends, IC gate |
+| 5 | Execution Excellence | ✅ Done | TWAP, IS decomposition, capacity model, intraday triggers |
+| 6 | Real-Time Infrastructure | Planned | WebSocket streaming, TimescaleDB, live dashboard, PDF reports |
+| 7 | Live Track Record | Planned | Immutable audit trail, GIPS performance, risk disclosures |
+
+**420 tests passing** | **Plans 6–7 target: Q3 2026** | **YC-ready target: April 2027**
+
+---
+
+## Running the System
 
 ```bash
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-cp .env.example .env   # set ANTHROPIC_API_KEY, ALPACA_API_KEY, ALPACA_SECRET_KEY, FRED_API_KEY
+# Activate virtual environment
+source .venv/bin/activate
 
-# Full daily run
-.venv/bin/python run_all_agents.py
+# Daily pipeline (also runs via launchd at 1:45 PM)
+python run_all_agents.py
 
-# Core pipeline only (single agent, no orchestration)
-.venv/bin/python -m ascent.main
+# Run test suite
+python -m pytest --tb=short -q
+# → 420 passed, 1 skipped
 
-# Tests (326 tests)
-.venv/bin/pytest tests/ -v
+# Interactive demo (Streamlit)
+streamlit run demo_app.py
+```
+
+---
+
+## Environment Setup
+
+```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+# Create .env with:
+ANTHROPIC_API_KEY=...
+ALPACA_KEY=...
+ALPACA_SECRET=...
+FRED_API_KEY=...
+REDDIT_CLIENT_ID=...      # optional, for Reddit alt data
+REDDIT_CLIENT_SECRET=...
+OPENROUTER_API_KEY=...    # optional, for OpenRouter debate models
 ```
 
 ---
@@ -44,269 +398,58 @@ cp .env.example .env   # set ANTHROPIC_API_KEY, ALPACA_API_KEY, ALPACA_SECRET_KE
 
 ```
 ascent/
-  config/         settings.py, types.py (AgentOutput dataclass), universe configs
+  config/       Settings, APIKeys, types (AgentOutput), universe JSON
   data/
-    ingest/       Yahoo Finance, FRED, fundamentals (45-day filing lag), earnings, GBM fallback
-    normalize/    Cleaning, schema validation
-    store/        Parquet cache, point-in-time joins (as_of_join, as_of_merge)
-    universe.py   get_universe_on_date() — per-fold survivorship filter
-  features/       build_features, feature_defs, targets
-  alpha/          trend, statarb, meanrev, ml_sleeve (CPCV), volatility, fundamental, earnings, stack
-  portfolio/      sector_constrained_weighted, _water_fill_cap (iterative, ≤50 iterations)
-  backtest/       engine, Almgren-Chriss cost model
-  research/       walk_forward_runner, walk_forward_lightweight, self_improve, shadow_promoter, cpcv, factor_discovery/
-  regime/         HMM engine (K=2–4), particle filter, emergency refit, posture mapping
-  risk/           correlation_guard
-  reporting/      blind_spot_detector, catalyst_scanner, debrief
-  execution/      eod_runner, alpaca_broker, order_engine, kill_switch, approval_server, debate_gate
-  monitoring/     skill_tracker, forward_pnl_tracker, attribution, counterfactual_tracker
-  llm/            client.py — centralized Anthropic wrapper (Opus 4.6 default, Haiku 4.5 for light tasks)
-  main.py         Core pipeline entrypoint
+    ingest/     yahoo, fred, edgar, capitol_trades, options_scanner,
+                sec_filings, earnings_transcripts, reddit_sentiment, google_trends
+    store/      parquet cache, point_in_time joins
+    validate/   altdata_validator (IC gate)
+  features/     build_features, feature_defs, targets
+  alpha/        trend, meanrev, statarb, ml_sleeve, fundamental, earnings,
+                llm_fundamental, analyst, options_flow, insider, short_interest,
+                event_alpha, altdata_alpha, stack
+  portfolio/    mvo_optimizer, black_litterman, regime_covariance,
+                optimizer, hedge_overlay
+  risk/         factor_data, factor_model, covariance_model,
+                factor_exposure, factor_constraints
+  research/     walk_forward_runner, walk_forward_lightweight, cpcv,
+                self_improve, shadow_promoter, factor_proposer,
+                factor_discovery/ (PySR + LLM + Harvey FDR gate)
+  regime/       engine, model, features, decision, particle_filter, breaks
+  execution/    eod_runner, alpaca_broker, order_engine, kill_switch,
+                cost_model, slippage_tracker, approval_server,
+                twap_executor, implementation_shortfall,
+                capacity_model, intraday_trigger, event_runner
+  monitoring/   skill_tracker, forward_pnl_tracker, attribution,
+                slippage_ic_feedback, pre_rebalance_checklist
+  reporting/    market_memo, ic_brief_generator, blind_spot_detector,
+                catalyst_scanner, debrief
+  llm/          client.py (centralized Claude wrapper, retry 3×)
 
-agents/           us_equities, macro, international, alternatives
-orchestrator/     central_intelligence.py
-debate/           debate_runner, agents (bull/bear/devil/regime/quant), judge, outcome_tracker
-memory/           r2r_interface (R2R + BM25 fallback)
-simulation/       scenario_simulator (parametric shock + Monte Carlo percentiles)
+agents/         us_equities, macro, international, alternatives, event_agent
+orchestrator/   central_intelligence.py
+debate/         debate_runner, agents, judge, outcome_tracker,
+                disagreement_scorer, agent_tools
+memory/         r2r_interface, reflection_agent
+simulation/     mirofish_interface
 
-data_cache/       Parquet caches, ml_model_*.pkl, active_alpha_config.json, shadow_configs/
-dashboard/        regime_signal.json, regime_labels.csv, agent_skill_scores.json
+data_cache/     prices_live, macro_live, profiles, ml_model_*.pkl,
+                active_alpha_config.json, altdata_*.parquet,
+                factor_returns.parquet, factor_loadings.parquet
+dashboard/      HTML dashboards, regime_signal.json, regime_labels.csv,
+                agent_skill_scores.json, factor_exposures.json
 outputs/
-  debate_log/       verdict_YYYY-MM-DD.json
-  scenarios/        scenario output JSON per rebalance
-  factor_proposals/ accepted discovery proposals (human review queue)
-logs/             PnL per agent, slippage, self_improve, skill_scores, multi_agent_run
+  debate_log/         verdict_YYYY-MM-DD.json
+  factor_proposals/   autonomous factor proposals (human review)
+  altdata_proposals/  validated alt-data proposals (human review)
+logs/           eod_log, slippage_log, event_trades, capacity_log,
+                intraday_adjustments, self_improve_log, skill_scores_log
 
-run_all_agents.py   Single daily entrypoint
+ascent/main.py         core pipeline entry point
+run_all_agents.py      single daily command (launchd trigger)
+demo_app.py            Streamlit demo (dark/gold aesthetic, live LLM debate)
 ```
 
 ---
 
-## Daily Runtime
-
-**`python3 run_all_agents.py`**
-
-Every day:
-1. Shadow promoter checks 30-day shadow configs — auto-promotes winners to `active_alpha_config.json`
-2. Four specialist agents run in parallel (AgentScope), each calling `ascent/main.py` for their universe
-3. Each agent emits an `AgentOutput`: `target_weights`, `regime_signal`, `alpha_scores`, `skill_score`
-4. Forward PnL cycle scores open positions; 63-day rolling OOS Sharpe updated per agent
-5. Orchestrator blends allocations: skill-weighted base + conviction bonus + correlation guard + EM/commodity cap + crisis veto
-
-On rebalance days (~every 10 business days):
-6. Pre-rebalance checklist
-7. Debate gate evaluates: regime entropy > 0.70, top position > 12%, VaR 99th < −3.5%, or catalyst detected
-8. If warranted: blind spot detection → catalyst scan → Monte Carlo → 5-agent debate → judge verdict
-9. Verdict gates execution: `proceed` → normal, `reduce_size` → Haiku adjusts weights, `halt_and_review` → skip + log
-10. Orders to Alpaca; post-fill slippage tracked
-
-Sundays 6 AM: self-improve loop — 5 sleeve-weight variants tested on real multi-fold OOS.
-
-**Core pipeline** (`ascent/main.py`):
-
-```
-data → normalize → regime fit → features → alpha stack → sector-constrained weights → SPY 200MA overlay → backtest → export
-```
-
-Signal at close `t`; trade at open `t+1`. SPY < 200-day MA → multiply all weights × 0.70.
-
----
-
-## Alpha Stack
-
-Seven sleeves blended into a composite cross-sectional score. All sleeves z-scored before blending. Weights are regime-adaptive and updated weekly by the self-improve loop via `data_cache/active_alpha_config.json`.
-
-| Sleeve | Weight | Signal |
-|--------|--------|--------|
-| Trend | 41% | Cross-sectional momentum; skip-last-month variant (`mom_252d − mom_21d`) at 0.20 sub-weight |
-| Stat-arb | 15% | Sector-residual mean reversion; requires `profiles.parquet` |
-| ML (XGBoost) | 10% | CPCV C(6,2)=15 folds, 5-day purge + embargo; 6 features selected by IC/IR; p5 IC Sharpe > −0.05 |
-| Mean Reversion | 5% | Short-term reversal |
-| Volatility | 5% | Long names with declining and stable vol: `−(vol_trend_10d / vol_of_vol_21d)` |
-| Fundamental | 5% | Gross profitability, accruals, asset growth, 52-week high; 45-day filing lag |
-| Earnings | 5% | PEAD — cross-sectional z-score of reported vs expected EPS; 1-bday announcement lag |
-| Analyst | 5% | Analyst revision signal; zero-filled if cache absent |
-| LLM Fundamental | 3% | Chicago Booth 6-step CoT via Claude Haiku; cached by (symbol, quarter_end); 45-day filing lag |
-| Options Flow | 2% | Options sentiment score; zero-filled if cache absent |
-| Insider | 2% | Insider net transaction score; zero-filled if cache absent |
-| Short Interest | 2% | Short squeeze signal; zero-filled if cache absent |
-
-Distressed filter: zeroes alpha for `mom_252d < −0.65` after blending.
-
----
-
-## Regime System
-
-Hidden Markov Model with K=2–4 states; K selected via walk-forward cross-validation. State labels: `calm_bull`, `stressed`, `crisis`, `neutral`, `uncertain`.
-
-- **Features**: VIX, SPY realized vol, credit spread (HYG/LQD), yield curve slope (TLT/IEF), SPY/TLT correlation
-- **Hysteresis**: enter 0.55, exit 0.35, minimum dwell 3 days; entropy > 0.90 → uncertain override
-- **Particle filter**: 500 particles (SIR), reinitializes on each batch refit
-- **Emergency refit triggers**: SPY −3% + VIX > 30, 200MA cross, SPY/TLT correlation flip, break z-score > 3.5
-- **Scheduled refit**: every 5 days
-- **Downstream effects**: sleeve weights, `max_weight` tightening, orchestrator base allocation, debate context
-
----
-
-## Orchestrator
-
-`orchestrator/central_intelligence.py` applies in sequence:
-
-1. **Regime base**: `calm_bull` US60/mac15/intl15/alt10; `stressed` US45/mac25/intl10/alt20; `crisis` US30/mac30/intl5/alt35
-2. **Skill blend**: negative Sharpe → zero; else 50% skill-score weight + 50% regime base
-3. **Conviction bonus**: up to +15% when ≥2 agents share a position with conviction > 0.3
-4. **Correlation guard**: 63-day cross-agent correlation cap at 0.70 — halve the smaller position
-5. **Thesis coherence**: 12 factor buckets, 6 contradictory pairs (e.g., long UUP and long GLD) → 40% reduction
-6. **EM + commodity cap**: hard 20% aggregate after all blending
-7. **Crisis veto**: `us_regime=crisis` → merged = 0.60 × macro + 0.40 × merged
-
----
-
-## Specialist Agents
-
-| Agent | Universe | Strategy |
-|-------|----------|----------|
-| US Equities | 901 symbols (S&P 500 + S&P 400) | Full 7-sleeve alpha stack; max 1 per sector; 12–20 positions |
-| Macro | TLT, IEF, UUP, GLD, PDBC, HYG, LQD, TIP, SGOV, BIL, DBB, KMLM | Trend-only; regime-sized: crisis top_n=3 / 40% |
-| International | EEM, VWO, EWT, AAXJ, EWJ, EWZ, EWC, EWY, INDA, EWG, EWU, EFA | Max 2 per region; UUP > 50MA → 20% EM alpha penalty |
-| Alternatives | VNQ, GLD, PDBC, DBA, IFRA, VIXY, BIL | Trend 80% + low-vol 20%; kill switch at 12%; top 4 |
-
----
-
-## Debate Layer
-
-Runs on high-uncertainty rebalance days only (gated by `execution/debate_gate.py`). Advisory — never writes to alpha, portfolio, or execution modules.
-
-| Agent | Model | Role |
-|-------|-------|------|
-| Bull | claude-opus-4-6 | Strongest case for executing as proposed |
-| Bear | claude-opus-4-6 | Case for reducing risk |
-| Devil's Advocate | claude-opus-4-6 | Most dangerous assumption; Monte Carlo tail quantification |
-| Regime Specialist | claude-haiku-4-5-20251001 | Sizing playbook for current regime |
-| Quant Sanity | Pure Python | Weight sum, max position, concentration, turnover checks |
-
-Round 2: bull/bear/devil respond to each other before judge synthesizes. Blind spot detector reads all prior verdicts, identifies systematic failure patterns, injects `blind_spot_context` into every session. Outcome tracker scores past verdicts against realized NAV.
-
-**Private context subsets:** each agent receives a different view of the portfolio — bull sees momentum and fundamental signals; bear sees concentration and regime stress; devil's advocate sees regime entropy and Monte Carlo tail; regime specialist sees macro indicators only. No agent sees the full context. Implemented via `_build_agent_context()` in `debate/agents.py`.
-
-**Verdict**: `proceed` | `reduce_size` (Haiku reweights) | `halt_and_review` (persists to `execution/halt_state.json`)
-
----
-
-## Self-Improving Alpha
-
-Weekly (Sunday 6 AM). Generates 5 sleeve-weight variants via bounded perturbation, scores each on real multi-fold expanding-window OOS via `walk_forward_lightweight.py`. Winners with edge > 0.05 Sharpe enter a 30-day shadow period. `shadow_promoter.py` auto-promotes survivors to `active_alpha_config.json` with per-regime variants. The alpha stack reads this file live on every run.
-
-**Gate:** `SELF_MODIFY_ENABLED = False` in `ascent/research/self_improve.py`. The loop exists but exits early until OOS Sharpe is positive for 30 consecutive trading days on a flat config. This prevents self-modification from compounding on noise before a clean baseline is established. Set to `True` only after manually verifying that condition in `logs/self_improve_log.jsonl`.
-
----
-
-## Execution and Risk Controls
-
-- **Kill switch**: SOFT_WARN at 8% drawdown (log + proceed); HARD_STOP at 15% (abort); alternatives agent at 12%
-- **Approval gate**: orders > 2% NAV write to `execution/pending_approvals.json`, async 30-minute wait
-- **Cost model**: Almgren-Chriss; blocks > 10% ADV, warns > 5% ADV
-- **Slippage tracking**: post-fill vs signal close, written to `logs/slippage_log.jsonl`
-- **Broker**: Alpaca paper trading
-
----
-
-## Portfolio Construction
-
-`sector_constrained_weighted()` in `ascent/portfolio/optimizer.py`:
-
-- Coverage check: < 80% sector coverage → skip sector caps, log warning
-- Rank alpha → `max_per_sector=1` → `_water_fill_cap()` (iterative redistribution, ≤50 iterations)
-- Hard clamp + renormalize. Post-condition: weights sum to 1.0 ± tolerance; no position > `max_weight`
-- Regime tightens `max_weight`: `crisis` → 0.08, `calm_bull` → 0.15
-
-Config defaults: `top_n=15`, `max_weight=0.10`, `min_weight=0.02`, `rebalance_freq=10` bdays
-
----
-
-## Data Integrity
-
-1. **No look-ahead bias** — walk-forward uses `get_universe_on_date()` per fold; regime fitted on training slice only; ML targets not leaked into feature windows
-2. **No simulated data under live cache names** — fallback labeled `prices_live_fallback_simulated`
-3. **Max-weight hard cap** — iterative `_water_fill_cap()` with post-condition assertion
-4. **Sector constraint fallback** — coverage < 80% → skip caps + warn; never collapses to single name
-5. **Failed folds are visible** — no silent zero-weight fallback; log includes fold date, stage, exception type
-6. **Debate is advisory** — no writes to alpha, portfolio, or execution from debate agents
-7. **Approval gate** — orders > 2% NAV require explicit approval before Alpaca submission
-
----
-
-## Testing
-
-```bash
-.venv/bin/pytest tests/ -v                   # 326 tests
-.venv/bin/pytest tests/ -k leakage           # Look-ahead / leakage tests
-.venv/bin/pytest tests/ -k walkforward       # Walk-forward split integrity
-.venv/bin/pytest tests/ -k regime            # Regime system
-.venv/bin/pytest tests/ -k factor_discovery  # Factor discovery pipeline
-```
-
-Coverage: data integrity, leakage detection, walk-forward splits, alpha sleeves, portfolio constraints, regime system, execution safety, debate layer, orchestrator logic, self-improve loop, hedge overlay, factor discovery (templates, leakage scanner, CPCV evaluator, Harvey FDR, discovery runner).
-
----
-
-## Environment
-
-- Python 3.12 (Homebrew), venv at `.venv/`
-- API keys loaded via `APIKeys.from_env()` only
-- Scheduled via launchd (macOS): daily run at 1:45 PM, self-improve at 6:00 AM Sunday
-- Semantic memory: R2R interface built; BM25 fallback active pending R2R API configuration
-
----
-
-## Built — AI-Native Features
-
-Plans at `docs/superpowers/plans/`.
-
-### AI-Native Tier 1 ✅ — Signal quality + self-calibration
-
-**Task 0 — Infrastructure prerequisites:**
-- `SELF_MODIFY_ENABLED = False` kill switch in `self_improve.py` — gated until +OOS Sharpe for 30 consecutive trading days on a flat config
-- `_build_agent_context()` in `debate/agents.py` — each agent receives a private context slice: bull sees momentum/fundamental, bear sees concentration/regime stress, devil's advocate sees regime entropy/Monte Carlo tail, regime specialist sees macro only
-- `+` sign prefix standard on all CAGR/Sharpe/Alpha figures
-
-**Task 0B — Disagreement score** (`debate/disagreement_scorer.py`): TF-IDF cosine similarity across agent reasoning traces. `disagreement_score = 1 - mean(pairwise_sims)`. Written to every verdict JSON as an informational note — not a verdict override. Used to validate that private context subsets are producing real divergence over time.
-
-**Task A — CoT LLM fundamental alpha** (`ascent/alpha/llm_fundamental.py`): Chicago Booth 6-step CoT via Claude Haiku on anonymized quarterly ratios. Cached by (symbol, quarter_end). Wired into alpha stack at 3%; trend reduced 44%→41%. IC logged to `logs/llm_fundamental_signals.jsonl`.
-
-**Task B — Slippage-adjusted IC feedback** (`ascent/monitoring/slippage_ic_feedback.py`): Spearman IC gross vs net-of-slippage, computed weekly. `MIN_FILLS = 50` — passive logger until ~July 2026.
-
-**Task C — Regime-conditional debate personas**: each agent's historical verdict accuracy in the current regime injected into its system prompt via `debate/outcome_tracker.py`. `min_samples = 10` — dormant until ~August 2026; activates automatically as verdicts accumulate.
-
-### AI-Native Tier 2 ✅ — Institutional memory + tool-capable reasoning
-
-**Task D — FinMem reflection agent** (`memory/reflection_agent.py`): after each verdict is scored (14 days post-decision), Haiku writes a structured lesson to `memory/reflections.jsonl`. Injected into future debate context filtered by regime. Limitation: inferred from NAV change, not position-level attribution.
-
-**Task E — LLM-guided hypothesis generation** (`ascent/research/factor_proposer.py`): Haiku proposes regime-aware sleeve weight narratives with cosine-similarity deduplication (threshold 0.85). Wired into `generate_variants()` with random fallback. `SELF_MODIFY_ENABLED` gate applies.
-
-**Task F — Tool-capable debate agents** (`debate/agent_tools.py`): bear and devil's advocate call four domain tools — `get_sector_concentration`, `get_var_estimate`, `get_position_momentum`, `get_regime_conditional_stats` — via Anthropic tool-use loop in `ascent/llm/client.py`. 5-second yfinance timeout; fallback to `generate_structured`.
-
----
-
-### AI-Native Tier 3 ✅ — Autonomous factor discovery
-
-**Path A — PySR symbolic regression** (`ascent/research/factor_discovery/pysr_engine.py`): genetic programming searches combinations of 10 pre-computed features (momentum, reversal, vol, z-score, 52wk high) and outputs human-readable mathematical expressions. No code generation — symbolic math on approved inputs only.
-
-**Path B — LLM template suggestion** (`ascent/research/factor_discovery/llm_suggester.py`): Haiku suggests JSON parameter sets for 5 pre-defined template families (Momentum, Reversion, Volatility, Quality, Correlation). Returns `{"template": "MomentumTemplate", "lookback": 120, "skip_days": 21}` — never Python code.
-
-**Validation** (`ascent/research/factor_discovery/regime_cpcv_evaluator.py`): per-regime Spearman IC with Harvey FDR correction. Thresholds: IC mean ≥ +0.015 AND IC IR ≥ +0.60 AND IC positive in every observed regime. At IR > 0.60, ~0.5 spurious acceptances/year from 50 candidates (vs ~3 at IR > 0.40).
-
-**Safety** (`ascent/research/factor_discovery/leakage_scanner.py`): AST + regex for lookahead patterns (`datetime.now()`, `.shift(-N)`, `.tail(1)`, hard-coded future dates). Rejects any candidate that trips a check.
-
-Nothing auto-deploys. Accepted candidates written to `outputs/factor_proposals/` for human review. Monthly cadence (first Sunday of each month, wired into `run_all_agents.py`).
-
-> **Pipeline is inactive until gate conditions are met (~July 2026):** `SELF_MODIFY_ENABLED = True` (30 consecutive days +OOS Sharpe), ≥63 days of live regime labels, ≥50 fills in slippage IC log.
-
----
-
-## Backlog
-
-- **Tier 4 — Alternative data**: AI feature engineering from SEC EDGAR, Capitol Trades, Reddit, Google Trends, Wikipedia pageviews → numerical signal per stock per day; validated via Spearman IC + CPCV + Harvey FDR
-- **Event-driven agents**: wake on triggers (8-K filing, congressional trade, options spike) rather than fixed 1:45 PM schedule
-- **Earnings surprise beta neutralization**: reduce momentum overlap in PEAD sleeve
-- **R2R semantic memory**: built but `R2R_API_KEY` not configured; BM25 fallback active
+*Built by Scott Dong · Live since April 1, 2026 · Alpaca paper trading · Mac Air M5*
