@@ -531,6 +531,55 @@ def main():
     except Exception as _ge:
         print(f"[GoogleTrends] Weekly refresh skipped: {_ge}")
 
+    # ── Monthly: investor report + audit integrity + methodology index ─────────
+    try:
+        from datetime import date as _mdate
+        _today_m = _mdate.today()
+        if _today_m.weekday() == 6 and _today_m.day <= 7:  # first Sunday of month
+            # Monthly investor report
+            try:
+                from ascent.reporting.investor_report import schedule_monthly_report
+                schedule_monthly_report()
+                print("[InvestorReport] Monthly report generated.")
+            except Exception as _ir_e:
+                print(f"[InvestorReport] Skipped: {_ir_e}")
+
+            # Audit trail integrity check
+            try:
+                import subprocess as _sp, sys as _sys
+                _audit_result = _sp.run(
+                    [_sys.executable, "scripts/verify_audit_trail.py"],
+                    capture_output=True, text=True, timeout=30,
+                )
+                print(f"[AuditIntegrity] {'PASS' if _audit_result.returncode == 0 else 'FAIL'}")
+            except Exception as _ai_e:
+                print(f"[AuditIntegrity] Skipped: {_ai_e}")
+
+            # Export methodology index
+            try:
+                from compliance.methodology_index import export_methodology_index
+                export_methodology_index()
+                print("[MethodologyIndex] Exported.")
+            except Exception as _mi_e:
+                print(f"[MethodologyIndex] Skipped: {_mi_e}")
+    except Exception as _monthly_e:
+        print(f"[Monthly] Plan 6/7 monthly tasks skipped: {_monthly_e}")
+
+    # ── Daily: methodology index export + alert check ─────────────────────────
+    try:
+        from compliance.methodology_index import export_methodology_index as _export_mi
+        _export_mi()
+    except Exception:
+        pass
+
+    try:
+        from ascent.monitoring.alert_system import check_alerts as _check_alerts
+        _alert_list = _check_alerts()
+        if _alert_list:
+            print(f"[Alerts] {len(_alert_list)} new alert(s) fired.")
+    except Exception:
+        pass
+
     # ── Step 5: Run orchestrator (reads fresh skill scores written above) ─────
     merged_weights = run_orchestrator(agent_outputs)
 
@@ -598,6 +647,26 @@ def main():
 
     print(f"\n[Runner] Merged weights written to {weights_path}")
     print(f"[Runner] {len(merged_weights)} positions, total weight: {sum(merged_weights.values()):.4f}")
+
+    # Audit trail: portfolio construction
+    try:
+        from compliance.audit_trail import record_event as _audit_rec
+        _audit_rec("portfolio_constructed", {
+            "date":         today.isoformat(),
+            "n_positions":  len(merged_weights),
+            "agents":       [ao.agent_id for ao in agent_outputs],
+        })
+    except Exception:
+        pass
+
+    # TimescaleDB: write portfolio state
+    try:
+        from ascent.data.store.timescale import write_portfolio_state, timescale_available
+        if timescale_available():
+            for _ao in agent_outputs:
+                write_portfolio_state(today, _ao.agent_id, _ao.target_weights)
+    except Exception:
+        pass
 
     # ── Non-rebalance day: stop here ──────────────────────────────────────────
     if not is_rebalance:

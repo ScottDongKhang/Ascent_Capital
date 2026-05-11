@@ -33,6 +33,17 @@ except Exception:
     check_intraday_triggers      = None  # type: ignore[assignment]
     execute_intraday_adjustment  = None  # type: ignore[assignment]
 
+try:
+    from compliance.audit_trail import record_event as _audit
+except Exception:
+    def _audit(event_type, payload):  # type: ignore[misc]
+        pass
+
+try:
+    from ascent.monitoring.alert_system import check_alerts
+except Exception:
+    check_alerts = None  # type: ignore[assignment]
+
 # Task 8: large-trade approval threshold
 LARGE_TRADE_THRESHOLD_PCT = 2.0  # % of portfolio NAV
 
@@ -280,6 +291,10 @@ def run_eod(dry_run: bool = False, as_of_date: str = None):
         try:
             kill_switch.check(current_nav=portfolio_value)
         except kill_switch.KillSwitchTriggered:
+            _audit("kill_switch_triggered", {
+                "nav": portfolio_value, "date": today,
+                "threshold": kill_switch.HARD_STOP_PCT,
+            })
             log_run(
                 run_date=today,
                 run_type="error",
@@ -393,13 +408,19 @@ def run_eod(dry_run: bool = False, as_of_date: str = None):
 
             try:
                 resp = submit_order(symbol=o.symbol, qty=qty, side=o.side)
+                order_id = resp.get("id") if resp else None
                 print(f"[EOD] {o.side.upper()} {qty:.4f} {o.symbol}  (${o.dollar_amount:,.0f})")
+                _audit("order_submitted", {
+                    "symbol": o.symbol, "side": o.side, "qty": qty,
+                    "dollar_amount": round(o.dollar_amount, 2),
+                    "order_id": order_id, "date": today,
+                })
                 executed.append({
                     "symbol":        o.symbol,
                     "side":          o.side,
                     "qty":           qty,
                     "dollar_amount": o.dollar_amount,
-                    "order_id":      resp.get("id"),
+                    "order_id":      order_id,
                 })
             except Exception as e:
                 print(f"[EOD] Failed {o.symbol}: {e}")
