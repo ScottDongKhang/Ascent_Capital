@@ -282,6 +282,7 @@ Logged to: logs/intraday_adjustments.jsonl
 | May 5, 2026 | Full portfolio rotation: 40 orders |
 | May 7, 2026 | NAV $104,815 | Regime: calm_bull |
 | May 10, 2026 | Plans 1–5 complete — 420 tests passing |
+| May 10, 2026 | Plans 6–7 complete — 446 tests passing |
 
 **Current portfolio (May 2026):** KMLM, IFRA, AMKR, FIX, WDC, VICR, VRT, VAL, WCC, DBB, CNC, WFRD, PDBC, STLD, DBA, CHRD, EWY, EWC, IRM, MUSA + VIXY hedge.
 
@@ -349,10 +350,10 @@ Gate conditions for live activation: ~July 2026
 | 3 | Event-Driven Architecture | ✅ Done | EDGAR, Capitol Trades, options anomaly, event trades |
 | 4 | Alternative Data Pipeline | ✅ Done | SEC, transcripts, Reddit, Google Trends, IC gate |
 | 5 | Execution Excellence | ✅ Done | TWAP, IS decomposition, capacity model, intraday triggers |
-| 6 | Real-Time Infrastructure | Planned | WebSocket streaming, TimescaleDB, live dashboard, PDF reports |
-| 7 | Live Track Record | Planned | Immutable audit trail, GIPS performance, risk disclosures |
+| 6 | Real-Time Infrastructure | ✅ Done | TimescaleDB hypertables, Alpaca WebSocket streaming, live operator dashboard (port 8502), monthly PDF investor reports |
+| 7 | Live Track Record | ✅ Done | SHA-256 hash-chain audit trail, GIPS-compliant TWR performance, risk disclosure generator, strategy methodology document |
 
-**420 tests passing** | **Plans 6–7 target: Q3 2026** | **YC-ready target: April 2027**
+**446 tests passing** | **All Plans 1–7 complete** | **YC-ready target: April 2027 (12-month live track record)**
 
 ---
 
@@ -367,10 +368,16 @@ python run_all_agents.py
 
 # Run test suite
 python -m pytest --tb=short -q
-# → 420 passed, 1 skipped
+# → 446 passed, 1 skipped
 
-# Interactive demo (Streamlit)
+# Interactive demo (Streamlit) — investor-facing
 streamlit run demo_app.py
+
+# Operator dashboard (Streamlit) — internal live monitoring
+streamlit run ascent/dashboard/live_dashboard.py --server.port 8502
+
+# TimescaleDB setup (requires Docker)
+bash scripts/setup_timescaledb.sh
 ```
 
 ---
@@ -390,7 +397,80 @@ FRED_API_KEY=...
 REDDIT_CLIENT_ID=...      # optional, for Reddit alt data
 REDDIT_CLIENT_SECRET=...
 OPENROUTER_API_KEY=...    # optional, for OpenRouter debate models
+TIMESCALEDB_URL=postgresql://postgres:ascent@localhost:5432/ascent  # optional, Plan 6
+NTFY_TOPIC=...            # optional, for push alerts (ntfy.sh)
 ```
+
+---
+
+## Real-Time Infrastructure (Plan 6)
+
+```
+Alpaca WebSocket IEX feed (901 symbols)
+         │  1-min bars
+         ▼
+┌─────────────────────────┐     ┌──────────────────────────────┐
+│  alpaca_stream.py        │────▶│  TimescaleDB (Docker)         │
+│  - in-memory price cache │     │  prices_1m  (7-day chunks)   │
+│  - daemon thread         │     │  prices_1d  (1-month chunks)  │
+│  - exponential backoff   │     │  nav_series                   │
+└─────────────────────────┘     │  factor_scores                │
+         │                      │  portfolio_state               │
+         ▼                      └──────────────────────────────┘
+┌─────────────────────────┐              │
+│  live_nav.py             │◀─────────────┘
+│  - compute_current_nav() │     ┌──────────────────────────────┐
+│  - intraday_drawdown()   │────▶│  live_dashboard.py (port 8502)│
+│  - write every 5 min     │     │  Portfolio / Risk / Alpha /   │
+└─────────────────────────┘     │  Events tabs; auto-refresh 30s│
+         │                      └──────────────────────────────┘
+         ▼
+┌─────────────────────────┐     ┌──────────────────────────────┐
+│  alert_system.py         │     │  investor_report.py           │
+│  - drawdown 5% / 10%     │     │  - monthly PDF (reportlab)    │
+│  - factor breach ±0.6σ   │     │  - GIPS performance table     │
+│  - sleeve IC < -0.01     │     │  - Haiku commentary           │
+│  - 4-hour deduplication  │     │  - risk disclosures           │
+│  - ntfy.sh push support  │     │  outputs/investor_reports/    │
+└─────────────────────────┘     └──────────────────────────────┘
+```
+
+**TimescaleDB is optional** — all components fall back to parquet/JSONL when DB unavailable. Set `TIMESCALEDB_URL` in `.env` and run `bash scripts/setup_timescaledb.sh` to activate.
+
+---
+
+## Compliance Infrastructure (Plan 7)
+
+```
+Every Decision Point                    Audit Trail
+───────────────────                     ────────────────────────────────
+signal_generated   ──────────────────▶  logs/audit_trail.jsonl
+portfolio_constructed ───────────────▶
+debate_verdict     ──────────────────▶  Entry N:
+order_submitted    ──────────────────▶    sequence_number: 1042
+order_filled       ──────────────────▶    timestamp: 2026-05-10T...
+kill_switch_triggered ───────────────▶    event_type: order_submitted
+approval_granted   ──────────────────▶    payload: {symbol, side, qty}
+                                          prev_hash: a3f9...
+                                          entry_hash: b7c2...  ─┐
+                                                                  │ SHA-256
+                                         Entry N+1:              │ chain
+                                           prev_hash: b7c2... ◀──┘
+                                           (tampering → chain breaks)
+
+Monthly (first Sunday):
+  scripts/verify_audit_trail.py  →  logs/audit_integrity.jsonl
+  compliance/performance_report.py  →  GIPS TWR table
+  compliance/methodology_index.py   →  dashboard/methodology_index.json
+  ascent/reporting/investor_report.py  →  outputs/investor_reports/YYYY-MM.pdf
+```
+
+**Key files:**
+- `compliance/audit_trail.py` — SHA-256 hash-chain, append-only, thread-safe
+- `compliance/performance_report.py` — GIPS TWR, Sharpe, max drawdown, alpha vs SPY
+- `compliance/risk_disclosure.py` — 10-section disclosure generator (review with counsel before distributing)
+- `docs/methodology.md` — full strategy methodology for due-diligence review
+- `docs/risk_disclosures.md` — standard risk disclosure template
 
 ---
 
@@ -402,7 +482,8 @@ ascent/
   data/
     ingest/     yahoo, fred, edgar, capitol_trades, options_scanner,
                 sec_filings, earnings_transcripts, reddit_sentiment, google_trends
-    store/      parquet cache, point_in_time joins
+    store/      parquet cache, point_in_time joins, timescale.py (TimescaleDB interface), schema.sql
+    streaming/  alpaca_stream.py (WebSocket 1-min bars, in-memory price cache)
     validate/   altdata_validator (IC gate)
   features/     build_features, feature_defs, targets
   alpha/        trend, meanrev, statarb, ml_sleeve, fundamental, earnings,
@@ -421,9 +502,10 @@ ascent/
                 twap_executor, implementation_shortfall,
                 capacity_model, intraday_trigger, event_runner
   monitoring/   skill_tracker, forward_pnl_tracker, attribution,
-                slippage_ic_feedback, pre_rebalance_checklist
+                slippage_ic_feedback, pre_rebalance_checklist,
+                live_nav.py, alert_system.py
   reporting/    market_memo, ic_brief_generator, blind_spot_detector,
-                catalyst_scanner, debrief
+                catalyst_scanner, debrief, investor_report.py
   llm/          client.py (centralized Claude wrapper, retry 3×)
 
 agents/         us_equities, macro, international, alternatives, event_agent
@@ -436,10 +518,17 @@ simulation/     mirofish_interface
 data_cache/     prices_live, macro_live, profiles, ml_model_*.pkl,
                 active_alpha_config.json, altdata_*.parquet,
                 factor_returns.parquet, factor_loadings.parquet
+compliance/     audit_trail.py (hash chain), performance_report.py (GIPS),
+                risk_disclosure.py, methodology_index.py
+docs/           methodology.md (full strategy doc), risk_disclosures.md
+scripts/        setup_timescaledb.sh, verify_audit_trail.py
+
 dashboard/      HTML dashboards, regime_signal.json, regime_labels.csv,
-                agent_skill_scores.json, factor_exposures.json
+                agent_skill_scores.json, factor_exposures.json,
+                methodology_index.json
 outputs/
   debate_log/         verdict_YYYY-MM-DD.json
+  investor_reports/   YYYY-MM.pdf monthly investor report
   factor_proposals/   autonomous factor proposals (human review)
   altdata_proposals/  validated alt-data proposals (human review)
 logs/           eod_log, slippage_log, event_trades, capacity_log,

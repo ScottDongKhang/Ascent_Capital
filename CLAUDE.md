@@ -244,12 +244,12 @@ All audits complete through third pass. No outstanding crash risks. Pipeline run
 - **Factor risk model (Plan 1)**: ✅ built — FF5+UMD, Ledoit-Wolf shrinkage Σ, factor exposure bounds, regime-aware constraints for MVO
 - **Portfolio construction overhaul (Plan 2)**: ✅ built — cvxpy MVO, Black-Litterman, regime covariance
 - **R2R semantic memory**: built but `R2R_API_KEY` not configured; BM25 fallback active
-- **Live dashboard UI**: planned in `docs/superpowers/plans/2026-05-10-plan6-realtime-infrastructure.md`
-- **Live track record + compliance**: planned in `docs/superpowers/plans/2026-05-10-plan7-live-track-record.md`
+- **Live dashboard UI**: ✅ built — `ascent/dashboard/live_dashboard.py` (Streamlit, port 8502); TimescaleDB interface with parquet fallback; WebSocket streaming via `ascent/data/streaming/alpaca_stream.py`
+- **Live track record + compliance**: ✅ built — `compliance/audit_trail.py` (SHA-256 hash chain), `compliance/performance_report.py` (GIPS TWR), `compliance/risk_disclosure.py`, `compliance/methodology_index.py`, `docs/methodology.md`, `docs/risk_disclosures.md`
 
 ### Institutional roadmap (Plans 1–7, written 2026-05-10)
 
-Seven sequenced plans taking Ascent to institutional and YC-ready state. Each has a complete spec in `docs/superpowers/plans/`:
+All seven plans complete. Full spec for each in `docs/superpowers/plans/`:
 
 | Plan | Status | File | What it adds |
 |------|--------|------|--------------|
@@ -258,11 +258,12 @@ Seven sequenced plans taking Ascent to institutional and YC-ready state. Each ha
 | Plan 3 | ✅ Done | `2026-05-10-plan3-event-driven-architecture.md` | EDGAR 8-K listener; Capitol Trades; options anomaly scanner; event trade execution (0.5% NAV cap) |
 | Plan 4 | ✅ Done | `2026-05-10-plan4-alternative-data-pipeline.md` | SEC full-text (10-K/10-Q); earnings transcripts; Reddit sentiment; Google Trends; IC validation gate |
 | Plan 5 | ✅ Done | `2026-05-10-plan5-execution-excellence.md` | TWAP executor; implementation shortfall decomposition; capacity model; intraday rebalance triggers |
-| Plan 6 | Planned | `2026-05-10-plan6-realtime-infrastructure.md` | Alpaca WebSocket streaming; TimescaleDB; live operator dashboard; monthly PDF investor reports |
-| Plan 7 | Planned | `2026-05-10-plan7-live-track-record.md` | Immutable audit trail (hash chain); GIPS performance presentation; risk disclosures; 12-month live track record |
+| Plan 6 | ✅ Done | `2026-05-10-plan6-realtime-infrastructure.md` | TimescaleDB time-series store; Alpaca WebSocket streaming; live operator dashboard (port 8502); monthly PDF investor reports via reportlab |
+| Plan 7 | ✅ Done | `2026-05-10-plan7-live-track-record.md` | SHA-256 hash-chain audit trail; GIPS-compliant TWR performance reporting; risk disclosure generator; full methodology document; methodology index |
 
-**Status:** Plans 1–5 complete (420 tests passing). Plans 6–7 are infrastructure/compliance — begin Plan 6 next.
-**Timeline to YC-ready:** ~12–18 months from now (~April 2027 if Plan 6 starts immediately).
+**Status:** All Plans 1–7 complete (446 tests passing, 1 skipped).
+**Next steps:** Deploy TimescaleDB (Docker), configure WebSocket stream, transfer real capital to Alpaca live account (~May–June 2026).
+**Timeline to YC-ready:** 12-month live track record required; clock starts when real capital is deployed.
 
 ---
 
@@ -587,3 +588,28 @@ Seven sequenced plans taking Ascent to institutional and YC-ready state. Each ha
 - **Tests**: 16 tests, all passing; full suite 420 passing (up from 404)
 - Files: 4 new, 4 modified; commit `71c60cb`
 - Open: Plans 6–7; TWAP_ENABLED stays False until paper validation (~July 2026); intraday triggers logged only (no live orders yet)
+
+### 2026-05-10 (Plans 6 & 7 — Real-Time Infrastructure + Compliance ✅)
+- **Plan 6 ✅**: Real-time infrastructure
+  - `ascent/data/store/schema.sql` + `scripts/setup_timescaledb.sh` — TimescaleDB Docker setup; 6 hypertables (prices_1m, prices_1d, factor_scores, portfolio_state, nav_series, factor_exposures); compression + retention policies; continuous aggregate
+  - `ascent/data/store/timescale.py` — psycopg2 interface; lazy singleton connection; `write_prices`, `read_prices`, `write_factor_scores`, `write_portfolio_state`, `write_nav`, `write_factor_exposures`, `get_nav_series`; all return False/empty on DB unavailable (never raise); `timescale_available()` liveness check
+  - `ascent/data/streaming/alpaca_stream.py` — Alpaca WebSocket IEX feed; daemon thread; in-memory price cache; exponential backoff reconnection (1–60s); 901-symbol subscription; `get_live_price()` for intraday NAV
+  - `ascent/monitoring/live_nav.py` — `LiveNAV` class; `compute_current_nav()`, `compute_intraday_drawdown()`; TimescaleDB write every 5 min; Alpaca positions loader
+  - `ascent/monitoring/alert_system.py` — drawdown (5%/10%), factor exposure breach (±0.6σ), sleeve IC degradation alerts; 4-hour deduplication; ntfy.sh push notification support; writes to `logs/alerts.jsonl`
+  - `ascent/dashboard/live_dashboard.py` — Streamlit operator dashboard (port 8502); Portfolio/Risk/Alpha/Events tabs; auto-refreshes every 30s; reads live logs, factor exposures, alert history
+  - `ascent/reporting/investor_report.py` — reportlab monthly PDF; cover page, GIPS performance table, attribution, risk summary, trade summary, Haiku commentary, risk disclosures; `schedule_monthly_report()` wired into monthly trigger
+- **Plan 7 ✅**: Compliance + audit
+  - `compliance/audit_trail.py` — `AuditTrail` class; SHA-256 hash chain; 11 event types; `verify_integrity()` detects tampering; module-level singleton `record_event()`
+  - `compliance/performance_report.py` — GIPS-compliant TWR; Sharpe, max drawdown, Calmar, beta/alpha vs SPY; `format_gips_table()` Markdown; `generate_performance_presentation()` one-page PDF; `get_all_period_performance()` for README auto-update
+  - `compliance/risk_disclosure.py` — 10-section risk disclosure generator; reads live system state (n_positions, leverage, kill switch threshold); NOT legal advice
+  - `compliance/methodology_index.py` — machine-readable registry of all 13 alpha sleeves, 9 data sources, 8 risk controls, 5 execution methods; exported daily to `dashboard/methodology_index.json`
+  - `scripts/verify_audit_trail.py` — standalone integrity verification script; exits 0/1; logs to `logs/audit_integrity.jsonl`; fires alert on failure
+  - `docs/methodology.md` — full strategy methodology document (all alpha sources, regime system, portfolio construction, execution, compliance)
+  - `docs/risk_disclosures.md` — standard risk disclosure template
+  - Audit trail wired into `eod_runner.py` (order_submitted, kill_switch_triggered events)
+  - Plan 6/7 monthly block added to `run_all_agents.py` (investor report, audit check, methodology export)
+  - TimescaleDB portfolio state write wired into `run_all_agents.py` daily
+- **Tests**: 26 new tests (14 Plan 6 + 12 Plan 7); full suite 446 passing, 1 skipped (up from 420)
+- **weasyprint** → **reportlab** substitution: weasyprint requires system GObject/Pango libs not available on Mac; reportlab is pure Python
+- Files: 15 new files, 3 modified (`eod_runner.py`, `run_all_agents.py`, `CLAUDE.md`)
+- Open: TimescaleDB requires Docker to activate; WebSocket stream requires ALPACA_KEY; real capital deployment is operational (not code) decision (~May–June 2026)
