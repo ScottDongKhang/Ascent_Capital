@@ -79,3 +79,18 @@ def test_validator_rejects_sector_overweight():
             ok, violations = validate(portfolio)
     assert ok is False
     assert any("tech" in v.lower() for v in violations)
+
+
+def test_validator_rejects_negative_weight():
+    from ascent.risk.pm_risk_validator import validate
+    portfolio = {
+        "AAPL": 0.10, "MSFT": 0.10, "GOOG": 0.10, "AMZN": 0.10,
+        "META": 0.10, "BAD": -0.05,
+    }
+    with patch("ascent.risk.pm_risk_validator._load_sector_map", return_value={}):
+        with patch("ascent.risk.pm_risk_validator._get_distressed_names", return_value=[]):
+            ok, violations = validate(portfolio)
+    assert ok is False
+    # Only the negative-weight violation — no spurious position-limit violations
+    assert any("BAD" in v for v in violations)
+    assert not any("exceeds max" in v for v in violations)

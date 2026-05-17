@@ -6,6 +6,8 @@ from typing import Dict, List, Tuple
 
 log = logging.getLogger(__name__)
 
+_REPO_ROOT = Path(__file__).resolve().parents[2]  # ascent/risk/ → repo root
+
 MAX_POSITION = 0.15
 MAX_SECTOR = 0.40
 MIN_POSITIONS = 5
@@ -27,6 +29,9 @@ def validate(portfolio: Dict[str, float]) -> Tuple[bool, List[str]]:
     for sym, w in weights.items():
         if w < 0:
             violations.append(f"Negative weight for {sym}: {w:.4f}")
+
+    if violations:
+        return False, violations
 
     for sym, w in weights.items():
         if w > MAX_POSITION:
@@ -62,7 +67,7 @@ def _compute_sector_weights(weights: Dict[str, float]) -> Dict[str, float]:
 def _load_sector_map() -> Dict[str, str]:
     try:
         import pandas as pd
-        p = Path("data_cache/profiles.parquet")
+        p = _REPO_ROOT / "data_cache" / "profiles.parquet"
         if p.exists():
             df = pd.read_parquet(p)
             if "symbol" in df.columns and "sector" in df.columns:
@@ -75,7 +80,7 @@ def _load_sector_map() -> Dict[str, str]:
 def _get_distressed_names(symbols: List[str]) -> List[str]:
     try:
         import pandas as pd
-        p = Path("data_cache/features_cache.parquet")
+        p = _REPO_ROOT / "data_cache" / "features_cache.parquet"
         if not p.exists():
             return []
         df = pd.read_parquet(p)
