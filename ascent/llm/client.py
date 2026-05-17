@@ -31,6 +31,7 @@ _load_env()
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 DEFAULT_MODEL     = "claude-opus-4-6"
+SONNET_MODEL      = "claude-sonnet-4-6"
 HAIKU_MODEL       = "claude-haiku-4-5-20251001"
 
 # Retry config

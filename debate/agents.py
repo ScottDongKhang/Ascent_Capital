@@ -9,14 +9,14 @@ Agents:
   - Regime specialist (LLM, Haiku)
   - Quant sanity checker (pure Python, no LLM)
 
-Uses claude-opus-4-6 (DEBATE_MODEL) for bull/bear/devil.
+Uses claude-sonnet-4-6 (DEBATE_MODEL) for bull/bear/devil.
 Uses claude-haiku-4-5-20251001 (HAIKU_MODEL) for regime specialist.
 Quant sanity checker uses no LLM.
 """
 
 import logging
 
-from ascent.llm.client import generate_structured, tool_completion, DEFAULT_MODEL as DEBATE_MODEL, HAIKU_MODEL
+from ascent.llm.client import generate_structured, tool_completion, SONNET_MODEL as DEBATE_MODEL, HAIKU_MODEL
 from debate.outcome_tracker import load_credibility_context
 
 log = logging.getLogger(__name__)
