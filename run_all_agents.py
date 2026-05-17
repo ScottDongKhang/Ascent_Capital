@@ -734,7 +734,9 @@ def main():
                 if hasattr(prices.columns, "levels"):
                     prices = prices["Close"]
                 daily_rets = prices.pct_change().iloc[-1]
-                ai_ret = float(sum(ai_portfolio.get(s, 0) * float(daily_rets.get(s, 0)) for s in syms))
+                raw_weights = {s: float(ai_portfolio.get(s, 0)) for s in syms}
+                total_w = sum(raw_weights.values()) or 1.0
+                ai_ret = float(sum((raw_weights[s] / total_w) * float(daily_rets.get(s, 0)) for s in syms))
 
             quant_ret = 0.0
             pnl_log = Path("logs/us_equities_pnl.jsonl")
@@ -742,7 +744,7 @@ def main():
                 lines = pnl_log.read_text().strip().split("\n")
                 if lines and lines[-1].strip():
                     last = _json.loads(lines[-1])
-                    quant_ret = float(last.get("portfolio_return", 0.0))
+                    quant_ret = float(last.get("portfolio_return", last.get("return", 0.0)))
 
             if ai_portfolio:
                 update_authority(ai_ret, quant_ret)
