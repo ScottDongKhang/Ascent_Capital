@@ -130,7 +130,7 @@ def _check_market_open() -> CheckItem:
         # Market might not be open yet — check if it's a weekday
         today = date.today()
         if today.weekday() >= 5:
-            return CheckItem("Market", "FAIL", "Today is a weekend — not a trading day", blocking=True)
+            return CheckItem("Market", "WARN", "Today is a weekend — orders will queue for Monday open")
         return CheckItem("Market", "WARN", "Market not yet open (pre-market or holiday)")
     except Exception as e:
         return CheckItem("Market", "WARN", f"Could not verify market status: {e}")

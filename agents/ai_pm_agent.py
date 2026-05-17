@@ -249,10 +249,12 @@ def _tool_run_quant_agent(inputs: dict) -> str:
             return f"Agent {agent_id} returned no result."
         top = sorted(result.target_weights.items(), key=lambda x: -x[1])[:10]
         weight_str = ", ".join(f"{s}={w:.1%}" for s, w in top)
+        skill = result.skill_score
+        skill_str = f"{skill:.3f}" if isinstance(skill, (int, float)) else str(skill)
         return (
             f"Quant agent: {agent_id}\n"
             f"Regime: {result.regime_signal}\n"
-            f"Skill score (63d Sharpe): {result.skill_score:.3f}\n"
+            f"Skill score (63d Sharpe): {skill_str}\n"
             f"Top weights: {weight_str}"
         )
     except Exception as exc:
