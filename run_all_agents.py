@@ -655,7 +655,7 @@ def main():
             else:
                 print(f"[Runner] AI PM proposal rejected: {violations} — using quant 100%")
 
-            format_thesis(ai_pm_result.thesis)
+            format_thesis({**ai_pm_result.thesis, "ai_pm_portfolio": ai_pm_result.portfolio})
 
             try:
                 from compliance.audit_trail import record_event
@@ -744,7 +744,10 @@ def main():
                     last = _json.loads(lines[-1])
                     quant_ret = float(last.get("portfolio_return", 0.0))
 
-            update_authority(ai_ret, quant_ret)
+            if ai_portfolio:
+                update_authority(ai_ret, quant_ret)
+            else:
+                print("[Runner] No AI PM thesis found yet — skipping authority update")
         except Exception as exc:
             print(f"[Runner] Earned authority update failed: {exc}")
 
