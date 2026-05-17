@@ -406,15 +406,24 @@ def _tool_propose_portfolio(inputs: dict, result_store: list) -> str:
 
 # ── Tool dispatcher ────────────────────────────────────────────────────────────
 
-def _make_executor(result_store: list):
+def _make_executor(result_store: list, precomputed: dict | None = None):
     from debate.agent_tools import (
         get_var_estimate, get_sector_concentration, get_position_momentum,
     )
 
+    _cache = precomputed or {}
+
+    def _run_quant_agent_cached(inputs: dict) -> str:
+        agent_id = inputs.get("agent_id", "")
+        if agent_id in _cache:
+            log.info("[AIPMAgent] Using precomputed output for agent '%s'", agent_id)
+            return _cache[agent_id]
+        return _tool_run_quant_agent(inputs)
+
     _map = {
         "get_regime_state":         _tool_get_regime_state,
         "get_macro_data":           _tool_get_macro_data,
-        "run_quant_agent":          _tool_run_quant_agent,
+        "run_quant_agent":          _run_quant_agent_cached,
         "get_sec_signal":           _tool_get_sec_signal,
         "get_transcript_signal":    _tool_get_transcript_signal,
         "get_attribution_history":  _tool_get_attribution_history,
@@ -453,12 +462,33 @@ def run_ai_pm(
     """
     result_store: List[AIPMResult] = []
 
+    # Build precomputed cache from already-run quant outputs — avoids 4 redundant pipeline runs
+    precomputed: dict = {}
+    if quant_outputs:
+        for ao in quant_outputs:
+            try:
+                top = sorted(ao.target_weights.items(), key=lambda x: -x[1])[:10]
+                weight_str = ", ".join(f"{s}={w:.1%}" for s, w in top)
+                skill = ao.skill_score
+                skill_str = f"{skill:.3f}" if isinstance(skill, (int, float)) else str(skill)
+                precomputed[ao.agent_id] = (
+                    f"Quant agent: {ao.agent_id}\n"
+                    f"Regime: {ao.regime_signal}\n"
+                    f"Skill score (63d Sharpe): {skill_str}\n"
+                    f"Top weights: {weight_str}"
+                )
+            except Exception as exc:
+                log.warning("[AIPMAgent] Could not cache output for agent: %s", exc)
+
+    if precomputed:
+        log.info("[AIPMAgent] Preloaded %d agent outputs — skipping redundant pipeline runs", len(precomputed))
+
     try:
         tool_completion(
             system_prompt=_SYSTEM_PROMPT,
             user_prompt=f"Today is {date.today()}. Please conduct your research and submit your portfolio.",
             tools=AI_PM_TOOLS,
-            tool_executor=_make_executor(result_store),
+            tool_executor=_make_executor(result_store, precomputed),
             model=DEFAULT_MODEL,
             max_tokens=4000,
             max_tool_calls=14,

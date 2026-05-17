@@ -325,67 +325,6 @@ def run_eod(dry_run: bool = False, as_of_date: str = None):
             )
             return
 
-        # ── Task 8: Large-trade approval check ───────────────────────────────
-        # Any individual order that moves more than LARGE_TRADE_THRESHOLD_PCT
-        # of portfolio NAV requires human approval before execution.
-        large_trades = []
-        for order in orders:
-            order_notional = order.dollar_amount  # already computed by order_engine
-            order_pct = order_notional / portfolio_value * 100
-            if order_pct >= LARGE_TRADE_THRESHOLD_PCT:
-                large_trades.append({
-                    "symbol":     order.symbol,
-                    "side":       order.side,
-                    "qty":        round(order.estimated_shares, 4),
-                    "notional":   round(order_notional, 2),
-                    "weight_pct": round(order_pct, 2),
-                })
-
-        if large_trades:
-            try:
-                from ascent.execution.approval_server import write_pending_trades, wait_for_approval_async
-                print(f"[EOD] {len(large_trades)} trades exceed {LARGE_TRADE_THRESHOLD_PCT}% threshold — requesting approval")
-                write_pending_trades(large_trades, run_date=today)
-                result = wait_for_approval_async(large_trades)
-                if result.status == "approved":
-                    print("[EOD] Trades APPROVED — proceeding with execution")
-                elif result.status == "rejected":
-                    print("[EOD] Trades REJECTED — skipping execution")
-                    log_run(
-                        run_date=today,
-                        run_type="rebalance",
-                        regime_label=regime_label,
-                        regime_confidence=regime_confidence,
-                        posture=posture,
-                        portfolio_value=portfolio_value,
-                        target_weights=target_weights.to_dict(),
-                        orders_executed=[],
-                        orders_skipped=[{"symbol": t["symbol"], "reason": "rejected_by_approval_ui"} for t in large_trades],
-                        notes=f"Execution rejected via approval UI for {len(large_trades)} large trades.",
-                    )
-                    return
-                else:
-                    # timeout or expired
-                    print(f"[EOD] Approval {result.status.upper()} — cancelling trades")
-                    log_run(
-                        run_date=today,
-                        run_type="rebalance",
-                        regime_label=regime_label,
-                        regime_confidence=regime_confidence,
-                        posture=posture,
-                        portfolio_value=portfolio_value,
-                        target_weights=target_weights.to_dict(),
-                        orders_executed=[],
-                        orders_skipped=[{"symbol": t["symbol"], "reason": f"approval_{result.status}"} for t in large_trades],
-                        notes=f"Approval {result.status} — trades cancelled.",
-                    )
-                    return
-            except ImportError:
-                # approval_server not installed — warn but don't block
-                print(f"[EOD] WARNING: approval_server not available, skipping large-trade check for {len(large_trades)} trades")
-            except Exception as e:
-                print(f"[EOD] WARNING: approval check failed ({e}) — proceeding without approval gate")
-        # ── End Task 8 ────────────────────────────────────────────────────────
 
         cancel_all_orders()
         print("[EOD] Cancelled open orders.")
@@ -691,53 +630,6 @@ def run_eod_with_weights(merged_weights: dict, run_date=None, dry_run: bool = Fa
 
     print(f"\n[EOD-Multi] Running with orchestrator weights | {today_str}")
     print(f"[EOD-Multi] Positions: {len(merged_weights)}")
-
-    # Resume check: if a previous run left pending approval state, try to resume it
-    import json as _json_r
-    from ascent.execution.approval_server import APPROVAL_PENDING_PATH as _APPROVAL_PENDING_PATH
-    _pending_path = _APPROVAL_PENDING_PATH
-    if _pending_path.exists():
-        _pending_state = _json_r.loads(_pending_path.read_text())
-        _already_approved = _pending_state.get("status") == "approved"
-        from datetime import datetime as _dt_r
-        _expires = _dt_r.fromisoformat(_pending_state["expires_at"])
-        _not_expired = _expires > _dt_r.now()
-        if _already_approved or _not_expired:
-            n_trades = len(_pending_state.get("trades", []))
-            print(f"[EOD-Multi] Resuming pending approval from previous run ({n_trades} trades)")
-            if _already_approved:
-                # Already approved — execute immediately without re-waiting
-                _resume_status = "approved"
-            else:
-                from ascent.execution.approval_server import wait_for_approval_async
-                _resume_result = wait_for_approval_async(
-                    pending_trades=[], resume=True, pending=_pending_state
-                )
-                _resume_status = _resume_result.status
-            if _resume_status == "approved":
-                print("[EOD-Multi] Resumed approval: APPROVED — submitting persisted trades")
-                from ascent.execution.alpaca_broker import (
-                    get_positions as _get_pos,
-                    get_portfolio_value as _get_pv,
-                    cancel_all_orders as _cancel,
-                    submit_order as _submit,
-                )
-                _cancel()
-                for _t in _pending_state.get("trades", []):
-                    try:
-                        _submit(_t["symbol"], qty=_t["qty"], side=_t["side"])
-                        print(f"[EOD-Multi] (Resume) {_t['side'].upper()} {_t['qty']} {_t['symbol']}")
-                    except Exception as _re:
-                        print(f"[EOD-Multi] (Resume) {_t['symbol']} FAILED: {_re}")
-                _log_multi_run(today_str, merged_weights, rebalanced=True, note="resumed_approval")
-                return
-            else:
-                print(f"[EOD-Multi] Resumed approval: {_resume_status.upper()} "
-                      "— clearing and proceeding with fresh run")
-                _pending_path.unlink(missing_ok=True)
-        else:
-            print("[EOD-Multi] Stale approval_pending.json found (expired) — clearing")
-            _pending_path.unlink(missing_ok=True)
 
     # 1. Rebalance calendar check — reuse existing helper
     # _is_rebalance_day expects a DataFrame for the first arg; pass None for multi-agent path
