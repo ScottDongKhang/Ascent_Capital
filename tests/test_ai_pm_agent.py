@@ -106,11 +106,11 @@ def _make_state(phase=0, ai_weight=0.0, ai_returns=None, qt_returns=None, revert
     return {
         "ai_weight": ai_weight,
         "phase": phase,
-        "phase_start_date": "2026-05-16",
+        "phase_start_date": "2026-05-15",
         "ai_returns_21d": ai_returns or [],
         "quant_returns_21d": qt_returns or [],
         "auto_revert_count": reverts,
-        "last_updated": "2026-05-16",
+        "last_updated": "2026-05-15",  # Yesterday, so today's update will process
     }
 
 
@@ -234,3 +234,4 @@ def test_hard_cap_at_0_80():
     import ascent.strategy.earned_authority as ea
     assert ea.HARD_CAP == 0.80
     assert all(w <= ea.HARD_CAP for w in ea.PHASE_WEIGHTS)
+    assert max(ea.PHASE_WEIGHTS) == 0.75  # phase schedule tops at 75%

@@ -16,7 +16,8 @@ ADVANCE_WINDOW = 21
 REVERT_DRAWDOWN_EDGE = 0.05
 MIN_WEIGHT = 0.02
 HARD_CAP = 0.80
-PHASE_WEIGHTS = [0.0, 0.25, 0.50, 0.75, 0.80]
+# Phases 0-3: shadow → 25% → 50% → 75%. HARD_CAP is the absolute ceiling.
+PHASE_WEIGHTS = [0.0, 0.25, 0.50, 0.75]
 
 
 def get_state() -> dict:
@@ -24,8 +25,8 @@ def get_state() -> dict:
     if STATE_PATH.exists():
         try:
             return json.loads(STATE_PATH.read_text())
-        except Exception:
-            pass
+        except Exception as exc:
+            log.warning("[EarnedAuthority] Corrupt state file, resetting to defaults: %s", exc)
     return {
         "ai_weight": 0.0, "phase": 0,
         "phase_start_date": str(date.today()),
@@ -64,6 +65,10 @@ def update_authority(ai_daily_return: float, quant_daily_return: float) -> dict:
     """Append daily returns, check advance/revert, save state. Returns updated state."""
     state = get_state()
     today = str(date.today())
+
+    if state.get("last_updated") == today:
+        log.debug("[EarnedAuthority] Already updated today (%s), skipping", today)
+        return state
 
     ai_buf: List[float] = (state.get("ai_returns_21d", []) + [float(ai_daily_return)])[-ADVANCE_WINDOW:]
     qt_buf: List[float] = (state.get("quant_returns_21d", []) + [float(quant_daily_return)])[-ADVANCE_WINDOW:]
@@ -115,6 +120,8 @@ def blend(ai_portfolio: Dict[str, float], quant_portfolio: Dict[str, float]) -> 
 
     total = sum(blended.values())
     if total <= 0:
+        if not ai_portfolio and not quant_portfolio:
+            log.error("[EarnedAuthority] blend() called with both portfolios empty")
         return dict(quant_portfolio)
     return {sym: w / total for sym, w in blended.items()}
 
