@@ -305,6 +305,7 @@ def test_tool_executor_never_raises():
         ("get_var_estimate", {"weights": {"FAKE": 1.0}}),
         ("get_sector_concentration", {"weights": {"FAKE": 1.0}}),
         ("get_position_momentum", {"symbols": ["FAKESYM"]}),
+        ("propose_portfolio", {"weights": {}, "thesis": {}}),
         ("completely_unknown_tool", {}),
     ]
     for tool_name, inputs in bad_inputs:

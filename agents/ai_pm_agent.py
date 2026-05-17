@@ -19,6 +19,8 @@ from ascent.llm.client import tool_completion, DEFAULT_MODEL
 
 log = logging.getLogger(__name__)
 
+_REPO_ROOT = Path(__file__).resolve().parents[1]  # agents/ → repo root
+
 
 @dataclass
 class AIPMResult:
@@ -193,7 +195,7 @@ Rules:
 
 def _tool_get_regime_state(_: dict) -> str:
     try:
-        p = Path("dashboard/regime_signal.json")
+        p = _REPO_ROOT / "dashboard" / "regime_signal.json"
         if not p.exists():
             return "Regime signal file not found."
         data = json.loads(p.read_text())
@@ -212,7 +214,7 @@ def _tool_get_macro_data(_: dict) -> str:
     try:
         import pandas as pd
         for name in ("macro_live", "macro_simulated"):
-            p = Path(f"data_cache/{name}.parquet")
+            p = _REPO_ROOT / "data_cache" / f"{name}.parquet"
             if p.exists():
                 df = pd.read_parquet(p)
                 if not df.empty:
@@ -261,7 +263,7 @@ def _tool_get_sec_signal(inputs: dict) -> str:
     symbol = inputs.get("symbol", "")
     try:
         import pandas as pd
-        p = Path("data_cache/sec_signals.parquet")
+        p = _REPO_ROOT / "data_cache" / "sec_signals.parquet"
         if not p.exists():
             return f"SEC signals not found for {symbol} (run sec_filings.py to populate)."
         df = pd.read_parquet(p)
@@ -284,7 +286,7 @@ def _tool_get_transcript_signal(inputs: dict) -> str:
     symbol = inputs.get("symbol", "")
     try:
         import pandas as pd
-        p = Path("data_cache/transcript_signals.parquet")
+        p = _REPO_ROOT / "data_cache" / "transcript_signals.parquet"
         if not p.exists():
             return f"Transcript signals not found for {symbol}."
         df = pd.read_parquet(p)
@@ -306,7 +308,7 @@ def _tool_get_transcript_signal(inputs: dict) -> str:
 def _tool_get_attribution_history(inputs: dict) -> str:
     symbol = inputs.get("symbol", "")
     try:
-        p = Path("logs/attribution_log.jsonl")
+        p = _REPO_ROOT / "logs" / "attribution_log.jsonl"
         if not p.exists():
             return "Attribution log not found."
         records = []
@@ -338,7 +340,7 @@ def _tool_get_earnings_signal(inputs: dict) -> str:
     symbol = inputs.get("symbol", "")
     try:
         import pandas as pd
-        p = Path("data_cache/earnings_cache.parquet")
+        p = _REPO_ROOT / "data_cache" / "earnings_cache.parquet"
         if not p.exists():
             return "Earnings cache not found."
         df = pd.read_parquet(p)
@@ -357,7 +359,7 @@ def _tool_get_earnings_signal(inputs: dict) -> str:
 def _tool_get_past_verdicts(inputs: dict) -> str:
     regime = inputs.get("regime", "")
     try:
-        d = Path("outputs/debate_log")
+        d = _REPO_ROOT / "outputs" / "debate_log"
         if not d.exists():
             return "No debate log found."
         verdicts = []
@@ -462,6 +464,9 @@ def run_ai_pm(
     except Exception as exc:
         log.error("[AIPMAgent] tool_completion failed: %s", exc)
         return AIPMResult(portfolio={}, thesis={}, fallback=True)
+
+    if len(result_store) > 1:
+        log.warning("[AIPMAgent] propose_portfolio called %d times; using last submission", len(result_store))
 
     if not result_store:
         log.warning("[AIPMAgent] No propose_portfolio call — using fallback")
