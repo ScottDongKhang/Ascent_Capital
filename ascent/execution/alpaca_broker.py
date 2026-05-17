@@ -3,9 +3,13 @@ ascent/execution/alpaca_broker.py
 Alpaca paper trading API wrapper.
 """
 import os
+import time
 import requests
 import pandas as pd
 from typing import Optional
+
+_ORDER_RETRY = 3
+_ORDER_DELAY = 0.4  # seconds between order submissions (Alpaca rate limit ~200 req/min)
 
 
 try:
@@ -70,7 +74,7 @@ def get_portfolio_value() -> float:
 
 def submit_order(symbol: str, qty: float, side: str, order_type: str = "market") -> dict:
     """
-    Submit a paper order to Alpaca.
+    Submit a paper order to Alpaca. Retries up to 3× on rate-limit or timeout.
     side: 'buy' or 'sell'
     qty: number of shares (fractional supported)
     """
@@ -81,9 +85,24 @@ def submit_order(symbol: str, qty: float, side: str, order_type: str = "market")
         "type":          order_type,
         "time_in_force": "day",
     }
-    r = requests.post(f"{ALPACA_BASE_URL}/orders", headers=_headers(), json=payload, timeout=10)
-    r.raise_for_status()
-    return r.json()
+    for attempt in range(_ORDER_RETRY):
+        try:
+            r = requests.post(
+                f"{ALPACA_BASE_URL}/orders", headers=_headers(), json=payload, timeout=15
+            )
+            if r.status_code == 429:
+                wait = 2 ** attempt
+                time.sleep(wait)
+                continue
+            r.raise_for_status()
+            time.sleep(_ORDER_DELAY)
+            return r.json()
+        except requests.Timeout:
+            if attempt < _ORDER_RETRY - 1:
+                time.sleep(2 ** attempt)
+                continue
+            raise
+    raise RuntimeError(f"submit_order({symbol}) failed after {_ORDER_RETRY} attempts")
 
 
 def close_position(symbol: str) -> dict:
@@ -93,15 +112,40 @@ def close_position(symbol: str) -> dict:
     403 errors caused by rounding mismatch between estimated and actual share count.
     Uses DELETE /v2/positions/{symbol} which Alpaca handles as "sell all".
     """
-    r = requests.delete(f"{ALPACA_BASE_URL}/positions/{symbol}", headers=_headers(), timeout=10)
-    r.raise_for_status()
-    return r.json()
+    for attempt in range(_ORDER_RETRY):
+        try:
+            r = requests.delete(
+                f"{ALPACA_BASE_URL}/positions/{symbol}", headers=_headers(), timeout=15
+            )
+            if r.status_code == 429:
+                time.sleep(2 ** attempt)
+                continue
+            r.raise_for_status()
+            time.sleep(_ORDER_DELAY)
+            return r.json()
+        except requests.Timeout:
+            if attempt < _ORDER_RETRY - 1:
+                time.sleep(2 ** attempt)
+                continue
+            raise
+    raise RuntimeError(f"close_position({symbol}) failed after {_ORDER_RETRY} attempts")
 
 
 def cancel_all_orders() -> None:
-    """Cancel all open orders."""
-    r = requests.delete(f"{ALPACA_BASE_URL}/orders", headers=_headers(), timeout=10)
-    r.raise_for_status()
+    """Cancel all open orders. Retries on rate-limit."""
+    for attempt in range(_ORDER_RETRY):
+        try:
+            r = requests.delete(f"{ALPACA_BASE_URL}/orders", headers=_headers(), timeout=15)
+            if r.status_code == 429:
+                time.sleep(2 ** attempt)
+                continue
+            r.raise_for_status()
+            return
+        except requests.Timeout:
+            if attempt < _ORDER_RETRY - 1:
+                time.sleep(2 ** attempt)
+                continue
+            raise
 
 
 def get_open_orders() -> list:
