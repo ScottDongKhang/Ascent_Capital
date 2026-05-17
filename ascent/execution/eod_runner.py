@@ -698,16 +698,23 @@ def run_eod_with_weights(merged_weights: dict, run_date=None, dry_run: bool = Fa
     _pending_path = _APPROVAL_PENDING_PATH
     if _pending_path.exists():
         _pending_state = _json_r.loads(_pending_path.read_text())
+        _already_approved = _pending_state.get("status") == "approved"
         from datetime import datetime as _dt_r
         _expires = _dt_r.fromisoformat(_pending_state["expires_at"])
-        if _expires > _dt_r.now():
-            print(f"[EOD-Multi] Resuming pending approval from previous run "
-                  f"({len(_pending_state.get('trades', []))} trades)")
-            from ascent.execution.approval_server import wait_for_approval_async
-            _resume_result = wait_for_approval_async(
-                pending_trades=[], resume=True, pending=_pending_state
-            )
-            if _resume_result.status == "approved":
+        _not_expired = _expires > _dt_r.now()
+        if _already_approved or _not_expired:
+            n_trades = len(_pending_state.get("trades", []))
+            print(f"[EOD-Multi] Resuming pending approval from previous run ({n_trades} trades)")
+            if _already_approved:
+                # Already approved — execute immediately without re-waiting
+                _resume_status = "approved"
+            else:
+                from ascent.execution.approval_server import wait_for_approval_async
+                _resume_result = wait_for_approval_async(
+                    pending_trades=[], resume=True, pending=_pending_state
+                )
+                _resume_status = _resume_result.status
+            if _resume_status == "approved":
                 print("[EOD-Multi] Resumed approval: APPROVED — submitting persisted trades")
                 from ascent.execution.alpaca_broker import (
                     get_positions as _get_pos,
@@ -725,7 +732,7 @@ def run_eod_with_weights(merged_weights: dict, run_date=None, dry_run: bool = Fa
                 _log_multi_run(today_str, merged_weights, rebalanced=True, note="resumed_approval")
                 return
             else:
-                print(f"[EOD-Multi] Resumed approval: {_resume_result.status.upper()} "
+                print(f"[EOD-Multi] Resumed approval: {_resume_status.upper()} "
                       "— clearing and proceeding with fresh run")
                 _pending_path.unlink(missing_ok=True)
         else:

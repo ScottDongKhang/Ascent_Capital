@@ -707,6 +707,44 @@ def main():
     except Exception:
         pass
 
+    # ── Update earned authority shadow returns (every day, rebalance or not) ──
+    try:
+        import json as _json
+        ai_portfolio = {}
+        thesis_dir = Path("outputs/ai_pm_theses")
+        if thesis_dir.exists():
+            thesis_files = sorted(thesis_dir.glob("*-thesis.json"), reverse=True)
+            if thesis_files:
+                last_thesis = _json.loads(thesis_files[0].read_text())
+                ai_portfolio = last_thesis.get("ai_pm_portfolio", {})
+
+        ai_ret = 0.0
+        if ai_portfolio:
+            import yfinance as yf
+            syms = list(ai_portfolio.keys())
+            prices = yf.download(syms, period="5d", auto_adjust=True, progress=False)
+            if hasattr(prices.columns, "levels"):
+                prices = prices["Close"]
+            daily_rets = prices.pct_change().iloc[-1]
+            raw_weights = {s: float(ai_portfolio.get(s, 0)) for s in syms}
+            total_w = sum(raw_weights.values()) or 1.0
+            ai_ret = float(sum((raw_weights[s] / total_w) * float(daily_rets.get(s, 0)) for s in syms))
+
+        quant_ret = 0.0
+        pnl_log = Path("logs/us_equities_pnl.jsonl")
+        if pnl_log.exists():
+            lines = pnl_log.read_text().strip().split("\n")
+            if lines and lines[-1].strip():
+                last = _json.loads(lines[-1])
+                quant_ret = float(last.get("portfolio_return", last.get("return", 0.0)))
+
+        if ai_portfolio:
+            update_authority(ai_ret, quant_ret)
+        else:
+            print("[Runner] No AI PM thesis found yet — skipping authority update")
+    except Exception as exc:
+        print(f"[Runner] Earned authority update failed: {exc}")
+
     # ── Non-rebalance day: stop here ──────────────────────────────────────────
     if not is_rebalance:
         print("[Runner] Non-rebalance day — weights updated, no debate, no execution.")
@@ -714,45 +752,6 @@ def main():
             _log_holdings(today)
         except Exception as e:
             print(f"[Runner] Holdings log skipped: {e}")
-
-        # Update earned authority shadow returns
-        try:
-            import json as _json
-            ai_portfolio = {}
-            thesis_dir = Path("outputs/ai_pm_theses")
-            if thesis_dir.exists():
-                thesis_files = sorted(thesis_dir.glob("*-thesis.json"), reverse=True)
-                if thesis_files:
-                    last_thesis = _json.loads(thesis_files[0].read_text())
-                    ai_portfolio = last_thesis.get("ai_pm_portfolio", {})
-
-            ai_ret = 0.0
-            if ai_portfolio:
-                import yfinance as yf
-                syms = list(ai_portfolio.keys())
-                prices = yf.download(syms, period="5d", auto_adjust=True, progress=False)
-                if hasattr(prices.columns, "levels"):
-                    prices = prices["Close"]
-                daily_rets = prices.pct_change().iloc[-1]
-                raw_weights = {s: float(ai_portfolio.get(s, 0)) for s in syms}
-                total_w = sum(raw_weights.values()) or 1.0
-                ai_ret = float(sum((raw_weights[s] / total_w) * float(daily_rets.get(s, 0)) for s in syms))
-
-            quant_ret = 0.0
-            pnl_log = Path("logs/us_equities_pnl.jsonl")
-            if pnl_log.exists():
-                lines = pnl_log.read_text().strip().split("\n")
-                if lines and lines[-1].strip():
-                    last = _json.loads(lines[-1])
-                    quant_ret = float(last.get("portfolio_return", last.get("return", 0.0)))
-
-            if ai_portfolio:
-                update_authority(ai_ret, quant_ret)
-            else:
-                print("[Runner] No AI PM thesis found yet — skipping authority update")
-        except Exception as exc:
-            print(f"[Runner] Earned authority update failed: {exc}")
-
         _log_run(today, merged_weights, agent_outputs, dry_run)
         return
 

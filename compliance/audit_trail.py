@@ -37,6 +37,7 @@ VALID_EVENT_TYPES = {
     "regime_changed",
     "config_modified",
     "audit_integrity_check",
+    "ai_pm_proposal",
 }
 
 _GENESIS_HASH = "0" * 64  # sentinel for first entry
