@@ -22,6 +22,11 @@ load_dotenv()
 from ascent.data.store.parquet import has_data, load_parquet
 from ascent.portfolio.optimizer import SectorDataError
 
+from agents.ai_pm_agent import run_ai_pm, AIPMResult
+from ascent.risk.pm_risk_validator import validate as validate_pm_proposal
+from ascent.strategy.earned_authority import blend as authority_blend, update_authority, get_state as get_authority_state
+from ascent.strategy.thesis_formatter import format_thesis
+
 
 SECTOR_OVERRIDE_LOG  = Path("logs/sector_override.jsonl")
 HALT_STATE_PATH     = Path("execution/halt_state.json")
@@ -632,6 +637,40 @@ def main():
     except Exception as _fe:
         print(f"[FactorExposure] Export skipped: {_fe}")
 
+    # ── AI PM Agent ─────────────────────────────────────────────────────────────
+    try:
+        print("[Runner] Running AI PM agent...")
+        ai_pm_result = run_ai_pm(quant_outputs=agent_outputs, merged_weights=merged_weights)
+
+        ok = False
+        violations = []
+        if ai_pm_result.fallback:
+            print("[Runner] AI PM fallback — using quant portfolio unchanged")
+        else:
+            ok, violations = validate_pm_proposal(ai_pm_result.portfolio)
+            if ok:
+                ai_weight = get_authority_state().get("ai_weight", 0.0)
+                merged_weights = authority_blend(ai_pm_result.portfolio, merged_weights)
+                print(f"[Runner] AI PM blend applied (ai_weight={ai_weight * 100:.0f}%)")
+            else:
+                print(f"[Runner] AI PM proposal rejected: {violations} — using quant 100%")
+
+            format_thesis(ai_pm_result.thesis)
+
+            try:
+                from compliance.audit_trail import record_event
+                record_event("ai_pm_proposal", {
+                    "portfolio_size": len(ai_pm_result.portfolio),
+                    "validated": ok if not ai_pm_result.fallback else False,
+                    "violations": violations if not ai_pm_result.fallback and not ok else [],
+                })
+            except Exception as ae:
+                print(f"[Runner] Audit trail write failed: {ae}")
+
+    except Exception as exc:
+        print(f"[Runner] AI PM agent failed: {exc} — using quant portfolio")
+    # ────────────────────────────────────────────────────────────────────────────
+
     # ── Step 6: Write merged weights to file ──────────────────────────────────
     weights_path = Path("execution/merged_weights.json")
     weights_path.parent.mkdir(parents=True, exist_ok=True)
@@ -675,6 +714,40 @@ def main():
             _log_holdings(today)
         except Exception as e:
             print(f"[Runner] Holdings log skipped: {e}")
+
+        # Update earned authority shadow returns
+        try:
+            import json as _json
+            ai_portfolio = {}
+            thesis_dir = Path("outputs/ai_pm_theses")
+            if thesis_dir.exists():
+                thesis_files = sorted(thesis_dir.glob("*-thesis.json"), reverse=True)
+                if thesis_files:
+                    last_thesis = _json.loads(thesis_files[0].read_text())
+                    ai_portfolio = last_thesis.get("ai_pm_portfolio", {})
+
+            ai_ret = 0.0
+            if ai_portfolio:
+                import yfinance as yf
+                syms = list(ai_portfolio.keys())
+                prices = yf.download(syms, period="5d", auto_adjust=True, progress=False)
+                if hasattr(prices.columns, "levels"):
+                    prices = prices["Close"]
+                daily_rets = prices.pct_change().iloc[-1]
+                ai_ret = float(sum(ai_portfolio.get(s, 0) * float(daily_rets.get(s, 0)) for s in syms))
+
+            quant_ret = 0.0
+            pnl_log = Path("logs/us_equities_pnl.jsonl")
+            if pnl_log.exists():
+                lines = pnl_log.read_text().strip().split("\n")
+                if lines and lines[-1].strip():
+                    last = _json.loads(lines[-1])
+                    quant_ret = float(last.get("portfolio_return", 0.0))
+
+            update_authority(ai_ret, quant_ret)
+        except Exception as exc:
+            print(f"[Runner] Earned authority update failed: {exc}")
+
         _log_run(today, merged_weights, agent_outputs, dry_run)
         return
 
