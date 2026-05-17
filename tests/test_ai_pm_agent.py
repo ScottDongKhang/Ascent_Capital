@@ -1,6 +1,10 @@
 # tests/test_ai_pm_agent.py
-import pytest
+import json
+import tempfile
+from pathlib import Path
 from unittest.mock import patch
+
+import pytest
 
 
 # ── pm_risk_validator ──────────────────────────────────────────────────────────
@@ -94,3 +98,139 @@ def test_validator_rejects_negative_weight():
     # Only the negative-weight violation — no spurious position-limit violations
     assert any("BAD" in v for v in violations)
     assert not any("exceeds max" in v for v in violations)
+
+
+# ── earned_authority ──────────────────────────────────────────────────────────
+
+def _make_state(phase=0, ai_weight=0.0, ai_returns=None, qt_returns=None, reverts=0):
+    return {
+        "ai_weight": ai_weight,
+        "phase": phase,
+        "phase_start_date": "2026-05-16",
+        "ai_returns_21d": ai_returns or [],
+        "quant_returns_21d": qt_returns or [],
+        "auto_revert_count": reverts,
+        "last_updated": "2026-05-16",
+    }
+
+
+def test_shadow_phase_blend_returns_pure_quant():
+    """At ai_weight=0, blend returns quant portfolio unchanged (only quant names survive)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        state_path = Path(tmp) / "earned_authority.json"
+        state_path.write_text(json.dumps(_make_state(phase=0, ai_weight=0.0)))
+        shadow_path = Path(tmp) / "shadow.jsonl"
+        with patch("ascent.strategy.earned_authority.STATE_PATH", state_path):
+            with patch("ascent.strategy.earned_authority.SHADOW_RETURNS_PATH", shadow_path):
+                import ascent.strategy.earned_authority as ea
+                quant = {"AAPL": 0.50, "MSFT": 0.50}
+                ai = {"GOOG": 0.60, "AMZN": 0.40}
+                result = ea.blend(ai, quant)
+    assert "AAPL" in result
+    assert "MSFT" in result
+    assert abs(sum(result.values()) - 1.0) < 0.001
+
+
+def test_blend_union_of_positions():
+    """At ai_weight=0.5, both portfolios contribute."""
+    with tempfile.TemporaryDirectory() as tmp:
+        state_path = Path(tmp) / "earned_authority.json"
+        state_path.write_text(json.dumps(_make_state(phase=2, ai_weight=0.5)))
+        shadow_path = Path(tmp) / "shadow.jsonl"
+        with patch("ascent.strategy.earned_authority.STATE_PATH", state_path):
+            with patch("ascent.strategy.earned_authority.SHADOW_RETURNS_PATH", shadow_path):
+                import ascent.strategy.earned_authority as ea
+                ai = {"VICR": 0.10, "AMKR": 0.08}
+                quant = {"VICR": 0.06, "FIX": 0.07}
+                result = ea.blend(ai, quant)
+    assert "VICR" in result
+    assert abs(sum(result.values()) - 1.0) < 0.001
+
+
+def test_blend_min_weight_filter():
+    """Positions below 0.02 after blending are dropped."""
+    with tempfile.TemporaryDirectory() as tmp:
+        state_path = Path(tmp) / "earned_authority.json"
+        state_path.write_text(json.dumps(_make_state(phase=0, ai_weight=0.1)))
+        shadow_path = Path(tmp) / "shadow.jsonl"
+        with patch("ascent.strategy.earned_authority.STATE_PATH", state_path):
+            with patch("ascent.strategy.earned_authority.SHADOW_RETURNS_PATH", shadow_path):
+                import ascent.strategy.earned_authority as ea
+                ai = {"TINY": 0.05}   # 0.1 * 0.05 = 0.005 < 0.02
+                quant = {"AAPL": 0.50, "MSFT": 0.50}
+                result = ea.blend(ai, quant)
+    assert "TINY" not in result
+    assert abs(sum(result.values()) - 1.0) < 0.001
+
+
+def test_blend_renormalizes_to_1():
+    with tempfile.TemporaryDirectory() as tmp:
+        state_path = Path(tmp) / "earned_authority.json"
+        state_path.write_text(json.dumps(_make_state(phase=1, ai_weight=0.25)))
+        shadow_path = Path(tmp) / "shadow.jsonl"
+        with patch("ascent.strategy.earned_authority.STATE_PATH", state_path):
+            with patch("ascent.strategy.earned_authority.SHADOW_RETURNS_PATH", shadow_path):
+                import ascent.strategy.earned_authority as ea
+                ai = {f"A{i}": 0.1 for i in range(5)}
+                quant = {f"Q{i}": 0.1 for i in range(5)}
+                result = ea.blend(ai, quant)
+    assert abs(sum(result.values()) - 1.0) < 0.001
+
+
+def test_authority_advances_after_edge():
+    """After 21 days with AI Sharpe > quant+0.05, phase advances 0→1."""
+    ai_returns = [0.002, 0.0015, 0.0025] * 7  # Variance present, AI > QT
+    qt_returns  = [0.001, 0.0005, 0.0015] * 7
+    with tempfile.TemporaryDirectory() as tmp:
+        state_path = Path(tmp) / "earned_authority.json"
+        state = _make_state(phase=0, ai_weight=0.0, ai_returns=ai_returns[:20], qt_returns=qt_returns[:20])
+        state_path.write_text(json.dumps(state))
+        shadow_path = Path(tmp) / "shadow.jsonl"
+        with patch("ascent.strategy.earned_authority.STATE_PATH", state_path):
+            with patch("ascent.strategy.earned_authority.SHADOW_RETURNS_PATH", shadow_path):
+                import ascent.strategy.earned_authority as ea
+                result = ea.update_authority(ai_returns[-1], qt_returns[-1])
+    assert result["phase"] == 1
+    assert result["ai_weight"] == 0.25
+
+
+def test_authority_stays_if_no_edge():
+    """With equal Sharpe, phase stays at 0."""
+    ai_returns = [0.001] * 21
+    qt_returns  = [0.001] * 21
+    with tempfile.TemporaryDirectory() as tmp:
+        state_path = Path(tmp) / "earned_authority.json"
+        state = _make_state(phase=0, ai_weight=0.0, ai_returns=ai_returns[:20], qt_returns=qt_returns[:20])
+        state_path.write_text(json.dumps(state))
+        shadow_path = Path(tmp) / "shadow.jsonl"
+        with patch("ascent.strategy.earned_authority.STATE_PATH", state_path):
+            with patch("ascent.strategy.earned_authority.SHADOW_RETURNS_PATH", shadow_path):
+                import ascent.strategy.earned_authority as ea
+                result = ea.update_authority(ai_returns[-1], qt_returns[-1])
+    assert result["phase"] == 0
+    assert result["ai_weight"] == 0.0
+
+
+def test_auto_revert_on_drawdown():
+    """AI drawdown > quant+5% at phase>0 reverts to phase 0."""
+    ai_returns = [-0.03] * 10 + [0.01] * 11
+    qt_returns  = [0.001] * 21
+    with tempfile.TemporaryDirectory() as tmp:
+        state_path = Path(tmp) / "earned_authority.json"
+        state = _make_state(phase=2, ai_weight=0.5, ai_returns=ai_returns[:20], qt_returns=qt_returns[:20])
+        state_path.write_text(json.dumps(state))
+        shadow_path = Path(tmp) / "shadow.jsonl"
+        with patch("ascent.strategy.earned_authority.STATE_PATH", state_path):
+            with patch("ascent.strategy.earned_authority.SHADOW_RETURNS_PATH", shadow_path):
+                import ascent.strategy.earned_authority as ea
+                result = ea.update_authority(ai_returns[-1], qt_returns[-1])
+    assert result["phase"] == 0
+    assert result["ai_weight"] == 0.0
+    assert result["auto_revert_count"] == 1
+
+
+def test_hard_cap_at_0_80():
+    """PHASE_WEIGHTS never exceeds HARD_CAP."""
+    import ascent.strategy.earned_authority as ea
+    assert ea.HARD_CAP == 0.80
+    assert all(w <= ea.HARD_CAP for w in ea.PHASE_WEIGHTS)
