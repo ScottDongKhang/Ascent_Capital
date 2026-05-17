@@ -235,3 +235,34 @@ def test_hard_cap_at_0_80():
     assert ea.HARD_CAP == 0.80
     assert all(w <= ea.HARD_CAP for w in ea.PHASE_WEIGHTS)
     assert max(ea.PHASE_WEIGHTS) == 0.75  # phase schedule tops at 75%
+
+
+# ── thesis_formatter ──────────────────────────────────────────────────────────
+
+def test_format_thesis_fills_missing_fields():
+    """Missing keys get filled with schema defaults; as_of_date is injected."""
+    with tempfile.TemporaryDirectory() as tmp:
+        out_dir = Path(tmp) / "ai_pm_theses"
+        with patch("ascent.strategy.thesis_formatter.OUTPUT_DIR", out_dir):
+            from ascent.strategy.thesis_formatter import format_thesis
+            result = format_thesis({"market_view": "Calm bull, credit spreads tight."})
+    assert result["market_view"] == "Calm bull, credit spreads tight."
+    assert result["quant_overrides"] == []     # default filled
+    assert result["quant_agreement"] == []     # default filled
+    assert result["key_risks"] == []           # default filled
+    assert "as_of_date" in result
+
+
+def test_thesis_to_plaintext_returns_non_empty_string():
+    from ascent.strategy.thesis_formatter import thesis_to_plaintext
+    thesis = {
+        "market_view": "Credit spreads are widening.",
+        "regime_assessment": "calm_bull, confidence 0.73",
+        "ai_pm_portfolio": {"VICR": 0.06, "AMKR": 0.05, "FIX": 0.07},
+        "quant_agreement": ["VICR", "FIX"],
+        "quant_overrides": [{"symbol": "VAL", "ai_action": "exclude"}],
+        "key_risks": ["Macro: Fed surprise", "Idio: VICR miss"],
+    }
+    result = thesis_to_plaintext(thesis)
+    assert isinstance(result, str)
+    assert len(result) > 20
