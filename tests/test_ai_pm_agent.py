@@ -266,3 +266,47 @@ def test_thesis_to_plaintext_returns_non_empty_string():
     result = thesis_to_plaintext(thesis)
     assert isinstance(result, str)
     assert len(result) > 20
+
+
+# ── ai_pm_agent ───────────────────────────────────────────────────────────────
+
+def test_fallback_on_no_propose_portfolio_call():
+    """If the tool loop exits without calling propose_portfolio, return fallback."""
+    from unittest.mock import patch
+
+    def fake_tool_completion(system_prompt, user_prompt, tools, tool_executor,
+                             model, max_tokens, max_tool_calls):
+        return "I forgot to submit."
+
+    with patch("agents.ai_pm_agent.tool_completion", fake_tool_completion):
+        from agents.ai_pm_agent import run_ai_pm
+        result = run_ai_pm()
+
+    assert result.fallback is True
+    assert result.portfolio == {}
+
+
+def test_tool_executor_never_raises():
+    """All tools with bad inputs return strings, never raise."""
+    from agents.ai_pm_agent import _make_executor
+    result_store = []
+    executor = _make_executor(result_store)
+
+    bad_inputs = [
+        ("get_regime_state", {}),
+        ("get_macro_data", {}),
+        ("run_quant_agent", {"agent_id": "nonexistent_agent"}),
+        ("get_sec_signal", {"symbol": "FAKESYM"}),
+        ("get_transcript_signal", {"symbol": "FAKESYM"}),
+        ("get_attribution_history", {"symbol": "FAKESYM"}),
+        ("get_earnings_signal", {"symbol": "FAKESYM"}),
+        ("get_past_verdicts", {"regime": "nonexistent_regime"}),
+        ("get_factor_exposures", {"weights": {"FAKE": 1.0}}),
+        ("get_var_estimate", {"weights": {"FAKE": 1.0}}),
+        ("get_sector_concentration", {"weights": {"FAKE": 1.0}}),
+        ("get_position_momentum", {"symbols": ["FAKESYM"]}),
+        ("completely_unknown_tool", {}),
+    ]
+    for tool_name, inputs in bad_inputs:
+        result = executor(tool_name, inputs)
+        assert isinstance(result, str), f"Tool {tool_name} returned {type(result)}, expected str"
