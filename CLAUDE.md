@@ -270,7 +270,7 @@ All audits complete through third pass. No outstanding crash risks. Pipeline run
 
 ## Build status
 
-All Plans 1–7 complete. 446 tests passing, 1 skipped. Full specs in `docs/superpowers/plans/`.
+All Plans 1–7 complete + AI PM Agent + adversarial red team + regime episodic memory. 478 tests passing, 1 skipped.
 
 | Plan | What it adds |
 |------|--------------|
@@ -331,3 +331,14 @@ All code referenced here is committed and tested. Details in git log.
 - **19 new tests; 465 passing, 1 skipped**
 - Current state: shadow period, `ai_weight=0.0`; advances to 25% after 21 rebalance days with Sharpe edge > 0.05 over quant
 - Open: push to GitHub; TimescaleDB/WebSocket/real capital still operational decisions
+
+### 2026-05-17 (adversarial self-play + episodic memory ✅)
+- `agents/red_team_agent.py` — SONNET red team attacks proposed portfolio (per-position worst-case + systemic kill shot); `run_red_team(portfolio, thesis, regime) -> str`; returns "" on failure, never raises
+- `agents/ai_pm_agent.py` — red team wired into `run_ai_pm`: after initial proposal, red team critique generated, AI PM gets one revision pass (max_tool_calls=6); if revision produces no `propose_portfolio`, initial proposal used silently
+- `memory/regime_memory.py` — `log_episode()`, `query_episodes()` (prefix-matched regime), `update_outcomes()`; persists to `logs/regime_episodes.jsonl`
+- `agents/ai_pm_agent.py` — `get_regime_memory` tool added; AI PM can now ask "what happened last 5 times in stressed regime?" before proposing
+- `run_all_agents.py` — `log_episode()` called after every run; `update_outcomes({})` called at startup
+- Removed paper-trading approval gate from `eod_runner.py` (was blocking every 29-order batch at $108K NAV)
+- AI PM now reuses precomputed AgentOutputs (saves ~160s, 4 redundant pipeline runs eliminated)
+- **478 passing, 1 skipped** (13 new tests this session)
+- Non-obvious: red team uses SONNET not Opus — adversarial critique doesn't need deep reasoning, saves cost; revision pass capped at max_tool_calls=6 to prevent runaway loops
