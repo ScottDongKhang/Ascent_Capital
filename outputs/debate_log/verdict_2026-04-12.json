@@ -1,7 +1,7 @@
 {
   "date": "2026-04-12",
   "data_as_of": "2026-04-12",
-  "timestamp": "2026-05-04T20:32:35.311913",
+  "timestamp": "2026-05-17T17:59:24.879685",
   "portfolio_state": {
     "date": "2026-04-12",
     "us_regime": "calm_bull",
@@ -51,8 +51,8 @@
       "catalyst_text": ""
     },
     "quant_context": {
-      "portfolio_var_95": -0.020526,
-      "portfolio_var_99": -0.027575,
+      "portfolio_var_95": -0.018787,
+      "portfolio_var_99": -0.023159,
       "factor_exposures": {
         "us_tech": 1.0
       },
@@ -63,10 +63,10 @@
         {
           "sym1": "AAPL",
           "sym2": "MSFT",
-          "correlation": 0.204
+          "correlation": 0.244
         }
       ],
-      "summary_text": "QUANTITATIVE RISK CONTEXT (pre-computed):\n\nPortfolio VaR (historical simulation, 63 trading days):\n  95th percentile (1-day): -2.05%  (1 in 20 chance of loss >= this)\n  99th percentile (1-day): -2.76%  (1 in 100 chance of loss >= this)\n\nFactor exposures (sum of position weights per factor):\n  us_tech            100.0%\n\nCorrelation: No high-correlation pairs (>0.65) detected.\n\nConcentration warning: us_tech is 100.0% of portfolio"
+      "summary_text": "QUANTITATIVE RISK CONTEXT (pre-computed):\n\nPortfolio VaR (historical simulation, 63 trading days):\n  95th percentile (1-day): -1.88%  (1 in 20 chance of loss >= this)\n  99th percentile (1-day): -2.32%  (1 in 100 chance of loss >= this)\n\nFactor exposures (sum of position weights per factor):\n  us_tech            100.0%\n\nCorrelation: No high-correlation pairs (>0.65) detected.\n\nConcentration warning: us_tech is 100.0% of portfolio"
     }
   },
   "arguments": {
@@ -84,7 +84,13 @@
     "confidence": 0.7,
     "recommendation": "proceed",
     "key_risks": [],
-    "reasoning": "ok"
+    "reasoning": "ok",
+    "disagreement_score": 1.0,
+    "pairwise_similarities": {
+      "bull_bear": 0.0,
+      "bull_devil": 0.0,
+      "bear_devil": 0.0
+    }
   },
   "outcome_scored": false
 }

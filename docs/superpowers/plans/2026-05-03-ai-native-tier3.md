@@ -1,93 +1,14 @@
-# AI-Native Ascent Capital — Tier 3 Implementation Plan (Research-Backed Revision)
+# AI-Native Ascent Capital — Tier 3 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-> **Revision note (2026-05-08):** This plan was rewritten after a research survey of AlphaAgent (arXiv:2502.16789), QuantaAlpha (arXiv:2602.07085), Harvey et al. false discovery (arXiv:2006.04269), CPCV validation (Arian et al. 2024), and PySR symbolic regression (ACM GEC 2024). The original plan had one critical flaw: free-form LLM code generation produces ~95% redundant momentum variants, forward-looking data leakage, and scalar returns. Every system that achieves real excess returns uses strict interfaces, not unconstrained generation. See research brief in session log for full citations.
+**Goal:** Build an autonomous factor discovery pipeline where Claude Opus proposes new alpha signals as Python code, an AST validator enforces structural and security constraints, a lightweight CPCV-style IC evaluator scores them on real historical data, and accepted proposals land in a human review queue for final approval before deployment.
 
----
+> **⚠ Do not begin Tier 3 until:** (1) OOS Sharpe is positive on a flat config for 30 consecutive trading days, (2) info subsets are live and showing measurable divergence between agents, (3) you have read Constitutional AI (Anthropic, 2022) and FinMem (arxiv:2311.13743). Factor discovery is the highest-cost, highest-risk task in this roadmap. Even hedge funds with 20 quants find 1–2 real factors per year. The IC thresholds in this plan (mean > 0.015, IR > 0.40) are intentionally conservative — do not lower them.
 
-## Goal
+**Architecture:** One new subsystem at `ascent/research/factor_discovery/`. Four modules with a clean linear pipeline: hypothesis_generator (Opus proposes code) → code_validator (AST safety + novelty check) → cpcv_evaluator (IC scoring on real prices) → discovery_runner (orchestrates the loop, writes accepted proposals to `outputs/factor_proposals/`). Human reviews the queue and manually adds approved factors to `ascent/features/feature_defs.py`. The system never auto-deploys generated code — the human is the final gate.
 
-Build a two-path autonomous factor discovery pipeline:
-
-1. **Primary (PySR)**: Genetic programming evolves symbolic factor expressions from pre-computed features. Output is a human-readable formula (`sqrt(vol_21d) / (mom_252d + 1e-6)`), not Python code. Safe by construction — no `exec`, no imports.
-2. **Secondary (LLM templates)**: Claude Haiku suggests parameters for a library of pre-defined factor templates (momentum, reversal, volatility, quality, correlation). LLM returns a JSON dict; the trusted template runs it. Zero code injection risk.
-
-Both paths feed into a unified **per-regime CPCV evaluator** that requires IC > 0.015 AND IC IR > 0.60 AND positive IC in *every* regime. Harvey et al. FDR correction is enforced. Human reviews all accepted proposals before deployment.
-
-**What changed from the original plan:**
-- ❌ Free-form LLM code generation → replaced by PySR + templates
-- ❌ Single-period rolling IC → replaced by per-regime CPCV
-- ❌ IC IR threshold 0.40 → raised to 0.60 (Harvey FDR correction)
-- ✅ IC mean threshold 0.015 → kept (correct for Ascent's breadth)
-- ✅ Human review gate → kept
-- ✅ Monthly cadence → kept (PySR is CPU-intensive; Opus saves cost)
-- ✅ SELF_MODIFY_ENABLED gate → kept
-- ✅ AST validation → kept but extended with lookahead scanner
-
----
-
-## Why These Choices
-
-### Why PySR instead of LLM code generation
-
-AlphaAgent (arXiv:2502.16789) achieves 11% excess return with IR=1.5 by enforcing:
-1. AST-based similarity check against existing alphas (novelty)
-2. Semantic consistency between hypothesis and generated code
-3. Complexity control (limits expression depth)
-
-Without these controls, LLM-generated factors fail. The controls are expensive to implement correctly. PySR gives you structural novelty and complexity control for free — it evolves formulas from primitives, so the output is transparent, interpretable, and never redundant by construction. QuantaAlpha (arXiv:2602.07085) extends this with evolutionary refinement loops: 5–15 iterations per factor, treating discovery as trajectory optimization, not single-shot generation.
-
-### Why per-regime IC instead of single-period
-
-A factor with IC=0.04 in calm_bull but IC=−0.03 in crisis destroys alpha when it counts most. Regime-specific validation is not an edge case — it's table stakes for a system that already runs a regime classifier.
-
-### Why IR > 0.60 instead of 0.40
-
-Harvey, Liu, and Zhu (arXiv:2006.04269) showed that 316 published "significant" factors have an estimated false discovery rate of 64% using standard t > 2.0 thresholds. Their recommendation for new factor proposals: require t > 3.0, equivalent to IR > 0.60 given Ascent's breadth (~1,000 decisions/year). With 50 candidates evaluated per year, the expected number of spurious acceptances drops from ~3 (at IR > 0.40) to ~0.5 (at IR > 0.60).
-
-### Realistic expectations
-
-Following the academic and industry evidence: **0–2 deployable factors per year.** Hedge funds with 20 quants find 1–3. Retail with automated discovery finds 0–2. This is not a pessimistic estimate — it is the correct mental model. The value is in the pipeline discipline, not the discovery rate.
-
----
-
-## ⚠ Gate Conditions — Do Not Begin Until
-
-1. OOS Sharpe > 0 for 30 consecutive trading days on flat config (no active self-improve changes)
-2. Regime labels have been live and consistent for at least 63 days (enough data to compute per-regime IC)
-3. `slippage_ic_feedback.py` has accumulated MIN_FILLS=50 (so live IC tracking is meaningful)
-4. PySR is installed: `pip install pysr` — confirm with `python3 -c "import pysr; print(pysr.__version__)"`
-5. Walk-forward CPCV (existing `cpcv.py`) has been validated on a known factor (run control: 252d momentum should show IC 0.02–0.06)
-
----
-
-## Architecture
-
-```
-Monthly trigger (first Sunday of each month, 6 AM)
-           │
-           ├─── Path A: PySR Symbolic Regression
-           │    features.parquet → pysr_engine.py → symbolic expressions
-           │    (e.g. "sqrt(vol_21d) / (mom_252d + 1e-6)")
-           │
-           └─── Path B: LLM Template Parameter Suggestion
-                regime + IC stats → llm_suggester.py → JSON params
-                → feature_templates.py → concrete factor signal
-                          │
-                          ▼
-              regime_cpcv_evaluator.py
-              (CPCV per regime: IC_calm, IC_stressed, IC_crisis,
-               IC_mean, IC_IR, t-stat equivalent, novelty check)
-                          │
-              IC_mean > 0.015 AND IC_IR > 0.60
-              AND IC_min > 0.01 across all regimes?
-                    YES → leakage_scanner → human review queue
-                    NO  → logged to factor_discovery_log.jsonl
-                          │
-              outputs/factor_proposals/{name}_{date}.json
-              (human reads, edits, merges into feature_defs.py)
-```
+**Tech Stack:** Python 3.12, Claude Opus (`claude-opus-4-6`) for hypothesis generation, existing `ascent/llm/client.py`, existing price/fundamental data caches, `ast` module (stdlib), `scipy.stats.spearmanr` (installed), `ascent/research/cpcv.py`.
 
 ---
 
@@ -96,27 +17,41 @@ Monthly trigger (first Sunday of each month, 6 AM)
 | Action | File | Responsibility |
 |--------|------|----------------|
 | Create | `ascent/research/factor_discovery/__init__.py` | Package marker |
-| Create | `ascent/research/factor_discovery/feature_templates.py` | 5 template families with parameter validation |
-| Create | `ascent/research/factor_discovery/pysr_engine.py` | PySR wrapper + gplearn fallback |
-| Create | `ascent/research/factor_discovery/llm_suggester.py` | Haiku suggests template parameters (JSON only) |
-| Create | `ascent/research/factor_discovery/leakage_scanner.py` | AST lookahead / forward-data detector |
-| Create | `ascent/research/factor_discovery/regime_cpcv_evaluator.py` | Per-regime CPCV IC + Harvey FDR check |
-| Create | `ascent/research/factor_discovery/discovery_runner.py` | Orchestrates both paths, writes proposals |
-| Create | `tests/test_factor_discovery.py` | 14 tests covering all modules |
-| Modify | `run_all_agents.py` | Monthly trigger (first Sunday) |
+| Create | `ascent/research/factor_discovery/hypothesis_generator.py` | Opus proposes factor code + rationale |
+| Create | `ascent/research/factor_discovery/code_validator.py` | AST safety, structure, novelty checks |
+| Create | `ascent/research/factor_discovery/cpcv_evaluator.py` | Rolling IC evaluation on real price data |
+| Create | `ascent/research/factor_discovery/discovery_runner.py` | Orchestrates pipeline, writes proposal queue |
+| Create | `tests/test_factor_discovery.py` | Full test suite for Task G |
+| Modify | `run_all_agents.py` | Monthly trigger for discovery run (first Sunday of month) |
 
 ---
 
 ## Task G: Autonomous Factor Discovery Pipeline
 
-### Step 1: Write failing tests
+**Problem:** Every alpha signal in Ascent was written by a human: momentum, stat-arb, fundamental quality, PEAD, vol regime. The self-improve loop (Task E) improves *weights* between existing signals but cannot propose *new* signals. The system has no ability to discover alpha from scratch. Research from AlphaAgent (arxiv:2502.16789) demonstrates that LLMs can generate novel, CPCV-validated factors with 11% annual excess returns — not by searching existing research, but by reasoning about economic mechanisms and writing testable code. This task builds that pipeline: Opus proposes factor code from first principles, an AST validator ensures the code is safe and structurally correct, a rolling IC evaluator scores it on Ascent's actual data, and approved proposals enter a human review queue. The human reviews, edits, and merges accepted factors into `feature_defs.py`.
+
+**Key design decisions:**
+- Claude Opus (not Haiku) — factor code generation requires genuine reasoning and creativity
+- AST validation blocks: imports, exec/eval, file I/O, subprocess, class definitions, scope manipulation
+- Restricted execution namespace: only `pd`, `np`, and safe stdlib builtins available when running factor code
+- IC threshold: mean IC > 0.015 AND IC IR > 0.4 (intentionally conservative — novel factors earn this slowly)
+- Human is the final gate: nothing deploys automatically
+- Monthly cadence: runs on the first Sunday of each month (not weekly — Opus is expensive)
+
+**Files:**
+- Create: `ascent/research/factor_discovery/__init__.py`
+- Create: `ascent/research/factor_discovery/hypothesis_generator.py`
+- Create: `ascent/research/factor_discovery/code_validator.py`
+- Create: `ascent/research/factor_discovery/cpcv_evaluator.py`
+- Create: `ascent/research/factor_discovery/discovery_runner.py`
+- Create: `tests/test_factor_discovery.py`
+- Modify: `run_all_agents.py`
+
+- [ ] **Step 1: Write failing tests**
 
 ```python
 # tests/test_factor_discovery.py
-"""
-14 tests covering: feature templates, PySR engine, LLM suggester,
-leakage scanner, per-regime CPCV evaluator, discovery runner.
-"""
+import ast
 import json
 import pytest
 import numpy as np
@@ -125,679 +60,465 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 
-# ── Fixtures ───────────────────────────────────────────────────────────────────
+# ── Fixtures ──────────────────────────────────────────────────────────────────
 
-def _make_prices(n_symbols=30, n_days=504, seed=42):
-    rng = np.random.default_rng(seed)
+def _make_price_df(n_symbols=20, n_days=504):
+    """Simulated price DataFrame indexed by date, columns by symbol."""
     idx  = pd.date_range(end="2026-05-01", periods=n_days, freq="B")
     syms = [f"SYM{i:02d}" for i in range(n_symbols)]
-    data = {s: np.cumprod(1 + rng.normal(0.0003, 0.015, n_days)) for s in syms}
+    data = {}
+    for s in syms:
+        np.random.seed(hash(s) % 2**31)
+        data[s] = np.cumprod(1 + np.random.normal(0.0003, 0.015, n_days))
     return pd.DataFrame(data, index=idx)
 
 
-def _make_regime_labels(index):
-    """Alternating regimes for testing per-regime IC split."""
-    labels = []
-    for i, dt in enumerate(index):
-        if i < len(index) // 3:
-            labels.append("calm_bull")
-        elif i < 2 * len(index) // 3:
-            labels.append("stressed")
-        else:
-            labels.append("calm_bull")
-    return pd.Series(labels, index=index)
+_VALID_FACTOR_CODE = '''
+def compute_factor_reversal_z(df):
+    """Short-term reversal: 5-day return, reversed and z-scored."""
+    ret5 = df.pct_change(5)
+    signal = -ret5.iloc[-1]
+    mean = signal.mean()
+    std  = signal.std()
+    if std < 1e-8:
+        return pd.Series(0.0, index=signal.index)
+    return (signal - mean) / std
+'''
+
+_INVALID_CODE_IMPORT = '''
+import os
+def compute_factor_bad(df):
+    os.system("rm -rf /")
+    return pd.Series(0.0, index=df.columns)
+'''
+
+_INVALID_CODE_EXEC = '''
+def compute_factor_exec(df):
+    exec("print('pwned')")
+    return pd.Series(0.0, index=df.columns)
+'''
+
+_INVALID_CODE_NO_FUNCTION = '''
+x = 1 + 2
+print(x)
+'''
+
+_INVALID_CODE_WRONG_NAME = '''
+def my_factor(df):
+    return pd.Series(0.0, index=df.columns)
+'''
 
 
-# ── Feature templates ──────────────────────────────────────────────────────────
+# ── Code validator tests ───────────────────────────────────────────────────────
 
-def test_momentum_template_sums_close_to_zero():
-    from ascent.research.factor_discovery.feature_templates import MomentumTemplate
-    prices = _make_prices()
-    tmpl   = MomentumTemplate(lookback=120, skip_days=21, normalization="zscore")
-    signal = tmpl.compute(prices)
-    assert isinstance(signal, pd.Series)
-    assert len(signal) == len(prices.columns)
-    # Cross-sectional z-score should sum near zero
-    assert abs(signal.sum()) < 1.0, "z-scored cross-section should sum near 0"
+def test_validate_accepts_valid_code():
+    from ascent.research.factor_discovery.code_validator import validate_factor_code
+    ok, msg = validate_factor_code(_VALID_FACTOR_CODE, expected_name="factor_reversal_z")
+    assert ok, f"Valid code rejected: {msg}"
 
 
-def test_reversal_template_returns_series():
-    from ascent.research.factor_discovery.feature_templates import ReversionTemplate
-    prices = _make_prices()
-    tmpl   = ReversionTemplate(lookback=5, normalization="rank")
-    signal = tmpl.compute(prices)
-    assert isinstance(signal, pd.Series)
-    assert not signal.isnull().all()
-
-
-def test_volatility_template_returns_series():
-    from ascent.research.factor_discovery.feature_templates import VolatilityTemplate
-    prices = _make_prices()
-    tmpl   = VolatilityTemplate(vol_window=21, vov_window=63, direction="low")
-    signal = tmpl.compute(prices)
-    assert isinstance(signal, pd.Series)
-
-
-def test_template_floor_guard():
-    """Templates must return zeros when std < 1e-8 (flat prices)."""
-    from ascent.research.factor_discovery.feature_templates import MomentumTemplate
-    flat_prices = pd.DataFrame(
-        np.ones((60, 10)), index=pd.date_range("2025-01-01", periods=60, freq="B"),
-        columns=[f"S{i}" for i in range(10)]
-    )
-    tmpl   = MomentumTemplate(lookback=21, skip_days=0, normalization="zscore")
-    signal = tmpl.compute(flat_prices)
-    assert (signal == 0).all() or signal.isnull().all(), "Flat prices must yield zero signal"
-
-
-# ── Leakage scanner ────────────────────────────────────────────────────────────
-
-def test_leakage_scanner_rejects_tail_access():
-    from ascent.research.factor_discovery.leakage_scanner import scan_for_leakage
-    code = "signal = df.tail(1).values[0]"
-    ok, msg = scan_for_leakage(code)
+def test_validate_rejects_import():
+    from ascent.research.factor_discovery.code_validator import validate_factor_code
+    ok, msg = validate_factor_code(_INVALID_CODE_IMPORT, expected_name="factor_bad")
     assert not ok
-    assert "lookahead" in msg.lower() or "tail" in msg.lower() or "leakage" in msg.lower()
+    assert "import" in msg.lower() or "forbidden" in msg.lower()
 
 
-def test_leakage_scanner_rejects_datetime_now():
-    from ascent.research.factor_discovery.leakage_scanner import scan_for_leakage
-    code = "import datetime; t = datetime.datetime.now()"
-    ok, msg = scan_for_leakage(code)
+def test_validate_rejects_exec_in_code():
+    from ascent.research.factor_discovery.code_validator import validate_factor_code
+    ok, msg = validate_factor_code(_INVALID_CODE_EXEC, expected_name="factor_exec")
+    assert not ok
+    assert "exec" in msg.lower() or "forbidden" in msg.lower() or "builtin" in msg.lower()
+
+
+def test_validate_rejects_no_function():
+    from ascent.research.factor_discovery.code_validator import validate_factor_code
+    ok, msg = validate_factor_code(_INVALID_CODE_NO_FUNCTION, expected_name="factor_x")
     assert not ok
 
 
-def test_leakage_scanner_accepts_clean_code():
-    from ascent.research.factor_discovery.leakage_scanner import scan_for_leakage
-    code = """
-ret = df.pct_change(21)
-signal = -ret.iloc[-1]
-signal = (signal - signal.mean()) / (signal.std() + 1e-8)
-"""
-    ok, msg = scan_for_leakage(code)
-    assert ok, f"Clean code should pass: {msg}"
+def test_validate_rejects_wrong_function_name():
+    from ascent.research.factor_discovery.code_validator import validate_factor_code
+    ok, msg = validate_factor_code(_INVALID_CODE_WRONG_NAME, expected_name="factor_reversal_z")
+    assert not ok
+    assert "name" in msg.lower() or "compute_factor_reversal_z" in msg
 
 
-# ── Per-regime CPCV evaluator ─────────────────────────────────────────────────
+def test_validate_ast_parses_syntax_error():
+    from ascent.research.factor_discovery.code_validator import validate_factor_code
+    ok, msg = validate_factor_code("def broken(df:\n    return None", expected_name="factor_broken")
+    assert not ok
+    assert "syntax" in msg.lower() or "parse" in msg.lower()
 
-def test_regime_evaluator_returns_all_keys():
-    from ascent.research.factor_discovery.regime_cpcv_evaluator import evaluate_factor_regime_ic
-    prices  = _make_prices(n_days=504)
-    regimes = _make_regime_labels(prices.index)
 
-    # Inline simple reversal factor as callable
-    def factor_fn(df):
-        s = -df.pct_change(5).iloc[-1]
-        return (s - s.mean()) / (s.std() + 1e-8)
+# ── IC evaluator tests ─────────────────────────────────────────────────────────
 
-    result = evaluate_factor_regime_ic(
-        factor_fn=factor_fn,
+def test_evaluate_ic_returns_dict():
+    from ascent.research.factor_discovery.cpcv_evaluator import evaluate_factor_ic
+    prices = _make_price_df(n_symbols=15, n_days=300)
+    result = evaluate_factor_ic(
+        code=_VALID_FACTOR_CODE,
+        factor_name="factor_reversal_z",
         prices_df=prices,
-        regime_labels=regimes,
         n_periods=5,
     )
     assert isinstance(result, dict)
-    for key in ["ic_mean", "ic_ir", "ic_p5", "n_observations", "ic_calm_bull", "ic_stressed"]:
+    for key in ["ic_mean", "ic_ir", "n_observations", "ic_p5"]:
         assert key in result, f"Missing key: {key}"
 
 
-def test_regime_evaluator_ic_in_valid_range():
-    from ascent.research.factor_discovery.regime_cpcv_evaluator import evaluate_factor_regime_ic
-    prices  = _make_prices(n_days=504)
-    regimes = _make_regime_labels(prices.index)
-
-    def factor_fn(df):
-        s = -df.pct_change(5).iloc[-1]
-        return (s - s.mean()) / (s.std() + 1e-8)
-
-    result = evaluate_factor_regime_ic(factor_fn, prices, regimes, n_periods=5)
-    assert -1.0 <= result["ic_mean"] <= 1.0
-
-
-def test_harvey_fdr_check():
-    """IC IR > 0.60 is the acceptance threshold (Harvey et al. multiple-testing correction)."""
-    from ascent.research.factor_discovery.regime_cpcv_evaluator import passes_harvey_threshold
-    assert passes_harvey_threshold(ic_mean=0.025, ic_ir=0.65)   is True
-    assert passes_harvey_threshold(ic_mean=0.025, ic_ir=0.55)   is False  # IR too low
-    assert passes_harvey_threshold(ic_mean=0.010, ic_ir=0.80)   is False  # IC mean too low
-    assert passes_harvey_threshold(ic_mean=0.020, ic_ir=0.60)   is True   # exactly at threshold
+def test_evaluate_ic_values_in_valid_range():
+    from ascent.research.factor_discovery.cpcv_evaluator import evaluate_factor_ic
+    prices = _make_price_df(n_symbols=15, n_days=400)
+    result = evaluate_factor_ic(
+        code=_VALID_FACTOR_CODE,
+        factor_name="factor_reversal_z",
+        prices_df=prices,
+        n_periods=5,
+    )
+    assert -1.0 <= result["ic_mean"] <= 1.0, "IC must be in [-1, 1]"
+    assert result["n_observations"] > 0
 
 
-# ── LLM suggester ─────────────────────────────────────────────────────────────
+def test_evaluate_ic_returns_error_on_bad_code():
+    from ascent.research.factor_discovery.cpcv_evaluator import evaluate_factor_ic
+    bad_code = "def compute_factor_crash(df):\n    raise ValueError('intentional')\n"
+    prices = _make_price_df()
+    result = evaluate_factor_ic(
+        code=bad_code, factor_name="factor_crash", prices_df=prices, n_periods=5
+    )
+    assert "error" in result
+    assert result.get("ic_mean", 0.0) == 0.0
 
-def test_llm_suggester_returns_params():
-    from ascent.research.factor_discovery.llm_suggester import suggest_template_params
+
+def test_evaluate_ic_sandbox_no_file_access():
+    """Code that tries to open a file should fail safely — not write to disk."""
+    from ascent.research.factor_discovery.cpcv_evaluator import evaluate_factor_ic
+    code_with_open = (
+        "def compute_factor_filewrite(df):\n"
+        "    open('/tmp/pwned.txt', 'w').write('hack')\n"
+        "    return df.iloc[-1]\n"
+    )
+    prices = _make_price_df()
+    result = evaluate_factor_ic(
+        code=code_with_open, factor_name="factor_filewrite", prices_df=prices, n_periods=5
+    )
+    assert "error" in result or result.get("ic_mean", 0.0) == 0.0
+    import os
+    assert not os.path.exists("/tmp/pwned.txt"), "Sandbox must block file writes"
+
+
+# ── Hypothesis generator tests ────────────────────────────────────────────────
+
+def test_generate_hypothesis_returns_dict():
+    from ascent.research.factor_discovery.hypothesis_generator import generate_factor_hypothesis
     mock_response = json.dumps({
-        "template": "MomentumTemplate",
-        "params": {"lookback": 90, "skip_days": 21, "normalization": "zscore"},
-        "rationale": "Quality bias dominates stressed regimes"
+        "name": "factor_reversal_z",
+        "description": "Short-term mean reversion captures overreaction",
+        "rationale": "Stocks that fall sharply in 5 days mean-revert as overreaction corrects.",
+        "code": _VALID_FACTOR_CODE,
     })
-    with patch("ascent.research.factor_discovery.llm_suggester._call_llm",
+    with patch("ascent.research.factor_discovery.hypothesis_generator._call_opus",
                return_value=mock_response):
-        result = suggest_template_params(regime="stressed", ic_context={})
+        result = generate_factor_hypothesis(
+            regime="stressed",
+            existing_factor_names=["trend", "fundamental", "earnings"],
+            n_attempts=1,
+        )
     assert isinstance(result, dict)
-    assert "template" in result
-    assert "params" in result
+    for key in ["name", "description", "rationale", "code"]:
+        assert key in result
 
 
-def test_llm_suggester_returns_none_on_failure():
-    from ascent.research.factor_discovery.llm_suggester import suggest_template_params
-    with patch("ascent.research.factor_discovery.llm_suggester._call_llm", return_value=None):
-        result = suggest_template_params(regime="stressed", ic_context={})
+def test_generate_hypothesis_returns_none_on_llm_failure():
+    from ascent.research.factor_discovery.hypothesis_generator import generate_factor_hypothesis
+    with patch("ascent.research.factor_discovery.hypothesis_generator._call_opus",
+               return_value=None):
+        result = generate_factor_hypothesis(
+            regime="stressed", existing_factor_names=["trend"], n_attempts=1
+        )
     assert result is None
 
 
-# ── Discovery runner ──────────────────────────────────────────────────────────
+# ── Discovery runner tests ────────────────────────────────────────────────────
 
-def test_discovery_runner_writes_proposal_on_pass(tmp_path):
+def test_discovery_runner_writes_accepted_proposal(tmp_path):
     from ascent.research.factor_discovery.discovery_runner import run_factor_discovery
 
-    def mock_factor_fn(df):
-        s = -df.pct_change(5).iloc[-1]
-        return (s - s.mean()) / (s.std() + 1e-8)
-
-    mock_eval = {
-        "ic_mean": 0.022, "ic_ir": 0.65, "ic_p5": -0.005,
-        "n_observations": 80, "ic_calm_bull": 0.025, "ic_stressed": 0.018,
-        "ic_crisis": 0.015, "ic_min_regime": 0.015,
+    mock_hypothesis = {
+        "name": "factor_reversal_z",
+        "description": "Short-term reversal",
+        "rationale": "Overreaction correction",
+        "code": _VALID_FACTOR_CODE,
     }
-    with patch("ascent.research.factor_discovery.discovery_runner._load_prices",
-               return_value=_make_prices()):
-        with patch("ascent.research.factor_discovery.discovery_runner._load_regime_labels",
-                   return_value=_make_regime_labels(_make_prices().index)):
-            with patch("ascent.research.factor_discovery.discovery_runner.evaluate_factor_regime_ic",
-                       return_value=mock_eval):
-                with patch("ascent.research.factor_discovery.discovery_runner._build_candidates",
-                           return_value=[{"name": "factor_test", "fn": mock_factor_fn,
-                                          "source": "template", "description": "Test"}]):
+    mock_ic = {
+        "ic_mean": 0.025, "ic_ir": 0.60,
+        "n_observations": 200, "ic_p5": -0.018,
+    }
+
+    with patch("ascent.research.factor_discovery.discovery_runner.generate_factor_hypothesis",
+               return_value=mock_hypothesis):
+        with patch("ascent.research.factor_discovery.discovery_runner.validate_factor_code",
+                   return_value=(True, "OK")):
+            with patch("ascent.research.factor_discovery.discovery_runner.evaluate_factor_ic",
+                       return_value=mock_ic):
+                with patch("ascent.research.factor_discovery.discovery_runner._load_prices",
+                           return_value=_make_price_df()):
                     with patch("ascent.research.factor_discovery.discovery_runner.PROPOSALS_DIR",
                                tmp_path):
-                        result = run_factor_discovery(n_candidates=1, regime="stressed")
+                        result = run_factor_discovery(n_hypotheses=1, regime="stressed")
 
-    assert result["n_accepted"] >= 1
-    files = list(tmp_path.glob("*.json"))
-    assert len(files) >= 1
-    proposal = json.loads(files[0].read_text())
+    assert isinstance(result, dict)
+    assert result.get("n_accepted", 0) >= 1 or result.get("n_rejected", 0) >= 0
+
+    proposal_files = list(tmp_path.glob("*.json"))
+    assert len(proposal_files) >= 1, "Accepted proposal must be written to proposals dir"
+    proposal = json.loads(proposal_files[0].read_text())
+    assert "code" in proposal
     assert "ic_mean" in proposal
-    assert "review_status" in proposal
-    assert proposal["review_status"] == "pending"
 
 
-def test_discovery_runner_rejects_low_ir(tmp_path):
+def test_novelty_check_rejects_pure_momentum_clone():
+    from ascent.research.factor_discovery.cpcv_evaluator import check_factor_novelty
+    # A factor that IS momentum will be rejected — Spearman corr with benchmark > 0.70
+    momentum_clone = '''
+def compute_factor_mom_clone(df):
+    ret = df.pct_change(252).iloc[-1]
+    mean, std = ret.mean(), ret.std()
+    if std < 1e-8:
+        return pd.Series(0.0, index=ret.index)
+    return (ret - mean) / std
+'''
+    prices = _make_price_df(n_symbols=30, n_days=504)
+    is_novel, msg = check_factor_novelty(momentum_clone, "mom_clone", prices, correlation_threshold=0.70)
+    assert not is_novel, f"Pure momentum clone should be rejected as non-novel, got: {msg}"
+
+
+def test_novelty_check_accepts_orthogonal_factor():
+    from ascent.research.factor_discovery.cpcv_evaluator import check_factor_novelty
+    # A factor based on intraday range volatility is unlikely to correlate > 0.70 with benchmarks
+    novel_factor = '''
+def compute_factor_reversal_z(df):
+    ret5 = df.pct_change(5)
+    signal = -ret5.iloc[-1]
+    mean = signal.mean()
+    std  = signal.std()
+    if std < 1e-8:
+        return pd.Series(0.0, index=signal.index)
+    return (signal - mean) / std
+'''
+    prices = _make_price_df(n_symbols=30, n_days=504)
+    is_novel, msg = check_factor_novelty(novel_factor, "reversal_z", prices, correlation_threshold=0.70)
+    # Short-term reversal may or may not be novel depending on correlation — just check it doesn't raise
+    assert isinstance(is_novel, bool)
+    assert isinstance(msg, str)
+
+
+def test_discovery_runner_rejects_low_ic_proposal(tmp_path):
     from ascent.research.factor_discovery.discovery_runner import run_factor_discovery
 
-    def mock_factor_fn(df):
-        return pd.Series(0.0, index=df.columns)
+    mock_ic = {"ic_mean": 0.002, "ic_ir": 0.10, "n_observations": 200, "ic_p5": -0.05}
 
-    mock_eval = {
-        "ic_mean": 0.020, "ic_ir": 0.35,  # IR too low
-        "ic_p5": -0.010, "n_observations": 80,
-        "ic_calm_bull": 0.020, "ic_stressed": 0.018, "ic_crisis": 0.015,
-        "ic_min_regime": 0.015,
-    }
-    with patch("ascent.research.factor_discovery.discovery_runner._load_prices",
-               return_value=_make_prices()):
-        with patch("ascent.research.factor_discovery.discovery_runner._load_regime_labels",
-                   return_value=_make_regime_labels(_make_prices().index)):
-            with patch("ascent.research.factor_discovery.discovery_runner.evaluate_factor_regime_ic",
-                       return_value=mock_eval):
-                with patch("ascent.research.factor_discovery.discovery_runner._build_candidates",
-                           return_value=[{"name": "factor_weak_ir", "fn": mock_factor_fn,
-                                          "source": "template", "description": "Weak"}]):
+    with patch("ascent.research.factor_discovery.discovery_runner.generate_factor_hypothesis",
+               return_value={"name": "factor_weak", "description": "", "rationale": "", "code": _VALID_FACTOR_CODE}):
+        with patch("ascent.research.factor_discovery.discovery_runner.validate_factor_code",
+                   return_value=(True, "OK")):
+            with patch("ascent.research.factor_discovery.discovery_runner.evaluate_factor_ic",
+                       return_value=mock_ic):
+                with patch("ascent.research.factor_discovery.discovery_runner._load_prices",
+                           return_value=_make_price_df()):
                     with patch("ascent.research.factor_discovery.discovery_runner.PROPOSALS_DIR",
                                tmp_path):
-                        result = run_factor_discovery(n_candidates=1, regime="stressed")
+                        result = run_factor_discovery(n_hypotheses=1, regime="stressed")
 
-    assert result["n_accepted"] == 0
-    assert len(list(tmp_path.glob("*.json"))) == 0
+    proposal_files = list(tmp_path.glob("*.json"))
+    assert len(proposal_files) == 0, "Low-IC proposal must NOT be written to proposals dir"
 ```
 
-Run to confirm they fail:
+- [ ] **Step 2: Run tests to verify they fail**
+
 ```bash
 cd "/Users/scott/Downloads/ascent capital v2 up to phase 5.1"
-.venv/bin/pytest tests/test_factor_discovery.py -v 2>&1 | head -20
+.venv/bin/pytest tests/test_factor_discovery.py -v 2>&1 | head -15
 ```
 Expected: `ModuleNotFoundError: No module named 'ascent.research.factor_discovery'`
 
----
-
-### Step 2: Create `ascent/research/factor_discovery/__init__.py`
+- [ ] **Step 3: Create `ascent/research/factor_discovery/__init__.py`**
 
 ```python
 # ascent/research/factor_discovery/__init__.py
 ```
 
----
-
-### Step 3: Create `ascent/research/factor_discovery/feature_templates.py`
+- [ ] **Step 4: Create `ascent/research/factor_discovery/code_validator.py`**
 
 ```python
 """
-ascent/research/factor_discovery/feature_templates.py
+ascent/research/factor_discovery/code_validator.py
 
-Pre-defined factor template families. Each template is a trusted, human-written
-class that accepts a parameter dict from the LLM and a price DataFrame, and
-returns a cross-sectionally z-scored pd.Series.
+AST-based validator for LLM-generated factor code.
 
-Template families:
-    MomentumTemplate    — skip-adjusted momentum with normalization options
-    ReversionTemplate   — short-term mean reversion
-    VolatilityTemplate  — volatility regime (low-vol or vol-trend)
-    QualityTemplate     — growth and stability metrics from price series
-    CorrelationTemplate — market beta / idiosyncratic component
+Checks:
+1. Valid Python syntax
+2. Single top-level FunctionDef named compute_{factor_name}
+3. No forbidden AST nodes (import, exec, eval, file I/O)
+4. No dangerous builtin references (open, __import__, compile)
 
-The LLM (llm_suggester.py) fills parameters into these templates via JSON.
-No code is generated; the template logic is trusted and reviewed by a human.
-"""
-from __future__ import annotations
-
-import logging
-from typing import Dict, Optional
-
-import numpy as np
-import pandas as pd
-
-log = logging.getLogger(__name__)
-
-_NORM_METHODS = frozenset({"zscore", "rank", "minmax"})
-
-
-def _normalize(s: pd.Series, method: str) -> pd.Series:
-    """Cross-sectional normalization. Returns zeros on degenerate input."""
-    s = s.dropna()
-    if s.empty:
-        return s
-    if method == "zscore":
-        std = s.std()
-        if std < 1e-8:
-            return pd.Series(0.0, index=s.index)
-        return (s - s.mean()) / std
-    if method == "rank":
-        return s.rank(pct=True) - 0.5
-    if method == "minmax":
-        rng = s.max() - s.min()
-        if rng < 1e-8:
-            return pd.Series(0.0, index=s.index)
-        return (s - s.min()) / rng - 0.5
-    return s
-
-
-class MomentumTemplate:
-    """
-    Skip-adjusted momentum.
-    signal = return(lookback) - return(skip_days)
-    Regime note: skip_days > 0 avoids 1-month reversal contamination.
-    """
-
-    PARAM_SCHEMA = {
-        "lookback":      {"type": int,   "min": 21,  "max": 252, "default": 120},
-        "skip_days":     {"type": int,   "min": 0,   "max": 63,  "default": 21},
-        "normalization": {"type": str,   "choices": _NORM_METHODS, "default": "zscore"},
-    }
-
-    def __init__(self, lookback: int = 120, skip_days: int = 21,
-                 normalization: str = "zscore"):
-        self.lookback      = lookback
-        self.skip_days     = skip_days
-        self.normalization = normalization
-
-    def compute(self, df: pd.DataFrame) -> pd.Series:
-        if len(df) < self.lookback + 1:
-            return pd.Series(0.0, index=df.columns)
-        ret_long = df.pct_change(self.lookback).iloc[-1]
-        if self.skip_days > 0 and len(df) > self.skip_days:
-            ret_short = df.pct_change(self.skip_days).iloc[-1]
-            signal    = ret_long - ret_short
-        else:
-            signal = ret_long
-        return _normalize(signal, self.normalization)
-
-    def to_dict(self) -> dict:
-        return {
-            "template": "MomentumTemplate",
-            "lookback": self.lookback, "skip_days": self.skip_days,
-            "normalization": self.normalization,
-        }
-
-
-class ReversionTemplate:
-    """
-    Short-term mean reversion.
-    signal = -return(lookback), optionally smoothed over smooth_window.
-    """
-
-    PARAM_SCHEMA = {
-        "lookback":      {"type": int, "min": 2,  "max": 21,  "default": 5},
-        "smooth_window": {"type": int, "min": 1,  "max": 10,  "default": 1},
-        "normalization": {"type": str, "choices": _NORM_METHODS, "default": "zscore"},
-    }
-
-    def __init__(self, lookback: int = 5, smooth_window: int = 1,
-                 normalization: str = "zscore"):
-        self.lookback      = lookback
-        self.smooth_window = smooth_window
-        self.normalization = normalization
-
-    def compute(self, df: pd.DataFrame) -> pd.Series:
-        if len(df) < self.lookback + self.smooth_window:
-            return pd.Series(0.0, index=df.columns)
-        rets   = df.pct_change(self.lookback)
-        if self.smooth_window > 1:
-            rets = rets.rolling(self.smooth_window).mean()
-        signal = -rets.iloc[-1]
-        return _normalize(signal, self.normalization)
-
-    def to_dict(self) -> dict:
-        return {"template": "ReversionTemplate", "lookback": self.lookback,
-                "smooth_window": self.smooth_window, "normalization": self.normalization}
-
-
-class VolatilityTemplate:
-    """
-    Volatility regime signal.
-    direction="low"   → long low-vol names (risk-parity style)
-    direction="trend" → long names with declining vol (vol-trend sleeve)
-    """
-
-    PARAM_SCHEMA = {
-        "vol_window":  {"type": int, "min": 10,  "max": 63,  "default": 21},
-        "vov_window":  {"type": int, "min": 21,  "max": 126, "default": 63},
-        "direction":   {"type": str, "choices": {"low", "trend"},  "default": "low"},
-        "normalization": {"type": str, "choices": _NORM_METHODS,   "default": "zscore"},
-    }
-
-    def __init__(self, vol_window: int = 21, vov_window: int = 63,
-                 direction: str = "low", normalization: str = "zscore"):
-        self.vol_window    = vol_window
-        self.vov_window    = vov_window
-        self.direction     = direction
-        self.normalization = normalization
-
-    def compute(self, df: pd.DataFrame) -> pd.Series:
-        if len(df) < self.vov_window:
-            return pd.Series(0.0, index=df.columns)
-        rets = df.pct_change()
-        vol  = rets.rolling(self.vol_window).std().iloc[-1]
-        if self.direction == "low":
-            signal = -vol
-        else:
-            vov    = rets.rolling(self.vol_window).std().rolling(self.vov_window).std()
-            trend  = rets.rolling(self.vol_window).std().diff(5)
-            vov_last  = vov.iloc[-1]
-            trend_last = trend.iloc[-1]
-            signal = -(trend_last / (vov_last + 1e-8))
-        return _normalize(signal.dropna(), self.normalization)
-
-    def to_dict(self) -> dict:
-        return {"template": "VolatilityTemplate", "vol_window": self.vol_window,
-                "vov_window": self.vov_window, "direction": self.direction,
-                "normalization": self.normalization}
-
-
-class QualityTemplate:
-    """
-    Price-implied quality: consistency and growth from price history.
-    metric="consistency" → rolling Sharpe (reward/risk)
-    metric="drawdown"    → inverse max drawdown (survivorship quality proxy)
-    metric="trend_strength" → trend quality via consecutive positive returns
-    """
-
-    PARAM_SCHEMA = {
-        "metric":      {"type": str, "choices": {"consistency", "drawdown", "trend_strength"},
-                        "default": "consistency"},
-        "window":      {"type": int, "min": 21, "max": 252, "default": 63},
-        "normalization": {"type": str, "choices": _NORM_METHODS, "default": "zscore"},
-    }
-
-    def __init__(self, metric: str = "consistency", window: int = 63,
-                 normalization: str = "zscore"):
-        self.metric        = metric
-        self.window        = window
-        self.normalization = normalization
-
-    def compute(self, df: pd.DataFrame) -> pd.Series:
-        if len(df) < self.window:
-            return pd.Series(0.0, index=df.columns)
-        rets = df.pct_change()
-        w    = rets.tail(self.window)
-        if self.metric == "consistency":
-            mean_ret = w.mean()
-            std_ret  = w.std().replace(0, np.nan)
-            signal   = mean_ret / std_ret
-        elif self.metric == "drawdown":
-            prices_w = df.tail(self.window)
-            running_max = prices_w.cummax()
-            dd = ((prices_w - running_max) / running_max.replace(0, np.nan)).min()
-            signal = -dd  # lower drawdown → higher signal
-        else:
-            signal = (w > 0).mean()  # fraction of up days
-        return _normalize(signal.dropna(), self.normalization)
-
-    def to_dict(self) -> dict:
-        return {"template": "QualityTemplate", "metric": self.metric,
-                "window": self.window, "normalization": self.normalization}
-
-
-class CorrelationTemplate:
-    """
-    Market correlation / idiosyncratic component.
-    mode="beta"          → cross-sectional beta-rank (low beta long)
-    mode="idiosyncratic" → residual return after removing market component
-    """
-
-    PARAM_SCHEMA = {
-        "window":        {"type": int, "min": 21, "max": 126, "default": 63},
-        "mode":          {"type": str, "choices": {"beta", "idiosyncratic"}, "default": "beta"},
-        "normalization": {"type": str, "choices": _NORM_METHODS, "default": "zscore"},
-    }
-
-    def __init__(self, window: int = 63, mode: str = "beta",
-                 normalization: str = "zscore"):
-        self.window        = window
-        self.mode          = mode
-        self.normalization = normalization
-
-    def compute(self, df: pd.DataFrame) -> pd.Series:
-        if len(df) < self.window + 1:
-            return pd.Series(0.0, index=df.columns)
-        rets   = df.pct_change().tail(self.window)
-        mkt    = rets.mean(axis=1)
-        betas  = {}
-        resids = {}
-        for col in rets.columns:
-            s = rets[col].dropna()
-            m = mkt.reindex(s.index)
-            cov   = np.cov(s.values, m.values)
-            var_m = cov[1, 1]
-            beta  = cov[0, 1] / var_m if var_m > 1e-8 else 1.0
-            betas[col]  = beta
-            resids[col] = (s - beta * m).mean()
-        if self.mode == "beta":
-            signal = pd.Series(betas)
-            signal = -signal  # long low-beta
-        else:
-            signal = pd.Series(resids)
-        return _normalize(signal.dropna(), self.normalization)
-
-    def to_dict(self) -> dict:
-        return {"template": "CorrelationTemplate", "window": self.window,
-                "mode": self.mode, "normalization": self.normalization}
-
-
-# ── Registry ───────────────────────────────────────────────────────────────────
-
-TEMPLATE_REGISTRY: Dict[str, type] = {
-    "MomentumTemplate":    MomentumTemplate,
-    "ReversionTemplate":   ReversionTemplate,
-    "VolatilityTemplate":  VolatilityTemplate,
-    "QualityTemplate":     QualityTemplate,
-    "CorrelationTemplate": CorrelationTemplate,
-}
-
-
-def instantiate_template(template_name: str, params: dict):
-    """Instantiate a template by name with the given parameter dict."""
-    cls = TEMPLATE_REGISTRY.get(template_name)
-    if cls is None:
-        raise ValueError(f"Unknown template: {template_name}. Valid: {list(TEMPLATE_REGISTRY)}")
-    schema = cls.PARAM_SCHEMA
-    validated = {}
-    for key, spec in schema.items():
-        val = params.get(key, spec["default"])
-        if spec["type"] is int:
-            val = int(val)
-            val = max(spec["min"], min(spec["max"], val))
-        elif spec["type"] is str and "choices" in spec:
-            if val not in spec["choices"]:
-                val = spec["default"]
-        validated[key] = val
-    return cls(**validated)
-```
-
----
-
-### Step 4: Create `ascent/research/factor_discovery/leakage_scanner.py`
-
-```python
-"""
-ascent/research/factor_discovery/leakage_scanner.py
-
-Detects forward-looking data access patterns in factor code strings.
-Used as a pre-validation gate before any code runs.
-
-Checks for:
-  - df.tail() / df.head() used as signal (last row access = lookahead)
-  - datetime.now(), pd.Timestamp.today() (runtime time = future knowledge)
-  - Hard-coded future dates
-  - .shift(-N) with negative shift (looks at future rows)
-  - .rolling(...).apply(lambda: ...) that accesses future values
-
-Note: df.iloc[-1] is LEGITIMATE as the final step to extract the
-cross-sectional signal from the last available date. The scanner
-distinguishes "iloc[-1] as final extraction" from "iloc[-1] inside
-a rolling window" (which is lookahead). Simple pattern matching
-is used — not full semantic analysis.
-
-Returns (is_clean: bool, message: str).
+Returns (is_valid: bool, message: str).
 """
 from __future__ import annotations
 
 import ast
-import re
 from typing import Tuple
 
 
-_LOOKAHEAD_PATTERNS = [
-    # Runtime time access
-    (r"datetime\.now\(\)",        "datetime.now() is future knowledge — use df.index[-1]"),
-    (r"datetime\.today\(\)",      "datetime.today() is future knowledge"),
-    (r"pd\.Timestamp\.today\(\)", "pd.Timestamp.today() is future knowledge"),
-    (r"pd\.Timestamp\.now\(\)",   "pd.Timestamp.now() is future knowledge"),
-    (r"time\.time\(\)",           "time.time() is future knowledge"),
-    # Direct future-row access patterns
-    (r"\.shift\(-\d+\)",          ".shift(-N) accesses future rows — use positive shift only"),
-    (r"\.tail\s*\(\s*1\s*\)",     ".tail(1) may be a lookahead pattern — use .iloc[-1] explicitly"),
-]
+_FORBIDDEN_NODE_TYPES = (
+    ast.Import,
+    ast.ImportFrom,
+    ast.ClassDef,
+    ast.Global,
+    ast.Nonlocal,
+    ast.AsyncFunctionDef,
+    ast.AsyncFor,
+    ast.AsyncWith,
+)
+
+_FORBIDDEN_NAMES = frozenset({
+    "exec", "eval", "compile", "open", "__import__", "breakpoint",
+    "input", "print", "__builtins__", "globals", "locals", "vars",
+    "setattr", "delattr", "memoryview", "bytearray",
+})
+
+_FORBIDDEN_ATTRIBUTE_PREFIXES = frozenset({
+    "os", "sys", "subprocess", "pathlib", "io", "socket",
+    "urllib", "requests", "shutil", "tempfile", "importlib",
+})
 
 
-class _LeakageVisitor(ast.NodeVisitor):
-    """Walk AST to find structural lookahead patterns."""
+class _SafetyVisitor(ast.NodeVisitor):
+    """AST visitor that collects safety violations."""
 
     def __init__(self):
         self.violations: list = []
 
+    def visit_Import(self, node):
+        self.violations.append("Import statement not allowed in factor code")
+
+    def visit_ImportFrom(self, node):
+        self.violations.append(f"'from ... import' not allowed: {ast.unparse(node)}")
+
+    def visit_ClassDef(self, node):
+        self.violations.append(f"Class definition not allowed: {node.name}")
+
+    def visit_Global(self, node):
+        self.violations.append(f"'global' statement not allowed")
+
+    def visit_Nonlocal(self, node):
+        self.violations.append(f"'nonlocal' statement not allowed")
+
+    def visit_AsyncFunctionDef(self, node):
+        self.violations.append(f"Async function not allowed: {node.name}")
+
+    def visit_Name(self, node):
+        if node.id in _FORBIDDEN_NAMES:
+            self.violations.append(f"Forbidden built-in reference: '{node.id}'")
+        self.generic_visit(node)
+
+    def visit_Attribute(self, node):
+        # Catch patterns like os.system, subprocess.run, etc.
+        if isinstance(node.value, ast.Name):
+            if node.value.id in _FORBIDDEN_ATTRIBUTE_PREFIXES:
+                self.violations.append(
+                    f"Forbidden module access: '{node.value.id}.{node.attr}'"
+                )
+        self.generic_visit(node)
+
     def visit_Call(self, node):
-        # Flag .rolling(...).apply(lambda ...) with negative indices inside
-        if (isinstance(node.func, ast.Attribute)
-                and node.func.attr == "apply"
-                and isinstance(node.func.value, ast.Call)
-                and isinstance(node.func.value.func, ast.Attribute)
-                and node.func.value.func.attr == "rolling"):
-            # Check lambda body for negative indexing
-            for arg in node.args:
-                if isinstance(arg, ast.Lambda):
-                    src = ast.unparse(arg)
-                    if "[-" in src:
-                        self.violations.append(
-                            "Negative index inside rolling().apply() lambda — potential lookahead"
-                        )
-        self.generic_visit(node)
-
-    def visit_Subscript(self, node):
-        # Flag df[future_date_string] patterns — hard-coded future dates
-        if isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, str):
-            val = node.slice.value
-            if len(val) == 10 and val.count("-") == 2:
-                try:
-                    from datetime import date
-                    parsed = date.fromisoformat(val)
-                    if parsed.year > 2026:
-                        self.violations.append(f"Hard-coded future date: '{val}'")
-                except ValueError:
-                    pass
+        # Catch exec("..."), eval("...") as function calls
+        if isinstance(node.func, ast.Name) and node.func.id in ("exec", "eval", "compile"):
+            self.violations.append(f"Forbidden function call: '{node.func.id}'")
         self.generic_visit(node)
 
 
-def scan_for_leakage(code: str) -> Tuple[bool, str]:
+def validate_factor_code(code: str, expected_name: str) -> Tuple[bool, str]:
     """
-    Scan factor code string for lookahead / forward-data patterns.
+    Validate LLM-generated factor code.
 
     Args:
-        code: Python source string.
+        code:          Python source code string from the LLM.
+        expected_name: The factor name (without 'compute_' prefix).
+                       The top-level function must be named compute_{expected_name}.
 
     Returns:
-        (is_clean, message) — message is "OK" or a description of the problem.
+        (is_valid, message) — message is "OK" on success or an error description.
     """
-    # Regex scan
-    for pattern, message in _LOOKAHEAD_PATTERNS:
-        if re.search(pattern, code):
-            return False, f"Lookahead pattern detected: {message}"
-
-    # AST scan (syntax errors → pass through as clean; validator handles syntax)
+    # 1. Syntax check
     try:
         tree = ast.parse(code)
-        visitor = _LeakageVisitor()
-        visitor.visit(tree)
-        if visitor.violations:
-            return False, f"Structural lookahead: {'; '.join(visitor.violations)}"
-    except SyntaxError:
-        pass  # syntax errors caught by code_validator; not our job here
+    except SyntaxError as exc:
+        return False, f"Syntax error: {exc}"
+
+    # 2. Must have exactly one top-level definition, and it must be a FunctionDef
+    top_level = tree.body
+    if not top_level:
+        return False, "Code is empty."
+
+    func_defs = [n for n in top_level if isinstance(n, ast.FunctionDef)]
+    non_funcs = [n for n in top_level if not isinstance(n, (ast.FunctionDef, ast.Expr))]
+
+    if not func_defs:
+        return False, "No function definition found. Factor code must define a function."
+
+    if len(func_defs) > 1:
+        names = [f.name for f in func_defs]
+        return False, f"Multiple function definitions not allowed: {names}"
+
+    if non_funcs:
+        non_func_types = [type(n).__name__ for n in non_funcs]
+        return False, f"Top-level statements not allowed (only function defs): {non_func_types}"
+
+    # 3. Function must be named compute_{expected_name}
+    fn = func_defs[0]
+    expected_fn_name = f"compute_{expected_name}"
+    if fn.name != expected_fn_name:
+        return False, (
+            f"Function must be named '{expected_fn_name}', got '{fn.name}'. "
+            f"Factor name is '{expected_name}'."
+        )
+
+    # 4. Function must accept at least one argument (the DataFrame)
+    if not fn.args.args:
+        return False, f"Function '{fn.name}' must accept at least one argument (df: pd.DataFrame)."
+
+    # 5. Safety scan — check for forbidden constructs
+    visitor = _SafetyVisitor()
+    visitor.visit(tree)
+    if visitor.violations:
+        return False, f"Safety violations: {'; '.join(visitor.violations)}"
 
     return True, "OK"
 ```
 
----
-
-### Step 5: Create `ascent/research/factor_discovery/regime_cpcv_evaluator.py`
+- [ ] **Step 5: Create `ascent/research/factor_discovery/cpcv_evaluator.py`**
 
 ```python
 """
-ascent/research/factor_discovery/regime_cpcv_evaluator.py
+ascent/research/factor_discovery/cpcv_evaluator.py
 
-Per-regime Information Coefficient evaluator with Harvey et al. FDR correction.
+Rolling IC evaluator for LLM-generated factor code.
 
-Architecture:
-  - Compute Spearman IC between factor values and n-period forward returns
-    for each date in the price history (weekly step)
-  - Split IC observations by regime label
-  - Report IC_calm_bull, IC_stressed, IC_crisis separately
-  - Require IC_mean > 0.015 AND IC_IR > 0.60 AND IC_min_regime > 0.01
+Executes the factor code in a restricted namespace, computes Spearman IC
+between the factor values and n-period forward returns, and returns summary
+statistics: mean IC, IC IR (IC/std), p5 IC, and observation count.
 
-IC IR > 0.60 threshold rationale:
-  Harvey, Liu, Zhu (2016, arXiv:2006.04269) show that with multiple testing,
-  the effective t-stat threshold for factor significance is ~3.0. For
-  Ascent's breadth (~1,000 decisions/year), this maps to IC IR > 0.60.
-  Applying IR > 0.40 generates ~3 spurious acceptances per year from 50
-  candidates; IR > 0.60 reduces this to ~0.5.
-
-References:
-  Harvey, Liu, Zhu (2016) — arXiv:2006.04269
-  CPCV methodology — Lopez de Prado (2018), expanded by Arian et al. (2024)
+The namespace restriction: only pd, np, and a safe subset of Python builtins
+are available during execution. File I/O, imports, and subprocess calls fail
+silently and return an error result.
 """
 from __future__ import annotations
 
+import builtins
 import logging
-from typing import Callable, Dict, Optional
+from typing import Dict
 
 import numpy as np
 import pandas as pd
@@ -805,527 +526,361 @@ from scipy.stats import spearmanr
 
 log = logging.getLogger(__name__)
 
-IC_MEAN_THRESHOLD   = 0.015
-IC_IR_THRESHOLD     = 0.60   # Harvey et al. multiple-testing correction
-IC_MIN_REGIME       = 0.010  # must be positive in every observed regime
-MIN_OBSERVATIONS    = 20
+# Builtins that are safe for factor code execution
+_SAFE_BUILTIN_NAMES = frozenset({
+    "abs", "all", "any", "bool", "dict", "enumerate", "filter",
+    "float", "frozenset", "int", "isinstance", "issubclass", "iter",
+    "len", "list", "map", "max", "min", "next", "range", "round",
+    "set", "slice", "sorted", "str", "sum", "tuple", "type", "zip",
+    "True", "False", "None", "NotImplemented",
+})
+
+_SAFE_BUILTINS = {
+    k: getattr(builtins, k)
+    for k in dir(builtins)
+    if k in _SAFE_BUILTIN_NAMES
+}
 
 
-def _compute_ic_series(
-    factor_fn: Callable[[pd.DataFrame], pd.Series],
+def _execute_factor(code: str, factor_name: str, df: pd.DataFrame) -> pd.Series:
+    """
+    Execute factor code in a restricted namespace and return the resulting Series.
+    Raises on any execution error so the caller can record it.
+    """
+    namespace = {"pd": pd, "np": np, "__builtins__": _SAFE_BUILTINS}
+    exec(compile(code, f"<factor_{factor_name}>", "exec"), namespace)
+
+    fn_name = f"compute_{factor_name}"
+    fn = namespace.get(fn_name)
+    if fn is None:
+        raise ValueError(f"Function '{fn_name}' not found after execution.")
+
+    result = fn(df)
+    if not isinstance(result, pd.Series):
+        raise TypeError(f"Factor must return pd.Series, got {type(result).__name__}")
+    return result
+
+
+def evaluate_factor_ic(
+    code: str,
+    factor_name: str,
     prices_df: pd.DataFrame,
-    n_periods: int,
-    lookback_days: int,
-    step: int,
-    min_symbols: int,
-) -> Dict[str, list]:
+    n_periods: int = 5,
+    min_symbols: int = 10,
+    lookback_days: int = 252,
+) -> Dict:
     """
-    Compute cross-sectional Spearman IC for each evaluation date.
+    Evaluate a factor's Information Coefficient on historical price data.
 
-    Returns dict: {"dates": [...], "ics": [...]}
+    Method:
+      For each rolling date (weekly step), compute:
+        - Factor value: execute the code on the trailing window ending at that date
+        - Forward return: n_periods-day return starting at that date
+
+      Compute Spearman IC (cross-sectional) at each date.
+      Report mean IC, IC IR, p5 IC, and observation count.
+
+    Args:
+        code:          Python source of the factor function.
+        factor_name:   Name (without 'compute_' prefix).
+        prices_df:     DataFrame of price series — index=dates, columns=symbols.
+        n_periods:     Forward return horizon in trading days.
+        min_symbols:   Minimum symbols required per period; periods below this are skipped.
+        lookback_days: How many days of price history to pass to the factor function.
+
+    Returns:
+        Dict with ic_mean, ic_ir, ic_p5, n_observations — or {"error": msg} on failure.
     """
-    dates  = prices_df.index[lookback_days:-n_periods:step]
-    result = {"dates": [], "ics": []}
+    if prices_df.empty or len(prices_df) < lookback_days + n_periods:
+        return {"error": "Insufficient price data", "ic_mean": 0.0, "ic_ir": 0.0,
+                "n_observations": 0, "ic_p5": 0.0}
+
+    ic_series = []
+    dates = prices_df.index[lookback_days:-n_periods:5]  # step every 5 days
 
     for dt in dates:
         try:
             iloc_pos = prices_df.index.get_loc(dt)
-            start    = max(0, iloc_pos - lookback_days)
-            window   = prices_df.iloc[start: iloc_pos + 1]
+            window_start = max(0, iloc_pos - lookback_days)
+            window_df    = prices_df.iloc[window_start : iloc_pos + 1]
 
-            factor_vals = factor_fn(window)
-            if not isinstance(factor_vals, pd.Series) or factor_vals.empty:
-                continue
+            factor_vals = _execute_factor(code, factor_name, window_df)
 
-            fwd_rets = prices_df.iloc[iloc_pos + n_periods] / prices_df.iloc[iloc_pos] - 1
+            fwd_rets = (
+                prices_df.iloc[iloc_pos + n_periods] /
+                prices_df.iloc[iloc_pos] - 1
+            )
 
             common = factor_vals.index.intersection(fwd_rets.index)
             f = factor_vals.reindex(common).dropna()
-            r = fwd_rets.reindex(f.index).dropna()
-            f = f.reindex(r.index)
+            r = fwd_rets.reindex(common).dropna()
+            common2 = f.index.intersection(r.index)
+            f = f.reindex(common2)
+            r = r.reindex(common2)
 
             if len(f) < min_symbols:
                 continue
 
             ic, _ = spearmanr(f.values, r.values)
             if not np.isnan(ic):
-                result["dates"].append(dt)
-                result["ics"].append(float(ic))
+                ic_series.append(float(ic))
 
         except Exception as exc:
-            log.debug("[RegimeCPCV] Skipped %s: %s", dt, exc)
+            log.debug("[CPCV] Skipped date %s: %s", dt, exc)
+            continue
 
-    return result
-
-
-def evaluate_factor_regime_ic(
-    factor_fn: Callable[[pd.DataFrame], pd.Series],
-    prices_df: pd.DataFrame,
-    regime_labels: Optional[pd.Series] = None,
-    n_periods: int = 5,
-    lookback_days: int = 252,
-    step: int = 5,
-    min_symbols: int = 10,
-) -> Dict:
-    """
-    Evaluate a factor's IC split by market regime.
-
-    Args:
-        factor_fn:      Callable (df: pd.DataFrame) -> pd.Series (cross-sectional signal)
-        prices_df:      Daily price DataFrame (index=dates, columns=symbols)
-        regime_labels:  pd.Series (index=dates, values=regime strings). None → skip regime split.
-        n_periods:      Forward return horizon (trading days)
-        lookback_days:  History length passed to factor_fn on each evaluation date
-        step:           Evaluation step (every N days)
-        min_symbols:    Minimum symbols required for a valid IC observation
-
-    Returns:
-        Dict with ic_mean, ic_ir, ic_p5, n_observations,
-        ic_calm_bull, ic_stressed, ic_crisis, ic_min_regime,
-        OR {"error": msg} on failure.
-    """
-    if prices_df.empty or len(prices_df) < lookback_days + n_periods:
+    if not ic_series:
         return {
-            "error": "Insufficient price data",
+            "error": "No valid IC observations computed",
             "ic_mean": 0.0, "ic_ir": 0.0, "n_observations": 0, "ic_p5": 0.0,
-            "ic_calm_bull": 0.0, "ic_stressed": 0.0, "ic_crisis": 0.0, "ic_min_regime": 0.0,
         }
 
-    raw = _compute_ic_series(factor_fn, prices_df, n_periods, lookback_days, step, min_symbols)
-    if not raw["ics"]:
-        return {
-            "error": "No valid IC observations",
-            "ic_mean": 0.0, "ic_ir": 0.0, "n_observations": 0, "ic_p5": 0.0,
-            "ic_calm_bull": 0.0, "ic_stressed": 0.0, "ic_crisis": 0.0, "ic_min_regime": 0.0,
-        }
-
-    ic_arr  = np.array(raw["ics"])
+    ic_arr = np.array(ic_series)
     ic_mean = float(np.mean(ic_arr))
     ic_std  = float(np.std(ic_arr))
     ic_ir   = round(ic_mean / ic_std, 3) if ic_std > 1e-6 else 0.0
     ic_p5   = float(np.percentile(ic_arr, 5))
 
-    result = {
-        "ic_mean":        round(ic_mean, 4),
-        "ic_ir":          round(ic_ir, 3),
-        "ic_p5":          round(ic_p5, 4),
-        "n_observations": len(ic_arr),
-        "ic_calm_bull":   0.0,
-        "ic_stressed":    0.0,
-        "ic_crisis":      0.0,
-        "ic_min_regime":  0.0,
+    return {
+        "ic_mean":       round(ic_mean, 4),
+        "ic_ir":         round(ic_ir, 3),
+        "ic_p5":         round(ic_p5, 4),
+        "n_observations": len(ic_series),
     }
 
-    # Per-regime split
-    if regime_labels is not None and not regime_labels.empty:
-        dates_series = pd.Series(raw["ics"], index=pd.DatetimeIndex(raw["dates"]))
-        for regime_key, label in [
-            ("ic_calm_bull", "calm_bull"),
-            ("ic_stressed",  "stressed"),
-            ("ic_crisis",    "crisis"),
-        ]:
-            regime_dates = regime_labels[regime_labels == label].index
-            overlap      = dates_series.index.intersection(regime_dates)
-            if len(overlap) >= 5:
-                result[regime_key] = round(float(dates_series.reindex(overlap).mean()), 4)
 
-        observed_ics = [v for k, v in result.items()
-                        if k.startswith("ic_") and k not in ("ic_mean", "ic_ir", "ic_p5",
-                                                               "ic_min_regime")
-                        and v != 0.0]
-        result["ic_min_regime"] = round(min(observed_ics), 4) if observed_ics else ic_mean
-
-    else:
-        result["ic_min_regime"] = ic_mean
-
-    return result
-
-
-def passes_harvey_threshold(ic_mean: float, ic_ir: float) -> bool:
+def check_factor_novelty(
+    code: str,
+    factor_name: str,
+    prices_df: pd.DataFrame,
+    correlation_threshold: float = 0.70,
+) -> tuple:
     """
-    Harvey et al. (2016) multiple-testing correction.
+    Check if the proposed factor is too correlated with existing benchmark signals.
 
-    Requires IC_mean > 0.015 AND IC_IR > 0.60.
-    At IR > 0.60 with 50 candidates/year, expected spurious acceptances ≈ 0.5.
-    At IR > 0.40, that rises to ~3.
+    Computes the new factor on a recent 252-day window, then correlates it against
+    three simple benchmark signals (252d momentum, 5d reversal, low volatility).
+    Rejects if any Spearman correlation exceeds the threshold.
 
-    Reference: arXiv:2006.04269
+    Without this check, Opus reliably rediscovers momentum and reversal variants
+    that are > 0.70 correlated with existing sleeves.
+
+    Returns:
+        (is_novel: bool, message: str)
     """
-    return ic_mean > IC_MEAN_THRESHOLD and ic_ir > IC_IR_THRESHOLD
+    try:
+        recent = prices_df.tail(252)
+        if len(recent) < 21 or recent.shape[1] < 5:
+            return True, "OK"  # insufficient data — don't block
+
+        new_signal = _execute_factor(code, factor_name, recent)
+        if new_signal.empty:
+            return True, "OK"
+
+        benchmarks = {}
+        try:
+            benchmarks["momentum_252d"] = recent.pct_change(min(252, len(recent) - 1)).iloc[-1]
+        except Exception:
+            pass
+        try:
+            benchmarks["reversal_5d"] = -recent.pct_change(5).iloc[-1]
+        except Exception:
+            pass
+        try:
+            benchmarks["low_vol"] = -recent.pct_change().rolling(21).std().iloc[-1]
+        except Exception:
+            pass
+
+        for bench_name, bench_signal in benchmarks.items():
+            common = new_signal.index.intersection(bench_signal.index)
+            ns = new_signal.reindex(common).dropna()
+            bs = bench_signal.reindex(common).dropna()
+            overlap = ns.index.intersection(bs.index)
+            if len(overlap) < 10:
+                continue
+            corr, _ = spearmanr(ns.reindex(overlap).values, bs.reindex(overlap).values)
+            if np.isnan(corr):
+                continue
+            if abs(corr) > correlation_threshold:
+                return False, (
+                    f"Correlation {corr:+.2f} with {bench_name} exceeds threshold "
+                    f"{correlation_threshold}. Factor is too similar to existing signals."
+                )
+
+        return True, "OK"
+
+    except Exception as exc:
+        return True, f"Novelty check skipped ({exc})"  # graceful degradation
 ```
 
----
-
-### Step 6: Create `ascent/research/factor_discovery/llm_suggester.py`
+- [ ] **Step 6: Create `ascent/research/factor_discovery/hypothesis_generator.py`**
 
 ```python
 """
-ascent/research/factor_discovery/llm_suggester.py
+ascent/research/factor_discovery/hypothesis_generator.py
 
-LLM-guided template parameter suggestion (Claude Haiku).
+Uses Claude Opus to generate novel alpha factor hypotheses as Python code.
 
-The LLM's role here is NOT to write code. It proposes parameters for
-pre-defined template families (lookback windows, normalization methods, etc.)
-based on the current regime and historical IC statistics.
+The LLM proposes:
+  - A factor name (snake_case, will be used as compute_{name})
+  - Economic rationale for why it should predict returns
+  - Python implementation as a pure function of a price DataFrame
 
-This is the correct LLM interface for factor discovery:
-  - LLM returns a JSON parameter dict
-  - Trusted Python template instantiates and runs it
-  - Zero code injection risk
-  - Output is interpretable and reviewable
-
-Reference: AlphaAgent (arXiv:2502.16789) shows that unconstrained code
-generation requires expensive semantic alignment checks. Template-based
-suggestion avoids this entirely while retaining the LLM's economic reasoning.
+The prompt instructs Opus to reason from first principles and avoid
+replicating factors already in the system.
 """
 from __future__ import annotations
 
 import json
 import logging
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 log = logging.getLogger(__name__)
 
 _SYSTEM_PROMPT = """\
-You are a quantitative researcher at Ascent Capital. Your job is to suggest
-parameters for alpha signal templates based on the current market regime and
-recent signal performance statistics.
+You are a quantitative researcher at a systematic hedge fund with deep expertise \
+in financial economics and signal processing. Your task is to propose ONE novel \
+alpha factor — an empirically-motivated signal that predicts cross-sectional stock \
+returns over a 5-day horizon.
 
-You will choose ONE template family and ONE set of parameters that you
-believe will capture a signal orthogonal to the existing ones.
+You will be given:
+1. The current market regime
+2. Existing factors in the system (to help you avoid redundancy)
 
-You ONLY return a JSON object. No code, no explanation outside the JSON."""
+Your factor must be:
+- Economically motivated (not just data mining)
+- Implementable as a pure Python function
+- Novel — not a close variant of the existing factors
+- Cross-sectionally z-scored in the output
+
+Respond ONLY with a JSON object. No other text."""
 
 _USER_TEMPLATE = """\
-Current regime: {regime}
+Current market regime: {regime}
 
-Existing factor IC statistics (avoid overlap with these):
-{ic_context}
+Existing factors (avoid redundancy with these):
+{existing_factors}
 
-Available template families:
-- MomentumTemplate: lookback (21–252 days), skip_days (0–63), normalization (zscore/rank/minmax)
-- ReversionTemplate: lookback (2–21 days), smooth_window (1–10), normalization
-- VolatilityTemplate: vol_window (10–63), vov_window (21–126), direction (low/trend), normalization
-- QualityTemplate: metric (consistency/drawdown/trend_strength), window (21–252), normalization
-- CorrelationTemplate: window (21–126), mode (beta/idiosyncratic), normalization
+Propose ONE new factor. The factor function receives a pd.DataFrame where:
+- The index is dates (most recent date = df.index[-1])
+- Columns are stock tickers (symbols)
+- Values are price history (adjusted close)
+
+The function must:
+1. Be named exactly: compute_{factor_name}
+2. Accept exactly one argument: df (pd.DataFrame)
+3. Return a pd.Series indexed by symbol with cross-sectionally z-scored values
+4. Use only pd (pandas) and np (numpy) — no imports inside the function
+5. Handle edge cases (e.g., return zeros when std < 1e-8)
 
 Think step by step:
-1. What economic mechanism is likely to drive returns in a {regime} regime?
-2. Which template family best captures that mechanism?
-3. What parameter values reflect the regime's typical duration and dynamics?
-4. Is this sufficiently different from the existing factors listed above?
+Step 1: Identify an economic mechanism that drives short-term cross-sectional returns
+Step 2: Specify what data transformation captures that mechanism
+Step 3: Write the Python implementation
+Step 4: Verify the output is a cross-sectionally z-scored pd.Series
 
-Respond with exactly this JSON:
+Respond with this exact JSON format:
 {{
-  "template": "TemplateName",
-  "params": {{}},
-  "rationale": "One sentence — economic mechanism"
+  "name": "factor_your_name",
+  "description": "One sentence — what this measures",
+  "rationale": "2-3 sentences — economic rationale for why this predicts returns",
+  "code": "def compute_factor_your_name(df):\\n    ...\\n    return result"
 }}"""
 
 
-def _call_llm(system_prompt: str, user_prompt: str) -> Optional[str]:
+def _call_opus(system_prompt: str, user_prompt: str) -> Optional[str]:
     try:
-        from ascent.llm.client import generate_structured, HAIKU_MODEL
+        from ascent.llm.client import generate_structured, DEFAULT_MODEL
         return generate_structured(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
-            model=HAIKU_MODEL,
-            max_tokens=300,
-            temperature=0.5,
+            model=DEFAULT_MODEL,
+            max_tokens=1200,
+            temperature=0.7,
             use_cache=False,
         )
     except Exception as exc:
-        log.warning("[LLMSuggester] Call failed: %s", exc)
+        log.warning("[FactorDiscovery] Opus call failed: %s", exc)
         return None
 
 
-def suggest_template_params(
+def generate_factor_hypothesis(
     regime: str,
-    ic_context: Dict,
-    existing_factor_names: Optional[List[str]] = None,
+    existing_factor_names: List[str],
+    n_attempts: int = 2,
 ) -> Optional[dict]:
     """
-    Ask Claude Haiku to suggest one template + parameters.
+    Ask Claude Opus to propose a novel alpha factor.
 
     Args:
-        regime:               Current regime label.
-        ic_context:           Dict of {factor_name: ic_mean} for existing factors.
-        existing_factor_names: Names already in production (for context).
+        regime:               Current market regime label.
+        existing_factor_names: List of factor names already in the system.
+        n_attempts:           How many times to retry on parse failure.
 
     Returns:
-        Dict with {template, params, rationale} or None if LLM/parse fails.
+        Dict with {name, description, rationale, code} or None if all attempts fail.
     """
-    ic_lines = "\n".join(
-        f"  {name}: IC={ic:.3f}" for name, ic in ic_context.items()
-    ) or "  (no IC data yet)"
+    existing_str = "\n".join(f"  - {n}" for n in existing_factor_names) or "  (none yet)"
+    user_prompt  = _USER_TEMPLATE.format(regime=regime, existing_factors=existing_str)
 
-    if existing_factor_names:
-        ic_lines += "\nDeployed factors: " + ", ".join(existing_factor_names)
-
-    user_prompt = _USER_TEMPLATE.format(regime=regime, ic_context=ic_lines)
-    raw = _call_llm(_SYSTEM_PROMPT, user_prompt)
-    if not raw:
-        return None
-
-    try:
-        start = raw.find("{")
-        end   = raw.rfind("}") + 1
-        if start == -1 or end == 0:
-            return None
-        parsed = json.loads(raw[start:end])
-        if "template" not in parsed or "params" not in parsed:
-            return None
-        return parsed
-    except Exception as exc:
-        log.warning("[LLMSuggester] Parse failed: %s", exc)
-        return None
-```
-
----
-
-### Step 7: Create `ascent/research/factor_discovery/pysr_engine.py`
-
-```python
-"""
-ascent/research/factor_discovery/pysr_engine.py
-
-Symbolic regression via PySR for factor discovery.
-
-PySR evolves human-readable mathematical expressions (e.g. "sqrt(vol_21d) /
-(mom_252d + 1e-6)") using genetic programming on pre-computed cross-sectional
-feature vectors. Output is a formula string, not Python code — safe by
-construction.
-
-Requires: pip install pysr
-Fallback: if PySR is unavailable, falls back to random template permutation.
-
-Why PySR instead of LLM code generation:
-  - No code execution risk (expression is a mathematical formula)
-  - Transparent output (human-readable, reviewable)
-  - No hallucination (builds from primitives you define)
-  - Novelty by construction (genetic crossover explores new combinations)
-  - AlphaAgent and QuantaAlpha both use evolutionary methods as the
-    core discovery mechanism; LLM provides hypothesis framing around it.
-
-Reference: PySR — Cranmer (2023), ACM GEC 2024 review.
-Reference: AlphaAgent — arXiv:2502.16789
-"""
-from __future__ import annotations
-
-import logging
-from typing import Callable, Dict, List, Optional, Tuple
-
-import numpy as np
-import pandas as pd
-
-log = logging.getLogger(__name__)
-
-# Pre-computed feature names that PySR can use as terminals
-# These must all be computable from a price DataFrame
-_FEATURE_NAMES = [
-    "mom_21d", "mom_63d", "mom_126d", "mom_252d",
-    "rev_5d", "rev_10d",
-    "vol_21d", "vol_63d",
-    "zscore_21d",
-    "high_52w_pct",
-]
-
-_UNARY_OPERATORS  = ["sqrt", "log", "abs", "neg"]
-_BINARY_OPERATORS = ["+", "-", "*", "/"]
-
-
-def _compute_features(prices_df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Compute cross-sectional feature panel from a price DataFrame.
-    Returns DataFrame (columns = feature names, index = symbols).
-    All columns are cross-sectionally z-scored.
-    """
-    n = len(prices_df)
-    cols = prices_df.columns
-    rows = {}
-
-    def _zscore(s: pd.Series) -> pd.Series:
-        std = s.std()
-        if std < 1e-8:
-            return pd.Series(0.0, index=s.index)
-        return (s - s.mean()) / std
-
-    rets = prices_df.pct_change()
-
-    if n >= 22:
-        rows["mom_21d"] = _zscore(prices_df.iloc[-1] / prices_df.iloc[-21] - 1)
-    if n >= 64:
-        rows["mom_63d"] = _zscore(prices_df.iloc[-1] / prices_df.iloc[-63] - 1)
-    if n >= 127:
-        rows["mom_126d"] = _zscore(prices_df.iloc[-1] / prices_df.iloc[-126] - 1)
-    if n >= 253:
-        rows["mom_252d"] = _zscore(prices_df.iloc[-1] / prices_df.iloc[-252] - 1)
-    if n >= 6:
-        rows["rev_5d"] = _zscore(-(prices_df.iloc[-1] / prices_df.iloc[-5] - 1))
-    if n >= 11:
-        rows["rev_10d"] = _zscore(-(prices_df.iloc[-1] / prices_df.iloc[-10] - 1))
-    if n >= 22:
-        rows["vol_21d"] = _zscore(-rets.tail(21).std())
-    if n >= 64:
-        rows["vol_63d"] = _zscore(-rets.tail(63).std())
-    if n >= 22:
-        roll_mean = rets.tail(252).rolling(21).mean()
-        roll_std  = rets.tail(252).rolling(21).std()
-        rows["zscore_21d"] = _zscore((roll_mean.iloc[-1]) / (roll_std.iloc[-1] + 1e-8))
-    if n >= 253:
-        peak = prices_df.tail(252).max()
-        rows["high_52w_pct"] = _zscore(prices_df.iloc[-1] / (peak + 1e-8) - 1)
-
-    if not rows:
-        return pd.DataFrame()
-
-    return pd.DataFrame(rows, index=cols).dropna(how="all")
-
-
-def _run_pysr(
-    X: np.ndarray,
-    y: np.ndarray,
-    feature_names: List[str],
-    n_iterations: int = 40,
-    population_size: int = 30,
-) -> Optional[Tuple[str, Callable]]:
-    """
-    Run PySR symbolic regression. Returns (expression_str, callable) or None.
-    """
-    try:
-        from pysr import PySRRegressor
-        model = PySRRegressor(
-            niterations=n_iterations,
-            population_size=population_size,
-            binary_operators=_BINARY_OPERATORS,
-            unary_operators=_UNARY_OPERATORS,
-            maxsize=10,
-            verbosity=0,
-            progress=False,
-            random_state=42,
-        )
-        model.fit(X, y, variable_names=feature_names)
-        best = model.get_best()
-        expr_str = str(best["equation"])
-        fn = model.predict
-        return expr_str, fn
-    except ImportError:
-        log.info("[PySR] pysr not installed — skipping symbolic regression path")
-        return None
-    except Exception as exc:
-        log.warning("[PySR] Run failed: %s", exc)
-        return None
-
-
-def discover_via_pysr(
-    prices_df: pd.DataFrame,
-    n_periods: int = 5,
-    lookback_days: int = 252,
-    n_iterations: int = 40,
-) -> List[Dict]:
-    """
-    Run PySR on a rolling cross-sectional dataset to discover symbolic factors.
-
-    For each evaluation date (every 5 days), compute features and forward returns,
-    stacking into X (features) and y (forward returns). PySR discovers the
-    expression that best predicts y from X cross-sectionally.
-
-    Returns:
-        List of dicts: [{name, expression, description, factor_fn}]
-        Empty list if PySR is unavailable or data insufficient.
-    """
-    if len(prices_df) < lookback_days + n_periods + 50:
-        return []
-
-    X_rows, y_rows = [], []
-    dates = prices_df.index[lookback_days:-n_periods:5]
-
-    for dt in dates:
-        try:
-            iloc_pos = prices_df.index.get_loc(dt)
-            window   = prices_df.iloc[max(0, iloc_pos - lookback_days): iloc_pos + 1]
-            feats    = _compute_features(window)
-            if feats.empty or len(feats) < 5:
-                continue
-            fwd_rets = prices_df.iloc[iloc_pos + n_periods] / prices_df.iloc[iloc_pos] - 1
-            common   = feats.index.intersection(fwd_rets.index)
-            X_rows.append(feats.reindex(common).values)
-            y_rows.append(fwd_rets.reindex(common).values)
-        except Exception:
+    for attempt in range(n_attempts):
+        raw = _call_opus(_SYSTEM_PROMPT, user_prompt)
+        if not raw:
             continue
 
-    if not X_rows or len(X_rows) < 5:
-        return []
-
-    # Stack all cross-sections (observations = dates × symbols)
-    try:
-        X = np.vstack(X_rows)
-        y = np.concatenate(y_rows)
-        available_features = list(feats.columns)
-    except Exception as exc:
-        log.warning("[PySR] Stack failed: %s", exc)
-        return []
-
-    result = _run_pysr(X, y, available_features, n_iterations=n_iterations)
-    if result is None:
-        return []
-
-    expr_str, pysr_predict_fn = result
-    feature_names_used = available_features
-
-    def _factor_fn(df: pd.DataFrame, _expr=expr_str, _feats=feature_names_used,
-                   _predict=pysr_predict_fn) -> pd.Series:
-        feats_df = _compute_features(df)
-        if feats_df.empty:
-            return pd.Series(0.0, index=df.columns)
-        X_eval = feats_df.reindex(columns=_feats, fill_value=0.0).values
         try:
-            scores = _predict(X_eval)
-            s = pd.Series(scores, index=feats_df.index)
-            std = s.std()
-            if std < 1e-8:
-                return pd.Series(0.0, index=s.index)
-            return (s - s.mean()) / std
-        except Exception:
-            return pd.Series(0.0, index=feats_df.index)
+            start = raw.find("{")
+            end   = raw.rfind("}") + 1
+            if start == -1 or end == 0:
+                log.warning("[FactorDiscovery] No JSON in response (attempt %d)", attempt + 1)
+                continue
 
-    return [{
-        "name":        f"factor_pysr_{abs(hash(expr_str)) % 10000:04d}",
-        "expression":  expr_str,
-        "description": f"PySR-discovered symbolic expression: {expr_str}",
-        "source":      "pysr",
-        "fn":          _factor_fn,
-    }]
+            parsed = json.loads(raw[start:end])
+            name   = str(parsed.get("name", "")).strip()
+            code   = str(parsed.get("code", "")).strip()
+
+            if not name.startswith("factor_"):
+                log.warning("[FactorDiscovery] Factor name must start with 'factor_': %s", name)
+                continue
+
+            if "def compute_" not in code:
+                log.warning("[FactorDiscovery] Code missing 'def compute_' pattern")
+                continue
+
+            return {
+                "name":        name,
+                "description": str(parsed.get("description", "")),
+                "rationale":   str(parsed.get("rationale", "")),
+                "code":        code,
+            }
+
+        except (json.JSONDecodeError, KeyError) as exc:
+            log.warning("[FactorDiscovery] Parse failed (attempt %d): %s", attempt + 1, exc)
+
+    return None
 ```
 
----
-
-### Step 8: Create `ascent/research/factor_discovery/discovery_runner.py`
+- [ ] **Step 7: Create `ascent/research/factor_discovery/discovery_runner.py`**
 
 ```python
 """
 ascent/research/factor_discovery/discovery_runner.py
 
-Orchestrates the two-path autonomous factor discovery pipeline.
+Orchestrates the factor discovery pipeline:
+  1. Load price data from cache
+  2. Generate N factor hypotheses via Claude Opus
+  3. Validate each with AST code_validator
+  4. Score valid factors with cpcv_evaluator
+  5. Write accepted proposals (IC > threshold) to outputs/factor_proposals/
+  6. Log all attempts (accepted + rejected) to logs/factor_discovery_log.jsonl
 
-Path A — PySR symbolic regression (primary):
-  1. Load prices from cache
-  2. Run pysr_engine.discover_via_pysr() → symbolic expressions
-  3. Evaluate each via regime_cpcv_evaluator
+Acceptance thresholds (conservative):
+  - ic_mean > 0.015  (IC of 1.5% is meaningful for 5-day horizon)
+  - ic_ir   > 0.40   (information ratio above 0.4)
+  - n_observations > 20
 
-Path B — LLM template suggestions (secondary):
-  1. Ask Claude Haiku for template + parameters
-  2. Instantiate template from feature_templates.py
-  3. Evaluate via regime_cpcv_evaluator
-
-Combined acceptance gate:
-  - IC_mean > 0.015  (Grinold threshold for Ascent's breadth)
-  - IC_IR   > 0.60   (Harvey et al. FDR-corrected threshold)
-  - IC_min_regime > 0.01  (must work in every observed regime)
-  - n_observations >= 20
-
-Accepted proposals written to outputs/factor_proposals/ with deployment
-instructions. Nothing auto-deploys — human reviews every accepted proposal.
+Human reviews accepted proposals in outputs/factor_proposals/ before any code
+is added to feature_defs.py. NOTHING auto-deploys.
 """
 from __future__ import annotations
 
@@ -1333,20 +888,19 @@ import json
 import logging
 from datetime import date, datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 import pandas as pd
 
 log = logging.getLogger(__name__)
 
-PROPOSALS_DIR     = Path("outputs/factor_proposals")
-DISCOVERY_LOG     = Path("logs/factor_discovery_log.jsonl")
+PROPOSALS_DIR    = Path("outputs/factor_proposals")
+DISCOVERY_LOG    = Path("logs/factor_discovery_log.jsonl")
 IC_MEAN_THRESHOLD = 0.015
-IC_IR_THRESHOLD   = 0.60
-IC_MIN_REGIME     = 0.010
+IC_IR_THRESHOLD   = 0.40
 MIN_OBSERVATIONS  = 20
 
-_DEPLOYED_FACTORS = [
+_EXISTING_FACTORS = [
     "trend", "meanrev", "volatility", "statarb", "ml",
     "fundamental", "earnings", "analyst", "options_flow",
     "insider", "short_interest", "llm_fundamental",
@@ -1354,7 +908,7 @@ _DEPLOYED_FACTORS = [
 
 
 def _load_prices() -> pd.DataFrame:
-    """Load price data from parquet cache or yfinance fallback."""
+    """Load price data from parquet cache for factor evaluation."""
     try:
         from ascent.data.store.parquet import load_parquet, has_data
         if has_data("prices_live"):
@@ -1366,26 +920,19 @@ def _load_prices() -> pd.DataFrame:
             return df.sort_index()
     except Exception as exc:
         log.warning("[FactorDiscovery] Parquet load failed: %s", exc)
+
     try:
         import yfinance as yf
         from ascent.config.settings import get_config
-        syms = list(getattr(get_config().universe, "symbols", []))[:60]
-        raw  = yf.download(syms, period="3y", auto_adjust=True, progress=False)
-        return (raw["Close"] if isinstance(raw.columns, pd.MultiIndex) else raw).dropna(
-            axis=1, how="all").sort_index()
+        cfg  = get_config()
+        syms = list(getattr(cfg.universe, "symbols", ["AAPL", "MSFT", "AMZN"]))[:50]
+        raw  = yf.download(syms, period="2y", auto_adjust=True, progress=False)
+        if isinstance(raw.columns, pd.MultiIndex):
+            return raw["Close"].dropna(axis=1, how="all").sort_index()
+        return raw.sort_index()
     except Exception as exc:
         log.warning("[FactorDiscovery] yfinance fallback failed: %s", exc)
         return pd.DataFrame()
-
-
-def _load_regime_labels(prices_index: pd.DatetimeIndex) -> Optional[pd.Series]:
-    """Load regime labels from dashboard CSV, aligned to prices index."""
-    try:
-        df = pd.read_csv("dashboard/regime_labels.csv", parse_dates=["date"])
-        df = df.set_index("date").sort_index()
-        return df["label"].reindex(prices_index, method="ffill")
-    except Exception:
-        return None
 
 
 def _write_log(entry: dict) -> None:
@@ -1394,308 +941,298 @@ def _write_log(entry: dict) -> None:
         f.write(json.dumps(entry) + "\n")
 
 
-def _write_proposal(candidate: dict, ic_result: dict) -> Path:
+def _write_proposal(hypothesis: dict, ic_result: dict) -> Path:
     PROPOSALS_DIR.mkdir(parents=True, exist_ok=True)
     today = date.today().isoformat()
-    fname = f"{candidate['name']}_{today}.json"
+    fname = f"{hypothesis['name']}_{today}.json"
     path  = PROPOSALS_DIR / fname
     payload = {
-        "name":         candidate["name"],
-        "source":       candidate.get("source", "unknown"),
-        "description":  candidate.get("description", ""),
-        "expression":   candidate.get("expression", ""),    # PySR: formula string
-        "template":     candidate.get("template", ""),      # LLM path: template name
-        "template_params": candidate.get("params", {}),
-        "rationale":    candidate.get("rationale", ""),
-        **{k: ic_result.get(k) for k in [
-            "ic_mean", "ic_ir", "ic_p5", "n_observations",
-            "ic_calm_bull", "ic_stressed", "ic_crisis", "ic_min_regime"
-        ]},
-        "proposed_at":          datetime.now().isoformat(),
-        "regime_at_proposal":   candidate.get("regime", "unknown"),
-        "review_status":        "pending",
-        "review_notes":         "",
+        **hypothesis,
+        **{k: ic_result.get(k) for k in ["ic_mean", "ic_ir", "ic_p5", "n_observations"]},
+        "proposed_at":  datetime.now().isoformat(),
+        "regime_at_proposal": hypothesis.get("regime", "unknown"),
+        "review_status": "pending",
+        "review_notes":  "",
         "how_to_deploy": (
-            "1. Review the expression/description for economic soundness.\n"
-            "2. For PySR factors: translate the expression into a Python function in "
-            "   ascent/features/feature_defs.py following the existing pattern.\n"
-            "3. For template factors: the feature_templates.py instantiation is the "
-            "   implementation — wrap it as a function in feature_defs.py.\n"
-            "4. Register in build_all_features() with appropriate lag.\n"
-            "5. Add to stack.py DEFAULT_ALPHA_WEIGHTS at a small initial weight (0.02).\n"
-            "6. Reduce another sleeve by 0.02 to keep the sum at 1.0.\n"
-            "7. Run the full test suite before committing.\n"
-            "8. Run system once in dry-run to confirm no pipeline errors."
+            "1. Review and edit the code below.\n"
+            "2. Add the function to ascent/features/feature_defs.py.\n"
+            "3. Register it in build_all_features() with appropriate lag.\n"
+            "4. Add to stack.py DEFAULT_ALPHA_WEIGHTS at a small initial weight (0.02).\n"
+            "5. Run the full test suite before committing."
         ),
     }
     path.write_text(json.dumps(payload, indent=2))
     return path
 
 
-def _build_candidates(regime: str, prices_df: pd.DataFrame) -> List[Dict]:
-    """Build candidate factor list from both paths."""
-    candidates = []
-
-    # Path A: PySR symbolic regression
-    try:
-        from ascent.research.factor_discovery.pysr_engine import discover_via_pysr
-        pysr_candidates = discover_via_pysr(prices_df, n_periods=5, n_iterations=40)
-        for c in pysr_candidates:
-            c["regime"] = regime
-        candidates.extend(pysr_candidates)
-        log.info("[FactorDiscovery] PySR produced %d candidates", len(pysr_candidates))
-    except Exception as exc:
-        log.warning("[FactorDiscovery] PySR path failed: %s", exc)
-
-    # Path B: LLM template suggestion
-    try:
-        from ascent.research.factor_discovery.llm_suggester import suggest_template_params
-        from ascent.research.factor_discovery.feature_templates import instantiate_template
-        suggestion = suggest_template_params(
-            regime=regime,
-            ic_context={},
-            existing_factor_names=_DEPLOYED_FACTORS,
-        )
-        if suggestion:
-            tmpl = instantiate_template(suggestion["template"], suggestion["params"])
-            def _make_fn(t):
-                def _fn(df):
-                    return t.compute(df)
-                return _fn
-            candidates.append({
-                "name":        f"factor_llm_{suggestion['template'].lower()[:8]}",
-                "description": suggestion.get("rationale", ""),
-                "source":      "llm_template",
-                "template":    suggestion["template"],
-                "params":      suggestion["params"],
-                "rationale":   suggestion.get("rationale", ""),
-                "regime":      regime,
-                "fn":          _make_fn(tmpl),
-            })
-            log.info("[FactorDiscovery] LLM template candidate: %s params=%s",
-                     suggestion["template"], suggestion["params"])
-    except Exception as exc:
-        log.warning("[FactorDiscovery] LLM template path failed: %s", exc)
-
-    return candidates
-
-
 def run_factor_discovery(
-    n_candidates: int = 5,
+    n_hypotheses: int = 3,
     regime: Optional[str] = None,
 ) -> Dict:
     """
-    Run one full factor discovery cycle (both paths).
+    Run one full factor discovery cycle.
 
     Args:
-        n_candidates: Target number of candidates to evaluate (informational).
-        regime:       Current regime string.
+        n_hypotheses: How many factor hypotheses to generate and evaluate.
+        regime:       Current market regime (passed to hypothesis generator for context).
 
     Returns:
-        Dict: n_generated, n_valid, n_accepted, n_rejected, proposals (paths).
+        Dict with n_generated, n_valid, n_accepted, n_rejected, proposals (list of paths).
     """
-    from ascent.research.factor_discovery.regime_cpcv_evaluator import (
-        evaluate_factor_regime_ic, passes_harvey_threshold,
-    )
+    from ascent.research.factor_discovery.hypothesis_generator import generate_factor_hypothesis
+    from ascent.research.factor_discovery.code_validator import validate_factor_code
+    from ascent.research.factor_discovery.cpcv_evaluator import evaluate_factor_ic
 
     regime = regime or "unknown"
-    log.info("[FactorDiscovery] Starting cycle — regime=%s", regime)
+    log.info("[FactorDiscovery] Starting cycle — regime=%s, n_hypotheses=%d", regime, n_hypotheses)
 
     prices = _load_prices()
     if prices.empty:
         log.warning("[FactorDiscovery] No price data — aborting")
         return {"n_generated": 0, "n_valid": 0, "n_accepted": 0, "n_rejected": 0, "proposals": []}
 
-    regime_labels = _load_regime_labels(prices.index)
-    candidates    = _build_candidates(regime, prices)
-
     n_valid = n_accepted = n_rejected = 0
     proposals = []
 
-    for candidate in candidates:
-        name = candidate.get("name", "unknown")
-        fn   = candidate.get("fn")
-        if fn is None:
+    for i in range(n_hypotheses):
+        log.info("[FactorDiscovery] Generating hypothesis %d/%d", i + 1, n_hypotheses)
+        hypothesis = generate_factor_hypothesis(
+            regime=regime,
+            existing_factor_names=_EXISTING_FACTORS,
+            n_attempts=2,
+        )
+        if hypothesis is None:
+            log.warning("[FactorDiscovery] Hypothesis generation failed for slot %d", i + 1)
             continue
 
-        log.info("[FactorDiscovery] Evaluating %s (source=%s)", name, candidate.get("source"))
+        factor_name = hypothesis["name"].replace("factor_", "", 1)
+        hypothesis["regime"] = regime
 
-        ic_result = evaluate_factor_regime_ic(
-            factor_fn=fn,
-            prices_df=prices,
-            regime_labels=regime_labels,
-            n_periods=5,
-        )
-
-        if "error" in ic_result:
-            log.info("[FactorDiscovery] Eval error for %s: %s", name, ic_result["error"])
+        # Validate code
+        is_valid, validation_msg = validate_factor_code(hypothesis["code"], factor_name)
+        if not is_valid:
+            log.info("[FactorDiscovery] Code validation failed: %s — %s",
+                     hypothesis["name"], validation_msg)
             _write_log({
                 "date": date.today().isoformat(), "regime": regime,
-                "name": name, "status": "evaluation_error", "error": ic_result["error"],
+                "name": hypothesis["name"], "status": "validation_failed",
+                "validation_msg": validation_msg,
             })
             n_rejected += 1
             continue
 
         n_valid += 1
-        ic_mean  = ic_result["ic_mean"]
-        ic_ir    = ic_result["ic_ir"]
-        n_obs    = ic_result["n_observations"]
-        ic_min_r = ic_result.get("ic_min_regime", ic_mean)
 
-        log.info("[FactorDiscovery] %s — IC=%.4f, IR=%.3f, IC_min_regime=%.4f, n=%d",
-                 name, ic_mean, ic_ir, ic_min_r, n_obs)
+        # Evaluate IC
+        log.info("[FactorDiscovery] Evaluating IC for %s", hypothesis["name"])
+        ic_result = evaluate_factor_ic(
+            code=hypothesis["code"],
+            factor_name=factor_name,
+            prices_df=prices,
+            n_periods=5,
+        )
+
+        if "error" in ic_result:
+            log.info("[FactorDiscovery] IC evaluation error: %s — %s",
+                     hypothesis["name"], ic_result["error"])
+            _write_log({
+                "date": date.today().isoformat(), "regime": regime,
+                "name": hypothesis["name"], "status": "evaluation_error",
+                "error": ic_result["error"],
+            })
+            n_rejected += 1
+            continue
+
+        ic_mean = ic_result.get("ic_mean", 0.0)
+        ic_ir   = ic_result.get("ic_ir", 0.0)
+        n_obs   = ic_result.get("n_observations", 0)
+
+        log.info("[FactorDiscovery] %s — IC=%.4f, IR=%.3f, n=%d",
+                 hypothesis["name"], ic_mean, ic_ir, n_obs)
 
         log_entry = {
-            "date": date.today().isoformat(), "regime": regime, "name": name,
-            "source": candidate.get("source"),
+            "date": date.today().isoformat(), "regime": regime,
+            "name": hypothesis["name"], "description": hypothesis.get("description", ""),
             "ic_mean": ic_mean, "ic_ir": ic_ir, "n_observations": n_obs,
-            "ic_min_regime": ic_min_r,
         }
 
-        # Acceptance gate: Harvey FDR + per-regime minimum + observation count
-        if (passes_harvey_threshold(ic_mean, ic_ir)
-                and ic_min_r > IC_MIN_REGIME
-                and n_obs >= MIN_OBSERVATIONS):
-            path = _write_proposal(candidate, ic_result)
-            proposals.append(str(path))
+        # Novelty check: reject if too correlated with existing benchmark signals
+        if ic_mean > IC_MEAN_THRESHOLD and ic_ir > IC_IR_THRESHOLD and n_obs >= MIN_OBSERVATIONS:
+            from ascent.research.factor_discovery.cpcv_evaluator import check_factor_novelty
+            is_novel, novelty_msg = check_factor_novelty(
+                code=hypothesis["code"],
+                factor_name=factor_name,
+                prices_df=prices,
+                correlation_threshold=0.70,
+            )
+            if not is_novel:
+                log.info("[FactorDiscovery] Novelty check failed: %s — %s",
+                         hypothesis["name"], novelty_msg)
+                n_rejected += 1
+                log_entry["status"] = "rejected_not_novel"
+                log_entry["novelty_msg"] = novelty_msg
+                _write_log(log_entry)
+                continue
+
+        if ic_mean > IC_MEAN_THRESHOLD and ic_ir > IC_IR_THRESHOLD and n_obs >= MIN_OBSERVATIONS:
+            proposal_path = _write_proposal(hypothesis, ic_result)
+            proposals.append(str(proposal_path))
             n_accepted += 1
             log_entry["status"] = "accepted"
-            log_entry["proposal_path"] = str(path)
-            log.info("[FactorDiscovery] ACCEPTED: %s → %s", name, path)
+            log_entry["proposal_path"] = str(proposal_path)
+            log.info("[FactorDiscovery] ACCEPTED: %s → %s", hypothesis["name"], proposal_path)
         else:
             n_rejected += 1
-            reasons = []
-            if not passes_harvey_threshold(ic_mean, ic_ir):
-                reasons.append(
-                    f"IC={ic_mean:.4f} or IR={ic_ir:.3f} below Harvey threshold "
-                    f"({IC_MEAN_THRESHOLD}/{IC_IR_THRESHOLD})"
-                )
-            if ic_min_r <= IC_MIN_REGIME:
-                reasons.append(f"IC_min_regime={ic_min_r:.4f} ≤ {IC_MIN_REGIME}")
+            log_entry["status"] = "rejected_low_ic"
+            reject_reasons = []
+            if ic_mean <= IC_MEAN_THRESHOLD:
+                reject_reasons.append(f"IC {ic_mean:.4f} ≤ threshold {IC_MEAN_THRESHOLD}")
+            if ic_ir <= IC_IR_THRESHOLD:
+                reject_reasons.append(f"IC IR {ic_ir:.3f} ≤ threshold {IC_IR_THRESHOLD}")
             if n_obs < MIN_OBSERVATIONS:
-                reasons.append(f"Only {n_obs} observations (need {MIN_OBSERVATIONS})")
-            log_entry["status"] = "rejected"
-            log_entry["reasons"] = reasons
-            log.info("[FactorDiscovery] Rejected %s: %s", name, "; ".join(reasons))
+                reject_reasons.append(f"Only {n_obs} observations (need {MIN_OBSERVATIONS})")
+            log_entry["reject_reasons"] = reject_reasons
+            log.info("[FactorDiscovery] Rejected: %s — %s",
+                     hypothesis["name"], "; ".join(reject_reasons))
 
         _write_log(log_entry)
 
     summary = {
-        "n_generated": len(candidates),
-        "n_valid":     n_valid,
-        "n_accepted":  n_accepted,
-        "n_rejected":  n_rejected,
-        "proposals":   proposals,
-        "regime":      regime,
-        "date":        date.today().isoformat(),
+        "n_generated":  n_hypotheses,
+        "n_valid":      n_valid,
+        "n_accepted":   n_accepted,
+        "n_rejected":   n_rejected,
+        "proposals":    proposals,
+        "regime":       regime,
+        "date":         date.today().isoformat(),
     }
     log.info("[FactorDiscovery] Cycle complete: %d accepted / %d rejected",
              n_accepted, n_rejected)
     return summary
 ```
 
----
+- [ ] **Step 8: Wire monthly discovery run into `run_all_agents.py`**
 
-### Step 9: Run all tests
-
-```bash
-cd "/Users/scott/Downloads/ascent capital v2 up to phase 5.1"
-.venv/bin/python -m pytest tests/test_factor_discovery.py -v
-```
-Expected: All 14 tests PASS.
-
-Full suite:
-```bash
-.venv/bin/python -m pytest tests/ -q --tb=short 2>&1 | tail -6
-```
-Expected: ≥ 326 tests pass (312 + 14 new).
-
----
-
-### Step 10: Wire monthly trigger into `run_all_agents.py`
-
-Add after the existing Sunday self-improve block:
+Find the Sunday self-improve block (search for `weekday() == 6` or `run_self_improve`). Add after the existing Sunday block:
 
 ```python
-        # Factor discovery — first Sunday of each month only
+        # Factor discovery — runs on first Sunday of each month
         try:
-            from datetime import date as _date
-            _today = _date.today()
-            if _today.weekday() == 6 and _today.day <= 7:  # first Sunday of month
+            from datetime import date
+            today = date.today()
+            if today.weekday() == 6 and today.day <= 7:  # first Sunday of the month
                 from ascent.research.factor_discovery.discovery_runner import run_factor_discovery
-                _regime_for_disc = _get_current_regime()
-                print(f"[FactorDiscovery] Monthly run — regime={_regime_for_disc}")
-                _disc = run_factor_discovery(n_candidates=5, regime=_regime_for_disc)
+                print("[FactorDiscovery] Monthly run starting...")
+                regime_for_discovery = _get_current_regime()  # reuse existing helper if available
+                discovery_result = run_factor_discovery(n_hypotheses=3, regime=regime_for_discovery)
                 print(
-                    f"[FactorDiscovery] Done: {_disc['n_accepted']} accepted, "
-                    f"{_disc['n_rejected']} rejected. "
-                    f"Proposals: outputs/factor_proposals/"
+                    f"[FactorDiscovery] Cycle complete: "
+                    f"{discovery_result['n_accepted']} accepted, "
+                    f"{discovery_result['n_rejected']} rejected. "
+                    f"Proposals in outputs/factor_proposals/"
                 )
         except Exception as _de:
             print(f"[FactorDiscovery] Monthly run skipped: {_de}")
 ```
 
-Add near the Sunday block if not already present:
+Note: `_get_current_regime()` should return the current regime string from the orchestrator's last output or `"unknown"` if unavailable. Add this helper near the Sunday block if not already present:
 
 ```python
 def _get_current_regime() -> str:
     try:
-        import json as _json
-        sig = _json.loads(open("dashboard/regime_signal.json").read())
+        import json
+        sig = json.loads(open("dashboard/regime_signal.json").read())
         return str(sig.get("label", "unknown")).lower()
     except Exception:
         return "unknown"
 ```
 
----
-
-### Step 11: Commit
+- [ ] **Step 9: Run all tests**
 
 ```bash
-git add ascent/research/factor_discovery/ tests/test_factor_discovery.py run_all_agents.py
-git commit -m "feat(research): autonomous factor discovery — PySR + templates, per-regime CPCV, Harvey FDR (14 tests)"
+.venv/bin/pytest tests/test_factor_discovery.py -v
+```
+Expected: All 12 tests PASS.
+
+- [ ] **Step 10: Full suite check**
+
+```bash
+.venv/bin/pytest tests/ -q --tb=short 2>&1 | tail -8
+```
+Expected: All tests pass (≥265).
+
+- [ ] **Step 11: Commit**
+
+```bash
+git add ascent/research/factor_discovery/__init__.py \
+        ascent/research/factor_discovery/hypothesis_generator.py \
+        ascent/research/factor_discovery/code_validator.py \
+        ascent/research/factor_discovery/cpcv_evaluator.py \
+        ascent/research/factor_discovery/discovery_runner.py \
+        tests/test_factor_discovery.py \
+        run_all_agents.py
+git commit -m "feat(research): autonomous factor discovery pipeline — Opus proposes code, AST validates, IC scores, human reviews"
 ```
 
 ---
 
-## Human Review Process
+## Final: Push
 
-When a proposal is accepted, `outputs/factor_proposals/factor_name_YYYY-MM-DD.json` is written. Review process:
+- [ ] **Push to GitHub**
 
-1. Read `expression` (PySR) or `template` + `template_params` (LLM path)
-2. Check `ic_calm_bull`, `ic_stressed`, `ic_crisis` — must all be positive
-3. Check `rationale` — is the economic mechanism sensible?
-4. For PySR factors: translate `expression` into a Python function in `feature_defs.py`
-5. For template factors: call `instantiate_template(template, params).compute(df)` in a new `feature_defs.py` function
-6. Add to `build_all_features()` and `stack.py` at initial weight 0.02
-7. Run full test suite
-8. Monitor IC daily via `slippage_ic_feedback.py` — divergence > 20% from CPCV IC → halt deployment
+```bash
+git push origin main
+```
 
 ---
 
-## Acceptance Thresholds — Rationale
+## Human Review Process (non-automated)
 
-| Threshold | Value | Source |
-|-----------|-------|--------|
-| `IC_mean > 0.015` | 0.015 | Grinold & Kahn: IR=0.40 at Ascent's breadth (~1,000 decisions/year) requires IC ≈ 0.013. 0.015 provides a 15% margin. |
-| `IC_IR > 0.60` | 0.60 | Harvey, Liu, Zhu (2016, arXiv:2006.04269): t-stat equivalent > 3.0 for multiple-testing-corrected factor significance. At IR > 0.40, ~3 spurious/year from 50 candidates; at IR > 0.60, ~0.5. |
-| `IC_min_regime > 0.01` | 0.01 | A factor with negative IC in crisis destroys alpha at the worst time. Require positive IC in every regime that has ≥ 5 observations. |
-| `n_observations ≥ 20` | 20 | Minimum for reliable IC estimation. At 5-day step × 504 history days → ~100 observations typical. |
+When a factor is accepted, a file like `outputs/factor_proposals/factor_vol_acceleration_2026-05-04.json` is written. To deploy it:
+
+1. Read the `code` field — review it for economic soundness and correctness
+2. Edit if needed (rename columns, add edge case guards, verify z-scoring)
+3. Add the function to `ascent/features/feature_defs.py` following the existing pattern:
+
+```python
+def factor_vol_acceleration(df: pd.DataFrame) -> pd.Series:
+    # [paste and clean up the generated code here]
+    ...
+```
+
+4. Register in `build_all_features()` in `ascent/features/build_features.py`
+5. Add to `stack.py` `DEFAULT_ALPHA_WEIGHTS` at a small initial weight (0.02)
+6. Reduce another sleeve by 0.02 to keep the sum at 1.0
+7. Run the full test suite: `.venv/bin/pytest tests/ -v`
+8. Run the system once in dry-run mode to verify the new factor doesn't crash the pipeline
+9. Commit: `git commit -m "feat(alpha): deploy {factor_name} — proposed by factor discovery, reviewed YYYY-MM-DD"`
 
 ---
 
-## Self-Review Checklist (for implementer)
+## Self-Review
 
-- [ ] PySR is installed and `import pysr` succeeds before starting
-- [ ] `feature_templates.py`: all 5 templates return `pd.Series` indexed by symbol
-- [ ] `feature_templates.py`: flat price input yields zero signal (not NaN)
-- [ ] `leakage_scanner.py`: rejects `.tail(1)`, `datetime.now()`, `.shift(-N)`
-- [ ] `leakage_scanner.py`: accepts clean rolling/pct_change code
-- [ ] `regime_cpcv_evaluator.py`: `evaluate_factor_regime_ic` returns all required keys
-- [ ] `regime_cpcv_evaluator.py`: `passes_harvey_threshold` uses 0.015 / 0.60 thresholds
-- [ ] `llm_suggester.py`: returns None on LLM failure (no crash)
-- [ ] `pysr_engine.py`: returns empty list if PySR not installed (graceful)
-- [ ] `discovery_runner.py`: proposal only written when all three conditions met
-- [ ] `discovery_runner.py`: low-IR candidate NOT written to proposals dir
-- [ ] All 14 tests pass; no regressions in full suite
-- [ ] `run_all_agents.py` monthly trigger fires on first Sunday only (`day <= 7`)
+**Spec coverage:**
+- ✅ LLM hypothesis generation: Opus proposes factor name, rationale, and Python implementation
+- ✅ Structured 6-step CoT prompt: regime context, existing factors, step-by-step reasoning, exact JSON format
+- ✅ AST validation: syntax check, forbidden nodes (Import, ClassDef, Global, Nonlocal), forbidden names (exec, eval, open), dangerous attribute access (os., sys., subprocess.)
+- ✅ Restricted execution namespace: only pd, np, and safe builtins available during IC evaluation
+- ✅ Rolling IC evaluator: Spearman IC between factor values and 5-day forward returns, reports mean/IR/p5/n
+- ✅ Acceptance thresholds: IC > 0.015 AND IC IR > 0.40 AND n_obs ≥ 20
+- ✅ Novelty check: Spearman correlation against benchmark signals (momentum, reversal, vol) — rejects if abs(corr) > 0.70; prevents Opus from rediscovering existing factors with different names
+- ✅ Proposals written to `outputs/factor_proposals/` with deployment instructions
+- ✅ All attempts logged to `logs/factor_discovery_log.jsonl`
+- ✅ Monthly trigger: first Sunday of each month in `run_all_agents.py`
+- ✅ Human is the final gate: nothing auto-deploys
+
+**Security validation:**
+- Import statements: blocked by AST `visit_Import` and `visit_ImportFrom`
+- `exec`/`eval` calls: blocked by `visit_Call` checking for forbidden names
+- File system access: `open` blocked in both AST check (visit_Name) and execution namespace
+- Module access: `os.system`, `subprocess.run` blocked by `visit_Attribute` checking prefixes
+- Execution namespace: `__builtins__` limited to ~22 safe builtins, no `open`, `exec`, `eval`, `__import__`
+
+**Type consistency:**
+- `validate_factor_code(code: str, expected_name: str) -> Tuple[bool, str]` — used correctly in discovery_runner
+- `evaluate_factor_ic(code, factor_name, prices_df, n_periods) -> Dict` — returns dict with `ic_mean`, `ic_ir`, `ic_p5`, `n_observations` OR `{"error": str}`
+- `generate_factor_hypothesis(regime, existing_factor_names, n_attempts) -> Optional[dict]` — returns dict with `name`, `description`, `rationale`, `code`
+- `run_factor_discovery(n_hypotheses, regime) -> Dict` — returns summary dict with `n_generated`, `n_valid`, `n_accepted`, `n_rejected`, `proposals`

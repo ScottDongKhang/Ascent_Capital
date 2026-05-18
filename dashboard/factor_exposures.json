@@ -1,0 +1,15 @@
+{
+  "exposures": {
+    "beta_mkt": 0.0,
+    "beta_smb": 0.0,
+    "beta_hml": 0.0,
+    "beta_rmw": 0.0,
+    "beta_cma": 0.0,
+    "beta_umd": 0.0
+  },
+  "dominant_factor": "beta_mkt",
+  "concentration_score": 0.0,
+  "violations": [],
+  "as_of": "2026-05-17",
+  "timestamp": "2026-05-17T00:38:29.688038"
+}
