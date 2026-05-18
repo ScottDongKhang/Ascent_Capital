@@ -193,7 +193,7 @@ Gate conditions (~July 2026): `SELF_MODIFY_ENABLED = True`, ≥63 days live regi
 
 ## Execution
 
-Kill switch: SOFT_WARN 8% (log+proceed), HARD_STOP 15% (abort). Alternatives: 12%. State in `logs/kill_switch_state.json`. Large trades (> 2% NAV) → `execution/pending_approvals.json`, async wait via `threading.Event`, 30-min timeout. Almgren-Chriss cost model: blocks > 10% ADV, warns > 5% ADV. Post-fill: slippage logged to `logs/slippage_log.jsonl`.
+Kill switch: SOFT_WARN 8% (log+proceed), HARD_STOP 15% (abort). Alternatives: 12%. State in `logs/kill_switch_state.json`. Approval gate removed (paper trading — all orders submit directly). Almgren-Chriss cost model: blocks > 10% ADV, warns > 5% ADV. Post-fill: slippage logged to `logs/slippage_log.jsonl`.
 
 **Plan 5 additions (execution excellence):**
 - `twap_executor.py`: TWAP_ENABLED=False kill switch; orders > 5% ADV routed to equal-spaced child limit orders; Almgren-Chriss optimal window sizing
@@ -207,7 +207,7 @@ Config: always `get_config()`, never `Config()` directly.
 
 ## LLM clients
 
-`ascent/llm/client.py`: `DEFAULT_MODEL = "claude-opus-4-6"`, `HAIKU_MODEL = "claude-haiku-4-5-20251001"`. Lazy singleton. Retry 3× with 2s/4s backoff. All files import `HAIKU_MODEL` from here — never redefine locally.
+`ascent/llm/client.py`: `DEFAULT_MODEL = "claude-opus-4-6"`, `SONNET_MODEL = "claude-sonnet-4-6"`, `HAIKU_MODEL = "claude-haiku-4-5-20251001"`. Lazy singleton. Retry 3× with 2s/4s backoff. All files import model constants from here — never redefine locally. Debate agents and red team use `SONNET_MODEL`; AI PM uses `DEFAULT_MODEL`; classifiers use `HAIKU_MODEL`.
 
 ---
 
@@ -235,7 +235,7 @@ Streamlit interactive demo for Tony Ngo. Dark/gold aesthetic. Sidebar: regime, V
 4. Sector constraint: < 80% coverage → skip caps + warn, never collapse to single name.
 5. `walk_forward_runner.py` not a production entrypoint — retained for self_improve Phase D only.
 6. Debate is advisory only.
-7. Approval gate for orders > 2% NAV.
+7. Debate is advisory only — never writes to alpha, portfolio, or execution modules.
 
 ---
 
@@ -270,7 +270,7 @@ All audits complete through third pass. No outstanding crash risks. Pipeline run
 
 ## Build status
 
-All Plans 1–7 complete + AI PM Agent + adversarial red team + regime episodic memory. 478 tests passing, 1 skipped.
+All Plans 1–7 complete + AI PM Agent + adversarial self-play + episodic memory + calibration tracking + narrative alpha. 492 tests passing, 1 skipped.
 
 | Plan | What it adds |
 |------|--------------|
@@ -342,3 +342,12 @@ All code referenced here is committed and tested. Details in git log.
 - AI PM now reuses precomputed AgentOutputs (saves ~160s, 4 redundant pipeline runs eliminated)
 - **478 passing, 1 skipped** (13 new tests this session)
 - Non-obvious: red team uses SONNET not Opus — adversarial critique doesn't need deep reasoning, saves cost; revision pass capped at max_tool_calls=6 to prevent runaway loops
+
+### 2026-05-17 cont. (narrative alpha + calibration tracker ✅)
+- `ascent/alpha/narrative_alpha.py` — `build_narrative_alpha()` reads `llm_fundamental_cache.json`, compares current vs prior quarter via Haiku, returns z-scored shift signal; caches comparisons to `narrative_shift_cache.json`; 0% weight in alpha stack until cache matures (same pattern as alt_data)
+- `ascent/alpha/stack.py` — `narrative: 0.0` added to `DEFAULT_ALPHA_WEIGHTS`; also synced in `self_improve.py` to keep integrity tests passing
+- `ascent/strategy/calibration_tracker.py` — `log_prediction()` derives conviction level deterministically from thesis (`high`=quant override, `medium`=own rationale, `quant_agreed`=rest); `update_outcomes()` fills realized 21d returns; `get_calibration_report()` computes Spearman IC (≥0.20=Calibrated, ≥0.05=Weak, <0.05=Uncalibrated)
+- `agents/ai_pm_agent.py` — `get_narrative_shift` + `get_calibration_report` tools added (16 tools total); `_tool_propose_portfolio` now logs calibration prediction after each submission
+- `run_all_agents.py` — calibration `update_outcomes({})` added alongside regime memory update at startup
+- **492 passing, 1 skipped** (27 new tests this session total)
+- Non-obvious: calibration conviction levels are pure structural derivation (no LLM) — deterministic and fast; narrative cache key uses md5(content) so it works even without explicit date context from callers
