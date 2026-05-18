@@ -22,6 +22,23 @@ log = logging.getLogger(__name__)
 _REPO_ROOT = Path(__file__).resolve().parents[1]  # agents/ → repo root
 
 
+def _get_current_regime() -> str:
+    """Read the current regime label from dashboard/regime_signal.json. Returns 'unknown' on any failure."""
+    try:
+        p = _REPO_ROOT / "dashboard" / "regime_signal.json"
+        if not p.exists():
+            return "unknown"
+        data = json.loads(p.read_text())
+        if isinstance(data, dict):
+            return str(data.get("regime", data.get("label", "unknown")))
+        if isinstance(data, list) and data:
+            row = data[-1]
+            return str(row.get("regime", row.get("label", "unknown")))
+        return "unknown"
+    except Exception:
+        return "unknown"
+
+
 @dataclass
 class AIPMResult:
     portfolio: Dict[str, float]
@@ -504,4 +521,42 @@ def run_ai_pm(
         log.warning("[AIPMAgent] No propose_portfolio call — using fallback")
         return AIPMResult(portfolio={}, thesis={}, fallback=True)
 
-    return result_store[-1]
+    # ── Red team adversarial self-play ────────────────────────────────────────
+    initial_result = result_store[-1]
+
+    from agents.red_team_agent import run_red_team
+    regime_str = _get_current_regime()
+    critique = run_red_team(initial_result.portfolio, initial_result.thesis, regime_str)
+
+    if critique:
+        log.info(
+            "[AIPMAgent] Red team critique generated (%d chars) — giving AI PM revision pass",
+            len(critique),
+        )
+        result_store_v2: List[AIPMResult] = []
+        revision_prompt = (
+            f"A red team adversarial analyst has reviewed your portfolio submission and raised the following concerns:\n\n"
+            f"{critique}\n\n"
+            f"You may revise your portfolio in response to these concerns, or resubmit the same portfolio if you believe it is sound. "
+            f"Call propose_portfolio when ready."
+        )
+        try:
+            tool_completion(
+                system_prompt=_SYSTEM_PROMPT,
+                user_prompt=revision_prompt,
+                tools=AI_PM_TOOLS,
+                tool_executor=_make_executor(result_store_v2, precomputed),
+                model=DEFAULT_MODEL,
+                max_tokens=2000,
+                max_tool_calls=6,
+            )
+        except Exception as exc:
+            log.warning("[AIPMAgent] Revision pass failed: %s — using initial proposal", exc)
+
+        if result_store_v2:
+            log.info("[AIPMAgent] AI PM revised portfolio after red team critique")
+            return result_store_v2[-1]
+        else:
+            log.info("[AIPMAgent] AI PM did not revise — using initial proposal")
+
+    return initial_result

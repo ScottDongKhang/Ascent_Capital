@@ -50,6 +50,10 @@ def _get_client():
     return _client
 
 
+# Public alias — preferred import for external callers
+get_client = _get_client
+
+
 def _check_api_key():
     if not ANTHROPIC_API_KEY:
         raise ValueError(
