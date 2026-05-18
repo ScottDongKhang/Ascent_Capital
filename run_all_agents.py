@@ -502,7 +502,6 @@ def main():
             from ascent.data.validate.altdata_validator import run_altdata_validation
             from ascent.data.ingest.sec_filings import load_sec_signals
             from ascent.data.ingest.earnings_transcripts import load_transcript_signals
-            from ascent.data.ingest.reddit_sentiment import load_reddit_signals
             from ascent.data.ingest.google_trends import load_trends_signals
             from ascent.data.store.parquet import load_parquet as _lp_alt, has_data as _hd_alt
             import pandas as _pd_alt
@@ -511,7 +510,6 @@ def main():
             for _src_name, _loader in [
                 ("sec",         load_sec_signals),
                 ("transcripts", load_transcript_signals),
-                ("reddit",      load_reddit_signals),
                 ("trends",      load_trends_signals),
             ]:
                 try:
