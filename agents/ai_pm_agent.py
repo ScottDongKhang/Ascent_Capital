@@ -187,6 +187,11 @@ AI_PM_TOOLS = [
         },
     },
     {
+        "name": "get_calibration_report",
+        "description": "Get your own calibration report — how well your conviction levels (high/medium/quant_agreed) have predicted realized 21-day returns over recent rebalances. Use this to assess whether to trust your own high-conviction calls.",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
         "name": "propose_portfolio",
         "description": "REQUIRED: Submit your final portfolio and investment thesis. Call this to end the research loop.",
         "input_schema": {
@@ -469,10 +474,27 @@ def _tool_get_narrative_shift(inputs: dict) -> str:
         return f"Narrative shift failed for {symbol}: {exc}"
 
 
+def _tool_get_calibration_report(_: dict) -> str:
+    try:
+        from ascent.strategy.calibration_tracker import get_calibration_report
+        return get_calibration_report(n_rebalances=10)
+    except Exception as exc:
+        return f"Calibration report unavailable: {exc}"
+
+
 def _tool_propose_portfolio(inputs: dict, result_store: list) -> str:
     weights = inputs.get("weights", {})
     thesis = inputs.get("thesis", {})
     result_store.append(AIPMResult(portfolio=weights, thesis=thesis))
+
+    # Log for calibration tracking
+    try:
+        from ascent.strategy.calibration_tracker import log_prediction
+        from datetime import date as _date
+        log_prediction(str(_date.today()), weights, thesis)
+    except Exception:
+        pass  # never block
+
     return "Portfolio submitted. Research loop complete."
 
 
@@ -507,6 +529,7 @@ def _make_executor(result_store: list, precomputed: dict | None = None):
         "get_sector_concentration": lambda i: get_sector_concentration(i),
         "get_position_momentum":    lambda i: get_position_momentum(i),
         "get_narrative_shift":      _tool_get_narrative_shift,
+        "get_calibration_report":   _tool_get_calibration_report,
         "propose_portfolio":        lambda i: _tool_propose_portfolio(i, result_store),
     }
 

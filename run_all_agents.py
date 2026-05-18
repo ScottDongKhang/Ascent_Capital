@@ -239,6 +239,13 @@ def main():
     except Exception:
         pass
 
+    # Update calibration outcomes (best-effort)
+    try:
+        from ascent.strategy.calibration_tracker import update_outcomes as _update_cal
+        _update_cal({}, str(date.today()))
+    except Exception:
+        pass
+
     # ── Step 0a: Start event agent background thread (market hours, weekdays) ──
     _event_thread = None
     try:
