@@ -10,6 +10,7 @@ before proposing a new portfolio.
 from __future__ import annotations
 
 import json
+import os
 from datetime import date, datetime
 from pathlib import Path
 from typing import Optional
@@ -170,11 +171,13 @@ def update_outcomes(price_returns: dict[str, float]) -> int:
         n_updated += 1
 
     if n_updated > 0:
-        with open(EPISODE_LOG, "w") as fh:
+        tmp = EPISODE_LOG.parent / (EPISODE_LOG.name + ".tmp")
+        with open(tmp, "w") as fh:
             for row in rows:
                 if "_raw" in row:
                     fh.write(row["_raw"] + "\n")
                 else:
                     fh.write(json.dumps(row) + "\n")
+        os.replace(tmp, EPISODE_LOG)
 
     return n_updated

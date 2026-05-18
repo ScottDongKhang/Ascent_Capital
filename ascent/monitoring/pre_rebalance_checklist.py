@@ -195,7 +195,7 @@ def _check_kill_switch() -> CheckItem:
 
     try:
         state = json.loads(KILL_SWITCH_PATH.read_text())
-        if state.get("halted") or state.get("triggered"):
+        if state.get("tripped"):
             reason = state.get("reason", "unknown reason")
             return CheckItem("Kill switch", "FAIL", f"KILL SWITCH IS ACTIVE: {reason}", blocking=True)
         return CheckItem("Kill switch", "PASS", "Kill switch clear")

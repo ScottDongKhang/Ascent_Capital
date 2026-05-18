@@ -265,6 +265,8 @@ def rank_weighted(
         raw_w[raw_w < min_weight] = 0.0
         if raw_w.sum() > 0:
             raw_w = raw_w / raw_w.sum()
+            if raw_w.max() > max_weight + 1e-9:
+                raw_w = _water_fill_cap(raw_w, max_weight)
         for sym in raw_w.index:
             weights.loc[dt, sym] = raw_w[sym]
 
@@ -524,6 +526,8 @@ def sector_constrained_weighted(
         raw_w[raw_w < 0.001] = 0.0
         if raw_w.sum() > 0:
             raw_w = raw_w / raw_w.sum()
+            if raw_w.max() > max_weight + 1e-9:
+                raw_w = _water_fill_cap(raw_w, max_weight)
 
         for sym in raw_w.index:
             weights.loc[dt, sym] = raw_w[sym]

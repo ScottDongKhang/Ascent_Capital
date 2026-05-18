@@ -19,19 +19,19 @@ def validate(portfolio: Dict[str, float]) -> Tuple[bool, List[str]]:
     if not portfolio:
         return False, ["Empty portfolio"]
 
-    total = sum(portfolio.values())
-    if total <= 0:
-        return False, ["Portfolio weights sum to zero or negative"]
-    weights = {sym: w / total for sym, w in portfolio.items()}
-
     violations: List[str] = []
 
-    for sym, w in weights.items():
+    for sym, w in portfolio.items():
         if w < 0:
             violations.append(f"Negative weight for {sym}: {w:.4f}")
 
     if violations:
         return False, violations
+
+    total = sum(portfolio.values())
+    if total <= 0:
+        return False, ["Portfolio weights sum to zero or negative"]
+    weights = {sym: w / total for sym, w in portfolio.items()}
 
     for sym, w in weights.items():
         if w > MAX_POSITION:

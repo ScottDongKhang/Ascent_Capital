@@ -75,10 +75,13 @@ def _read_log() -> list:
 
 def _write_log(entries: list) -> None:
     """Rewrite the entire log file from a list of entries."""
+    import os
     CALIBRATION_LOG.parent.mkdir(parents=True, exist_ok=True)
-    with open(CALIBRATION_LOG, "w") as f:
+    tmp = CALIBRATION_LOG.parent / (CALIBRATION_LOG.name + ".tmp")
+    with open(tmp, "w") as f:
         for entry in entries:
             f.write(json.dumps(entry) + "\n")
+    os.replace(tmp, CALIBRATION_LOG)
 
 
 # ── Public API ─────────────────────────────────────────────────────────────────

@@ -841,35 +841,7 @@ def run_eod_with_weights(merged_weights: dict, run_date=None, dry_run: bool = Fa
         else:
             print(f"[EOD-Multi] Kill switch check error: {_ks_exc} — continuing")
 
-    # 6. Large-trade approval check (reuse Phase A threshold)
-    large_trades = []
-    for order in orders:
-        order_pct = order.dollar_amount / portfolio_value * 100
-        if order_pct >= LARGE_TRADE_THRESHOLD_PCT:
-            large_trades.append({
-                "symbol":     order.symbol,
-                "side":       order.side,
-                "qty":        round(order.estimated_shares, 4),
-                "notional":   round(order.dollar_amount, 2),
-                "weight_pct": round(order_pct, 2),
-            })
-
-    if large_trades and not dry_run:
-        try:
-            from ascent.execution.approval_server import write_pending_trades, wait_for_approval_async
-            print(f"[EOD-Multi] {len(large_trades)} trades exceed {LARGE_TRADE_THRESHOLD_PCT}% — requesting approval")
-            write_pending_trades(large_trades, run_date=today_str)
-            result = wait_for_approval_async(large_trades)
-            if result.status == "approved":
-                print("[EOD-Multi] Trades APPROVED — proceeding")
-            else:
-                print(f"[EOD-Multi] Trades {result.status.upper()} — aborting execution")
-                _log_multi_run(today_str, merged_weights, rebalanced=False, note=f"approval_{result.status}")
-                return
-        except ImportError:
-            print("[EOD-Multi] WARNING: approval_server not available — skipping approval gate")
-
-    # 7. Submit orders (or dry-run)
+    # 6. Submit orders (or dry-run)
     if dry_run:
         print("[EOD-Multi] DRY RUN — orders NOT submitted to Alpaca")
         _log_multi_run(today_str, merged_weights, rebalanced=True, note="dry_run")
