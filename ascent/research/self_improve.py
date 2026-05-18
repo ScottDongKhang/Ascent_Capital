@@ -48,6 +48,7 @@ DEFAULT_ALPHA_WEIGHTS = {
     "insider":         0.02,
     "short_interest":  0.02,
     "altdata":         0.00,   # zero until first source passes IC gate
+    "narrative":       0.00,   # zero until narrative cache has ≥30 days history
 }
 
 PERTURB_RANGE  = 0.10   # max +/- 10% per sleeve per variant

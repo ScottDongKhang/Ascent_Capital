@@ -27,6 +27,7 @@ DEFAULT_ALPHA_WEIGHTS = {
     "insider":         0.02,
     "short_interest":  0.02,
     "altdata":         0.00,   # zero until first source passes IC gate
+    "narrative":       0.00,   # zero until narrative cache has ≥30 days history
 }
 
 def _load_active_alpha_weights(regime: str = None) -> dict:
@@ -246,6 +247,32 @@ def build_alpha_stack(features, alpha_weights=None, regime_signal=None, agent_id
                 log.debug("[Stack] altdata sleeve returned empty — no validated sources")
         except Exception as exc:
             log.warning("[Stack] altdata sleeve failed: %s", exc)
+    # Narrative alpha — 0% weight until narrative cache has ≥30 days history
+    try:
+        from ascent.alpha.narrative_alpha import build_narrative_alpha
+        _symbols = list(features.get("mom_252d", pd.DataFrame()).columns) if "mom_252d" in features else []
+        if _symbols:
+            narr = build_narrative_alpha(_symbols)
+            if narr is not None and not narr.empty:
+                # Convert Series to DataFrame matching features shape if needed
+                if isinstance(narr, pd.Series):
+                    # Stack needs a DataFrame indexed by date×symbol; create a single-row DF
+                    if "mom_252d" in features:
+                        _idx = features["mom_252d"].index
+                        narr_df = pd.DataFrame(
+                            {sym: narr.get(sym, 0.0) for sym in narr.index},
+                            index=_idx,
+                        )
+                    else:
+                        narr_df = narr.to_frame().T
+                    alphas["narrative"] = narr_df
+                else:
+                    alphas["narrative"] = narr
+                log.info("[Stack] narrative alpha sleeve: %d symbols", len(narr))
+        else:
+            log.debug("[Stack] narrative alpha skipped — no symbols available")
+    except Exception as exc:
+        log.warning("[Stack] narrative_alpha failed: %s", exc)
     loaded = list(alphas.keys())
     skipped = [k for k in alpha_weights if k not in loaded]
     print(f"[alpha_stack] loaded={loaded}  skipped={skipped}")

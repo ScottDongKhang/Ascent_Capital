@@ -178,6 +178,15 @@ AI_PM_TOOLS = [
         },
     },
     {
+        "name": "get_narrative_shift",
+        "description": "Get the quarter-over-quarter narrative shift signal for a symbol. Returns whether the LLM fundamental thesis has improved or deteriorated since last quarter — a leading indicator of analyst revision.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"symbol": {"type": "string"}},
+            "required": ["symbol"],
+        },
+    },
+    {
         "name": "propose_portfolio",
         "description": "REQUIRED: Submit your final portfolio and investment thesis. Call this to end the research loop.",
         "input_schema": {
@@ -437,6 +446,29 @@ def _tool_get_regime_memory(inputs: dict) -> str:
         return f"Regime memory unavailable: {exc}"
 
 
+def _tool_get_narrative_shift(inputs: dict) -> str:
+    symbol = inputs.get("symbol", "").upper()
+    try:
+        from ascent.alpha.narrative_alpha import _get_symbol_analyses, _compute_shift
+        fund_cache_path = _REPO_ROOT / "data_cache" / "llm_fundamental_cache.json"
+        if not fund_cache_path.exists():
+            return f"No LLM fundamental cache found for {symbol}."
+        fund_cache = json.loads(fund_cache_path.read_text())
+        analyses = _get_symbol_analyses(symbol, fund_cache)
+        if len(analyses) < 2:
+            return f"Insufficient history for {symbol} — only {len(analyses)} quarter(s) cached."
+        current, prior = analyses[0], analyses[1]
+        shift = _compute_shift(symbol, current["analysis"], prior["analysis"])
+        direction = "improved" if shift > 0.1 else "deteriorated" if shift < -0.1 else "stable"
+        return (
+            f"Narrative shift for {symbol}: {shift:+.2f} ({direction})\n"
+            f"Current Q ({current['date']}): {current['analysis'].get('direction','?')} — {current['analysis'].get('key_trend','?')}\n"
+            f"Prior Q ({prior['date']}): {prior['analysis'].get('direction','?')} — {prior['analysis'].get('key_trend','?')}"
+        )
+    except Exception as exc:
+        return f"Narrative shift failed for {symbol}: {exc}"
+
+
 def _tool_propose_portfolio(inputs: dict, result_store: list) -> str:
     weights = inputs.get("weights", {})
     thesis = inputs.get("thesis", {})
@@ -474,6 +506,7 @@ def _make_executor(result_store: list, precomputed: dict | None = None):
         "get_var_estimate":         lambda i: get_var_estimate(i),
         "get_sector_concentration": lambda i: get_sector_concentration(i),
         "get_position_momentum":    lambda i: get_position_momentum(i),
+        "get_narrative_shift":      _tool_get_narrative_shift,
         "propose_portfolio":        lambda i: _tool_propose_portfolio(i, result_store),
     }
 
