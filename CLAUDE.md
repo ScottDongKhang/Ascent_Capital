@@ -407,3 +407,14 @@ Python 3.12.13 Homebrew, venv at `.venv/`. Use `.venv/bin/python`. API keys via 
 - calibration_tracker: pure structural conviction — no LLM. Both stack.py and self_improve.py updated.
 - Debate agents switched from Opus → Sonnet (significant cost reduction).
 - 465→492 tests (27 new this session).
+
+### 2026-05-17 (bug hunt + fixes)
+- Full system audit: alpha math, portfolio construction, AI PM, orchestrator, debate, execution, workflow.
+- **CRITICAL fix**: pre_rebalance_checklist.py was checking `state.get("halted") or state.get("triggered")` — kill_switch.py writes key `"tripped"`. Kill switch was functionally disabled at checklist level. Fixed.
+- **CRITICAL fix**: eod_runner.py multi-agent path still had approval gate (single-agent path was cleaned prior session, multi-agent missed). Removed. Paper trading now submits all orders directly.
+- **Integrity fix**: optimizer.py (rank_weighted + sector_constrained_weighted) — after _water_fill_cap, zeroing min-weight names and renormalizing could push remaining weights above max_weight cap. Added re-cap pass after renorm.
+- **Validator fix**: pm_risk_validator.py — negative weight check now runs before normalization. Mixed-sign portfolios were producing distorted position-cap violations after normalization inflated weights.
+- **Data safety fix**: regime_memory.py and calibration_tracker.py rewrote log files with open("w") (truncate-then-write). Now use tempfile + os.replace for atomic writes — data loss on crash is no longer possible.
+- Removed leftover reddit_sentiment import from run_all_agents.py altdata validation block (missed in prior revert).
+- Added 2026-05-18 to rebalance_calendar.csv — Monday is now a rebalance day.
+- 492 tests passing throughout.
