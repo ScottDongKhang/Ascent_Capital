@@ -24,6 +24,7 @@ from ascent.portfolio.optimizer import SectorDataError
 
 from agents.ai_pm_agent import run_ai_pm, AIPMResult
 from ascent.risk.pm_risk_validator import validate as validate_pm_proposal
+from memory.regime_memory import log_episode, update_outcomes
 from ascent.strategy.earned_authority import blend as authority_blend, update_authority, get_state as get_authority_state
 from ascent.strategy.thesis_formatter import format_thesis
 
@@ -231,6 +232,12 @@ def main():
     print(f"# Date:  {today}")
     print(f"# Mode:  {'DRY RUN' if dry_run else 'LIVE'}")
     print(f"{'#'*60}\n")
+
+    # Update realized outcomes for past episodes (best-effort; no-op if no data)
+    try:
+        update_outcomes({})
+    except Exception:
+        pass
 
     # ── Step 0a: Start event agent background thread (market hours, weekdays) ──
     _event_thread = None
@@ -670,6 +677,24 @@ def main():
     except Exception as exc:
         print(f"[Runner] AI PM agent failed: {exc} — using quant portfolio")
     # ────────────────────────────────────────────────────────────────────────────
+
+    # Log episode for regime-aware memory
+    try:
+        _episode_regime = _get_current_regime()
+        _episode_ai_w = None
+        try:
+            if not ai_pm_result.fallback:
+                _episode_ai_w = ai_pm_result.portfolio if ai_pm_result.portfolio else None
+        except Exception:
+            pass
+        log_episode(
+            run_date=today.isoformat(),
+            regime=_episode_regime,
+            quant_weights=merged_weights,
+            ai_weights=_episode_ai_w,
+        )
+    except Exception as _e:
+        print(f"[Memory] Episode log failed: {_e}")
 
     # ── Step 6: Write merged weights to file ──────────────────────────────────
     weights_path = Path("execution/merged_weights.json")

@@ -164,6 +164,20 @@ AI_PM_TOOLS = [
         },
     },
     {
+        "name": "get_regime_memory",
+        "description": "Query historical episodes where the market was in a similar regime. Returns realized 21-day returns from past periods in the same regime — use this to calibrate expected returns and risk before proposing.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "regime": {
+                    "type": "string",
+                    "description": "Regime label to query (e.g. 'calm_bull', 'stressed', 'crisis')",
+                }
+            },
+            "required": ["regime"],
+        },
+    },
+    {
         "name": "propose_portfolio",
         "description": "REQUIRED: Submit your final portfolio and investment thesis. Call this to end the research loop.",
         "input_schema": {
@@ -414,6 +428,15 @@ def _tool_get_factor_exposures(inputs: dict) -> str:
         return f"Factor exposure failed: {exc}"
 
 
+def _tool_get_regime_memory(inputs: dict) -> str:
+    regime = inputs.get("regime", "")
+    try:
+        from memory.regime_memory import query_episodes
+        return query_episodes(regime, n=5)
+    except Exception as exc:
+        return f"Regime memory unavailable: {exc}"
+
+
 def _tool_propose_portfolio(inputs: dict, result_store: list) -> str:
     weights = inputs.get("weights", {})
     thesis = inputs.get("thesis", {})
@@ -446,6 +469,7 @@ def _make_executor(result_store: list, precomputed: dict | None = None):
         "get_attribution_history":  _tool_get_attribution_history,
         "get_earnings_signal":      _tool_get_earnings_signal,
         "get_past_verdicts":        _tool_get_past_verdicts,
+        "get_regime_memory":        _tool_get_regime_memory,
         "get_factor_exposures":     _tool_get_factor_exposures,
         "get_var_estimate":         lambda i: get_var_estimate(i),
         "get_sector_concentration": lambda i: get_sector_concentration(i),
