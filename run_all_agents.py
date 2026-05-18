@@ -532,10 +532,36 @@ def main():
                 _alt_results = run_altdata_validation(_alt_sources, _alt_prices, _alt_regime)
                 _alt_accepted = [r["source"] for r in _alt_results if r["status"] == "accepted"]
                 print(f"[AltdataValidation] {len(_alt_accepted)} accepted: {_alt_accepted}")
+                # Auto-register sources that passed the IC gate
+                if _alt_accepted:
+                    from ascent.data.validate.altdata_validator import register_altdata_source
+                    for _src in _alt_accepted:
+                        try:
+                            register_altdata_source(_src, initial_weight=0.02)
+                            print(f"[AltdataValidation] Registered {_src} at weight=0.02")
+                        except Exception as _re:
+                            print(f"[AltdataValidation] Failed to register {_src}: {_re}")
             else:
                 print("[AltdataValidation] No cached altdata panels found — run ingest first")
     except Exception as _ae:
         print(f"[AltdataValidation] Monthly run skipped: {_ae}")
+
+    # Reddit sentiment daily ingest — builds altdata_reddit.parquet incrementally
+    try:
+        from ascent.data.ingest.reddit_sentiment import build_reddit_panel as _build_reddit
+        _reddit_syms = list(merged_weights.keys()) if merged_weights else []
+        if not _reddit_syms:
+            # Fall back to US equities universe if merged_weights not yet set
+            from ascent.config.settings import get_config as _rcfg
+            _reddit_syms = list(_rcfg().universe.symbols)[:200]
+        if _reddit_syms:
+            _reddit_panel = _build_reddit(_reddit_syms)
+            if _reddit_panel is not None and not _reddit_panel.empty:
+                print(f"[Reddit] Daily panel updated: {len(_reddit_panel)} dates × {_reddit_panel.shape[1]} symbols")
+            else:
+                print("[Reddit] Daily panel skipped (no credentials or no data)")
+    except Exception as _re:
+        print(f"[Reddit] Daily ingest skipped: {_re}")
 
     # Google Trends weekly refresh — every Sunday (rate-limited; capped at 50 symbols)
     try:

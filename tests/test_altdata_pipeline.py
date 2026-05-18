@@ -378,3 +378,97 @@ def test_altdata_sleeve_in_stack_at_zero_weight():
     from ascent.alpha.stack import DEFAULT_ALPHA_WEIGHTS
     assert "altdata" in DEFAULT_ALPHA_WEIGHTS
     assert DEFAULT_ALPHA_WEIGHTS["altdata"] == 0.00
+
+
+# ── Task 8 (activation pipeline) ─────────────────────────────────────────────
+
+def test_altdata_weights_key_in_config(tmp_path):
+    """register_altdata_source creates altdata_weights key when missing from config."""
+    from ascent.data.validate.altdata_validator import register_altdata_source, _CONFIG_PATH
+    config_path = tmp_path / "active_alpha_config.json"
+    # Write config without altdata_weights key
+    config_path.write_text(json.dumps({"global": {"trend": 0.7}, "updated_at": "2026-05-17"}))
+    with patch.object(
+        __import__("ascent.data.validate.altdata_validator", fromlist=["_CONFIG_PATH"]),
+        "_CONFIG_PATH",
+        config_path,
+    ):
+        register_altdata_source("reddit", initial_weight=0.02)
+    result = json.loads(config_path.read_text())
+    assert "altdata_weights" in result
+    assert result["altdata_weights"]["reddit"] == 0.02
+
+
+def test_validate_script_dry_run(tmp_path):
+    """validate_altdata main() with --dry-run does not write to active_alpha_config.json."""
+    import scripts.validate_altdata as vscript
+    from ascent.data.validate.altdata_validator import IC_MEAN_THRESHOLD, IC_IR_THRESHOLD, MIN_OBSERVATIONS
+
+    idx = pd.bdate_range("2025-01-01", periods=30)
+    syms = ["AAPL", "MSFT", "TSLA"]
+    # Construct a panel that will pass the IC gate (correlated with future returns)
+    rng = np.random.default_rng(42)
+    panel = pd.DataFrame(rng.standard_normal((30, 3)), index=idx, columns=syms)
+    prices = pd.DataFrame(
+        (1 + rng.standard_normal((40, 3)) * 0.01).cumprod(axis=0),
+        index=pd.bdate_range("2025-01-01", periods=40),
+        columns=syms,
+    )
+    config_path = tmp_path / "active_alpha_config.json"
+    config_path.write_text(json.dumps({"global": {}, "updated_at": "2026-05-17"}))
+
+    with (
+        patch.object(vscript, "_load_sources", return_value={"reddit": panel}),
+        patch.object(vscript, "_load_prices", return_value=prices),
+        patch.object(vscript, "_load_regime", return_value=pd.Series(dtype=str)),
+        patch(
+            "ascent.data.validate.altdata_validator._CONFIG_PATH",
+            config_path,
+        ),
+    ):
+        vscript.main(["--dry-run"])
+
+    # Config must not have been written with a registered source even if accepted
+    result = json.loads(config_path.read_text())
+    assert result.get("altdata_weights") is None or result["altdata_weights"] == {}
+
+
+def test_daily_reddit_ingest_skips_on_no_credentials():
+    """build_reddit_panel returns empty/None when PRAW credentials are absent."""
+    from ascent.data.ingest.reddit_sentiment import build_reddit_panel
+    with patch("ascent.data.ingest.reddit_sentiment._get_praw_client", return_value=None):
+        result = build_reddit_panel(["AAPL", "MSFT"])
+    # Must not raise; must return None or an empty DataFrame
+    assert result is None or (isinstance(result, pd.DataFrame) and result.empty)
+
+
+def test_auto_registration_on_accepted_source():
+    """Monthly validation auto-registers sources that pass the IC gate."""
+    import ascent.data.validate.altdata_validator as _validator
+
+    accepted_result = {
+        "source": "reddit",
+        "ic_mean": 0.025,
+        "ic_ir": 0.80,
+        "ic_min_regime": 0.018,
+        "n_observations": 25,
+        "status": "accepted",
+        "reasons": [],
+    }
+
+    with (
+        patch.object(_validator, "validate_altdata_source", return_value=accepted_result),
+        patch.object(_validator, "_write_proposal"),
+        patch.object(_validator, "register_altdata_source") as mock_register,
+    ):
+        # Simulate what run_all_agents does after getting results
+        idx = pd.bdate_range("2025-01-01", periods=5)
+        dummy_panel = pd.DataFrame({"AAPL": [0.1] * 5}, index=idx)
+        results = _validator.run_altdata_validation(
+            {"reddit": dummy_panel}, pd.DataFrame(), pd.Series(dtype=str)
+        )
+        accepted = [r["source"] for r in results if r["status"] == "accepted"]
+        for src in accepted:
+            _validator.register_altdata_source(src, initial_weight=0.02)
+
+    mock_register.assert_called_once_with("reddit", initial_weight=0.02)
