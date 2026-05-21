@@ -346,9 +346,9 @@ Python 3.12.13 Homebrew, venv at `.venv/`. Use `.venv/bin/python`. API keys via 
 
 ---
 
-## Current state (as of 2026-05-17)
+## Current state (as of 2026-05-18)
 
-**Portfolio** (post-rebalance May 5): KMLM 10.9%, IFRA 9.4%, AMKR/FIX/WDC 5.9% each, VICR 5.7%, VRT 5.6%, VAL 5.2%, WCC 5.0%, DBB 4.6%, CNC 4.5%, WFRD 4.3%, PDBC 4.2%, STLD 3.4%, DBA 3.3%, CHRD 3.1%, EWY 2.4%, EWC 2.3%, IRM 1.8%, MUSA/AAXJ/EEM/VWO 1.5% each, VIXY 2.8% hedge. NAV ~$104,815. Live since April 1, 2026.
+**Portfolio** (post-rebalance May 19): EWY 10.9%, PDBC 6.9%, CBOE/CHRD/HUM/SATS/SNDK/STRL/VICR/VRT/WDC ~6.5% each, DBB 3.8%, EWT/EEM 3.4% each, EWC 3.3%, DBA 3.1%, BIL 2.8%, KMLM 2.4%, UUP 1.6%. 18 positions. NAV ~$103,790. Live since April 1, 2026.
 
 **AI PM**: Phase 0 (`ai_weight=0.0`), shadow period started 2026-05-19. Advances to 25% after 21 rebalance days with Sharpe edge > 0.05. `data_cache/earned_authority.json` is the ground truth.
 
@@ -418,3 +418,29 @@ Python 3.12.13 Homebrew, venv at `.venv/`. Use `.venv/bin/python`. API keys via 
 - Removed leftover reddit_sentiment import from run_all_agents.py altdata validation block (missed in prior revert).
 - Added 2026-05-18 to rebalance_calendar.csv — Monday is now a rebalance day.
 - 492 tests passing throughout.
+
+### 2026-05-18 (rebalance #3 — cancelled)
+- Pipeline ran: 29 orders generated (15 sells, 14 buys), submitted pre-market.
+- Orders manually cancelled: FRED API was down at time of submission; user pulled back to May 5 holdings.
+- Hub gracefully handles FRED outage — falls back to cached macro_live.parquet without crashing.
+- AI PM Phase 0, shadow period tracking started. SNDK excluded by AI PM (3196% momentum = SanDisk/WDC merger artifact) — correct call, not reflected in live book at 0% weight.
+- May 19 also a rebalance day — re-run pending FRED recovery; cache is 1 day old, safe to proceed on.
+
+### 2026-05-19 (rebalance #3 — retry)
+- FRED back up; re-run clean. 30 orders submitted (15 sells, 15 buys). NAV $103,790. 18 positions.
+- Same portfolio as May 18 proposed book (CBOE/HUM/SATS/SNDK/STRL + EWY/EWT/EEM/EWC international tilt).
+- Macro agent shifted calm_bull → neutral vs yesterday; minor weight changes only.
+- Attribution: -0.95% vs SPY -0.67%. VRT worst (-0.263%, -5.0%). Debate gate skipped (calm_bull, entropy 0.00).
+- May 18 logs fully cleaned before re-run (10 JSONL entries, 4 snapshots, AI PM thesis, shadow returns, earned_authority).
+
+### 2026-05-20 (non-rebalance intelligence stack ✅)
+- Added `_PRICING`, `_record_usage()`, `get_usage_summary()`, `log_costs()` to `ascent/llm/client.py` — per-process cost accumulation logged to `logs/cost_log.jsonl` at run end.
+- Added `use_cache=True` to AI PM `tool_completion` calls (both main + revision pass) and bear/devil debate agents — prompt cache hits reduce Opus cost ~90%.
+- AI PM gated to rebalance days only in `run_all_agents.py` (was running daily, burning ~$0.50–$2 per non-rebalance day).
+- Built 7 non-rebalance intelligence modules in `ascent/monitoring/`: conviction_tracker, signal_health, regime_trajectory, analogue_search, position_thesis, adversarial_daily, macro_calendar.
+- Built `ascent/monitoring/daily_intelligence.py` — orchestrates all 7 with independent `_safe()` wrappers, atomic write to `data_cache/daily_intelligence/YYYY-MM-DD.json`.
+- Built `ascent/monitoring/rebalance_brief.py` — Haiku synthesizes 9 days of intelligence into `data_cache/rebalance_brief.json`.
+- Added `get_rebalance_brief` as tool #17 in AI PM (called first in Phase 1 prompt); brief is pre-digested 9-day intelligence.
+- Fixed execution order: brief generation moved BEFORE AI PM block (was after weights write — AI PM would have read stale brief from previous cycle).
+- 492 → 506 tests (14 new in `tests/monitoring/`).
+- Files: ascent/llm/client.py, run_all_agents.py, agents/ai_pm_agent.py, debate/agents.py, ascent/monitoring/ (7 new + orchestrator + brief), tests/monitoring/ (6 test files).

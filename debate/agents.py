@@ -329,6 +329,7 @@ def run_bear_agent(portfolio_state: dict) -> str:
             model=DEBATE_MODEL,
             max_tokens=800,
             max_tool_calls=2,
+            use_cache=True,
         )
     except Exception as e:
         log.warning("[Bear] Tool completion failed (%s), falling back to generate_structured", e)
@@ -396,6 +397,7 @@ def run_devils_advocate(portfolio_state: dict) -> str:
             model=DEBATE_MODEL,
             max_tokens=800,
             max_tool_calls=2,
+            use_cache=True,
         )
     except Exception as e:
         log.warning("[DevilsAdvocate] Tool completion failed (%s), falling back to generate_structured", e)

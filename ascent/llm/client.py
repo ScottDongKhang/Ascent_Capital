@@ -9,12 +9,69 @@ Configuration:
 """
 
 import os
+import json
 import time
 import logging
 from pathlib import Path
 from typing import List, Dict, Optional
 
 log = logging.getLogger(__name__)
+
+# ── Cost accumulator (per-process, reset on each run) ─────────────────────────
+_PRICING = {
+    # (input $/MTok, output $/MTok)
+    "claude-opus-4-6":           (15.00, 75.00),
+    "claude-opus-4-7":           (15.00, 75.00),
+    "claude-sonnet-4-6":         ( 3.00, 15.00),
+    "claude-haiku-4-5-20251001": ( 0.80,  4.00),
+}
+_DEFAULT_PRICING = (3.00, 15.00)  # fallback for unknown models
+
+_usage: Dict[str, Dict] = {}  # keyed by model
+
+
+def _record_usage(model: str, input_tokens: int, output_tokens: int) -> None:
+    if model not in _usage:
+        _usage[model] = {"input_tokens": 0, "output_tokens": 0, "calls": 0}
+    _usage[model]["input_tokens"]  += input_tokens
+    _usage[model]["output_tokens"] += output_tokens
+    _usage[model]["calls"]         += 1
+
+
+def get_usage_summary() -> Dict:
+    """Return token counts and estimated cost across all models this process."""
+    rows = []
+    total_cost = 0.0
+    for model, counts in _usage.items():
+        in_price, out_price = _PRICING.get(model, _DEFAULT_PRICING)
+        cost = (counts["input_tokens"] / 1_000_000 * in_price
+              + counts["output_tokens"] / 1_000_000 * out_price)
+        total_cost += cost
+        rows.append({
+            "model":         model,
+            "input_tokens":  counts["input_tokens"],
+            "output_tokens": counts["output_tokens"],
+            "calls":         counts["calls"],
+            "cost_usd":      round(cost, 4),
+        })
+    return {"models": rows, "total_cost_usd": round(total_cost, 4)}
+
+
+def log_costs(date_str: str, log_dir: str = "logs") -> None:
+    """Append today's token usage + estimated cost to logs/cost_log.jsonl."""
+    summary = get_usage_summary()
+    if not summary["models"]:
+        return
+    entry = {"date": date_str, **summary}
+    path = Path(log_dir) / "cost_log.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a") as f:
+        f.write(json.dumps(entry) + "\n")
+    tc = summary["total_cost_usd"]
+    print(f"[LLM] Cost logged — ${tc:.4f} total | {path}")
+    for row in summary["models"]:
+        print(f"  {row['model']}: {row['calls']} calls, "
+              f"{row['input_tokens']:,} in / {row['output_tokens']:,} out → ${row['cost_usd']:.4f}")
 
 
 def _load_env():
@@ -112,6 +169,7 @@ def chat_completion(
     for attempt in range(_MAX_RETRIES):
         try:
             response = client.messages.create(**kwargs)
+            _record_usage(model, response.usage.input_tokens, response.usage.output_tokens)
             return response.content[0].text
         except Exception as e:
             if attempt == _MAX_RETRIES - 1:
@@ -169,6 +227,7 @@ def extended_thinking_completion(
     for attempt in range(_MAX_RETRIES):
         try:
             resp = client.messages.create(**kwargs)
+            _record_usage(model, resp.usage.input_tokens, resp.usage.output_tokens)
             text_parts = [b.text for b in resp.content if getattr(b, "type", "") == "text"]
             return "\n".join(text_parts)
         except Exception as e:
@@ -189,6 +248,7 @@ def tool_completion(
     model: str = DEFAULT_MODEL,
     max_tokens: int = 2000,
     max_tool_calls: int = 3,
+    use_cache: bool = False,
 ) -> str:
     """
     Execute an LLM call with Anthropic tool use, running the tool loop until
@@ -211,16 +271,21 @@ def tool_completion(
     messages = [{"role": "user", "content": user_prompt}]
 
     for _iteration in range(max_tool_calls + 1):
+        system_block = (
+            [{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}]
+            if use_cache else system_prompt
+        )
         kwargs = dict(
             model=model,
             max_tokens=max_tokens,
             tools=tools,
             messages=messages,
-            system=system_prompt,
+            system=system_block,
         )
         for attempt in range(_MAX_RETRIES):
             try:
                 resp = client.messages.create(**kwargs)
+                _record_usage(model, resp.usage.input_tokens, resp.usage.output_tokens)
                 break
             except Exception as e:
                 if attempt == _MAX_RETRIES - 1:

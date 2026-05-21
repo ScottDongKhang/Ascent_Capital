@@ -657,6 +657,15 @@ def main():
         except Exception as _di_e:
             print(f"[DailyIntel] Skipped: {_di_e}")
 
+    # ── Generate rebalance brief BEFORE AI PM so get_rebalance_brief tool reads current intel ──
+    if is_rebalance:
+        try:
+            from ascent.monitoring.rebalance_brief import generate_rebalance_brief
+            generate_rebalance_brief(today.isoformat())
+            print("[RebalanceBrief] Brief generated for AI PM.")
+        except Exception as _rb_e:
+            print(f"[RebalanceBrief] Generation failed: {_rb_e}")
+
     # ── AI PM Agent (rebalance days only — authority/calibration are rebalance-gated) ──
     if not is_rebalance:
         print("[Runner] AI PM skipped — non-rebalance day.")
@@ -748,14 +757,6 @@ def main():
             )
         except Exception as _rs_e:
             print(f"[RebalanceState] Snapshot failed: {_rs_e}")
-
-        # ── Generate rebalance brief from accumulated intelligence ────────────
-        try:
-            from ascent.monitoring.rebalance_brief import generate_rebalance_brief
-            generate_rebalance_brief(today.isoformat())
-            print("[RebalanceBrief] Brief generated for AI PM.")
-        except Exception as _rb_e:
-            print(f"[RebalanceBrief] Generation failed: {_rb_e}")
 
     # Audit trail: portfolio construction
     try:
