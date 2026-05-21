@@ -1,6 +1,6 @@
 # Ascent Capital — AI-Native Quantitative Fund
 
-![Tests](https://img.shields.io/badge/tests-492%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-506%20passing-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.12-blue)
 ![Status](https://img.shields.io/badge/status-live%20paper%20trading-informational)
 ![AI PM](https://img.shields.io/badge/AI%20PM-Claude%20Opus%204.6-blueviolet)
@@ -50,7 +50,7 @@ python3.12 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
 python run_all_agents.py                                               # daily pipeline (launchd 1:45 PM ET)
-python -m pytest --tb=short -q                                        # 492 passed, 1 skipped
+python -m pytest --tb=short -q                                        # 506 passed, 1 skipped
 streamlit run demo_app.py                                             # investor demo (dark/gold, live LLM debate)
 streamlit run ascent/dashboard/live_dashboard.py --server.port 8502  # operator dashboard
 ```
@@ -80,9 +80,11 @@ streamlit run ascent/dashboard/live_dashboard.py --server.port 8502  # operator 
 | May 5, 2026 | Full portfolio rotation: 40 orders |
 | May 7, 2026 | NAV $104,815 · Regime: calm_bull |
 | May 16, 2026 | AI PM Agent live · adversarial red team · episodic memory · calibration tracking |
-| May 17, 2026 | Narrative alpha sleeve added · 492 tests |
+| May 17, 2026 | Narrative alpha sleeve · bug hunt (5 fixes) · 492 tests |
+| May 19, 2026 | Rebalance #3 · 30 orders · NAV $103,790 · 18 positions · AI PM shadow period begins |
+| May 20, 2026 | Non-rebalance intelligence stack · 7 daily monitors · rebalance brief · cost tracking · 506 tests |
 
-**Current holdings (May 2026):** KMLM, IFRA, AMKR, FIX, WDC, VICR, VRT, VAL, WCC, DBB, CNC, WFRD, PDBC, STLD, DBA, CHRD, EWY, EWC, IRM, MUSA + VIXY hedge.
+**Current holdings (May 2026):** EWY, PDBC, CBOE, CHRD, HUM, SATS, SNDK, STRL, VICR, VRT, WDC, DBB, EWT, EEM, EWC, DBA, BIL, KMLM, UUP — 18 positions · NAV ~$103,790.
 
 ---
 
@@ -106,8 +108,22 @@ python run_all_agents.py  (daily, 1:45 PM ET via launchd)
 │   ├── Thesis coherence check (12 factor buckets, 6 contradiction pairs → 40% reduction)
 │   └── EM+commodity hard cap (20%)
 │
-├─ AI PM Agent  (Claude Opus 4.6 · 16-tool research loop)
-│   ├── Phase 1: Market context (regime state, macro indicators)
+├─ Non-Rebalance Intelligence  (9 days between rebalances)
+│   ├── Conviction decay: alpha rank drift per held position since entry
+│   ├── Signal health: per-sleeve IC trend vs rebalance baseline
+│   ├── Regime trajectory: stability score + stress trend from HMM series
+│   ├── Historical analogues: fingerprint-match past regime episodes → realized outcomes
+│   ├── Position thesis: Haiku checks if buy thesis still holds vs original rationale
+│   ├── Adversarial challenge: Haiku surfaces most dangerous hidden assumption
+│   ├── Macro calendar: FOMC/CPI/NFP/earnings exposure scoring per position
+│   └── → atomic write to data_cache/daily_intelligence/YYYY-MM-DD.json
+│
+├─ Rebalance Brief  (generated just before AI PM on rebalance days)
+│   └── Haiku synthesizes 9 days of intelligence → data_cache/rebalance_brief.json
+│       (stale positions, weakening sleeves, adversarial themes, analogue signal)
+│
+├─ AI PM Agent  (Claude Opus 4.6 · 17-tool research loop · rebalance days only)
+│   ├── Phase 1: get_rebalance_brief (pre-digested 9-day brief) · regime state · macro
 │   ├── Phase 2: Quant baseline (all 4 agents via precomputed cache — no re-runs)
 │   ├── Phase 3: Signal research (≤6 of 10 tools: SEC, transcripts, attribution,
 │   │           earnings, factor exposures, VaR, sector concentration, momentum,
@@ -215,11 +231,13 @@ Regime propagates through every layer: sleeve weights, max position size, orches
 | Execution Excellence | ✅ | TWAP, IS decomposition, capacity model, intraday triggers (kill-switched) |
 | Real-Time Infrastructure | ✅ | TimescaleDB, Alpaca WebSocket (901 symbols), live dashboard, monthly PDF |
 | Live Track Record | ✅ | SHA-256 audit trail, GIPS TWR, risk disclosures, methodology doc |
-| AI PM Agent | ✅ | Earned autonomy (0→75%), 16-tool loop, investment thesis audit trail |
+| AI PM Agent | ✅ | Earned autonomy (0→75%), 17-tool loop, investment thesis audit trail |
 | Adversarial Self-Play | ✅ | Red team attacks proposal before submission; AI PM revises or defends |
 | Episodic Memory | ✅ | Per-regime outcome log; AI PM queries past periods before proposing |
 | Calibration Tracking | ✅ | Conviction-vs-realized IC; AI PM sees its own hit rate |
 | Narrative Alpha | ✅ | Quarter-over-quarter thesis shift detection (0% until cache matures) |
+| Non-Rebalance Intelligence | ✅ | 7 daily monitors accumulate over 9 days; Haiku brief feeds AI PM on rebalance morning |
+| LLM Cost Tracking | ✅ | Per-model token accounting + estimated cost logged to `logs/cost_log.jsonl` each run |
 
 **Operational next steps (not code):** Deploy TimescaleDB (Docker), configure WebSocket (`ALPACA_KEY`), transfer real capital (~May–June 2026). YC-ready at April 2027 (12-month live track record).
 
@@ -283,8 +301,11 @@ ascent/
                 twap_executor, implementation_shortfall,
                 capacity_model, intraday_trigger, event_runner, debate_gate
   monitoring/   skill_tracker, forward_pnl_tracker, attribution,
-                slippage_ic_feedback, live_nav, alert_system
-  llm/          client.py (Claude Opus/Sonnet/Haiku routing, retry 3×)
+                slippage_ic_feedback, live_nav, alert_system,
+                conviction_tracker, signal_health, regime_trajectory,
+                analogue_search, position_thesis, adversarial_daily,
+                macro_calendar, daily_intelligence, rebalance_brief
+  llm/          client.py (Claude Opus/Sonnet/Haiku routing, retry 3×, cost tracking)
   dashboard/    export_dashboard_data, live_dashboard.py (port 8502)
   strategy/     earned_authority.py, thesis_formatter.py, calibration_tracker.py
 
@@ -302,9 +323,11 @@ scripts/        setup_timescaledb.sh, verify_audit_trail.py, evaluate_hedge.py
 data_cache/     prices_live, macro_live, profiles, ml_model_*.pkl,
                 active_alpha_config.json, factor_returns.parquet,
                 llm_fundamental_cache.json, narrative_shift_cache.json,
-                earned_authority.json, ai_pm_shadow_returns.jsonl
+                earned_authority.json, ai_pm_shadow_returns.jsonl,
+                daily_intelligence/YYYY-MM-DD.json, rebalance_brief.json
 logs/           eod_log, slippage_log, attribution_log, audit_trail.jsonl,
-                regime_episodes.jsonl, ai_pm_calibration.jsonl, alerts.jsonl
+                regime_episodes.jsonl, ai_pm_calibration.jsonl, alerts.jsonl,
+                cost_log.jsonl
 outputs/        debate_log/, investor_reports/, factor_proposals/, ai_pm_theses/
 
 ascent/main.py        core pipeline entrypoint

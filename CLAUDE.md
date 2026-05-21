@@ -356,7 +356,7 @@ Python 3.12.13 Homebrew, venv at `.venv/`. Use `.venv/bin/python`. API keys via 
 
 **Regime**: calm_bull (refitted May 7). Regime signal in `dashboard/regime_signal.json`.
 
-**Tests**: 492 passing, 1 skipped.
+**Tests**: 506 passing, 1 skipped.
 
 **Kill switches pending paper validation (~July 2026)**: `EVENT_TRADING_ENABLED=False`, `TWAP_ENABLED=False`, `SELF_MODIFY_ENABLED=False`.
 
@@ -376,6 +376,8 @@ Python 3.12.13 Homebrew, venv at `.venv/`. Use `.venv/bin/python`. API keys via 
 | Episodic memory | ✅ | Per-regime outcome log; queried by AI PM before proposing |
 | Calibration tracking | ✅ | Conviction-vs-realized IC; AI PM checks own hit rate |
 | Narrative alpha | ✅ | Q-o-Q thesis shift detection (Haiku); 0% weight until cache matures |
+| Non-rebalance intelligence | ✅ | 7 daily monitors → rebalance brief → AI PM tool #17 `get_rebalance_brief` |
+| LLM cost tracking | ✅ | Per-model token + cost accounting; `logs/cost_log.jsonl` per run |
 
 ---
 
