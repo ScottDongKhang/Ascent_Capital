@@ -649,39 +649,49 @@ def main():
     except Exception as _fe:
         print(f"[FactorExposure] Export skipped: {_fe}")
 
-    # ── AI PM Agent ─────────────────────────────────────────────────────────────
-    try:
-        print("[Runner] Running AI PM agent...")
-        ai_pm_result = run_ai_pm(quant_outputs=agent_outputs, merged_weights=merged_weights)
+    # ── Daily intelligence (non-rebalance days — feeds rebalance brief) ──────
+    if not is_rebalance:
+        try:
+            from ascent.monitoring.daily_intelligence import run_daily_intelligence
+            run_daily_intelligence(today.isoformat(), merged_weights, agent_outputs)
+        except Exception as _di_e:
+            print(f"[DailyIntel] Skipped: {_di_e}")
 
-        ok = False
-        violations = []
-        if ai_pm_result.fallback:
-            print("[Runner] AI PM fallback — using quant portfolio unchanged")
-        else:
-            ok, violations = validate_pm_proposal(ai_pm_result.portfolio)
-            if ok:
-                ai_weight = get_authority_state().get("ai_weight", 0.0)
-                merged_weights = authority_blend(ai_pm_result.portfolio, merged_weights)
-                print(f"[Runner] AI PM blend applied (ai_weight={ai_weight * 100:.0f}%)")
+    # ── AI PM Agent (rebalance days only — authority/calibration are rebalance-gated) ──
+    if not is_rebalance:
+        print("[Runner] AI PM skipped — non-rebalance day.")
+    else:
+        try:
+            print("[Runner] Running AI PM agent...")
+            ai_pm_result = run_ai_pm(quant_outputs=agent_outputs, merged_weights=merged_weights)
+
+            ok = False
+            violations = []
+            if ai_pm_result.fallback:
+                print("[Runner] AI PM fallback — using quant portfolio unchanged")
             else:
-                print(f"[Runner] AI PM proposal rejected: {violations} — using quant 100%")
+                ok, violations = validate_pm_proposal(ai_pm_result.portfolio)
+                if ok:
+                    ai_weight = get_authority_state().get("ai_weight", 0.0)
+                    merged_weights = authority_blend(ai_pm_result.portfolio, merged_weights)
+                    print(f"[Runner] AI PM blend applied (ai_weight={ai_weight * 100:.0f}%)")
+                else:
+                    print(f"[Runner] AI PM proposal rejected: {violations} — using quant 100%")
 
-            format_thesis({**ai_pm_result.thesis, "ai_pm_portfolio": ai_pm_result.portfolio})
+                format_thesis({**ai_pm_result.thesis, "ai_pm_portfolio": ai_pm_result.portfolio})
 
-            try:
-                from compliance.audit_trail import record_event
-                record_event("ai_pm_proposal", {
-                    "portfolio_size": len(ai_pm_result.portfolio),
-                    "validated": ok if not ai_pm_result.fallback else False,
-                    "violations": violations if not ai_pm_result.fallback and not ok else [],
-                })
-            except Exception as ae:
-                print(f"[Runner] Audit trail write failed: {ae}")
+                try:
+                    from compliance.audit_trail import record_event
+                    record_event("ai_pm_proposal", {
+                        "portfolio_size": len(ai_pm_result.portfolio),
+                        "validated": ok if not ai_pm_result.fallback else False,
+                        "violations": violations if not ai_pm_result.fallback and not ok else [],
+                    })
+                except Exception as ae:
+                    print(f"[Runner] Audit trail write failed: {ae}")
 
-    except Exception as exc:
-        print(f"[Runner] AI PM agent failed: {exc} — using quant portfolio")
-    # ────────────────────────────────────────────────────────────────────────────
+        except Exception as exc:
+            print(f"[Runner] AI PM agent failed: {exc} — using quant portfolio")
 
     # Log episode for regime-aware memory
     try:
@@ -716,6 +726,36 @@ def main():
 
     print(f"\n[Runner] Merged weights written to {weights_path}")
     print(f"[Runner] {len(merged_weights)} positions, total weight: {sum(merged_weights.values()):.4f}")
+
+    # ── Snapshot rebalance baseline for conviction tracker ───────────────────
+    if is_rebalance:
+        try:
+            from ascent.monitoring.conviction_tracker import save_rebalance_alpha_state
+            from ascent.monitoring.signal_health import compute_signal_health
+            from ascent.monitoring.regime_trajectory import compute_regime_trajectory
+            _sleeve_ics = {
+                s: d.get("ic_5d_avg", 0.0)
+                for s, d in compute_signal_health(today.isoformat()).items()
+            }
+            _traj = compute_regime_trajectory(today.isoformat())
+            save_rebalance_alpha_state(
+                date=today.isoformat(),
+                merged_weights=merged_weights,
+                agent_outputs=agent_outputs,
+                sleeve_ics=_sleeve_ics,
+                regime=_traj.get("current_label", "unknown"),
+                regime_stability_10d=_traj.get("stability_10d", 0.5),
+            )
+        except Exception as _rs_e:
+            print(f"[RebalanceState] Snapshot failed: {_rs_e}")
+
+        # ── Generate rebalance brief from accumulated intelligence ────────────
+        try:
+            from ascent.monitoring.rebalance_brief import generate_rebalance_brief
+            generate_rebalance_brief(today.isoformat())
+            print("[RebalanceBrief] Brief generated for AI PM.")
+        except Exception as _rb_e:
+            print(f"[RebalanceBrief] Generation failed: {_rb_e}")
 
     # Audit trail: portfolio construction
     try:
@@ -902,6 +942,13 @@ def _log_run(today, merged_weights, agent_outputs, dry_run):
         f.write(json.dumps(run_log) + "\n")
 
     print(f"\n[Runner] Run logged to {log_path}")
+
+    try:
+        from ascent.llm.client import log_costs
+        log_costs(today.isoformat())
+    except Exception as e:
+        print(f"[Runner] Cost log skipped ({e})")
+
     print(f"[Runner] Done.\n")
 
 
