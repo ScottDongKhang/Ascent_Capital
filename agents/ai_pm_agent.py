@@ -50,6 +50,17 @@ class AIPMResult:
 
 AI_PM_TOOLS = [
     {
+        "name": "get_rebalance_brief",
+        "description": (
+            "Get the pre-rebalance intelligence brief synthesized from the last 9 non-rebalance "
+            "days. Contains: regime trajectory and stability, positions whose conviction has "
+            "decayed since last rebalance, weakening alpha sleeves, macro event risks, "
+            "historical analogue outcomes, and accumulated adversarial challenges. "
+            "Call this FIRST before any other tool."
+        ),
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
         "name": "get_regime_state",
         "description": "Get the current market regime label, confidence, HMM entropy, and days in current regime.",
         "input_schema": {"type": "object", "properties": {}, "required": []},
@@ -222,7 +233,7 @@ _SYSTEM_PROMPT = """You are the portfolio manager of Ascent Capital, a multi-str
 Your job is to construct a portfolio for the next rebalance period using the research tools available.
 
 Work through your research in order:
-1. PHASE 1 — Market context: Call get_regime_state and get_macro_data first.
+1. PHASE 1 — Market context: Call get_rebalance_brief FIRST (pre-digested 9-day intelligence brief), then get_regime_state and get_macro_data.
 2. PHASE 2 — Quant baseline: Call run_quant_agent for all four agents (us_equities, macro, international, alternatives).
 3. PHASE 3 — Signal research: For names you are considering, call up to 6 of the signal tools.
 4. PHASE 4 — Submit: Call propose_portfolio with your final weights and investment thesis.
@@ -482,6 +493,28 @@ def _tool_get_calibration_report(_: dict) -> str:
         return f"Calibration report unavailable: {exc}"
 
 
+def _tool_get_rebalance_brief(_: dict) -> str:
+    try:
+        from pathlib import Path
+        import json
+        brief_path = Path("data_cache/rebalance_brief.json")
+        if not brief_path.exists():
+            return "No pre-rebalance brief available. Proceed with standard research."
+        data = json.loads(brief_path.read_text())
+        lines = [
+            f"=== PRE-REBALANCE INTELLIGENCE BRIEF ({data.get('date', 'N/A')}) ===",
+            f"\nSYNTHESIS:\n{data.get('synthesis', 'N/A')}",
+            f"\nSTALE POSITIONS (rank decayed ≥10 since rebalance): {data.get('stale_positions') or 'none'}",
+            f"WEAKENING ALPHA SLEEVES: {data.get('weakening_sleeves') or 'none'}",
+            f"ANALOGUE SIGNAL: {data.get('analogue_signal', 'N/A')}",
+            f"TOP MACRO RISKS: {'; '.join(data.get('top_macro_risks', [])) or 'none'}",
+            "\nACCUMULATED ADVERSARIAL CHALLENGES (last 3 days):",
+        ] + [f"  - {t}" for t in data.get("adversarial_themes", [])]
+        return "\n".join(lines)
+    except Exception as e:
+        return f"Brief unavailable: {e}"
+
+
 def _tool_propose_portfolio(inputs: dict, result_store: list) -> str:
     weights = inputs.get("weights", {})
     thesis = inputs.get("thesis", {})
@@ -515,6 +548,7 @@ def _make_executor(result_store: list, precomputed: dict | None = None):
         return _tool_run_quant_agent(inputs)
 
     _map = {
+        "get_rebalance_brief":      _tool_get_rebalance_brief,
         "get_regime_state":         _tool_get_regime_state,
         "get_macro_data":           _tool_get_macro_data,
         "run_quant_agent":          _run_quant_agent_cached,
@@ -589,6 +623,7 @@ def run_ai_pm(
             model=DEFAULT_MODEL,
             max_tokens=4000,
             max_tool_calls=14,
+            use_cache=True,
         )
     except Exception as exc:
         log.error("[AIPMAgent] tool_completion failed: %s", exc)
@@ -629,6 +664,7 @@ def run_ai_pm(
                 model=DEFAULT_MODEL,
                 max_tokens=2000,
                 max_tool_calls=6,
+                use_cache=True,
             )
         except Exception as exc:
             log.warning("[AIPMAgent] Revision pass failed: %s — using initial proposal", exc)
