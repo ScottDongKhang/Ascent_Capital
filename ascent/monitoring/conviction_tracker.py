@@ -1,5 +1,7 @@
 import json
 import logging
+import os
+import tempfile as _tempfile
 from pathlib import Path
 from typing import Dict, List, Any
 
@@ -97,6 +99,17 @@ def save_rebalance_alpha_state(
         "regime":                regime,
         "regime_stability_10d":  round(regime_stability_10d, 4),
     }
-    Path(state_path).parent.mkdir(parents=True, exist_ok=True)
-    Path(state_path).write_text(json.dumps(state, indent=2))
+    p = Path(state_path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp_fd, tmp_path = _tempfile.mkstemp(dir=p.parent, suffix=".tmp")
+    try:
+        with os.fdopen(tmp_fd, "w") as f:
+            json.dump(state, f, indent=2)
+        os.replace(tmp_path, p)
+    except Exception as e:
+        log.error("[ConvictionTracker] Write failed: %s", e)
+        try:
+            os.unlink(tmp_path)
+        except Exception:
+            pass
     log.info("[ConvictionTracker] Rebalance state saved to %s", state_path)

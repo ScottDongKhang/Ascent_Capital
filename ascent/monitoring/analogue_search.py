@@ -27,7 +27,12 @@ def find_historical_analogues(
     current_label = regime_trajectory.get("current_label", "")
 
     episodes = []
-    for line in path.read_text().splitlines():
+    try:
+        content = path.read_text()
+    except Exception as e:
+        log.warning("[AnalogueSearch] Failed to read %s: %s", episodes_path, e)
+        return []
+    for line in content.splitlines():
         if not line.strip():
             continue
         try:

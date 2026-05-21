@@ -64,7 +64,7 @@ def compute_signal_health(
     for sleeve, ics in sleeve_ics.items():
         avg = sum(ics) / len(ics)
         base = baseline.get(sleeve)
-        change_pct = round((avg - base) / abs(base) * 100, 1) if base and base != 0 else None
+        change_pct = round((avg - base) / abs(base) * 100, 1) if base is not None and base != 0 else None
         if change_pct is None:
             status = "unknown"
         elif change_pct >= -20:
