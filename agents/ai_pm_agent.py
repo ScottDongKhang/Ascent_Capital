@@ -5,6 +5,8 @@ AI Portfolio Manager — Opus tool-use loop.
 Runs a 4-phase research loop (market context → quant baselines → signal research → submit)
 and returns AIPMResult(portfolio, thesis). Falls back to AIPMResult(portfolio={}, fallback=True)
 if the loop exits without calling propose_portfolio.
+
+18 tools total.
 """
 from __future__ import annotations
 
@@ -59,6 +61,21 @@ AI_PM_TOOLS = [
             "Call this FIRST before any other tool."
         ),
         "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "get_live_news",
+        "description": (
+            "Fetch last 72 hours of news headlines for a specific ticker symbol. "
+            "Use this to check for recent earnings, guidance changes, M&A, management changes, "
+            "or macro events that could affect a position thesis."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "symbol": {"type": "string", "description": "Ticker symbol, e.g. AAPL"},
+            },
+            "required": ["symbol"],
+        },
     },
     {
         "name": "get_regime_state",
@@ -515,6 +532,29 @@ def _tool_get_rebalance_brief(_: dict) -> str:
         return f"Brief unavailable: {e}"
 
 
+def _tool_get_live_news(inputs: dict) -> str:
+    """Fetch last 72h news headlines for a symbol via yfinance."""
+    import time as _time
+    from datetime import datetime as _dt
+    symbol = inputs.get("symbol", "").upper().strip()
+    if not symbol:
+        return "Error: symbol required"
+    try:
+        import yfinance as yf
+        news = yf.Ticker(symbol).news or []
+        cutoff = _time.time() - 72 * 3600
+        recent = [n for n in news if n.get("providerPublishTime", 0) > cutoff][:5]
+        if not recent:
+            return f"No news in last 72h for {symbol}."
+        lines = [f"{symbol} news (last 72h):"]
+        for n in recent:
+            ts = _dt.fromtimestamp(n["providerPublishTime"]).strftime("%Y-%m-%d %H:%M")
+            lines.append(f"  [{ts}] {n.get('title', 'No title')} — {n.get('publisher', '')}")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"News fetch failed for {symbol}: {e}"
+
+
 def _tool_propose_portfolio(inputs: dict, result_store: list) -> str:
     weights = inputs.get("weights", {})
     thesis = inputs.get("thesis", {})
@@ -549,6 +589,7 @@ def _make_executor(result_store: list, precomputed: dict | None = None):
 
     _map = {
         "get_rebalance_brief":      _tool_get_rebalance_brief,
+        "get_live_news":            _tool_get_live_news,
         "get_regime_state":         _tool_get_regime_state,
         "get_macro_data":           _tool_get_macro_data,
         "run_quant_agent":          _run_quant_agent_cached,
