@@ -144,6 +144,39 @@ def high_52w_pct(close: pd.DataFrame) -> pd.DataFrame:
     return close / close.rolling(252, min_periods=63).max()
 
 
+# ── Sector-Relative Momentum ──────────────────────────────────────────
+
+def sector_relative_momentum(
+    close: pd.DataFrame,
+    sector_map: dict,
+    window: int = 252,
+) -> pd.DataFrame:
+    """
+    252d return minus sector-median 252d return per stock.
+    Captures idiosyncratic momentum, orthogonal to sector drift.
+    Symbols not in sector_map are left with their raw momentum.
+    """
+    mom = momentum_return(close, window)
+    if not sector_map:
+        return mom
+
+    result = mom.copy()
+    sector_groups: dict[str, list[str]] = {}
+    for sym, sector in sector_map.items():
+        if sym in close.columns:
+            sector_groups.setdefault(sector, []).append(sym)
+
+    for sector, syms in sector_groups.items():
+        in_universe = [s for s in syms if s in mom.columns]
+        if len(in_universe) < 2:
+            continue
+        sector_median = mom[in_universe].median(axis=1)
+        for sym in in_universe:
+            result[sym] = mom[sym] - sector_median
+
+    return result
+
+
 # ── Fundamental Panel ─────────────────────────────────────────────────
 
 def build_fundamental_panel(
@@ -463,6 +496,7 @@ def build_all_features(
     options_df: pd.DataFrame | None = None,
     insider_df: pd.DataFrame | None = None,
     short_df: pd.DataFrame | None = None,
+    sector_map: dict | None = None,
 ) -> dict[str, pd.DataFrame]:
     """
     Build all features. Returns dict of {feature_name: DataFrame(dates × symbols)}.
@@ -508,6 +542,10 @@ def build_all_features(
     features["macd_hist"] = macd_signal(close)
     features["rsi_14"] = rsi(close, 14)
     features["high_52w_pct"] = high_52w_pct(close)
+
+    # Sector-relative momentum
+    if sector_map:
+        features["sector_rel_mom"] = sector_relative_momentum(close, sector_map)
 
     # Macro (broadcast to all symbols if available)
     if macro_pivot is not None and not macro_pivot.empty:

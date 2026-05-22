@@ -58,6 +58,17 @@ class FeatureBuilder:
 
     def compute_features(self) -> dict[str, pd.DataFrame]:
         """Compute all features. Returns {name: DataFrame(dates × symbols)}."""
+        # Load sector map for sector-relative momentum
+        sector_map: dict = {}
+        try:
+            from ascent.data.store.parquet import load_parquet, has_data
+            if has_data("profiles"):
+                profiles = load_parquet("profiles")
+                if "symbol" in profiles.columns and "sector" in profiles.columns:
+                    sector_map = dict(zip(profiles["symbol"], profiles["sector"]))
+        except Exception:
+            pass
+
         features = build_all_features(
             self.close, self.volume, self.dollar_volume, self.macro_pivot,
             earnings_df=self.earnings_df,
@@ -65,6 +76,7 @@ class FeatureBuilder:
             options_df=self.options_df,
             insider_df=self.insider_df,
             short_df=self.short_df,
+            sector_map=sector_map,
         )
         if self.fundamentals_df is not None and not self.fundamentals_df.empty:
             try:

@@ -35,6 +35,7 @@ ML_FEATURES = [
     "iv_skew",             # options-implied bearish/bullish skew; forward-fill 5d
     "insider_net_score",   # rolling 63d net insider purchases; sparse
     "short_pct_float",     # % of float short; forward-fill 15d
+    "sector_rel_mom",      # idiosyncratic momentum (stock vs sector median)
     # Excluded (ICIR < 0.1): mom_21d, mom_63d, vol_21d, vol_ratio_10_63,
     # rsi_14, macd_hist, dollar_vol_rank_21d
     # gross_profitability / accruals / asset_growth excluded: only ~5 quarters of
