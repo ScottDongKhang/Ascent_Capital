@@ -50,7 +50,7 @@ def update_position_theses(
 
     alpha_context = {}
     us_agent = next((ao for ao in agent_outputs if ao.agent_id == "us_equities"), None)
-    if us_agent is not None and not us_agent.alpha_scores.empty:
+    if us_agent is not None and us_agent.alpha_scores is not None and not us_agent.alpha_scores.empty:
         try:
             latest = us_agent.alpha_scores.iloc[-1].to_dict()
             alpha_context = {s: round(latest[s], 3) for s in merged_weights if s in latest}
