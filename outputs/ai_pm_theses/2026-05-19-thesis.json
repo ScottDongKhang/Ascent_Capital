@@ -1,0 +1,99 @@
+{
+  "market_view": "Calm bull regime with positive momentum broadly across equities and commodities. The primary regime signal is constructive, but the alternatives agent reading 'stressed' suggests underlying cross-asset tension \u2014 possibly commodity supply disruption or credit stress not fully reflected in equity prices. We position for continued upside while maintaining meaningful commodity and defensive allocations as portfolio insurance.",
+  "regime_assessment": "HMM regime: calm_bull. This is a risk-on environment historically, but the divergence between the main regime (calm_bull) and the alternatives agent (stressed) warrants caution. We allocate ~65% to equities and ~35% to commodities/alternatives/cash as a hedge against regime transition. No past verdicts or calibration data available for this regime, so we rely on quant agent consensus and momentum signals.",
+  "quant_baseline_summary": "US Equities agent: 10 equal-weight names with diverse sector exposure (CBOE, CHRD, EWY, HUM, SATS, SNDK, STRL, VICR, VRT, WDC). Macro agent: heavy commodities (PDBC 30%, DBB 30%, KMLM 30%) with light USD. International agent: Asia-heavy (EWY, EWT, EEM) plus Canada. Alternatives agent: defensive with commodities (PDBC, DBA) and T-bills (BIL). All skill scores unavailable.",
+  "ai_pm_portfolio": {
+    "CBOE": 8,
+    "CHRD": 7,
+    "EWY": 9,
+    "HUM": 6,
+    "SATS": 4,
+    "STRL": 6,
+    "VICR": 5,
+    "VRT": 8,
+    "WDC": 4,
+    "EWT": 7,
+    "EEM": 6,
+    "EWC": 5,
+    "PDBC": 7,
+    "DBB": 5,
+    "KMLM": 5,
+    "BIL": 4,
+    "DBA": 4
+  },
+  "quant_agreement": [
+    "CBOE at ~8% \u2014 moderate momentum, diversified financials exposure",
+    "CHRD at ~7% \u2014 energy with healthy 66% momentum",
+    "EWY at ~9% \u2014 top pick across both US equities and international agents, strong 203% momentum",
+    "VRT at ~8% \u2014 strong momentum, AI/data center infrastructure theme",
+    "EWT at ~7% \u2014 solid Asia tech exposure, 75% momentum",
+    "PDBC at ~7% \u2014 commodity basket, favored by both macro and alternatives agents",
+    "KMLM at ~5% \u2014 managed futures, macro agent pick for trend-following diversification",
+    "EEM at ~6% \u2014 broad EM exposure, international agent pick",
+    "HUM at ~6% \u2014 healthcare diversification",
+    "STRL at ~6% \u2014 industrials with strong momentum",
+    "DBB at ~5% \u2014 base metals, macro agent pick",
+    "BIL at ~4% \u2014 cash proxy for defensive allocation per alternatives agent",
+    "DBA at ~4% \u2014 agriculture commodities, alternatives agent pick"
+  ],
+  "quant_overrides": [
+    {
+      "symbol": "SNDK",
+      "ai_action": "REMOVED \u2014 quant recommended 10%",
+      "reason": "252-day momentum of +3,467% is extreme and likely reflects a corporate action, spin-off, or data anomaly. Risk of mean-reversion or data integrity issue is too high to include without fundamental signal confirmation. SEC/earnings signal caches were unavailable to validate."
+    },
+    {
+      "symbol": "SATS",
+      "ai_action": "REDUCED from 10% to ~4%",
+      "reason": "252-day momentum of +521% is parabolic. While quant model is momentum-positive, we trim to manage reversal risk in a name with no available fundamental signal confirmation."
+    },
+    {
+      "symbol": "WDC",
+      "ai_action": "REDUCED from 10% to ~4%",
+      "reason": "252-day momentum of +803% is extremely extended. Trimmed to limit downside from potential momentum reversal. No SEC or earnings signals available to confirm fundamental support."
+    },
+    {
+      "symbol": "VICR",
+      "ai_action": "REDUCED from 10% to ~5%",
+      "reason": "252-day momentum of +464% is highly extended. Modest trim while retaining exposure given AI/power infrastructure theme alignment with VRT."
+    },
+    {
+      "symbol": "EWC",
+      "ai_action": "REDUCED from intl agent's ~20% to ~5%",
+      "reason": "Moderate 33% momentum is weakest among international names. Reduced to make room for commodity diversification and defensive positions."
+    },
+    {
+      "symbol": "UUP",
+      "ai_action": "REMOVED \u2014 macro agent recommended 10%",
+      "reason": "USD strength (+3.8% momentum) is minimal and could work against international/EM equity positions (EWY, EWT, EEM). Removed to avoid hedging out our own international book."
+    }
+  ],
+  "position_rationale": {
+    "CBOE": "8% \u2014 Moderate momentum (+63%), financial services diversification. Exchange business model provides natural hedge in vol spikes.",
+    "CHRD": "7% \u2014 Energy sector with solid +66% momentum. Provides commodity-adjacent equity exposure.",
+    "EWY": "9% \u2014 Largest position. Top pick across 2 quant agents, strong +203% momentum. South Korea benefits from AI/semiconductor cycle.",
+    "HUM": "6% \u2014 Healthcare managed care. Defensive sector with +28% momentum. Provides cyclical diversification.",
+    "SATS": "4% \u2014 Trimmed from quant 10%. Satellite communications with extreme +521% momentum \u2014 retain small position for upside but manage reversal risk.",
+    "STRL": "6% \u2014 Industrials/infrastructure with strong +292% momentum. Beneficiary of US infrastructure buildout.",
+    "VICR": "5% \u2014 Power component manufacturer. +464% momentum driven by AI power demand theme. Trimmed but retained for thematic exposure.",
+    "VRT": "8% \u2014 Data center thermal management. +204% momentum. Core AI infrastructure play, less extended than VICR/SATS.",
+    "WDC": "4% \u2014 Storage/memory. Trimmed from 10% due to +803% extreme momentum. Small position retains exposure to storage cycle.",
+    "EWT": "7% \u2014 Taiwan, semiconductor supply chain. +75% healthy momentum. TSMC-driven structural allocation.",
+    "EEM": "6% \u2014 Broad EM diversification. +42% moderate momentum. Captures EM recovery beyond single-country bets.",
+    "EWC": "5% \u2014 Canada. Modest +33% momentum. Resource-rich economy provides commodity equity exposure.",
+    "PDBC": "7% \u2014 Broad commodity basket. Favored by both macro and alternatives agents. +54% momentum. Inflation hedge.",
+    "DBB": "5% \u2014 Base metals. +42% momentum. Infrastructure/EV demand theme plus macro agent signal.",
+    "KMLM": "5% \u2014 Managed futures. Trend-following strategy provides crisis alpha and decorrelation. +20% momentum.",
+    "BIL": "4% \u2014 T-bill proxy. Cash buffer per alternatives agent's stressed reading. Provides optionality for rebalancing.",
+    "DBA": "4% \u2014 Agriculture commodities. Low +6% momentum but included for diversification and alternatives agent's defensive thesis."
+  },
+  "key_risks": [
+    "Momentum concentration: Several positions have extreme 252-day returns (SATS, VICR, STRL, WDC). Even after trimming, a broad momentum reversal could cause significant drawdowns.",
+    "EM/Asia concentration: ~20% in EWY/EWT/EEM exposes the portfolio to geopolitical risk (China-Taiwan tensions, Korean Peninsula) and USD strength.",
+    "Regime transition risk: The alternatives agent reading 'stressed' while the main regime reads 'calm_bull' may be an early warning of regime change. Our 35% non-equity allocation mitigates but doesn't fully hedge this.",
+    "Signal data gap: SEC filings, earnings transcripts, and narrative shift signals were all unavailable. We are operating purely on momentum and quant agent signals without fundamental confirmation.",
+    "Commodity correlation: PDBC + DBB + DBA + CHRD + EWC all have commodity sensitivity. In a demand destruction scenario, these would correlate to the downside."
+  ],
+  "what_could_be_wrong": "The biggest risk to this portfolio is that we are late-cycle in a momentum-driven rally and the alternatives agent's 'stressed' signal is the correct forward-looking read. If we are on the cusp of a regime transition from calm_bull to stressed/crisis, our equity momentum positions could see sharp reversals while our 35% defensive allocation may not provide sufficient offset. Additionally, without any fundamental signal confirmation (all SEC/earnings/narrative caches empty), we are essentially running a pure momentum + quant agent consensus strategy \u2014 which works well in calm_bull but can be catastrophic at turning points. The SNDK exclusion could also be wrong if the +3467% return reflects a genuine fundamental re-rating we're missing.",
+  "as_of_date": "2026-05-19"
+}

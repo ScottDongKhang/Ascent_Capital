@@ -1,7 +1,7 @@
 {
   "date": "2026-04-12",
   "data_as_of": "2026-04-12",
-  "timestamp": "2026-05-17T17:59:24.879685",
+  "timestamp": "2026-05-21T21:14:31.812851",
   "portfolio_state": {
     "date": "2026-04-12",
     "us_regime": "calm_bull",
@@ -63,7 +63,7 @@
         {
           "sym1": "AAPL",
           "sym2": "MSFT",
-          "correlation": 0.244
+          "correlation": 0.276
         }
       ],
       "summary_text": "QUANTITATIVE RISK CONTEXT (pre-computed):\n\nPortfolio VaR (historical simulation, 63 trading days):\n  95th percentile (1-day): -1.88%  (1 in 20 chance of loss >= this)\n  99th percentile (1-day): -2.32%  (1 in 100 chance of loss >= this)\n\nFactor exposures (sum of position weights per factor):\n  us_tech            100.0%\n\nCorrelation: No high-correlation pairs (>0.65) detected.\n\nConcentration warning: us_tech is 100.0% of portfolio"
