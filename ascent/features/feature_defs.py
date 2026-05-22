@@ -177,6 +177,36 @@ def sector_relative_momentum(
     return result
 
 
+# ── HY Spread Direction ───────────────────────────────────────────────
+
+def hy_spread_direction(
+    macro_pivot: pd.DataFrame,
+    close: pd.DataFrame,
+    window: int = 20,
+) -> pd.DataFrame:
+    """
+    Direction of HY credit spread change over `window` days.
+    +1 = spreads tightening (risk-on), -1 = spreading (risk-off), 0 = flat.
+    Broadcast uniformly to all equity symbols — pure macro regime input.
+    Returns zeros if hy_spread not in macro_pivot.
+    """
+    zeros = pd.DataFrame(0.0, index=close.index, columns=close.columns)
+    if macro_pivot is None or "hy_spread" not in macro_pivot.columns:
+        return zeros
+
+    hy = macro_pivot["hy_spread"].reindex(close.index).ffill()
+    change = hy.diff(window)
+    direction = change.apply(
+        lambda x: -1.0 if x > 0 else (1.0 if x < 0 else 0.0)
+    ).fillna(0.0)
+
+    return pd.DataFrame(
+        np.tile(direction.values.reshape(-1, 1), (1, close.shape[1])),
+        index=close.index,
+        columns=close.columns,
+    )
+
+
 # ── Fundamental Panel ─────────────────────────────────────────────────
 
 def build_fundamental_panel(
@@ -563,6 +593,10 @@ def build_all_features(
                     np.tile(chg.values.reshape(-1, 1), (1, close.shape[1])),
                     index=chg.index, columns=close.columns,
                 ).reindex(close.index).ffill()
+
+    # HY-spread direction (cross-asset regime signal for ML sleeve)
+    if macro_pivot is not None and not macro_pivot.empty:
+        features["hy_spread_dir"] = hy_spread_direction(macro_pivot, close)
 
     # Earnings surprise panel (PEAD signal)
     if earnings_df is not None and not earnings_df.empty:
