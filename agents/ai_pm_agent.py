@@ -294,11 +294,24 @@ def _build_system_prompt(ic: float | None = None) -> str:
     return base
 
 
-def _get_calibration_report_safe(n_rebalances: int = 10) -> dict | None:
-    """Load calibration report. Returns None on any failure."""
+def _get_calibration_ic_safe(n_rebalances: int = 10) -> float | None:
+    """Return the Spearman IC float from the calibration report, or None on any failure.
+
+    ``get_calibration_report`` returns a plain-text string; we parse the IC value
+    out of the known line format:
+        "  IC (conviction → 21d return): +0.12  [Weak]"
+    Returns None when there is no data yet or when parsing fails.
+    """
+    import re
     try:
         from ascent.strategy.calibration_tracker import get_calibration_report
-        return get_calibration_report(n_rebalances=n_rebalances)
+        report_str = get_calibration_report(n_rebalances=n_rebalances)
+        if not isinstance(report_str, str):
+            return None
+        m = re.search(r"IC \(conviction.*?\):\s*([+-]?\d+\.\d+)", report_str)
+        if m:
+            return float(m.group(1))
+        return None
     except Exception:
         return None
 
@@ -730,8 +743,7 @@ def run_ai_pm(
         log.info("[AIPMAgent] Preloaded %d agent outputs — skipping redundant pipeline runs", len(precomputed))
 
     # Build system prompt with calibration gate
-    _cal_report = _get_calibration_report_safe(n_rebalances=10)
-    _ic = _cal_report.get("spearman_ic") if _cal_report else None
+    _ic = _get_calibration_ic_safe(n_rebalances=10)
     _system = _build_system_prompt(ic=_ic)
 
     try:
