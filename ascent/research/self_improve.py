@@ -35,7 +35,7 @@ ACTIVE_CONFIG_PATH = Path("data_cache/active_alpha_config.json")
 
 # Match current stack.py defaults exactly
 DEFAULT_ALPHA_WEIGHTS = {
-    "trend":           0.41,
+    "trend":           0.38,
     "meanrev":         0.05,
     "statarb":         0.15,
     "ml":              0.10,
@@ -48,7 +48,7 @@ DEFAULT_ALPHA_WEIGHTS = {
     "insider":         0.02,
     "short_interest":  0.02,
     "altdata":         0.00,   # zero until first source passes IC gate
-    "narrative":       0.00,   # zero until narrative cache has ≥30 days history
+    "narrative":       0.03,   # activate narrative alpha
 }
 
 PERTURB_RANGE  = 0.10   # max +/- 10% per sleeve per variant

@@ -14,7 +14,7 @@ from ascent.alpha.ml_sleeve import build_ml_alpha, build_ml_alpha_cpcv
 log = logging.getLogger(__name__)
 
 DEFAULT_ALPHA_WEIGHTS = {
-    "trend":           0.41,
+    "trend":           0.38,
     "meanrev":         0.05,
     "volatility":      0.05,
     "statarb":         0.15,
@@ -27,7 +27,7 @@ DEFAULT_ALPHA_WEIGHTS = {
     "insider":         0.02,
     "short_interest":  0.02,
     "altdata":         0.00,   # zero until first source passes IC gate
-    "narrative":       0.00,   # zero until narrative cache has ≥30 days history
+    "narrative":       0.03,   # activate narrative alpha
 }
 
 def _load_active_alpha_weights(regime: str = None) -> dict:
