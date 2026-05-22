@@ -27,8 +27,7 @@ def test_seed_writes_cache(tmp_path):
 
     mock_result = {"direction": "UP", "confidence": 0.8, "key_trend": "strong", "uncertainty": "rates"}
 
-    with patch("ascent.alpha.llm_fundamental._call_llm", return_value=mock_result), \
-         patch("ascent.alpha.llm_fundamental.CACHE_PATH", cache_path):
+    with patch("ascent.alpha.llm_fundamental._call_llm", return_value=mock_result):
         seed_cache(fundamentals, cache_path=cache_path)
 
     assert cache_path.exists()
