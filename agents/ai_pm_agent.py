@@ -78,6 +78,21 @@ AI_PM_TOOLS = [
         },
     },
     {
+        "name": "get_analyst_estimates",
+        "description": (
+            "Fetch analyst consensus for a ticker: forward P/E, target price range, "
+            "number of analysts, recommendation mean (1=Strong Buy), earnings and revenue growth. "
+            "Use before making a high-conviction override of the quant signal."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "symbol": {"type": "string", "description": "Ticker symbol, e.g. AAPL"},
+            },
+            "required": ["symbol"],
+        },
+    },
+    {
         "name": "get_regime_state",
         "description": "Get the current market regime label, confidence, HMM entropy, and days in current regime.",
         "input_schema": {"type": "object", "properties": {}, "required": []},
@@ -555,6 +570,40 @@ def _tool_get_live_news(inputs: dict) -> str:
         return f"News fetch failed for {symbol}: {e}"
 
 
+def _tool_get_analyst_estimates(inputs: dict) -> str:
+    """Fetch forward valuation and analyst consensus for a symbol via yfinance."""
+    symbol = inputs.get("symbol", "").upper().strip()
+    if not symbol:
+        return "Error: symbol required"
+    try:
+        import yfinance as yf
+        info = yf.Ticker(symbol).info or {}
+        fields = [
+            ("forwardPE",               "Forward P/E"),
+            ("priceToBook",             "Price/Book"),
+            ("targetMeanPrice",         "Analyst target (mean)"),
+            ("targetLowPrice",          "Analyst target (low)"),
+            ("targetHighPrice",         "Analyst target (high)"),
+            ("numberOfAnalystOpinions", "# analysts covering"),
+            ("recommendationMean",      "Rec mean (1=Strong Buy, 5=Strong Sell)"),
+            ("earningsGrowth",          "Earnings growth (YoY)"),
+            ("revenueGrowth",           "Revenue growth (YoY)"),
+        ]
+        lines = [f"{symbol} analyst consensus:"]
+        for key, label in fields:
+            val = info.get(key)
+            if val is not None:
+                if isinstance(val, float) and key.endswith("Growth"):
+                    lines.append(f"  {label}: {val*100:.1f}%")
+                else:
+                    lines.append(f"  {label}: {val}")
+        if len(lines) == 1:
+            return f"No analyst data available for {symbol}."
+        return "\n".join(lines)
+    except Exception as e:
+        return f"Analyst data failed for {symbol}: {e}"
+
+
 def _tool_propose_portfolio(inputs: dict, result_store: list) -> str:
     weights = inputs.get("weights", {})
     thesis = inputs.get("thesis", {})
@@ -590,6 +639,7 @@ def _make_executor(result_store: list, precomputed: dict | None = None):
     _map = {
         "get_rebalance_brief":      _tool_get_rebalance_brief,
         "get_live_news":            _tool_get_live_news,
+        "get_analyst_estimates":    _tool_get_analyst_estimates,
         "get_regime_state":         _tool_get_regime_state,
         "get_macro_data":           _tool_get_macro_data,
         "run_quant_agent":          _run_quant_agent_cached,
