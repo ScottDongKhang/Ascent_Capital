@@ -279,6 +279,30 @@ Rules:
 """
 
 
+def _build_system_prompt(ic: float | None = None) -> str:
+    """Return the AI PM system prompt, prepending a calibration warning if IC < 0.05."""
+    base = _SYSTEM_PROMPT
+    if ic is not None and ic < 0.05:
+        warning = (
+            "\n\n⚠️  CALIBRATION WARNING: Your recent conviction-vs-outcome IC is "
+            f"{ic:.3f} (Uncalibrated, threshold 0.05). Your high-conviction overrides "
+            "have not been predictive. Be conservative — prefer the quant baseline "
+            "unless you have a clearly non-quantitative thesis (news, events, regime shift). "
+            "Do not override quant on momentum or valuation alone this session.\n"
+        )
+        return warning + base
+    return base
+
+
+def _get_calibration_report_safe(n_rebalances: int = 10) -> dict | None:
+    """Load calibration report. Returns None on any failure."""
+    try:
+        from ascent.strategy.calibration_tracker import get_calibration_report
+        return get_calibration_report(n_rebalances=n_rebalances)
+    except Exception:
+        return None
+
+
 # ── Tool executor implementations ──────────────────────────────────────────────
 
 def _tool_get_regime_state(_: dict) -> str:
@@ -705,9 +729,14 @@ def run_ai_pm(
     if precomputed:
         log.info("[AIPMAgent] Preloaded %d agent outputs — skipping redundant pipeline runs", len(precomputed))
 
+    # Build system prompt with calibration gate
+    _cal_report = _get_calibration_report_safe(n_rebalances=10)
+    _ic = _cal_report.get("spearman_ic") if _cal_report else None
+    _system = _build_system_prompt(ic=_ic)
+
     try:
         tool_completion(
-            system_prompt=_SYSTEM_PROMPT,
+            system_prompt=_system,
             user_prompt=f"Today is {date.today()}. Please conduct your research and submit your portfolio.",
             tools=AI_PM_TOOLS,
             tool_executor=_make_executor(result_store, precomputed),
@@ -748,7 +777,7 @@ def run_ai_pm(
         )
         try:
             tool_completion(
-                system_prompt=_SYSTEM_PROMPT,
+                system_prompt=_system,
                 user_prompt=revision_prompt,
                 tools=AI_PM_TOOLS,
                 tool_executor=_make_executor(result_store_v2, precomputed),
