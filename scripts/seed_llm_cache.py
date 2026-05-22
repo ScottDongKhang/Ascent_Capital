@@ -12,6 +12,8 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import json
+from collections import Counter
 import pandas as pd
 from ascent.alpha.llm_fundamental import llm_fundamental_alpha, CACHE_PATH
 
@@ -110,10 +112,8 @@ def main():
     print(f"[Seeder] Done — cache at {CACHE_PATH}")
 
     # Report how many symbols have >=2 entries (required for narrative alpha)
-    import json
     if CACHE_PATH.exists():
         cache = json.loads(CACHE_PATH.read_text())
-        from collections import Counter
         sym_counts: Counter = Counter()
         for key in cache:
             sym = key.rsplit("_", 1)[0]

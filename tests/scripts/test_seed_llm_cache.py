@@ -27,12 +27,13 @@ def test_seed_writes_cache(tmp_path):
 
     mock_result = {"direction": "UP", "confidence": 0.8, "key_trend": "strong", "uncertainty": "rates"}
 
-    with patch("ascent.alpha.llm_fundamental._call_llm", return_value=mock_result):
+    with patch("ascent.alpha.llm_fundamental._call_llm", return_value=mock_result), \
+         patch("ascent.alpha.llm_fundamental.open", create=True):
         seed_cache(fundamentals, cache_path=cache_path)
 
     assert cache_path.exists()
     cache = json.loads(cache_path.read_text())
-    assert len(cache) >= 2  # at least one entry per symbol
+    assert len(cache) >= 4  # 2 symbols × at least 2 quarters each
 
 
 def test_seed_handles_no_fundamentals(tmp_path):
