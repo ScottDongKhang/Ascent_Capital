@@ -102,7 +102,7 @@ demo_app.py           Streamlit interactive demo
 
 | Sleeve | Weight | Notes |
 |--------|--------|-------|
-| Trend | 41% | Cross-sectional momentum; skip-last-month `mom_252d − mom_21d` at 0.20 sub-weight |
+| Trend | 38% | Cross-sectional momentum; skip-last-month `mom_252d − mom_21d` at 0.20 sub-weight |
 | Stat-arb | 15% | Sector residuals; needs profiles.parquet |
 | ML (XGBoost) | 10% | CPCV C(6,2)=15 folds, purge=5 bdays, embargo=5 bdays; 6 features by IC/IR; p5 guard > −0.05 |
 | Mean reversion | 5% | Short-term reversal |
@@ -115,7 +115,7 @@ demo_app.py           Streamlit interactive demo
 | Insider | 2% | Insider net transaction score; sparse — zero-filled if cache absent |
 | Short Interest | 2% | Short squeeze signal; sparse — zero-filled if cache absent |
 | Alt Data | 0% | IC-validated alt data (SEC 10-K, transcripts, Reddit, Google Trends); 0% until IC gate passes |
-| Narrative Alpha | 0% | Quarter-over-quarter thesis shift detection via Haiku; 0% until cache matures |
+| Narrative Alpha | 3% | Quarter-over-quarter thesis shift detection via Haiku; returns zeros if cache absent |
 
 **Critical**: `DEFAULT_ALPHA_WEIGHTS` exists in BOTH `ascent/alpha/stack.py` AND `ascent/research/self_improve.py`. If adding a new sleeve, update both or integrity tests will fail.
 
@@ -375,7 +375,7 @@ Python 3.12.13 Homebrew, venv at `.venv/`. Use `.venv/bin/python`. API keys via 
 | Adversarial self-play | ✅ | Red team (Sonnet) attacks proposal; AI PM revises or defends |
 | Episodic memory | ✅ | Per-regime outcome log; queried by AI PM before proposing |
 | Calibration tracking | ✅ | Conviction-vs-realized IC; AI PM checks own hit rate |
-| Narrative alpha | ✅ | Q-o-Q thesis shift detection (Haiku); 0% weight until cache matures |
+| Narrative alpha | ✅ | Q-o-Q thesis shift detection (Haiku); 3% weight; returns zeros if cache absent |
 | Non-rebalance intelligence | ✅ | 7 daily monitors → rebalance brief → AI PM tool #17 `get_rebalance_brief` |
 | LLM cost tracking | ✅ | Per-model token + cost accounting; `logs/cost_log.jsonl` per run |
 
