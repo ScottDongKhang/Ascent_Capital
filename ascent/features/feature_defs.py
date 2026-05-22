@@ -196,9 +196,7 @@ def hy_spread_direction(
 
     hy = macro_pivot["hy_spread"].reindex(close.index).ffill()
     change = hy.diff(window)
-    direction = change.apply(
-        lambda x: -1.0 if x > 0 else (1.0 if x < 0 else 0.0)
-    ).fillna(0.0)
+    direction = -np.sign(change).fillna(0.0)
 
     return pd.DataFrame(
         np.tile(direction.values.reshape(-1, 1), (1, close.shape[1])),
@@ -594,8 +592,7 @@ def build_all_features(
                     index=chg.index, columns=close.columns,
                 ).reindex(close.index).ffill()
 
-    # HY-spread direction (cross-asset regime signal for ML sleeve)
-    if macro_pivot is not None and not macro_pivot.empty:
+        # HY-spread direction (cross-asset regime signal for ML sleeve)
         features["hy_spread_dir"] = hy_spread_direction(macro_pivot, close)
 
     # Earnings surprise panel (PEAD signal)

@@ -251,6 +251,10 @@ _SPARSE_FILL_ZERO = {
     "short_pct_float",     # NaN = no short interest data → 0
 }
 
+_SKIP_CS_NORMALIZE: set[str] = {
+    "hy_spread_dir",   # broadcast macro signal — CS z-score would zero it out
+}
+
 
 def _stack_features(features: dict, available: list) -> pd.DataFrame:
     """
@@ -265,11 +269,16 @@ def _stack_features(features: dict, available: list) -> pd.DataFrame:
     long_frames = []
     for feat_name in available:
         df = features[feat_name]
-        # Cross-sectional z-score: subtract daily mean, divide by daily std
-        cs_mean = df.mean(axis=1)
-        cs_std  = df.std(axis=1).replace(0, 1)
-        df_cs   = df.sub(cs_mean, axis=0).div(cs_std, axis=0)
-        stacked = df_cs.stack().rename(feat_name)
+        if feat_name in _SKIP_CS_NORMALIZE:
+            # Broadcast macro signals: all symbols share the same value per day,
+            # so CS z-score would produce 0/0 → 0 for every cell. Pass raw values.
+            stacked = df.stack().rename(feat_name)
+        else:
+            # Cross-sectional z-score: subtract daily mean, divide by daily std
+            cs_mean = df.mean(axis=1)
+            cs_std  = df.std(axis=1).replace(0, 1)
+            df_cs   = df.sub(cs_mean, axis=0).div(cs_std, axis=0)
+            stacked = df_cs.stack().rename(feat_name)
         long_frames.append(stacked)
     result = pd.concat(long_frames, axis=1)
     for col in _SPARSE_FILL_ZERO:
