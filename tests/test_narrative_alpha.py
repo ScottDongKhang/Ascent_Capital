@@ -189,9 +189,9 @@ def test_narrative_cache_prevents_duplicate_llm_calls(tmp_path):
 # ── test_narrative_in_stack_weights ───────────────────────────────────────────
 
 def test_narrative_in_stack_default_weights():
-    """narrative sleeve must be present in DEFAULT_ALPHA_WEIGHTS at 0.0."""
+    """narrative sleeve must be present in DEFAULT_ALPHA_WEIGHTS at 0.03."""
     from ascent.alpha.stack import DEFAULT_ALPHA_WEIGHTS
     assert "narrative" in DEFAULT_ALPHA_WEIGHTS, \
         "DEFAULT_ALPHA_WEIGHTS must include 'narrative' sleeve"
-    assert DEFAULT_ALPHA_WEIGHTS["narrative"] == 0.0, \
-        "narrative sleeve must be zero-weighted until cache matures"
+    assert abs(DEFAULT_ALPHA_WEIGHTS["narrative"] - 0.03) < 0.001, \
+        "narrative sleeve activated at 3% (cache seeder built in Task #13)"
