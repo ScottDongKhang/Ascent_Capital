@@ -469,3 +469,11 @@ Python 3.12.13 Homebrew, venv at `.venv/`. Use `.venv/bin/python`. API keys via 
 - 536 → 562 tests (21 new, 1 skipped). Note: 541 was the test count from the previous session snapshot; actual was 541→562.
 - Files: ascent/memory/decision_memory.py (new), ascent/strategy/conviction_gate.py (new), agents/ai_pm_agent.py, run_all_agents.py, tests/test_decision_memory.py (new), tests/test_conviction_gate.py (new).
 - Open: third part of "all three" — proprietary signals via factor discovery activation (proposal-only mode). ML conviction model training when n_cases≥30 (infrastructure is ML-ready; needs data accumulation).
+
+### 2026-05-23 (position health monitor + intelligence upgrade ✅)
+- **Position health** (`ascent/monitoring/position_health.py`): pure-Python per-position metrics: return since last rebalance, 252d/21d momentum, alpha rank percentile in 900-symbol universe, flag (OK/WATCH/DETERIORATING). Runs first, before any LLM.
+- **adversarial_daily.py upgraded**: now receives PositionHealth dict; Haiku sees actual return-since-rebalance, momentum, rank per position — not just symbol names.
+- **position_thesis.py upgraded**: each position gets health data in prompt; DETERIORATING positions flagged explicitly for thesis review.
+- **daily_intelligence.py**: position_health runs first, passed downstream to all LLM monitors; health snapshot added to JSON output.
+- **rebalance_brief.py**: health table (sorted worst-first) added to Haiku synthesis prompt; deteriorating/watching lists in output dict for AI PM tool.
+- 562 → 569 tests (7 new). Files: ascent/monitoring/position_health.py (new), adversarial_daily.py, position_thesis.py, daily_intelligence.py, rebalance_brief.py, tests/monitoring/test_position_health.py (new).
