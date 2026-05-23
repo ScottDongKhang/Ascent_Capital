@@ -1,15 +1,15 @@
 import logging
-from typing import Dict
+from typing import Dict, Optional
 
 log = logging.getLogger(__name__)
 
 _SYSTEM = (
     "You are a risk manager at an institutional quantitative fund. "
-    "Your job is to identify the SINGLE most dangerous assumption currently embedded "
-    "in the portfolio — something the quant signals would not catch. "
-    "Think about: hidden correlations, regime fragility, crowding, "
-    "event risk, liquidity, or thesis staleness. "
-    "Be specific, quantitative, and under 100 words."
+    "You have real position-level data: return since last rebalance, momentum, and alpha rank. "
+    "Identify the SINGLE most dangerous assumption currently embedded in this portfolio — "
+    "something the quant signals might not catch. Reference specific symbols and numbers. "
+    "Think about: hidden correlations, regime fragility, crowding, event risk, liquidity, "
+    "or thesis staleness. Be specific, quantitative, and under 120 words."
 )
 
 
@@ -18,9 +18,11 @@ def generate_adversarial_challenge(
     merged_weights: Dict[str, float],
     agent_outputs: list,
     regime: str = "unknown",
+    position_health: Optional[Dict] = None,
 ) -> str:
     """
     Returns a single adversarial challenge string, or '' on failure.
+    position_health: dict of {symbol: PositionHealth} from position_health.py
     """
     if not merged_weights:
         return ""
@@ -30,23 +32,44 @@ def generate_adversarial_challenge(
     except ImportError:
         return ""
 
-    top_positions = sorted(merged_weights.items(), key=lambda x: x[1], reverse=True)[:8]
-    pos_str = ", ".join(f"{s} ({w:.1%})" for s, w in top_positions)
+    # Build health context — sorted worst first
+    health_lines = []
+    if position_health:
+        from ascent.monitoring.position_health import format_health_summary
+        health_lines = [
+            "Position health (sorted by risk):",
+            format_health_summary(position_health),
+        ]
+        deteriorating = [s for s, h in position_health.items() if h.flag == "DETERIORATING"]
+        watching = [s for s, h in position_health.items() if h.flag == "WATCH"]
+        if deteriorating:
+            health_lines.append(f"DETERIORATING positions: {', '.join(deteriorating)}")
+        if watching:
+            health_lines.append(f"WATCH positions: {', '.join(watching)}")
+    else:
+        top = sorted(merged_weights.items(), key=lambda x: -x[1])[:8]
+        health_lines = ["Positions: " + ", ".join(f"{s} ({w:.1%})" for s, w in top)]
 
-    user_prompt = (
-        f"Date: {date}\n"
-        f"Regime: {regime}\n"
-        f"Top positions: {pos_str}\n"
-        f"Total positions: {len(merged_weights)}\n\n"
-        "What is the single most dangerous assumption in this portfolio right now?"
-    )
+    # Portfolio-level concentration context
+    top5_weight = sum(sorted(merged_weights.values(), reverse=True)[:5])
+
+    user_prompt = "\n".join([
+        f"Date: {date}",
+        f"Regime: {regime}",
+        f"Portfolio: {len(merged_weights)} positions, top-5 concentration {top5_weight:.0%}",
+        "",
+    ] + health_lines + [
+        "",
+        "What is the single most dangerous assumption in this portfolio right now?",
+        "Reference specific symbols and return/momentum numbers from the data above.",
+    ])
 
     try:
         return generate_structured(
             system_prompt=_SYSTEM,
             user_prompt=user_prompt,
             model=HAIKU_MODEL,
-            max_tokens=300,
+            max_tokens=350,
             temperature=0.7,
         ).strip()
     except Exception as e:

@@ -47,6 +47,11 @@ def _load_entries(intel_dir: str) -> List[Dict]:
 def _extract_stale_positions(entries: List[Dict]) -> List[str]:
     if not entries:
         return []
+    # Prefer position_health flags (richer signal) over conviction_decay rank delta
+    health = entries[-1].get("position_health", {})
+    if health:
+        return [sym for sym, h in health.items() if h.get("flag") == "DETERIORATING"]
+    # Fallback to conviction_decay rank drop
     latest = entries[-1].get("conviction_decay", {})
     stale = []
     for sym, data in latest.items():
@@ -55,6 +60,29 @@ def _extract_stale_positions(entries: List[Dict]) -> List[str]:
         if r_then is not None and r_now is not None and (r_now - r_then) >= 10:
             stale.append(sym)
     return stale
+
+
+def _extract_health_summary(entries: List[Dict]) -> str:
+    """Return a compact health table for the rebalance brief prompt."""
+    if not entries:
+        return ""
+    health = entries[-1].get("position_health", {})
+    if not health:
+        return ""
+    lines = []
+    order = {"DETERIORATING": 0, "WATCH": 1, "OK": 2}
+    sorted_items = sorted(health.items(), key=lambda kv: (order.get(kv[1].get("flag", "OK"), 3),
+                                                           kv[1].get("return_since_rebalance") or 0))
+    for sym, h in sorted_items[:12]:
+        flag = h.get("flag", "OK")
+        ret  = h.get("return_since_rebalance")
+        mom  = h.get("momentum_252d")
+        rank = h.get("alpha_rank_pct")
+        ret_str  = f"{ret:+.1%}" if ret is not None else "n/a"
+        mom_str  = f"{mom:+.0%}" if mom is not None else "n/a"
+        rank_str = f"{rank:.0%}" if rank is not None else "n/a"
+        lines.append(f"  {sym} [{flag}] ret={ret_str} mom={mom_str} rank={rank_str}")
+    return "Position health (worst first):\n" + "\n".join(lines)
 
 
 def _extract_weakening_sleeves(entries: List[Dict]) -> List[str]:
@@ -125,19 +153,26 @@ def generate_rebalance_brief(
         if all_outcomes else "Insufficient historical analogues"
     )
 
+    health_summary = _extract_health_summary(entries)
+
     summary_lines = [
         f"Period: last {len(entries)} trading days ending {date}",
-        f"Stale positions (rank dropped ≥10): {stale_positions or 'none'}",
+        f"Deteriorating positions: {stale_positions or 'none'}",
         f"Weakening alpha sleeves: {weakening_sleeves or 'none'}",
         f"Regime trajectory: {json.dumps(entries[-1].get('regime_trajectory', {}))}",
         f"Analogue signal: {analogue_signal}",
         f"Top macro risks: {top_macro_risks}",
+    ]
+    if health_summary:
+        summary_lines += ["", health_summary]
+    summary_lines += [
+        "",
         "Daily adversarial challenges (last 3):",
     ] + [f"  - {t}" for t in adversarial_themes[-3:]] + [
         "Latest position thesis updates:",
     ] + [
-        f"  {sym}: {thesis[:80]}"
-        for sym, thesis in list(entries[-1].get("position_theses", {}).items())[:6]
+        f"  {sym}: {thesis[:100]}"
+        for sym, thesis in list(entries[-1].get("position_theses", {}).items())[:8]
     ]
 
     synthesis = ""
@@ -155,10 +190,17 @@ def generate_rebalance_brief(
     except Exception as e:
         log.warning("[RebalanceBrief] Haiku synthesis failed: %s", e)
 
+    # Latest health flags for the AI PM tool
+    latest_health = entries[-1].get("position_health", {}) if entries else {}
+    deteriorating = [s for s, h in latest_health.items() if h.get("flag") == "DETERIORATING"]
+    watching      = [s for s, h in latest_health.items() if h.get("flag") == "WATCH"]
+
     result = {
         "date":               date,
         "synthesis":          synthesis,
         "stale_positions":    stale_positions,
+        "deteriorating":      deteriorating,
+        "watching":           watching,
         "weakening_sleeves":  weakening_sleeves,
         "top_macro_risks":    top_macro_risks,
         "analogue_signal":    analogue_signal,
