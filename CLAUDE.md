@@ -458,3 +458,14 @@ Python 3.12.13 Homebrew, venv at `.venv/`. Use `.venv/bin/python`. API keys via 
 - **Key gotcha**: water-fill cap in `build_long_short_weights` must be single-pass (not iterative): cap symbols initially above threshold, redistribute overflow only to symbols initially below threshold. Iterative cap breaks when all symbols start above threshold and redistributed names get re-capped in the next iteration.
 - 506 → 536 tests (30 new across 3 plans).
 - Files: scripts/seed_llm_cache.py, ascent/features/feature_defs.py, ascent/features/build_features.py, ascent/alpha/ml_sleeve.py, ascent/alpha/stack.py, ascent/research/self_improve.py, agents/ai_pm_agent.py, ascent/monitoring/rebalance_trigger.py, ascent/portfolio/long_short.py, ascent/risk/pm_risk_validator.py, run_all_agents.py.
+
+### 2026-05-22 (proprietary decision memory + conviction gate — AI PM is not a wrapper ✅)
+- **Decision memory** (`ascent/memory/decision_memory.py`): every AI PM override stored with context features (type, regime, ai_weight, quant_weight, momentum_252d). After 21d, realized wedge filled in. Per-(type, regime) win rate, avg wedge, best/worst tracked. This is a compounding knowledge base — the AI PM literally learns from its own mistakes.
+- **Conviction gate** (`ascent/strategy/conviction_gate.py`): data-driven go/no-go before each override. Rules-based now; ML-ready (logistic regression when n≥30 cases). Structural always-approve: `data_quality`, `correlation_risk`, `news_event`. Valuation gated by calibration IC AND historical win rate. `regime_macro` fully rules-driven by win rate.
+- **AI PM tools #21, #22**: `query_decision_history(override_type, regime)` → past win rate + recent cases; `check_override_conviction(override_type, regime)` → gate result with size multiplier. Phase 3 of AI PM now requires consulting both before finalizing any override.
+- **Thesis schema updated**: `override_type` required per override entry; `pre_mortem` field added (what kills this trade in 30d).
+- **run_all_agents.py wiring**: after each rebalance AI PM run, each override ingested into decision_memory.jsonl. Daily `_fill_wedge_and_decision_outcomes()` fetches 21d cumulative prices via yfinance → fills alpha_wedge_tracker → propagates realized wedge to decision_memory.
+- **Red team**: now receives `quant_weights` so it attacks AI PM vs quant deltas explicitly.
+- 536 → 562 tests (21 new, 1 skipped). Note: 541 was the test count from the previous session snapshot; actual was 541→562.
+- Files: ascent/memory/decision_memory.py (new), ascent/strategy/conviction_gate.py (new), agents/ai_pm_agent.py, run_all_agents.py, tests/test_decision_memory.py (new), tests/test_conviction_gate.py (new).
+- Open: third part of "all three" — proprietary signals via factor discovery activation (proposal-only mode). ML conviction model training when n_cases≥30 (infrastructure is ML-ready; needs data accumulation).
