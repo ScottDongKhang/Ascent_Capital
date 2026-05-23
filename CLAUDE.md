@@ -175,7 +175,7 @@ Claude Opus 4.6, 16 tools, `max_tool_calls=14`.
 3. Phase 3 — Signal research: up to 6 of 10 signal tools
 4. Phase 4 — Submit: `propose_portfolio(weights, thesis)`
 
-**16 tools**: `get_regime_state`, `get_macro_data`, `run_quant_agent`, `get_sec_signal`, `get_transcript_signal`, `get_attribution_history`, `get_earnings_signal`, `get_past_verdicts`, `get_factor_exposures`, `get_var_estimate`, `get_sector_concentration`, `get_position_momentum`, `get_narrative_shift`, `get_regime_memory`, `get_calibration_report`, `propose_portfolio`.
+**19 tools**: `get_rebalance_brief`, `get_regime_state`, `get_macro_data`, `run_quant_agent`, `get_sec_signal`, `get_transcript_signal`, `get_attribution_history`, `get_earnings_signal`, `get_past_verdicts`, `get_factor_exposures`, `get_var_estimate`, `get_sector_concentration`, `get_position_momentum`, `get_narrative_shift`, `get_regime_memory`, `get_calibration_report`, `get_live_news`, `get_analyst_estimates`, `propose_portfolio`.
 
 **After initial proposal — adversarial self-play:**
 - `red_team_agent.py` (Sonnet) attacks proposal: per-position worst-case + systemic kill shot
@@ -378,6 +378,10 @@ Python 3.12.13 Homebrew, venv at `.venv/`. Use `.venv/bin/python`. API keys via 
 | Narrative alpha | ✅ | Q-o-Q thesis shift detection (Haiku); 3% weight; returns zeros if cache absent |
 | Non-rebalance intelligence | ✅ | 7 daily monitors → rebalance brief → AI PM tool #17 `get_rebalance_brief` |
 | LLM cost tracking | ✅ | Per-model token + cost accounting; `logs/cost_log.jsonl` per run |
+| Alpha signal activation | ✅ | Narrative alpha 3%, sector-rel-mom, HY-spread-dir; ML retrain forced |
+| AI PM intelligence | ✅ | 19 tools; live news, analyst estimates, calibration-aware prompt |
+| IC-decay early rebalance | ✅ | `rebalance_trigger.py`; fires when composite IC drops ≥30% after ≥5 bdays |
+| 130/30 long-short | ✅ | `long_short.py` built; `LONG_SHORT_ENABLED=False` until ≥30 paper rebalances |
 
 ---
 
@@ -446,3 +450,11 @@ Python 3.12.13 Homebrew, venv at `.venv/`. Use `.venv/bin/python`. API keys via 
 - Fixed execution order: brief generation moved BEFORE AI PM block (was after weights write — AI PM would have read stale brief from previous cycle).
 - 492 → 506 tests (14 new in `tests/monitoring/`).
 - Files: ascent/llm/client.py, run_all_agents.py, agents/ai_pm_agent.py, debate/agents.py, ascent/monitoring/ (7 new + orchestrator + brief), tests/monitoring/ (6 test files).
+
+### 2026-05-21–22 (alpha signal activation + AI PM intelligence + portfolio evolution ✅)
+- **Alpha signals (Plan 1)**: LLM fundamental cache seeder (`scripts/seed_llm_cache.py`) — batch-populates 4 quarters for all symbols to activate narrative alpha. Narrative alpha weight raised 0%→3% (trend 41%→38%). Sector-relative momentum feature added (`feature_defs.py`, `build_features.py`, `ML_FEATURES` — now 11 items). HY-spread direction feature added (12th ML feature; `_SKIP_CS_NORMALIZE` bypass so CS z-score doesn't zero the broadcast signal). ML model cache cleared — retrain required on next run.
+- **AI PM upgrades (Plan 2)**: Added tools #18 `get_live_news` (72h headlines via yfinance) and #19 `get_analyst_estimates` (forward PE, target price, rec mean via yfinance). Added calibration-aware system prompt: `_build_system_prompt(ic)` prepends ⚠️ CALIBRATION WARNING when conviction IC < 0.05. `_get_calibration_ic_safe()` parses IC float from `get_calibration_report()` string output via regex (returns a string, not a dict — key gotcha).
+- **Portfolio mechanics (Plan 3)**: IC-decay triggered early rebalance (`ascent/monitoring/rebalance_trigger.py`) — writes flag file when composite IC drops ≥30% from baseline after ≥5 bdays; `run_all_agents.py` reads flag and promotes to rebalance day. 130/30 long-short framework (`ascent/portfolio/long_short.py`) — kill-switched `LONG_SHORT_ENABLED=False` until ≥30 paper rebalances (~August 2026). `allow_shorts=False` added to `pm_risk_validator.validate()`.
+- **Key gotcha**: water-fill cap in `build_long_short_weights` must be single-pass (not iterative): cap symbols initially above threshold, redistribute overflow only to symbols initially below threshold. Iterative cap breaks when all symbols start above threshold and redistributed names get re-capped in the next iteration.
+- 506 → 536 tests (30 new across 3 plans).
+- Files: scripts/seed_llm_cache.py, ascent/features/feature_defs.py, ascent/features/build_features.py, ascent/alpha/ml_sleeve.py, ascent/alpha/stack.py, ascent/research/self_improve.py, agents/ai_pm_agent.py, ascent/monitoring/rebalance_trigger.py, ascent/portfolio/long_short.py, ascent/risk/pm_risk_validator.py, run_all_agents.py.
