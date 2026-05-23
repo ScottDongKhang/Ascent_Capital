@@ -215,6 +215,110 @@ def check_halt_state(today=None) -> bool:
     return True
 
 
+def _fill_wedge_and_decision_outcomes(as_of_date: str) -> None:
+    """
+    Fetch 21-day cumulative returns for symbols in pending alpha_wedge records,
+    fill wedge_21d in alpha_wedge.jsonl, then propagate wedge to decision_memory.jsonl.
+
+    Only runs for rebalances ≥30 calendar days old (giving market 21 trading days).
+    No-op if alpha_wedge log doesn't exist or yfinance fetch fails.
+    """
+    from datetime import date as _date, timedelta as _td
+    import json as _json
+    from pathlib import Path as _Path
+
+    wedge_log = _Path("logs/alpha_wedge.jsonl")
+    if not wedge_log.exists():
+        return
+
+    rows = [_json.loads(l) for l in wedge_log.read_text().splitlines() if l.strip()]
+    today = _date.fromisoformat(as_of_date)
+
+    # Collect symbols from records ≥30 calendar days old with no wedge yet
+    pending = [r for r in rows
+               if r.get("wedge_21d") is None
+               and (_date.fromisoformat(r["rebalance_date"]) + _td(days=30)) <= today]
+
+    if not pending:
+        return
+
+    # Gather all symbols across pending records
+    all_symbols: set = set()
+    for r in pending:
+        all_symbols.update(r.get("ai_pm_weights", {}).keys())
+        all_symbols.update(r.get("quant_weights", {}).keys())
+
+    if not all_symbols:
+        return
+
+    try:
+        import yfinance as _yf
+        syms = list(all_symbols)
+        raw = _yf.download(syms, period="65d", auto_adjust=True, progress=False)
+        if raw.empty:
+            return
+        import pandas as _pd
+        closes = raw["Close"] if isinstance(raw.columns, _pd.MultiIndex) else raw
+        if not isinstance(closes, _pd.DataFrame):
+            closes = closes.to_frame()
+    except Exception as _e:
+        print(f"[WedgeFill] Price fetch failed: {_e}")
+        return
+
+    # Compute cumulative returns from each rebalance date
+    from ascent.monitoring.alpha_wedge_tracker import update_outcomes as _aw_update
+    from ascent.memory.decision_memory import update_outcomes as _dm_update
+
+    for row in pending:
+        rb_date_str = row["rebalance_date"]
+        rb_date = _date.fromisoformat(rb_date_str)
+
+        try:
+            # Prices on rebalance day and 21 trading days later
+            rb_close = closes[closes.index.date == rb_date]
+            if rb_close.empty:
+                # Try nearest date
+                future = closes[closes.index.date >= rb_date]
+                if future.empty:
+                    continue
+                rb_close = future.iloc[[0]]
+
+            # Price 21+ calendar days after rebalance (use ~31cd as buffer)
+            end_target = rb_date + _td(days=31)
+            end_prices = closes[closes.index.date >= end_target]
+            if end_prices.empty:
+                end_target = rb_date + _td(days=28)
+                end_prices = closes[closes.index.date >= end_target]
+            if end_prices.empty:
+                continue
+            end_close = end_prices.iloc[[0]]
+
+            price_rets = {}
+            for sym in closes.columns:
+                p0 = rb_close[sym].iloc[0] if sym in rb_close.columns else None
+                p1 = end_close[sym].iloc[0] if sym in end_close.columns else None
+                if p0 and p1 and float(p0) != 0:
+                    price_rets[str(sym)] = float((p1 - p0) / p0)
+
+            if not price_rets:
+                continue
+
+            # Fill alpha_wedge entry directly for this rebalance
+            _aw_update(price_rets, as_of_date, lookback_days=60)
+
+            # After fill, read back the wedge for this rebalance and propagate
+            if wedge_log.exists():
+                _updated = [_json.loads(l) for l in wedge_log.read_text().splitlines() if l.strip()]
+                for _r in _updated:
+                    if _r.get("rebalance_date") == rb_date_str and _r.get("wedge_21d") is not None:
+                        _dm_update(rb_date_str, _r["wedge_21d"])
+                        print(f"[WedgeFill] Propagated wedge {_r['wedge_21d']:+.3%} for {rb_date_str}")
+                        break
+
+        except Exception as _re:
+            print(f"[WedgeFill] Could not fill {rb_date_str}: {_re}")
+
+
 def main():
     dry_run             = "--dry-run" in sys.argv
     skip_sector_check   = "--skip-sector-check" in sys.argv
@@ -247,6 +351,12 @@ def main():
         _update_cal({}, str(date.today()))
     except Exception:
         pass
+
+    # Fill 21d outcomes for alpha wedge + decision memory (best-effort)
+    try:
+        _fill_wedge_and_decision_outcomes(today.isoformat())
+    except Exception as _fwd_e:
+        print(f"[Runner] Wedge outcome fill failed: {_fwd_e}")
 
     # ── Step 0a: Start event agent background thread (market hours, weekdays) ──
     _event_thread = None
@@ -745,6 +855,37 @@ def main():
                     print("[Runner] Alpha wedge recorded")
                 except Exception as _we:
                     print(f"[Runner] Alpha wedge record failed: {_we}")
+
+                # Ingest each AI PM override into decision memory for future conviction gating
+                try:
+                    from ascent.memory.decision_memory import ingest_override as _ingest_dm
+                    _dm_regime = _get_current_regime()
+                    for _ov in ai_pm_result.thesis.get("quant_overrides", []):
+                        _sym = _ov.get("symbol", "")
+                        _ov_type = _ov.get("override_type", "")
+                        if not _sym or not _ov_type:
+                            continue
+                        _ai_w = ai_pm_result.portfolio.get(_sym, 0.0)
+                        _q_w = _quant_weights_snapshot.get(_sym, 0.0)
+                        _mom = None
+                        try:
+                            from ascent.monitoring.conviction_tracker import get_position_momentum_safe
+                            _mom = get_position_momentum_safe(_sym)
+                        except Exception:
+                            pass
+                        _ingest_dm(
+                            rebalance_date=today.isoformat(),
+                            symbol=_sym,
+                            override_type=_ov_type,
+                            regime=_dm_regime,
+                            ai_action=_ov.get("ai_action", ""),
+                            ai_weight=_ai_w,
+                            quant_weight=_q_w,
+                            momentum_252d=_mom,
+                        )
+                    print("[Runner] Decision memory updated")
+                except Exception as _dm_e:
+                    print(f"[Runner] Decision memory update failed: {_dm_e}")
 
                 try:
                     from compliance.audit_trail import record_event

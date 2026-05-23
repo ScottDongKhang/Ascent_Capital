@@ -245,6 +245,54 @@ AI_PM_TOOLS = [
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
+        "name": "query_decision_history",
+        "description": (
+            "Query your proprietary override decision history. Returns your historical win rate, "
+            "average wedge contribution, and recent cases for a given override type and regime. "
+            "Call this BEFORE finalizing any override to check if your judgment has been accurate "
+            "for this type of call in the current regime. The result includes a concrete "
+            "recommendation (proceed / reduce size / block) based on your actual track record."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "override_type": {
+                    "type": "string",
+                    "enum": ["data_quality", "regime_macro", "news_event", "correlation_risk", "valuation"],
+                    "description": "The type of override you are considering making",
+                },
+                "regime": {
+                    "type": "string",
+                    "description": "Current regime label (e.g. 'calm_bull', 'stressed')",
+                },
+            },
+            "required": ["override_type", "regime"],
+        },
+    },
+    {
+        "name": "check_override_conviction",
+        "description": (
+            "Get a concrete go/no-go decision on a specific override from the conviction gate. "
+            "Returns whether to proceed, a size multiplier (1.0=full, 0.75=reduce 25%, 0.0=block), "
+            "and the reason based on historical performance data. "
+            "Use this as the final check before including a non-standard override in your proposal."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "override_type": {
+                    "type": "string",
+                    "enum": ["data_quality", "regime_macro", "news_event", "correlation_risk", "valuation"],
+                },
+                "regime": {
+                    "type": "string",
+                    "description": "Current regime label",
+                },
+            },
+            "required": ["override_type", "regime"],
+        },
+    },
+    {
         "name": "propose_portfolio",
         "description": "REQUIRED: Submit your final portfolio and investment thesis. Call this to end the research loop.",
         "input_schema": {
@@ -306,7 +354,13 @@ Then WRITE before any Phase 3 tool:
   • Biggest quant risk: single largest factor or concentration risk in the combined baseline
 
 ══ PHASE 3 — SIGNAL RESEARCH ══
-Use up to 6 signal tools. Start with EXTENDED names. For each override you are considering, gather at least one confirming signal AND one that could refute your view. If both signals point the same way, you have a high-conviction override. If they conflict, default to the quant.
+Use up to 6 signal tools. Start with EXTENDED names. For each override you are considering:
+1. Call query_decision_history(override_type, regime) — check your historical win rate for this type of call.
+2. Gather at least one confirming signal AND one that could refute your view.
+3. Call check_override_conviction(override_type, regime) — get the go/no-go recommendation.
+4. Apply the size multiplier from the conviction gate to your position sizing.
+
+If the conviction gate blocks an override, you need a new non-quant piece of evidence to proceed.
 
 ══ PHASE 4 — DELIBERATION + SUBMIT ══
 Before calling propose_portfolio, WRITE:
@@ -629,6 +683,31 @@ def _tool_get_alpha_wedge(_: dict) -> str:
         return f"Alpha wedge data unavailable: {exc}"
 
 
+def _tool_query_decision_history(inputs: dict) -> str:
+    try:
+        from ascent.memory.decision_memory import format_query_result
+        return format_query_result(
+            override_type=inputs.get("override_type"),
+            regime=inputs.get("regime"),
+        )
+    except Exception as exc:
+        return f"Decision history unavailable: {exc}"
+
+
+def _tool_check_override_conviction(inputs: dict) -> str:
+    try:
+        from ascent.strategy.conviction_gate import evaluate, format_gate_result
+        ic = _get_calibration_ic_safe()
+        result = evaluate(
+            override_type=inputs.get("override_type", ""),
+            regime=inputs.get("regime", ""),
+            calibration_ic=ic,
+        )
+        return format_gate_result(result)
+    except Exception as exc:
+        return f"Conviction gate unavailable: {exc}"
+
+
 def _tool_get_rebalance_brief(_: dict) -> str:
     try:
         from pathlib import Path
@@ -758,9 +837,11 @@ def _make_executor(result_store: list, precomputed: dict | None = None):
         "get_sector_concentration": lambda i: get_sector_concentration(i),
         "get_position_momentum":    lambda i: get_position_momentum(i),
         "get_narrative_shift":      _tool_get_narrative_shift,
-        "get_calibration_report":   _tool_get_calibration_report,
-        "get_alpha_wedge":          _tool_get_alpha_wedge,
-        "propose_portfolio":        lambda i: _tool_propose_portfolio(i, result_store),
+        "get_calibration_report":       _tool_get_calibration_report,
+        "get_alpha_wedge":              _tool_get_alpha_wedge,
+        "query_decision_history":       _tool_query_decision_history,
+        "check_override_conviction":    _tool_check_override_conviction,
+        "propose_portfolio":            lambda i: _tool_propose_portfolio(i, result_store),
     }
 
     def executor(tool_name: str, tool_inputs: dict) -> str:
