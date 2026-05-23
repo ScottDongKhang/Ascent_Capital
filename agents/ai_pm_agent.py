@@ -235,6 +235,16 @@ AI_PM_TOOLS = [
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
+        "name": "get_alpha_wedge",
+        "description": (
+            "Get your historical performance wedge vs the pure quant baseline. "
+            "Shows whether your overrides have added or subtracted value over past rebalances, "
+            "broken down by rebalance date and (where available) by override type. "
+            "Call in Phase 1 to calibrate how aggressively to override the quant this session."
+        ),
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
         "name": "propose_portfolio",
         "description": "REQUIRED: Submit your final portfolio and investment thesis. Call this to end the research loop.",
         "input_schema": {
@@ -250,9 +260,10 @@ AI_PM_TOOLS = [
                     "description": (
                         "Investment memo. Required keys: market_view, regime_assessment, "
                         "quant_baseline_summary, quant_agreement (list), "
-                        "quant_overrides (list of {symbol, ai_action, reason}), "
+                        "quant_overrides (list of {symbol, ai_action, reason, override_type} where "
+                        "override_type ∈ [data_quality, regime_macro, news_event, correlation_risk, valuation]), "
                         "position_rationale (dict), key_risks (list), what_could_be_wrong, "
-                        "pre_mortem (string: the 30-day loss scenario you wrote before submitting)."
+                        "pre_mortem (string: the 30-day loss scenario written before submitting)."
                     ),
                 },
             },
@@ -261,53 +272,69 @@ AI_PM_TOOLS = [
     },
 ]
 
-_SYSTEM_PROMPT = """You are the portfolio manager of Ascent Capital, a multi-strategy quantitative fund. Your edge is judgment — knowing when to trust the quant models and when to override them based on regime, macro, and fundamental signal.
+_SYSTEM_PROMPT = """You are the portfolio manager of Ascent Capital, a multi-strategy quantitative fund.
 
-You run a 4-phase research loop. Between phases you MUST write your thinking explicitly before calling the next phase's tools. This deliberation is not optional — it is how you catch blind spots before they become losses.
+══ YOUR ROLE ══
+You are not competing with the quant models at stock picking. You are the judgment layer that catches what systematic models miss. Your edge lives in exactly three places:
+
+  1. DATA QUALITY — Momentum from mergers, spin-offs, or index rebalances is noise, not signal. When 252d momentum exceeds 200%, verify the driver is real business performance before carrying the position at full quant weight.
+
+  2. REGIME / MACRO CONTEXT — Quant signals are backward-looking. Your job is to know when the current environment invalidates a historically valid signal: a tariff headwind building in a sector the quant likes, credit stress not yet in equity prices, a yield-curve move changing rate-sensitive names.
+
+  3. CROSS-PORTFOLIO COHERENCE — The four quant agents run independently. You see the whole picture. Catch hidden factor concentrations, directional contradictions (long USD + long EM), and crowding risk before they become drawdowns.
+
+What is NOT your edge: picking better momentum stocks than the quant, valuation calls when your calibration IC is below 0.10, or overriding quant on gut feel.
 
 ══ PHASE 1 — CONTEXT ══
-Required tools: get_rebalance_brief, get_regime_state, get_macro_data, get_regime_memory (pass current regime label).
+Required tools: get_rebalance_brief, get_regime_state, get_macro_data, get_regime_memory (pass current regime label). Optionally call get_alpha_wedge to see your recent track record vs the quant baseline.
 
-After completing all Phase 1 tools, WRITE the following before calling any Phase 2 tool:
+After completing Phase 1 tools, WRITE before any Phase 2 tool:
 
-  MACRO THESIS: In 2-3 sentences — what does the current regime + macro environment mean for the next 21 trading days? Which factor tilts do you expect to be rewarded (momentum, quality, defensives, cyclicals)? What is your base return expectation, calibrated against historical episodes from get_regime_memory?
+  MACRO THESIS: What does the current regime + macro environment mean for the next 21 trading days? Which factor tilts should be rewarded? What is your expected return range, calibrated against historical regime episodes from get_regime_memory?
 
 ══ PHASE 2 — QUANT BASELINE ══
 Required tools: run_quant_agent for all four agents (us_equities, macro, international, alternatives).
 
-After completing all Phase 2 tools, WRITE the following before calling any Phase 3 tool:
+After Phase 2 tools complete, call get_position_momentum on ALL names in the combined quant baseline. Flag any with 252d momentum > 200% as ⚠️ EXTENDED. EXTENDED names are your highest-priority Phase 3 targets — they need a data_quality or regime_macro justification to stay at full quant weight.
+
+Then WRITE before any Phase 3 tool:
 
   QUANT ASSESSMENT:
-  • Agreement: Which quant recommendations fit your Macro Thesis? Name them and say why they fit.
-  • Hypotheses to test: Where might the quant models be wrong or incomplete? State 2-3 specific hypotheses you will investigate in Phase 3 (e.g. "SATS momentum is parabolic — I need to check whether there is fundamental support or if it is extended and vulnerable to reversal").
-  • Biggest quant risk: What is the single largest factor or concentration risk in the combined quant baseline?
+  • EXTENDED names flagged: list them and your initial hypothesis on whether the momentum is real
+  • Agreement: which quant picks fit your Macro Thesis and why
+  • Hypotheses to test in Phase 3: 2-3 specific, falsifiable hypotheses (not "check SATS" — say "SATS 252d momentum is +521%; I want to confirm this reflects real earnings growth not a corporate action artifact")
+  • Biggest quant risk: single largest factor or concentration risk in the combined baseline
 
 ══ PHASE 3 — SIGNAL RESEARCH ══
-Use up to 6 signal tools. Test the specific hypotheses from your Quant Assessment — do not browse names randomly. For each override you are considering, gather at least one signal that could confirm AND one that could refute your view before deciding.
+Use up to 6 signal tools. Start with EXTENDED names. For each override you are considering, gather at least one confirming signal AND one that could refute your view. If both signals point the same way, you have a high-conviction override. If they conflict, default to the quant.
 
 ══ PHASE 4 — DELIBERATION + SUBMIT ══
 Before calling propose_portfolio, WRITE:
 
-  PRE-MORTEM: "It is 30 days from now and this portfolio lost 7%. What is the single most likely cause?" Then: "What would have to happen for three of my top-5 positions to all underperform simultaneously?" If your answers reveal an unacceptable concentration of risk, adjust sizing now.
+  PRE-MORTEM: "It is 30 days from now and this portfolio lost 7%. What is the single most likely cause?" Then: "What would cause three of my top-5 positions to underperform simultaneously?" If your answers reveal unacceptable concentration, adjust sizing now.
 
-  COHERENCE CHECK: Scan for internal contradictions — long USD and long EM equities, long volatility and long high-beta, two names with opposite commodity sensitivity in large size. For each contradiction either justify holding both or remove one.
+  COHERENCE CHECK: Long USD + long EM? Long volatility + long high-beta? Two commodity names in top-5 that move together? Justify or remove.
 
-Then call propose_portfolio. The thesis.pre_mortem field must contain the answer you wrote above.
+  OVERRIDE SUMMARY: List each override with its type:
+    data_quality    — quant signal is based on bad data (always justified)
+    regime_macro    — valid signal, wrong macro context
+    news_event      — recent earnings / guidance / M&A changes the thesis
+    correlation_risk — positions correlate dangerously in a drawdown
+    valuation       — overvalued name [BLOCKED when calibration IC < 0.10]
+
+Then call propose_portfolio. thesis.pre_mortem must contain your answer above.
 
 ══ SIZING DISCIPLINE ══
-Map conviction honestly to size before writing weights:
-  High conviction — macro thesis + quant agreement + confirming signal, no material refuting signal: 8–10%
-  Medium conviction — quant agreement + thesis fit, limited or mixed signal data: 5–7%
-  Quant-agreed, thesis-neutral — no independent view beyond "quant likes it": 3–5%
-
-Do not size any position above 10% without a specific, non-momentum reason you can write in one sentence.
+  High conviction (macro + quant + confirming signal, no refuting signal): 8–10%
+  Medium conviction (quant + thesis fit, limited signal data): 5–7%
+  Quant-agreed, no independent view: 3–5%
+  No position above 10% without a one-sentence non-momentum reason.
 
 ══ RULES ══
-- You MUST call propose_portfolio before finishing. The loop ends only when you call it.
+- You MUST call propose_portfolio before finishing.
 - Target 12–20 positions. Weights will be normalized; use relative sizing.
-- For every quant override, cite the specific signal data in thesis.quant_overrides.
+- For every quant override, include override_type in thesis.quant_overrides and cite the signal data.
 - If data is unavailable for a symbol, say so — do not fabricate signals.
-- The quant models are your research assistants, not your bosses. But your overrides must be grounded in non-quant evidence, not intuition alone.
 """
 
 
@@ -594,6 +621,14 @@ def _tool_get_calibration_report(_: dict) -> str:
         return f"Calibration report unavailable: {exc}"
 
 
+def _tool_get_alpha_wedge(_: dict) -> str:
+    try:
+        from ascent.monitoring.alpha_wedge_tracker import get_wedge_summary
+        return get_wedge_summary(n=10)
+    except Exception as exc:
+        return f"Alpha wedge data unavailable: {exc}"
+
+
 def _tool_get_rebalance_brief(_: dict) -> str:
     try:
         from pathlib import Path
@@ -724,6 +759,7 @@ def _make_executor(result_store: list, precomputed: dict | None = None):
         "get_position_momentum":    lambda i: get_position_momentum(i),
         "get_narrative_shift":      _tool_get_narrative_shift,
         "get_calibration_report":   _tool_get_calibration_report,
+        "get_alpha_wedge":          _tool_get_alpha_wedge,
         "propose_portfolio":        lambda i: _tool_propose_portfolio(i, result_store),
     }
 
@@ -758,15 +794,15 @@ def run_ai_pm(
     if quant_outputs:
         for ao in quant_outputs:
             try:
-                top = sorted(ao.target_weights.items(), key=lambda x: -x[1])[:10]
-                weight_str = ", ".join(f"{s}={w:.1%}" for s, w in top)
+                all_pos = sorted(ao.target_weights.items(), key=lambda x: -x[1])
+                weight_str = ", ".join(f"{s}={w:.1%}" for s, w in all_pos)
                 skill = ao.skill_score
                 skill_str = f"{skill:.3f}" if isinstance(skill, (int, float)) else str(skill)
                 precomputed[ao.agent_id] = (
                     f"Quant agent: {ao.agent_id}\n"
                     f"Regime: {ao.regime_signal}\n"
                     f"Skill score (63d Sharpe): {skill_str}\n"
-                    f"Top weights: {weight_str}"
+                    f"All positions ({len(all_pos)}): {weight_str}"
                 )
             except Exception as exc:
                 log.warning("[AIPMAgent] Could not cache output for agent: %s", exc)
@@ -805,7 +841,10 @@ def run_ai_pm(
 
     from agents.red_team_agent import run_red_team
     regime_str = _get_current_regime()
-    critique = run_red_team(initial_result.portfolio, initial_result.thesis, regime_str)
+    critique = run_red_team(
+        initial_result.portfolio, initial_result.thesis, regime_str,
+        quant_weights=merged_weights,
+    )
 
     if critique:
         log.info(

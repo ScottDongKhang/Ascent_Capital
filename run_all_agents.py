@@ -705,6 +705,7 @@ def main():
             print(f"[RebalanceBrief] Generation failed: {_rb_e}")
 
     # ── AI PM Agent (rebalance days only — authority/calibration are rebalance-gated) ──
+    _quant_weights_snapshot = dict(merged_weights)  # capture pure quant before any AI PM blend
     if not is_rebalance:
         print("[Runner] AI PM skipped — non-rebalance day.")
     else:
@@ -726,6 +727,24 @@ def main():
                     print(f"[Runner] AI PM proposal rejected: {violations} — using quant 100%")
 
                 format_thesis({**ai_pm_result.thesis, "ai_pm_portfolio": ai_pm_result.portfolio})
+
+                # Record AI PM vs quant wedge for feedback loop
+                try:
+                    from ascent.monitoring.alpha_wedge_tracker import record_rebalance as _record_wedge
+                    _override_types = {
+                        o.get("symbol", ""): o.get("override_type", "unknown")
+                        for o in ai_pm_result.thesis.get("quant_overrides", [])
+                        if o.get("symbol")
+                    }
+                    _record_wedge(
+                        rebalance_date=today.isoformat(),
+                        ai_pm_weights=ai_pm_result.portfolio,
+                        quant_weights=_quant_weights_snapshot,
+                        override_types=_override_types,
+                    )
+                    print("[Runner] Alpha wedge recorded")
+                except Exception as _we:
+                    print(f"[Runner] Alpha wedge record failed: {_we}")
 
                 try:
                     from compliance.audit_trail import record_event

@@ -24,53 +24,86 @@ _SYSTEM_PROMPT = (
 )
 
 
-def run_red_team(portfolio: dict, thesis: dict, regime: str = "") -> str:
+def run_red_team(
+    portfolio: dict,
+    thesis: dict,
+    regime: str = "",
+    quant_weights: dict | None = None,
+) -> str:
     """
     Given a proposed portfolio and thesis, return the hardest possible bear critique.
 
     Args:
-        portfolio: Dict of {symbol: weight} from the AI PM's propose_portfolio call.
-        thesis:    The investment thesis dict from the same call.
-        regime:    Current market regime label (e.g. 'calm_bull', 'stressed', 'crisis').
+        portfolio:     Dict of {symbol: weight} from the AI PM's propose_portfolio call.
+        thesis:        The investment thesis dict from the same call.
+        regime:        Current market regime label (e.g. 'calm_bull', 'stressed', 'crisis').
+        quant_weights: The pure quant baseline weights before AI PM overrides. When provided,
+                       the red team attacks the AI PM vs quant deltas specifically.
 
     Returns:
         Plain-text critique string. Returns "" on any failure — never raises.
     """
     try:
-        # Build a compact portfolio summary for the prompt
         top_positions = sorted(portfolio.items(), key=lambda x: -x[1])[:10]
         positions_str = "\n".join(
             f"  {sym}: {w:.1%}" for sym, w in top_positions
         ) if top_positions else "  (empty portfolio)"
 
-        # Extract key thesis elements safely
         market_view = thesis.get("market_view", "not provided")
         key_risks = thesis.get("key_risks", [])
         what_could_be_wrong = thesis.get("what_could_be_wrong", "not provided")
         quant_overrides = thesis.get("quant_overrides", [])
+        pre_mortem = thesis.get("pre_mortem", "not provided")
 
         risks_str = (
-            "\n".join(f"  - {r}" for r in key_risks)
-            if key_risks
-            else "  (none listed)"
+            "\n".join(f"  - {r}" for r in key_risks) if key_risks else "  (none listed)"
         )
         overrides_str = (
             "\n".join(
-                f"  - {o.get('symbol','?')}: {o.get('ai_action','?')} — {o.get('reason','?')}"
+                f"  - {o.get('symbol','?')} [{o.get('override_type','?')}]: "
+                f"{o.get('ai_action','?')} — {o.get('reason','?')}"
                 for o in quant_overrides
             )
-            if quant_overrides
-            else "  (none)"
+            if quant_overrides else "  (none)"
         )
 
-        prompt = f"""You are reviewing the following portfolio proposal submitted by a portfolio manager.
+        # Build vs-quant delta section when quant baseline is available
+        delta_section = ""
+        if quant_weights:
+            all_syms = set(list(portfolio.keys()) + list(quant_weights.keys()))
+            deltas = []
+            for sym in all_syms:
+                ai_w  = portfolio.get(sym, 0.0)
+                q_w   = quant_weights.get(sym, 0.0)
+                diff  = ai_w - q_w
+                if abs(diff) >= 0.02:
+                    direction = "ADDED" if q_w == 0 else ("REMOVED" if ai_w == 0 else
+                                ("INCREASED" if diff > 0 else "REDUCED"))
+                    deltas.append((sym, q_w, ai_w, diff, direction))
+            deltas.sort(key=lambda x: -abs(x[3]))
+
+            if deltas:
+                delta_lines = []
+                for sym, q_w, ai_w, diff, direction in deltas[:8]:
+                    delta_lines.append(
+                        f"  {sym}: Quant={q_w:.1%} → AI PM={ai_w:.1%} ({direction}, delta={diff:+.1%})"
+                    )
+                delta_section = (
+                    "\nAI PM vs QUANT BASELINE DELTAS (positions changed ≥2%):\n"
+                    + "\n".join(delta_lines)
+                    + "\n"
+                )
+
+        prompt = f"""You are reviewing a portfolio proposal from an AI portfolio manager who has overridden the pure quant baseline.
 
 CURRENT REGIME: {regime if regime else "unknown"}
 
 PROPOSED PORTFOLIO:
 {positions_str}
-
+{delta_section}
 PM'S MARKET VIEW: {market_view}
+
+PM'S PRE-MORTEM: {pre_mortem}
 
 PM'S STATED RISKS:
 {risks_str}
@@ -80,13 +113,17 @@ PM'S WHAT COULD BE WRONG: {what_could_be_wrong}
 PM'S QUANT OVERRIDES:
 {overrides_str}
 
-Your task:
-1. For each of the top positions (up to 5), write one tight paragraph identifying the SINGLE worst-case scenario that could destroy that position. Be specific — cite sector dynamics, earnings risk, rate sensitivity, or valuation if relevant.
-2. Identify ONE systemic risk the PM is ignoring — this should be a correlation, crowding, or macro tail risk that is NOT mentioned in the PM's risk list.
-3. Call out any position that looks like narrative-driven momentum likely to mean-revert badly in a {regime if regime else "current"} regime environment.
-4. End with a one-sentence "kill shot" — the single most dangerous thing about this portfolio as a whole.
+Your task — be brutally specific, no soft language:
 
-Format: position-by-position paragraphs, then systemic risk section, then kill shot. Be concise — one paragraph max per position."""
+1. OVERRIDE ATTACKS: For each AI PM override vs the quant baseline (from the delta section above), state the worst-case outcome if the quant was RIGHT and the AI PM was WRONG. Quantify the cost: if the PM reduced SATS from 10% to 4% and SATS rallies 40%, that is a 2.4% alpha drag. Make the PM feel the cost of being wrong.
+
+2. POSITION ATTACKS: For each of the top-5 positions, identify the single most dangerous scenario specific to that name — not a generic "could fall" but a specific catalyst (earnings miss, rate shock, regulatory risk, supply chain disruption).
+
+3. SYSTEMIC BLIND SPOT: Identify ONE correlation or crowding risk the PM is ignoring that is NOT in their risk list. This must be specific — name the positions that correlate and the scenario that triggers it.
+
+4. KILL SHOT: One sentence. The single most dangerous thing about this portfolio that the PM is rationalizing away.
+
+Format: override attacks first, then position attacks, then blind spot, then kill shot. One paragraph max per item. No constructive suggestions — only attack."""
 
         client = get_client()
         response = client.messages.create(
