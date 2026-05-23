@@ -14,16 +14,22 @@ MIN_POSITIONS = 5
 DISTRESSED_THRESHOLD = -0.65
 
 
-def validate(portfolio: Dict[str, float]) -> Tuple[bool, List[str]]:
-    """Pre-blend hard-limit check. Returns (ok, violations). Never raises."""
+def validate(
+    portfolio: Dict[str, float],
+    allow_shorts: bool = False,
+) -> Tuple[bool, List[str]]:
+    """Pre-blend hard-limit check. Returns (ok, violations). Never raises.
+    allow_shorts: if True, negative weights are permitted (130/30 mode).
+    """
     if not portfolio:
         return False, ["Empty portfolio"]
 
     violations: List[str] = []
 
-    for sym, w in portfolio.items():
-        if w < 0:
-            violations.append(f"Negative weight for {sym}: {w:.4f}")
+    if not allow_shorts:
+        for sym, w in portfolio.items():
+            if w < 0:
+                violations.append(f"Negative weight for {sym}: {w:.4f}")
 
     if violations:
         return False, violations

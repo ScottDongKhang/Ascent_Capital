@@ -35,6 +35,8 @@ HALT_OVERRIDE_PATH  = Path("execution/halt_override.json")
 REGIME_SIGNAL_PATH  = Path("dashboard/regime_signal.json")
 REGIME_STALE_DAYS   = 5
 
+LONG_SHORT_ENABLED = False  # 130/30 — enable after ≥30 paper rebalances (~August 2026)
+
 
 def _is_regime_stale() -> bool:
     """Return True if regime_signal.json is missing, is the old list schema, or last_refit_date > 5 days ago."""
@@ -660,7 +662,23 @@ def main():
     except Exception as _hedge_e:
         print(f"[Hedge] Overlay skipped: {_hedge_e}")
 
-    # ── Step 5c: Export factor exposures to dashboard ────────────────────────
+    # ── Step 5c: 130/30 long-short overlay (kill-switched) ───────────────────
+    if LONG_SHORT_ENABLED:
+        try:
+            from ascent.portfolio.long_short import build_long_short_weights
+            _us = next((ao for ao in agent_outputs if ao.agent_id == "us_equities"), None)
+            if _us is not None and _us.alpha_scores is not None and not _us.alpha_scores.empty:
+                _alpha = _us.alpha_scores.iloc[-1].dropna()
+                merged_weights = build_long_short_weights(
+                    _alpha, long_n=15, short_n=5, long_pct=1.30, short_pct=0.30
+                )
+                print(f"[LongShort] 130/30 applied: "
+                      f"{sum(1 for v in merged_weights.values() if v > 0)} longs, "
+                      f"{sum(1 for v in merged_weights.values() if v < 0)} shorts")
+        except Exception as _ls_e:
+            print(f"[LongShort] Skipped: {_ls_e}")
+
+    # ── Step 5d: Export factor exposures to dashboard ────────────────────────
     try:
         import pandas as _pd
         from ascent.risk.factor_exposure import export_factor_exposures
