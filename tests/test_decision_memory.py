@@ -167,3 +167,84 @@ def test_format_query_result_with_data(tmp_path):
     assert "matured outcome" in result
     assert "Win rate" in result
     assert "Recommendation" in result
+
+
+def test_ingest_override_stores_altdata_fields(tmp_path):
+    """With mocked caches, new altdata fields are written to the JSONL record."""
+    import json
+    import pandas as pd
+    from unittest.mock import patch
+    from ascent.memory.decision_memory import ingest_override
+
+    log_path = tmp_path / "logs" / "decision_memory.jsonl"
+    detail_path = tmp_path / "data_cache" / "altdata_sec_detail.json"
+    detail_path.parent.mkdir(parents=True, exist_ok=True)
+    detail_path.write_text(json.dumps({"AAPL": {"tone": 0.65, "as_of": "2026-05-24"}}))
+
+    trends_df = pd.DataFrame({"AAPL": [0.42]},
+                              index=pd.DatetimeIndex(["2026-05-24"]))
+    trends_df.index.name = "date"
+    trends_path = tmp_path / "data_cache" / "altdata_trends.parquet"
+    trends_df.to_parquet(trends_path)
+
+    with patch("ascent.memory.decision_memory._REPO_ROOT", tmp_path):
+        ingest_override(
+            rebalance_date="2026-05-24",
+            symbol="AAPL",
+            override_type="valuation",
+            regime="calm_bull",
+            ai_action="REDUCED from 10% to 5%",
+            ai_weight=0.05,
+            quant_weight=0.10,
+            log_path=log_path,
+        )
+
+    rows = [json.loads(l) for l in log_path.read_text().splitlines() if l.strip()]
+    assert len(rows) == 1
+    assert rows[0]["sec_tone"] == 0.65
+    assert rows[0]["trends_direction"] == pytest.approx(0.42, abs=0.01)
+
+
+def test_ingest_override_backward_compat_old_records(tmp_path):
+    """Old records missing altdata fields deserialize without KeyError."""
+    import json
+    from ascent.memory.decision_memory import query, OverrideRecord
+
+    old_record = {
+        "entry_id": "2026-04-01_AAPL",
+        "rebalance_date": "2026-04-01",
+        "symbol": "AAPL",
+        "override_type": "valuation",
+        "regime": "calm_bull",
+        "ai_action": "REDUCED",
+        "ai_weight": 0.05,
+        "quant_weight": 0.10,
+        "weight_delta": -0.05,
+        "momentum_252d": 0.30,
+        "wedge_21d": 0.02,
+    }
+    log_path = tmp_path / "logs" / "decision_memory.jsonl"
+    log_path.parent.mkdir(parents=True)
+    log_path.write_text(json.dumps(old_record) + "\n")
+
+    records = query(log_path=log_path)
+    assert len(records) == 1
+    r = records[0]
+    assert r.sec_tone is None
+    assert r.transcript_sentiment is None
+    assert r.reddit_buzz is None
+    assert r.trends_direction is None
+
+
+def test_read_altdata_context_returns_all_none_when_no_caches(tmp_path):
+    """No cache files → all four fields are None, no exception."""
+    from unittest.mock import patch
+    from ascent.memory.decision_memory import _read_altdata_context
+    with patch("ascent.memory.decision_memory._REPO_ROOT", tmp_path):
+        ctx = _read_altdata_context("AAPL")
+    assert ctx == {
+        "sec_tone": None,
+        "transcript_sentiment": None,
+        "reddit_buzz": None,
+        "trends_direction": None,
+    }

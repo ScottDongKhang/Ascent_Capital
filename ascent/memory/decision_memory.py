@@ -43,6 +43,48 @@ class OverrideRecord:
     weight_delta: float      # ai_weight - quant_weight
     momentum_252d: Optional[float] = None   # from get_position_momentum if available
     wedge_21d: Optional[float] = None       # filled after 21 trading days
+    # Alt data snapshot at override time — for ML conviction model training
+    sec_tone: Optional[float] = None
+    transcript_sentiment: Optional[float] = None
+    reddit_buzz: Optional[float] = None
+    trends_direction: Optional[float] = None
+
+
+def _read_altdata_context(symbol: str) -> dict:
+    """Read current alt data signals for a symbol from cached files. Returns None for absent sources."""
+    ctx: dict = {
+        "sec_tone": None,
+        "transcript_sentiment": None,
+        "reddit_buzz": None,
+        "trends_direction": None,
+    }
+    try:
+        import json as _json
+        detail_path = _REPO_ROOT / "data_cache" / "altdata_sec_detail.json"
+        if detail_path.exists():
+            detail = _json.loads(detail_path.read_text())
+            ctx["sec_tone"] = detail.get(symbol, {}).get("tone")
+    except Exception:
+        pass
+
+    for key, fname in [
+        ("transcript_sentiment", "altdata_transcripts.parquet"),
+        ("reddit_buzz",          "altdata_reddit.parquet"),
+        ("trends_direction",     "altdata_trends.parquet"),
+    ]:
+        try:
+            import pandas as _pd
+            p = _REPO_ROOT / "data_cache" / fname
+            if p.exists():
+                df = _pd.read_parquet(p)
+                if symbol in df.columns:
+                    col = df[symbol].dropna()
+                    if not col.empty:
+                        ctx[key] = float(col.iloc[-1])
+        except Exception:
+            pass
+
+    return ctx
 
 
 def ingest_override(
@@ -61,6 +103,7 @@ def ingest_override(
         log.warning("[DecisionMemory] Unknown override_type '%s' — storing anyway", override_type)
 
     entry_id = f"{rebalance_date}_{symbol}"
+    altdata_ctx = _read_altdata_context(symbol)
     record = OverrideRecord(
         entry_id=entry_id,
         rebalance_date=rebalance_date,
@@ -73,6 +116,10 @@ def ingest_override(
         weight_delta=ai_weight - quant_weight,
         momentum_252d=momentum_252d,
         wedge_21d=None,
+        sec_tone=altdata_ctx["sec_tone"],
+        transcript_sentiment=altdata_ctx["transcript_sentiment"],
+        reddit_buzz=altdata_ctx["reddit_buzz"],
+        trends_direction=altdata_ctx["trends_direction"],
     )
 
     log_path.parent.mkdir(parents=True, exist_ok=True)
