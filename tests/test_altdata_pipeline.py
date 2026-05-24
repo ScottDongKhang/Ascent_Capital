@@ -503,3 +503,63 @@ def test_classify_filing_signal_yoy_improvement():
     assert "yoy_improvement" in result
     assert result["yoy_improvement"] == 0.6
 
+
+# ── Task 3: EDGAR 8-K fetcher ─────────────────────────────────────────────────
+
+def test_fetch_recent_8k_transcripts_returns_records():
+    """EDGAR returns a hit with Item 2.02 content → list with one record."""
+    import json
+    from unittest.mock import patch
+    from ascent.data.ingest.earnings_transcripts import fetch_recent_8k_transcripts
+
+    hit = {"_source": {
+        "biz_location": "http://fake-8k-url",
+        "file_date": "2026-04-01",
+    }}
+    search_resp = json.dumps({"hits": {"hits": [hit]}})
+    filing_text = (
+        "SECURITIES AND EXCHANGE COMMISSION\n"
+        "ITEM 2.02 RESULTS OF OPERATIONS AND FINANCIAL CONDITION\n"
+        "Revenue increased 20% year over year. Management raised guidance.\n"
+    )
+
+    with patch("ascent.data.ingest.earnings_transcripts._get",
+               side_effect=[search_resp, filing_text]):
+        records = fetch_recent_8k_transcripts(["AAPL"])
+
+    assert len(records) == 1
+    assert records[0]["symbol"] == "AAPL"
+    assert "transcript_text" in records[0]
+    assert "earnings_date" in records[0]
+    assert "Revenue increased" in records[0]["transcript_text"]
+
+
+def test_fetch_recent_8k_transcripts_empty_on_no_hits():
+    """No EDGAR hits → returns empty list, no exception."""
+    import json
+    from unittest.mock import patch
+    from ascent.data.ingest.earnings_transcripts import fetch_recent_8k_transcripts
+
+    with patch("ascent.data.ingest.earnings_transcripts._get",
+               return_value=json.dumps({"hits": {"hits": []}})):
+        records = fetch_recent_8k_transcripts(["AAPL"])
+
+    assert records == []
+
+
+def test_fetch_recent_8k_transcripts_skips_no_item_2_02():
+    """8-K without Item 2.02 section → symbol skipped, no record."""
+    import json
+    from unittest.mock import patch
+    from ascent.data.ingest.earnings_transcripts import fetch_recent_8k_transcripts
+
+    hit = {"_source": {"biz_location": "http://fake", "file_date": "2026-04-01"}}
+    search_resp = json.dumps({"hits": {"hits": [hit]}})
+    filing_no_item = "EXHIBIT 99.1\nPress release about unrelated matters."
+
+    with patch("ascent.data.ingest.earnings_transcripts._get",
+               side_effect=[search_resp, filing_no_item]):
+        records = fetch_recent_8k_transcripts(["AAPL"])
+
+    assert records == []
+

@@ -5,8 +5,10 @@ Primary source: EDGAR 8-K Item 2.02 (Results of Operations).
 1-business-day lag. Forward-fills 63 days.
 """
 from __future__ import annotations
+import json
 import logging
 import re
+import time
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Optional
@@ -16,6 +18,106 @@ import pandas as pd
 log = logging.getLogger(__name__)
 
 _CACHE_PATH = Path("data_cache/altdata_transcripts.parquet")
+
+_EDGAR_8K_SEARCH = (
+    "https://efts.sec.gov/LATEST/search-index?q=%22{symbol}%22"
+    "&dateRange=custom&category=form-type&forms=8-K"
+    "&startdt={start}&enddt={end}"
+)
+_SEC_DELAY = 0.12
+_8K_ITEM_PATTERNS = [
+    r"ITEM\s+2\.02",
+    r"RESULTS\s+OF\s+OPERATIONS\s+AND\s+FINANCIAL\s+CONDITION",
+]
+
+
+def _get(url: str, retries: int = 3) -> Optional[str]:
+    """HTTP GET with retry. Returns None on failure."""
+    try:
+        import requests
+        for attempt in range(retries):
+            try:
+                r = requests.get(
+                    url,
+                    headers={"User-Agent": "Ascent Capital research@ascentcap.ai"},
+                    timeout=15,
+                )
+                if r.status_code == 200:
+                    return r.text
+                if r.status_code == 429:
+                    time.sleep(2 ** attempt)
+            except Exception as e:
+                log.debug("[Transcripts] fetch attempt %d failed: %s", attempt + 1, e)
+                time.sleep(0.5)
+    except Exception as e:
+        log.warning("[Transcripts] requests not available: %s", e)
+    return None
+
+
+def fetch_recent_8k_transcripts(
+    symbols: list[str],
+    lookback_days: int = 90,
+) -> list[dict]:
+    """
+    Fetch recent 8-K Item 2.02 (Results of Operations) filings from EDGAR.
+    Returns list of {symbol, earnings_date, transcript_text} for downstream
+    update_transcript_signals().
+    """
+    records = []
+    start_date = (date.today() - timedelta(days=lookback_days)).isoformat()
+    end_date = date.today().isoformat()
+
+    for symbol in symbols:
+        try:
+            time.sleep(_SEC_DELAY)
+            url = _EDGAR_8K_SEARCH.format(symbol=symbol, start=start_date, end=end_date)
+            raw = _get(url)
+            if not raw:
+                continue
+            hits = json.loads(raw).get("hits", {}).get("hits", [])
+            if not hits:
+                continue
+            src = hits[0].get("_source", {})
+            doc_url = src.get("biz_location") or src.get("_id") or ""
+            if not doc_url:
+                continue
+            time.sleep(_SEC_DELAY)
+            text = _get(doc_url)
+            if not text:
+                continue
+
+            # Find Item 2.02 section
+            upper = text.upper()
+            item_start = -1
+            for pat in _8K_ITEM_PATTERNS:
+                m = re.search(pat, upper)
+                if m:
+                    item_start = m.start()
+                    break
+            if item_start == -1:
+                log.debug("[Transcripts] No Item 2.02 found in 8-K for %s", symbol)
+                continue
+
+            excerpt = text[item_start:item_start + 6000]
+            excerpt = re.sub(r"<[^>]+>", " ", excerpt)
+            excerpt = re.sub(r"\s+", " ", excerpt).strip()
+
+            filed_str = src.get("file_date") or src.get("display_date_filed") or end_date
+            try:
+                earnings_date = date.fromisoformat(filed_str[:10])
+            except Exception:
+                earnings_date = date.today()
+
+            records.append({
+                "symbol": symbol,
+                "earnings_date": earnings_date,
+                "transcript_text": excerpt,
+            })
+        except Exception as e:
+            log.warning("[Transcripts] 8-K fetch failed for %s: %s", symbol, e)
+
+    return records
+
 
 try:
     from ascent.llm.client import generate_structured, HAIKU_MODEL
