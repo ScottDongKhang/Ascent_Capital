@@ -13,6 +13,7 @@ heuristic rules. The interface to the caller never changes.
 from __future__ import annotations
 
 import logging
+import pickle
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -24,6 +25,65 @@ BLOCK_WIN_RATE = 0.35    # block if win_rate below this AND n_cases >= MIN_BLOCK
 MIN_BLOCK_CASES = 8      # need at least this many cases to block an override type
 REDUCE_WIN_RATE = 0.50   # reduce size if win_rate between BLOCK and REDUCE
 STRONG_WIN_RATE = 0.60   # full conviction above this
+
+_MODEL_PATH = Path("data_cache/conviction_model.pkl")
+_OVERRIDE_TYPES = ["data_quality", "regime_macro", "news_event", "correlation_risk", "valuation"]
+_REGIMES       = ["calm_bull", "stressed", "crisis", "neutral", "uncertain"]
+
+_model_cache: dict = {"model": None, "n_trained": 0}
+
+
+def _build_feature_vector(record) -> list:
+    ot_vec  = [1.0 if record.override_type == t else 0.0 for t in _OVERRIDE_TYPES]
+    reg_vec = [1.0 if record.regime == r else 0.0 for r in _REGIMES]
+    num = [
+        record.momentum_252d or 0.0,
+        record.sec_tone or 0.0,
+        record.transcript_sentiment or 0.0,
+        record.reddit_buzz or 0.0,
+        record.trends_direction or 0.0,
+    ]
+    return ot_vec + reg_vec + num
+
+
+def _get_ml_model(matured_records):
+    """Return trained LogisticRegression if n >= MIN_ML_CASES, else None."""
+    n = len(matured_records)
+    if n < MIN_ML_CASES:
+        return None
+
+    if _model_cache["model"] is not None and _model_cache["n_trained"] == n:
+        return _model_cache["model"]
+
+    if _MODEL_PATH.exists():
+        try:
+            with open(_MODEL_PATH, "rb") as f:
+                cached = pickle.load(f)
+            if cached.get("n_trained") == n:
+                _model_cache["model"] = cached["model"]
+                _model_cache["n_trained"] = n
+                return _model_cache["model"]
+        except Exception:
+            pass
+
+    try:
+        from sklearn.linear_model import LogisticRegression
+        X = [_build_feature_vector(r) for r in matured_records]
+        y = [1 if r.wedge_21d > 0 else 0 for r in matured_records]
+        model = LogisticRegression(C=1.0, max_iter=500)
+        model.fit(X, y)
+        _model_cache["model"] = model
+        _model_cache["n_trained"] = n
+        try:
+            _MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
+            with open(_MODEL_PATH, "wb") as f:
+                pickle.dump({"model": model, "n_trained": n}, f)
+        except Exception:
+            pass
+        return model
+    except Exception as exc:
+        log.warning("[ConvictionGate] ML model training failed: %s", exc)
+        return None
 
 
 @dataclass
@@ -41,6 +101,7 @@ def evaluate(
     regime: str,
     calibration_ic: Optional[float] = None,
     log_path: Optional[Path] = None,
+    symbol: Optional[str] = None,
 ) -> GateResult:
     """
     Evaluate whether the AI PM should proceed with an override of the given type.
@@ -51,11 +112,12 @@ def evaluate(
         regime:           Current regime label (e.g. 'calm_bull')
         calibration_ic:   Spearman IC from calibration tracker (optional)
         log_path:         Path to decision_memory.jsonl (uses default if None)
+        symbol:           Symbol for ML feature lookup at inference time (optional)
 
     Returns:
         GateResult with proceed flag, size multiplier, and reasoning.
     """
-    from ascent.memory.decision_memory import get_statistics
+    from ascent.memory.decision_memory import get_statistics, query, OverrideRecord, _read_altdata_context
 
     kwargs = {} if log_path is None else {"log_path": log_path}
     stats = get_statistics(override_type=override_type, regime=regime, **kwargs)
@@ -63,6 +125,50 @@ def evaluate(
     wr    = stats["win_rate"]
     aw    = stats["avg_wedge"]
 
+    # ML path — only for non-structural override types
+    if override_type not in ("data_quality", "correlation_risk", "news_event"):
+        all_matured = [r for r in query(override_type=None, regime=None, n=1000, **kwargs)
+                       if r.wedge_21d is not None]
+        model = _get_ml_model(all_matured)
+        if model is not None:
+            ctx = _read_altdata_context(symbol) if symbol else {
+                "sec_tone": None, "transcript_sentiment": None,
+                "reddit_buzz": None, "trends_direction": None,
+            }
+            probe = OverrideRecord(
+                entry_id="probe", rebalance_date="", symbol=symbol or "",
+                override_type=override_type, regime=regime,
+                ai_action="", ai_weight=0.0, quant_weight=0.0, weight_delta=0.0,
+                momentum_252d=None, wedge_21d=None,
+                sec_tone=ctx["sec_tone"],
+                transcript_sentiment=ctx["transcript_sentiment"],
+                reddit_buzz=ctx["reddit_buzz"],
+                trends_direction=ctx["trends_direction"],
+            )
+            prob = float(model.predict_proba([_build_feature_vector(probe)])[0][1])
+            n_total = len(all_matured)
+            if abs(prob - 0.5) >= 0.05:
+                if prob >= 0.65:
+                    return GateResult(
+                        proceed=True, size_multiplier=1.0, confidence="strong",
+                        reason=f"ML model: {prob:.0%} win probability ({n_total} cases)",
+                        n_cases=n, win_rate=wr,
+                    )
+                elif prob >= 0.50:
+                    return GateResult(
+                        proceed=True, size_multiplier=0.80, confidence="proceed",
+                        reason=f"ML model: {prob:.0%} win probability ({n_total} cases)",
+                        n_cases=n, win_rate=wr,
+                    )
+                else:
+                    return GateResult(
+                        proceed=False, size_multiplier=0.0, confidence="block",
+                        reason=f"ML model: {prob:.0%} win probability ({n_total} cases) — blocked",
+                        n_cases=n, win_rate=wr,
+                    )
+            # model not confident enough — fall through to rules
+
+    # ── Existing rules-based logic (unchanged) ────────────────────────────────
     # data_quality and correlation_risk are always approved — these are the AI PM's
     # clearest edges and hardest to have bad historical track records on
     if override_type in ("data_quality", "correlation_risk", "news_event"):

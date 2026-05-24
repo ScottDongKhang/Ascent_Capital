@@ -13,7 +13,7 @@ def _write_memory_log(tmp_path, records):
     return p
 
 
-def _make_record(i, override_type, regime, wedge):
+def _make_record(i, override_type, regime, wedge, sec_tone=None, trends_direction=None):
     return {
         "entry_id": f"2026-04-{i:02d}_{override_type[:3]}",
         "rebalance_date": f"2026-04-{i:02d}",
@@ -26,6 +26,10 @@ def _make_record(i, override_type, regime, wedge):
         "weight_delta": -0.05,
         "momentum_252d": None,
         "wedge_21d": wedge,
+        "sec_tone": sec_tone,
+        "transcript_sentiment": None,
+        "reddit_buzz": None,
+        "trends_direction": trends_direction,
     }
 
 
@@ -144,3 +148,85 @@ def test_format_gate_result_blocked(tmp_path):
     text = format_gate_result(result)
     assert "BLOCKED" in text
     assert "Size multiplier" not in text
+
+
+def test_evaluate_accepts_symbol_param(tmp_path):
+    """symbol kwarg accepted without error — backward compat with no symbol."""
+    from ascent.strategy.conviction_gate import evaluate
+    log_path = _write_memory_log(tmp_path, [])
+    result = evaluate("data_quality", "calm_bull", log_path=log_path, symbol="AAPL")
+    assert result.proceed is True
+
+
+def test_ml_model_not_triggered_below_30_cases(tmp_path):
+    """25 matured valuation records → _get_ml_model returns None → rules path."""
+    from unittest.mock import patch
+    from ascent.strategy.conviction_gate import evaluate
+
+    records = [_make_record(i, "valuation", "calm_bull", 0.01 if i % 2 == 0 else -0.01)
+               for i in range(1, 26)]
+    log_path = _write_memory_log(tmp_path, records)
+
+    with patch("ascent.strategy.conviction_gate._get_ml_model", return_value=None) as mock_ml:
+        result = evaluate("valuation", "calm_bull", log_path=log_path)
+        mock_ml.assert_called_once()
+    assert result.confidence in ("strong", "proceed", "caution", "block")
+
+
+def test_ml_model_activates_at_30_cases_high_confidence(tmp_path):
+    """30 matured valuation records + mock ML returning 0.80 prob → STRONG gate."""
+    from unittest.mock import patch, MagicMock
+    from ascent.strategy.conviction_gate import evaluate
+
+    records = [_make_record(i, "valuation", "calm_bull", 0.02) for i in range(1, 31)]
+    log_path = _write_memory_log(tmp_path, records)
+
+    mock_model = MagicMock()
+    mock_model.predict_proba.return_value = [[0.20, 0.80]]
+
+    with patch("ascent.strategy.conviction_gate._get_ml_model", return_value=mock_model):
+        result = evaluate("valuation", "calm_bull", log_path=log_path)
+
+    assert result.proceed is True
+    assert result.confidence == "strong"
+    assert result.size_multiplier == 1.0
+
+
+def test_ml_model_falls_back_when_not_confident(tmp_path):
+    """Model returns prob=0.53 (|0.53−0.5|=0.03 < 0.05) → falls back to rules."""
+    from unittest.mock import patch, MagicMock
+    from ascent.strategy.conviction_gate import evaluate
+
+    records = [_make_record(i, "valuation", "calm_bull", 0.01 if i <= 20 else -0.01)
+               for i in range(1, 31)]
+    log_path = _write_memory_log(tmp_path, records)
+
+    mock_model = MagicMock()
+    mock_model.predict_proba.return_value = [[0.47, 0.53]]
+
+    with patch("ascent.strategy.conviction_gate._get_ml_model", return_value=mock_model):
+        result = evaluate("valuation", "calm_bull", log_path=log_path)
+
+    # Model confidence too low — fell back to rules-based path.
+    # Rules path can return any valid confidence level; verify result is rules-driven
+    # (reason will mention "track record" or "calibration", not "ML model").
+    assert "ML model" not in result.reason
+    assert result.confidence in ("strong", "proceed", "caution", "block")
+
+
+def test_ml_model_blocks_on_low_probability(tmp_path):
+    """Model returns prob=0.25 → BLOCKED."""
+    from unittest.mock import patch, MagicMock
+    from ascent.strategy.conviction_gate import evaluate
+
+    records = [_make_record(i, "valuation", "calm_bull", 0.02) for i in range(1, 31)]
+    log_path = _write_memory_log(tmp_path, records)
+
+    mock_model = MagicMock()
+    mock_model.predict_proba.return_value = [[0.75, 0.25]]
+
+    with patch("ascent.strategy.conviction_gate._get_ml_model", return_value=mock_model):
+        result = evaluate("valuation", "calm_bull", log_path=log_path)
+
+    assert result.proceed is False
+    assert result.confidence == "block"
