@@ -46,16 +46,58 @@ _NEXT_SECTION_PATTERNS = [
     r"FINANCIAL\s+STATEMENTS",
 ]
 
-_CLASSIFY_SYSTEM = """You are a financial analyst extracting structured signals from 10-K/10-Q MD&A sections.
+_RISK_PATTERNS = [
+    r"ITEM\s+1A[\.A]?\s*[\.\-–—]?\s*RISK\s+FACTORS",
+    r"RISK\s+FACTORS",
+]
+_RISK_NEXT_SECTION = [
+    r"ITEM\s+1B[\.\s]",
+    r"ITEM\s+2[\.\s]",
+    r"UNRESOLVED\s+STAFF\s+COMMENTS",
+    r"PROPERTIES",
+]
 
-Analyze the text and return JSON with these five float fields:
+
+def extract_risk_factors_section(full_text: str) -> str:
+    """Extract Item 1A Risk Factors section. Returns empty string if absent."""
+    upper = full_text.upper()
+    start_idx = -1
+    for pat in _RISK_PATTERNS:
+        m = re.search(pat, upper)
+        if m:
+            start_idx = m.start()
+            break
+    if start_idx == -1:
+        return ""
+    end_idx = len(full_text)
+    for pat in _RISK_NEXT_SECTION:
+        m = re.search(pat, upper[start_idx + 100:])
+        if m:
+            candidate = start_idx + 100 + m.start()
+            if candidate < end_idx:
+                end_idx = candidate
+    section = full_text[start_idx:end_idx]
+    section = re.sub(r"<[^>]+>", " ", section)
+    section = re.sub(r"\s+", " ", section).strip()
+    return section[:4000]
+
+
+_CLASSIFY_SYSTEM = """You are a financial analyst extracting structured signals from 10-K/10-Q filings.
+
+Analyze the MD&A and Risk Factors text and return JSON with these seven float fields:
 - revenue_momentum: -1.0 (decelerating/declining) to +1.0 (accelerating/growing strongly)
 - margin_trend: -1.0 (contracting) to +1.0 (expanding)
 - tone: -1.0 (defensive/cautious) to +1.0 (confident/optimistic)
 - liquidity_risk: 0.0 (no concern) to 1.0 (severe: covenant breach, going concern, cash burn)
 - guidance: -1.0 (lowered) to +1.0 (raised), 0.0 if maintained or absent
+- risk_trend: -1.0 (significant new risks appearing) to +1.0 (existing risks diminishing or resolved)
+- guidance_specificity: 0.0 (vague qualitative language) to 1.0 (specific numerical targets)
 
 Be conservative — only assign extreme values on clear hard facts."""
+
+_YOY_SYSTEM = """You are comparing two consecutive quarterly SEC filings for the same company.
+Return JSON with one field: yoy_improvement (-1.0 = significantly worse, 0.0 = unchanged, +1.0 = significantly better).
+Base your assessment on changes in tone, revenue trajectory, margin direction, and guidance."""
 
 
 def _get(url: str, retries: int = 3) -> Optional[str]:
@@ -104,11 +146,18 @@ def extract_mda_section(full_text: str) -> str:
     return section[:8000]
 
 
-def classify_filing_signal(mda_text: str, symbol: str, period_end: date) -> dict:
-    """Classify MD&A text into structured signals via Haiku. Returns zeros on failure."""
+def classify_filing_signal(
+    mda_text: str,
+    symbol: str,
+    period_end: date,
+    risk_factors_text: str = "",
+    prev_signals: Optional[dict] = None,
+) -> dict:
+    """Classify MD&A + Risk Factors into 7 structured signals via Haiku. Returns zeros on failure."""
     _neutral = {
         "revenue_momentum": 0.0, "margin_trend": 0.0, "tone": 0.0,
         "liquidity_risk": 0.0, "guidance": 0.0,
+        "risk_trend": 0.0, "guidance_specificity": 0.0,
     }
     try:
         if generate_structured is None:
@@ -116,28 +165,53 @@ def classify_filing_signal(mda_text: str, symbol: str, period_end: date) -> dict
         schema = {
             "type": "object",
             "properties": {
-                "revenue_momentum": {"type": "number"},
-                "margin_trend":     {"type": "number"},
-                "tone":             {"type": "number"},
-                "liquidity_risk":   {"type": "number"},
-                "guidance":         {"type": "number"},
+                "revenue_momentum":     {"type": "number"},
+                "margin_trend":         {"type": "number"},
+                "tone":                 {"type": "number"},
+                "liquidity_risk":       {"type": "number"},
+                "guidance":             {"type": "number"},
+                "risk_trend":           {"type": "number"},
+                "guidance_specificity": {"type": "number"},
             },
-            "required": ["revenue_momentum", "margin_trend", "tone", "liquidity_risk", "guidance"],
+            "required": ["revenue_momentum", "margin_trend", "tone",
+                         "liquidity_risk", "guidance", "risk_trend", "guidance_specificity"],
         }
         prompt = (
             f"Company: {symbol}  Period ending: {period_end}\n\n"
-            f"MD&A excerpt:\n{mda_text[:3000]}"
+            f"MD&A:\n{mda_text[:2500]}"
         )
+        if risk_factors_text:
+            prompt += f"\n\nRISK FACTORS:\n{risk_factors_text[:2000]}"
+
         result = generate_structured(prompt=prompt, system=_CLASSIFY_SYSTEM, schema=schema, model=HAIKU_MODEL)
         if not isinstance(result, dict):
             return _neutral.copy()
-        # Clamp values to valid ranges
-        out = {}
-        for k, lo, hi in [
+
+        ranges = [
             ("revenue_momentum", -1.0, 1.0), ("margin_trend", -1.0, 1.0),
-            ("tone", -1.0, 1.0), ("liquidity_risk", 0.0, 1.0), ("guidance", -1.0, 1.0),
-        ]:
-            out[k] = float(max(lo, min(hi, result.get(k, 0.0))))
+            ("tone", -1.0, 1.0), ("liquidity_risk", 0.0, 1.0),
+            ("guidance", -1.0, 1.0), ("risk_trend", -1.0, 1.0),
+            ("guidance_specificity", 0.0, 1.0),
+        ]
+        out = {k: float(max(lo, min(hi, result.get(k, 0.0)))) for k, lo, hi in ranges}
+
+        # YoY comparison if previous quarter signals provided
+        if prev_signals:
+            try:
+                yoy_schema = {
+                    "type": "object",
+                    "properties": {"yoy_improvement": {"type": "number"}},
+                    "required": ["yoy_improvement"],
+                }
+                prev_str = ", ".join(f"{k}={v:.2f}" for k, v in prev_signals.items())
+                curr_str = ", ".join(f"{k}={v:.2f}" for k, v in out.items())
+                yoy_prompt = f"Previous quarter: {prev_str}\nCurrent quarter: {curr_str}"
+                yoy = generate_structured(prompt=yoy_prompt, system=_YOY_SYSTEM, schema=yoy_schema, model=HAIKU_MODEL)
+                if isinstance(yoy, dict):
+                    out["yoy_improvement"] = float(max(-1.0, min(1.0, yoy.get("yoy_improvement", 0.0))))
+            except Exception:
+                out["yoy_improvement"] = 0.0
+
         return out
     except Exception as e:
         log.warning("[SecFilings] classify_filing_signal failed for %s: %s", symbol, e)
@@ -208,7 +282,11 @@ def build_sec_signal_panel(
                 continue
             period_end = date.today() - timedelta(days=45)
             signal_date = period_end + timedelta(days=45)
-            sig = classify_filing_signal(text, sym, period_end)
+            risk_text = extract_risk_factors_section(text)
+            prev_sig = load_sec_detail(sym) or None
+            sig = classify_filing_signal(text, sym, period_end,
+                                         risk_factors_text=risk_text,
+                                         prev_signals=prev_sig if prev_sig else None)
             _update_detail_cache(sym, sig, period_end)          # persist all signals
             rows.append({"date": signal_date, "symbol": sym, **sig})
         except Exception as e:

@@ -40,15 +40,17 @@ def test_extract_mda_section_fallback():
 
 
 def test_classify_filing_signal_returns_required_keys():
-    """Haiku mock → dict has all 5 required keys."""
+    """Haiku mock → dict has all 5 original required keys (plus any new ones added later)."""
     from ascent.data.ingest.sec_filings import classify_filing_signal
     mock_result = {
         "revenue_momentum": 0.6, "margin_trend": 0.3, "tone": 0.5,
         "liquidity_risk": 0.1, "guidance": 0.4,
+        "risk_trend": 0.0, "guidance_specificity": 0.0,
     }
     with patch("ascent.data.ingest.sec_filings.generate_structured", return_value=mock_result):
         result = classify_filing_signal("Revenue grew 15%. Margins improved.", "AAPL", date.today())
-    assert set(result.keys()) == {"revenue_momentum", "margin_trend", "tone", "liquidity_risk", "guidance"}
+    required = {"revenue_momentum", "margin_trend", "tone", "liquidity_risk", "guidance"}
+    assert required.issubset(result.keys())
     assert result["revenue_momentum"] == 0.6
 
 
@@ -437,4 +439,67 @@ def test_load_sec_detail_returns_empty_dict_when_missing(tmp_path):
     with patch("ascent.data.ingest.sec_filings._DETAIL_PATH", tmp_path / "missing.json"):
         assert load_sec_detail("AAPL") == {}
 
+
+# ── Task 2 (SEC — Risk Factors + YoY) ────────────────────────────────────────
+
+def test_extract_risk_factors_section_finds_content():
+    """ITEM 1A present → returns risk factors text, not empty."""
+    from ascent.data.ingest.sec_filings import extract_risk_factors_section
+    text = (
+        "ITEM 1. BUSINESS\nWe sell widgets.\n"
+        "ITEM 1A. RISK FACTORS\n"
+        "Tariff risk could materially impact our supply chain.\n"
+        "Competition from low-cost providers is increasing.\n"
+        "ITEM 1B. UNRESOLVED STAFF COMMENTS\nNone.\n"
+    )
+    result = extract_risk_factors_section(text)
+    assert "Tariff risk" in result
+    assert "UNRESOLVED" not in result.upper()
+
+
+def test_extract_risk_factors_section_returns_empty_when_absent():
+    """No ITEM 1A → returns empty string."""
+    from ascent.data.ingest.sec_filings import extract_risk_factors_section
+    assert extract_risk_factors_section("ITEM 1. BUSINESS\nWe sell widgets.") == ""
+
+
+def test_classify_filing_signal_returns_7_keys():
+    """With risk_factors_text provided → dict has risk_trend and guidance_specificity."""
+    from unittest.mock import patch
+    from datetime import date
+    from ascent.data.ingest.sec_filings import classify_filing_signal
+    mock_result = {
+        "revenue_momentum": 0.6, "margin_trend": 0.3, "tone": 0.5,
+        "liquidity_risk": 0.1, "guidance": 0.4,
+        "risk_trend": 0.2, "guidance_specificity": 0.7,
+    }
+    with patch("ascent.data.ingest.sec_filings.generate_structured", return_value=mock_result):
+        result = classify_filing_signal(
+            "Revenue grew 15%.", "AAPL", date.today(),
+            risk_factors_text="Supply chain risks are diminishing.",
+        )
+    assert "risk_trend" in result
+    assert "guidance_specificity" in result
+    assert result["risk_trend"] == 0.2
+
+
+def test_classify_filing_signal_yoy_improvement():
+    """Passing prev_signals → yoy_improvement field returned."""
+    from unittest.mock import patch
+    from datetime import date
+    from ascent.data.ingest.sec_filings import classify_filing_signal
+    base_signals = {
+        "revenue_momentum": 0.6, "margin_trend": 0.3, "tone": 0.5,
+        "liquidity_risk": 0.1, "guidance": 0.4,
+        "risk_trend": 0.0, "guidance_specificity": 0.5,
+    }
+    yoy_mock = {"yoy_improvement": 0.6}
+    with patch("ascent.data.ingest.sec_filings.generate_structured", side_effect=[base_signals, yoy_mock]):
+        prev = {"revenue_momentum": 0.2, "tone": 0.1}
+        result = classify_filing_signal(
+            "Revenue accelerated strongly.", "AAPL", date.today(),
+            prev_signals=prev,
+        )
+    assert "yoy_improvement" in result
+    assert result["yoy_improvement"] == 0.6
 
