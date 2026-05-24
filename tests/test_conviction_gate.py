@@ -150,6 +150,18 @@ def test_format_gate_result_blocked(tmp_path):
     assert "Size multiplier" not in text
 
 
+def test_all_records_unmatured_no_crash(tmp_path):
+    """n >= 5 records but all wedge_21d=None (unmatured) — wr is None, must not raise TypeError."""
+    from ascent.strategy.conviction_gate import evaluate
+    records = [
+        {**_make_record(i, "regime_macro", "calm_bull", None), "wedge_21d": None}
+        for i in range(1, 8)
+    ]
+    log_path = _write_memory_log(tmp_path, records)
+    result = evaluate("regime_macro", "calm_bull", log_path=log_path)
+    assert result.confidence in ("strong", "proceed", "caution", "block")
+
+
 def test_evaluate_accepts_symbol_param(tmp_path):
     """symbol kwarg accepted without error — backward compat with no symbol."""
     from ascent.strategy.conviction_gate import evaluate

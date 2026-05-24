@@ -202,7 +202,7 @@ def evaluate(
         )
 
     # Strong track record
-    if wr >= STRONG_WIN_RATE and aw is not None and aw > 0:
+    if wr is not None and wr >= STRONG_WIN_RATE and aw is not None and aw > 0:
         return GateResult(
             proceed=True, size_multiplier=1.0, confidence="strong",
             reason=f"Strong track record: {wr:.0%} win rate, {aw:+.2%} avg wedge across {n} cases",
@@ -218,7 +218,7 @@ def evaluate(
         )
 
     # Poor track record — block if enough evidence, otherwise reduce
-    if n >= MIN_BLOCK_CASES and wr < BLOCK_WIN_RATE:
+    if n >= MIN_BLOCK_CASES and wr is not None and wr < BLOCK_WIN_RATE:
         return GateResult(
             proceed=False, size_multiplier=0.0, confidence="block",
             reason=f"Poor track record: {wr:.0%} win rate across {n} cases — override blocked",
