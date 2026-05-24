@@ -215,6 +215,52 @@ def check_halt_state(today=None) -> bool:
     return True
 
 
+def _get_portfolio_symbols() -> list:
+    """Return symbols with nonzero weight in the current merged portfolio."""
+    try:
+        p = Path("execution/merged_weights.json")
+        if p.exists():
+            weights = json.loads(p.read_text())
+            return [s for s, w in weights.items()
+                    if isinstance(w, (int, float)) and w > 0]
+    except Exception:
+        pass
+    return []
+
+
+def _collect_altdata(portfolio_symbols: list, all_symbols: list) -> None:
+    """
+    Run all four alt data collection sources before agents start.
+    Each source is independently wrapped — one failure never blocks the rest.
+    """
+    from ascent.data.ingest.sec_filings import update_sec_signals
+    from ascent.data.ingest.earnings_transcripts import (
+        fetch_recent_8k_transcripts, update_transcript_signals,
+    )
+    from ascent.data.ingest.reddit_sentiment import build_reddit_panel
+    from ascent.data.ingest.google_trends import update_trends_signals
+
+    today = date.today()
+    is_sunday = today.weekday() == 6
+    targets = portfolio_symbols if portfolio_symbols else all_symbols[:50]
+
+    sources = [
+        ("SEC",         lambda: update_sec_signals(all_symbols)),
+        ("Transcripts", lambda: update_transcript_signals(
+                            fetch_recent_8k_transcripts(targets))),
+        ("Reddit",      lambda: build_reddit_panel(targets)),
+        ("Trends",      lambda: update_trends_signals(
+                            all_symbols if is_sunday else targets)),
+    ]
+    for name, fn in sources:
+        try:
+            print(f"[AltData] Collecting {name}...")
+            fn()
+            print(f"[AltData] {name} done")
+        except Exception as e:
+            print(f"[AltData] {name} failed (non-fatal): {e}")
+
+
 def _fill_wedge_and_decision_outcomes(as_of_date: str) -> None:
     """
     Fetch 21-day cumulative returns for symbols in pending alpha_wedge records,
@@ -390,6 +436,12 @@ def main():
     if hub_manifest.get("status") != "ok":
         print(f"[Hub] WARNING: hub failed ({hub_manifest.get('error', 'unknown')}) "
               "— agents will fetch data individually")
+
+    # ── Alt data collection (runs before agents; each source fails silently) ──
+    _collect_altdata(
+        portfolio_symbols=_get_portfolio_symbols(),
+        all_symbols=us_symbols,
+    )
 
     # ── Import agents (lazy, after startup validation) ───────────────────────
     from agents.us_equities_agent import run_us_equities_agent

@@ -563,3 +563,23 @@ def test_fetch_recent_8k_transcripts_skips_no_item_2_02():
 
     assert records == []
 
+
+# ── Task 4: Collection orchestrator ──────────────────────────────────────────
+
+def test_collect_altdata_completes_when_all_sources_fail():
+    """All four sources raise exceptions → _collect_altdata completes without raising."""
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+    from unittest.mock import patch
+    from run_all_agents import _collect_altdata
+
+    with patch("ascent.data.ingest.sec_filings.update_sec_signals", side_effect=Exception("SEC down")), \
+         patch("ascent.data.ingest.earnings_transcripts.fetch_recent_8k_transcripts", side_effect=Exception("EDGAR down")), \
+         patch("ascent.data.ingest.earnings_transcripts.update_transcript_signals", side_effect=Exception("write fail")), \
+         patch("ascent.data.ingest.reddit_sentiment.build_reddit_panel", side_effect=Exception("no reddit key")), \
+         patch("ascent.data.ingest.google_trends.update_trends_signals", side_effect=Exception("rate limited")):
+        # Must not raise
+        _collect_altdata(portfolio_symbols=["AAPL", "MSFT"], all_symbols=["AAPL", "MSFT", "GOOGL"])
+
