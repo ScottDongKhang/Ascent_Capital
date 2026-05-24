@@ -18,6 +18,8 @@ import pandas as pd
 log = logging.getLogger(__name__)
 
 _CACHE_PATH = Path("data_cache/altdata_sec.parquet")
+_DETAIL_PATH = Path("data_cache/altdata_sec_detail.json")
+_FRESHNESS_DAYS = 90  # re-fetch only if cache older than this
 _EDGAR_SEARCH = "https://efts.sec.gov/LATEST/search-index?q=%22{symbol}%22&dateRange=custom&category=form-type&forms={form}&startdt={start}&enddt={end}"
 _EDGAR_FILING = "https://www.sec.gov/Archives/edgar/data/{cik}/{accession}/{doc}"
 
@@ -191,7 +193,7 @@ def build_sec_signal_panel(
     """
     Build a dates × symbols panel of SEC filing signals.
     Applies 45-day filing lag. Forward-fills 90 days.
-    Primary signal: revenue_momentum.
+    Primary signal: revenue_momentum. All 5 signals persisted to detail JSON.
     """
     if end_date is None:
         end_date = date.today().isoformat()
@@ -204,10 +206,10 @@ def build_sec_signal_panel(
                                           start_date=start_date, end_date=end_date)
             if not text:
                 continue
-            # Approximate period end as today - 45 days (filing lag)
             period_end = date.today() - timedelta(days=45)
-            signal_date = period_end + timedelta(days=45)  # apply 45-day lag
+            signal_date = period_end + timedelta(days=45)
             sig = classify_filing_signal(text, sym, period_end)
+            _update_detail_cache(sym, sig, period_end)          # persist all signals
             rows.append({"date": signal_date, "symbol": sym, **sig})
         except Exception as e:
             log.warning("[SecFilings] build_sec_signal_panel: symbol %s failed: %s", sym, e)
@@ -218,24 +220,29 @@ def build_sec_signal_panel(
     df = pd.DataFrame(rows)
     df["date"] = pd.to_datetime(df["date"])
     df = df.set_index("date")
-
-    # Pivot to wide (dates × symbols) using revenue_momentum as primary signal
     wide = df.pivot(columns="symbol", values="revenue_momentum")
     date_range = pd.bdate_range(start=start_date, end=end_date)
     wide = wide.reindex(date_range)
-    wide = wide.ffill(limit=90)  # 90-day forward-fill (signal decays at next quarterly filing)
+    wide = wide.ffill(limit=90)
     wide.index.name = "date"
     return wide
 
 
 def update_sec_signals(symbols: list[str], lookback_months: int = 12) -> pd.DataFrame:
-    """Incremental update — only re-fetch if cache is absent or stale."""
+    """Incremental update — skip entirely if cache is < 90 days stale."""
     start_date = (date.today() - timedelta(days=lookback_months * 30)).isoformat()
 
     existing = pd.DataFrame()
     if _CACHE_PATH.exists():
         try:
             existing = pd.read_parquet(_CACHE_PATH)
+            if not existing.empty:
+                last_date = existing.index[-1]
+                age_days = (pd.Timestamp.today() - last_date).days
+                if age_days < _FRESHNESS_DAYS:
+                    log.info("[SecFilings] Cache fresh (last=%s, age=%dd) — skipping EDGAR fetch",
+                             last_date.date(), age_days)
+                    return existing
         except Exception:
             pass
 
@@ -261,3 +268,30 @@ def load_sec_signals() -> pd.DataFrame:
         except Exception as e:
             log.warning("[SecFilings] load failed: %s", e)
     return pd.DataFrame()
+
+
+def _update_detail_cache(symbol: str, signals: dict, period_end: date) -> None:
+    """Persist full signal dict for a symbol to altdata_sec_detail.json."""
+    detail: dict = {}
+    if _DETAIL_PATH.exists():
+        try:
+            detail = json.loads(_DETAIL_PATH.read_text())
+        except Exception:
+            pass
+    detail[symbol] = {
+        **signals,
+        "period_end": period_end.isoformat(),
+        "as_of": date.today().isoformat(),
+    }
+    _DETAIL_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _DETAIL_PATH.write_text(json.dumps(detail, indent=2))
+
+
+def load_sec_detail(symbol: str) -> dict:
+    """Return full signal dict for symbol from altdata_sec_detail.json, or {}."""
+    if _DETAIL_PATH.exists():
+        try:
+            return json.loads(_DETAIL_PATH.read_text()).get(symbol, {})
+        except Exception:
+            pass
+    return {}

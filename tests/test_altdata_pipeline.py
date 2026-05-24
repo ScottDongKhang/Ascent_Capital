@@ -380,3 +380,61 @@ def test_altdata_sleeve_in_stack_at_zero_weight():
     assert DEFAULT_ALPHA_WEIGHTS["altdata"] == 0.00
 
 
+# ── Task 1 (SEC detail JSON + freshness gate) ─────────────────────────────────
+
+def test_update_sec_signals_writes_detail_json(tmp_path):
+    """All 5 classified signals written to altdata_sec_detail.json keyed by symbol."""
+    import json
+    from unittest.mock import patch
+    from ascent.data.ingest.sec_filings import update_sec_signals
+
+    mock_text = "Revenue grew 15%. Margins expanded. Guidance raised."
+    mock_signals = {
+        "revenue_momentum": 0.7, "margin_trend": 0.5, "tone": 0.6,
+        "liquidity_risk": 0.1, "guidance": 0.8,
+    }
+    detail_path = tmp_path / "altdata_sec_detail.json"
+    cache_path  = tmp_path / "altdata_sec.parquet"
+
+    with patch("ascent.data.ingest.sec_filings._get", return_value='{"hits":{"hits":[{"_source":{"biz_location":"http://fake"}}]}}'), \
+         patch("ascent.data.ingest.sec_filings.generate_structured", return_value=mock_signals), \
+         patch("ascent.data.ingest.sec_filings._CACHE_PATH", cache_path), \
+         patch("ascent.data.ingest.sec_filings._DETAIL_PATH", detail_path):
+        update_sec_signals(["AAPL"])
+
+    assert detail_path.exists()
+    detail = json.loads(detail_path.read_text())
+    assert "AAPL" in detail
+    for k in ["revenue_momentum", "margin_trend", "tone", "liquidity_risk", "guidance"]:
+        assert k in detail["AAPL"]
+
+
+def test_update_sec_signals_freshness_gate(tmp_path):
+    """If cache last row < 90 days ago, skip EDGAR fetch entirely."""
+    import pandas as pd
+    from unittest.mock import patch, MagicMock
+    from ascent.data.ingest.sec_filings import update_sec_signals
+
+    # Write a fresh parquet with today's date
+    fresh = pd.DataFrame({"AAPL": [0.5]}, index=pd.DatetimeIndex([pd.Timestamp.today()]))
+    fresh.index.name = "date"
+    cache_path = tmp_path / "altdata_sec.parquet"
+    fresh.to_parquet(cache_path)
+
+    mock_get = MagicMock()
+    with patch("ascent.data.ingest.sec_filings._get", mock_get), \
+         patch("ascent.data.ingest.sec_filings._CACHE_PATH", cache_path):
+        result = update_sec_signals(["AAPL"])
+
+    mock_get.assert_not_called()
+    assert not result.empty
+
+
+def test_load_sec_detail_returns_empty_dict_when_missing(tmp_path):
+    """load_sec_detail returns {} gracefully when detail JSON absent."""
+    from unittest.mock import patch
+    from ascent.data.ingest.sec_filings import load_sec_detail
+    with patch("ascent.data.ingest.sec_filings._DETAIL_PATH", tmp_path / "missing.json"):
+        assert load_sec_detail("AAPL") == {}
+
+
