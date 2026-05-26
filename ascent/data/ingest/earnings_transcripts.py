@@ -54,6 +54,23 @@ def _get(url: str, retries: int = 3) -> Optional[str]:
     return None
 
 
+def _pick_primary_doc(index_html: str, cik_int: int, adsh_nodashes: str) -> str:
+    """Find primary filing document URL, skipping exhibits."""
+    prefix = f"/Archives/edgar/data/{cik_int}/{adsh_nodashes}/"
+    all_links = re.findall(
+        rf'href="({re.escape(prefix)}[^"]+\.htm)"',
+        index_html, re.IGNORECASE
+    )
+    _EXHIBIT_PAT = re.compile(
+        r"(^ex\d|^exhibit|x\d{{2}}kxex|x\d{{2}}qxex|xex\d|_ex\d)", re.IGNORECASE
+    )
+    for link in all_links:
+        filename = link.split("/")[-1]
+        if not _EXHIBIT_PAT.search(filename):
+            return "https://www.sec.gov" + link
+    return "https://www.sec.gov" + all_links[0] if all_links else ""
+
+
 def fetch_recent_8k_transcripts(
     symbols: list[str],
     lookback_days: int = 90,
@@ -77,10 +94,50 @@ def fetch_recent_8k_transcripts(
             hits = json.loads(raw).get("hits", {}).get("hits", [])
             if not hits:
                 continue
-            src = hits[0].get("_source", {})
-            doc_url = src.get("biz_location") or src.get("_id") or ""
-            if not doc_url:
+
+            # Find the most recent hit that contains Item 2.02
+            src = None
+            for hit in hits:
+                s = hit.get("_source", {})
+                if "2.02" in s.get("items", []):
+                    src = s
+                    break
+            if src is None:
+                log.debug("[Transcripts] No Item 2.02 filing found for %s", symbol)
                 continue
+
+            # Construct EDGAR document URL from adsh + cik + primaryDocument
+            adsh = src.get("adsh", "")
+            ciks = src.get("ciks", [])
+            if not adsh or not ciks:
+                continue
+            cik_int = int(ciks[0])
+            adsh_nodashes = adsh.replace("-", "")
+            # Use submissions API to get the correct primary document filename
+            _SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik}.json"
+            cik_padded = str(cik_int).zfill(10)
+            time.sleep(_SEC_DELAY)
+            sub_raw = _get(_SUBMISSIONS_URL.format(cik=cik_padded))
+            if not sub_raw:
+                continue
+            import json as _json_inner
+            sub = _json_inner.loads(sub_raw)
+            recent = sub.get("filings", {}).get("recent", {})
+            accessions = recent.get("accessionNumber", [])
+            primary_docs = recent.get("primaryDocument", [])
+            adsh_clean = adsh.replace("-", "")
+            primary = next(
+                (primary_docs[i] for i, a in enumerate(accessions)
+                 if a.replace("-", "") == adsh_clean),
+                None
+            )
+            if not primary:
+                continue
+            doc_url = (
+                f"https://www.sec.gov/Archives/edgar/data/"
+                f"{cik_int}/{adsh_nodashes}/{primary}"
+            )
+
             time.sleep(_SEC_DELAY)
             text = _get(doc_url)
             if not text:
@@ -95,14 +152,14 @@ def fetch_recent_8k_transcripts(
                     item_start = m.start()
                     break
             if item_start == -1:
-                log.debug("[Transcripts] No Item 2.02 found in 8-K for %s", symbol)
+                log.debug("[Transcripts] No Item 2.02 found in 8-K body for %s", symbol)
                 continue
 
             excerpt = text[item_start:item_start + 6000]
             excerpt = re.sub(r"<[^>]+>", " ", excerpt)
             excerpt = re.sub(r"\s+", " ", excerpt).strip()
 
-            filed_str = src.get("file_date") or src.get("display_date_filed") or end_date
+            filed_str = src.get("file_date") or end_date
             try:
                 earnings_date = date.fromisoformat(filed_str[:10])
             except Exception:
@@ -176,11 +233,17 @@ def classify_transcript_signal(prepared_remarks: str, qa_section: str, symbol: s
         }
         text = f"PREPARED REMARKS:\n{prepared_remarks}\n\nQ&A:\n{qa_section}"
         result = generate_structured(
-            prompt=f"Company: {symbol}\n\n{text}",
-            system=_CLASSIFY_SYSTEM,
-            schema=schema,
+            system_prompt=_CLASSIFY_SYSTEM,
+            user_prompt=f"Company: {symbol}\n\n{text}",
             model=HAIKU_MODEL,
         )
+        if isinstance(result, str):
+            import json as _json
+            # Extract JSON object from response (handles code blocks + trailing text)
+            m = re.search(r"\{[^{}]*\}", result, re.DOTALL)
+            if not m:
+                raise ValueError("no JSON object found in response")
+            result = _json.loads(m.group())
         if not isinstance(result, dict):
             return _neutral.copy()
         out = {}

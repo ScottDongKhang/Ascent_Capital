@@ -100,6 +100,38 @@ Return JSON with one field: yoy_improvement (-1.0 = significantly worse, 0.0 = u
 Base your assessment on changes in tone, revenue trajectory, margin direction, and guidance."""
 
 
+def _pick_primary_doc(index_html: str, cik_int: int, adsh_nodashes: str) -> str:
+    """
+    Find the primary 10-K/10-Q document URL from an EDGAR filing index page.
+    Skips exhibits (filenames containing 'ex', 'exhibit', or extra suffixes).
+    Returns full URL or empty string.
+    """
+    prefix = f"/Archives/edgar/data/{cik_int}/{adsh_nodashes}/"
+    all_links = re.findall(
+        rf'href="({re.escape(prefix)}[^"]+\.htm)"',
+        index_html, re.IGNORECASE
+    )
+    _EXHIBIT_PAT = re.compile(
+        r"(^ex\d|^exhibit|x\d{2}kxex|x\d{2}qxex|xex\d|_ex\d)", re.IGNORECASE
+    )
+    for link in all_links:
+        filename = link.split("/")[-1]
+        if not _EXHIBIT_PAT.search(filename):
+            return "https://www.sec.gov" + link
+    # Fallback: first link in the filing directory
+    return "https://www.sec.gov" + all_links[0] if all_links else ""
+
+
+def _parse_json_response(raw: str) -> dict:
+    """Extract JSON object from LLM response, handling markdown code blocks and trailing text."""
+    if isinstance(raw, dict):
+        return raw
+    m = re.search(r"\{[^{}]*\}", raw, re.DOTALL)
+    if not m:
+        raise ValueError("no JSON object in LLM response")
+    return json.loads(m.group())
+
+
 def _get(url: str, retries: int = 3) -> Optional[str]:
     try:
         import requests
@@ -119,31 +151,28 @@ def _get(url: str, retries: int = 3) -> Optional[str]:
 
 
 def extract_mda_section(full_text: str) -> str:
-    """Extract MD&A section from filing text. Falls back to first 4000 chars."""
+    """Extract MD&A section from filing text. Falls back to first 4000 chars.
+    Skips TOC entries (< 500 chars) to find the actual section body."""
     upper = full_text.upper()
-    start_idx = -1
+
     for pat in _MDA_PATTERNS:
-        m = re.search(pat, upper)
-        if m:
+        for m in re.finditer(pat, upper):
             start_idx = m.start()
-            break
+            end_idx = len(full_text)
+            for epat in _NEXT_SECTION_PATTERNS:
+                em = re.search(epat, upper[start_idx + 100:])
+                if em:
+                    candidate = start_idx + 100 + em.start()
+                    if candidate < end_idx:
+                        end_idx = candidate
+            if end_idx - start_idx < 500:
+                continue  # TOC entry — keep searching for actual section
+            section = full_text[start_idx:end_idx]
+            section = re.sub(r"<[^>]+>", " ", section)
+            section = re.sub(r"\s+", " ", section).strip()
+            return section[:8000]
 
-    if start_idx == -1:
-        return full_text[:4000]
-
-    end_idx = len(full_text)
-    for pat in _NEXT_SECTION_PATTERNS:
-        m = re.search(pat, upper[start_idx + 100:])
-        if m:
-            candidate = start_idx + 100 + m.start()
-            if candidate < end_idx:
-                end_idx = candidate
-
-    section = full_text[start_idx:end_idx]
-    # Strip HTML tags
-    section = re.sub(r"<[^>]+>", " ", section)
-    section = re.sub(r"\s+", " ", section).strip()
-    return section[:8000]
+    return full_text[:4000]
 
 
 def classify_filing_signal(
@@ -183,7 +212,12 @@ def classify_filing_signal(
         if risk_factors_text:
             prompt += f"\n\nRISK FACTORS:\n{risk_factors_text[:2000]}"
 
-        result = generate_structured(prompt=prompt, system=_CLASSIFY_SYSTEM, schema=schema, model=HAIKU_MODEL)
+        raw = generate_structured(
+            system_prompt=_CLASSIFY_SYSTEM,
+            user_prompt=prompt,
+            model=HAIKU_MODEL,
+        )
+        result = _parse_json_response(raw)
         if not isinstance(result, dict):
             return _neutral.copy()
 
@@ -198,15 +232,15 @@ def classify_filing_signal(
         # YoY comparison if previous quarter signals provided
         if prev_signals:
             try:
-                yoy_schema = {
-                    "type": "object",
-                    "properties": {"yoy_improvement": {"type": "number"}},
-                    "required": ["yoy_improvement"],
-                }
                 prev_str = ", ".join(f"{k}={v:.2f}" for k, v in prev_signals.items())
                 curr_str = ", ".join(f"{k}={v:.2f}" for k, v in out.items())
                 yoy_prompt = f"Previous quarter: {prev_str}\nCurrent quarter: {curr_str}"
-                yoy = generate_structured(prompt=yoy_prompt, system=_YOY_SYSTEM, schema=yoy_schema, model=HAIKU_MODEL)
+                yoy_raw = generate_structured(
+                    system_prompt=_YOY_SYSTEM,
+                    user_prompt=yoy_prompt,
+                    model=HAIKU_MODEL,
+                )
+                yoy = _parse_json_response(yoy_raw)
                 if isinstance(yoy, dict):
                     out["yoy_improvement"] = float(max(-1.0, min(1.0, yoy.get("yoy_improvement", 0.0))))
             except Exception:
@@ -218,6 +252,28 @@ def classify_filing_signal(
         return _neutral.copy()
 
 
+_SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik}.json"
+_TICKERS_URL     = "https://www.sec.gov/files/company_tickers.json"
+_ticker_to_cik: dict = {}
+
+
+def _get_cik_for_symbol(symbol: str) -> str:
+    """Return zero-padded 10-digit CIK for a ticker symbol, or '' if not found."""
+    global _ticker_to_cik
+    if not _ticker_to_cik:
+        raw = _get(_TICKERS_URL)
+        if raw:
+            try:
+                data = json.loads(raw)
+                _ticker_to_cik = {
+                    v["ticker"].upper(): str(v["cik_str"]).zfill(10)
+                    for v in data.values()
+                }
+            except Exception:
+                pass
+    return _ticker_to_cik.get(symbol.upper(), "")
+
+
 def fetch_full_text_filing(symbol: str, filing_type: str = "10-K",
                             start_date: Optional[str] = None, end_date: Optional[str] = None) -> str:
     """Fetch MD&A section from EDGAR for symbol's most recent filing of filing_type."""
@@ -226,33 +282,48 @@ def fetch_full_text_filing(symbol: str, filing_type: str = "10-K",
     if end_date is None:
         end_date = date.today().isoformat()
 
-    url = _EDGAR_SEARCH.format(
-        symbol=symbol, form=filing_type,
-        start=start_date, end=end_date,
-    )
-    raw = _get(url)
-    if not raw:
-        return ""
     try:
-        hits = json.loads(raw).get("hits", {}).get("hits", [])
-        if not hits:
+        cik = _get_cik_for_symbol(symbol)
+        if not cik:
+            log.debug("[SecFilings] CIK not found for %s", symbol)
             return ""
-        # Take most recent filing
-        src = hits[0].get("_source", {})
-        filing_url = src.get("file_date_formatted") or src.get("period_of_report") or ""
-        # Try to get the actual document URL
-        entity_id = src.get("entity_id", "")
-        file_num = src.get("file_num", "")
-        display_date = src.get("display_date_filed", "")
-        # EDGAR full-text search returns the filing index URL
-        doc_url = src.get("biz_location") or src.get("_id") or ""
-        if not doc_url:
-            return ""
+
         time.sleep(_SEC_DELAY)
-        text = _get(doc_url)
-        if not text:
+        sub_raw = _get(_SUBMISSIONS_URL.format(cik=cik))
+        if not sub_raw:
             return ""
-        return extract_mda_section(text)
+        sub = json.loads(sub_raw)
+        recent = sub.get("filings", {}).get("recent", {})
+        forms     = recent.get("form", [])
+        accessions = recent.get("accessionNumber", [])
+        primary_docs = recent.get("primaryDocument", [])
+        filing_dates = recent.get("filingDate", [])
+
+        accepted_forms = {filing_type, filing_type + "/A"}
+
+        for i, form in enumerate(forms):
+            if form not in accepted_forms:
+                continue
+            fd = filing_dates[i]
+            if fd < start_date or fd > end_date:
+                continue
+            adsh_nodashes = accessions[i].replace("-", "")
+            cik_int = int(cik)
+            primary = primary_docs[i]
+            doc_url = (
+                f"https://www.sec.gov/Archives/edgar/data/"
+                f"{cik_int}/{adsh_nodashes}/{primary}"
+            )
+            time.sleep(_SEC_DELAY)
+            text = _get(doc_url)
+            if text:
+                # Strip HTML tags before section extraction (modern iXBRL filings
+                # have tags interspersed in text, breaking pattern matching)
+                clean = re.sub(r"<[^>]+>", " ", text)
+                clean = re.sub(r"\s+", " ", clean)
+                return extract_mda_section(clean)
+
+        return ""
     except Exception as e:
         log.warning("[SecFilings] fetch_full_text_filing failed for %s: %s", symbol, e)
         return ""
@@ -281,7 +352,11 @@ def build_sec_signal_panel(
             if not text:
                 continue
             period_end = date.today() - timedelta(days=45)
-            signal_date = period_end + timedelta(days=45)
+            # Roll back to last business day (filing signal must land on a trading day)
+            raw_signal_date = pd.Timestamp(period_end + timedelta(days=45))
+            while raw_signal_date.dayofweek >= 5:
+                raw_signal_date -= pd.Timedelta(days=1)
+            signal_date = raw_signal_date
             risk_text = extract_risk_factors_section(text)
             prev_sig = load_sec_detail(sym) or None
             sig = classify_filing_signal(text, sym, period_end,
@@ -307,29 +382,40 @@ def build_sec_signal_panel(
 
 
 def update_sec_signals(symbols: list[str], lookback_months: int = 12) -> pd.DataFrame:
-    """Incremental update — skip entirely if cache is < 90 days stale."""
+    """Incremental update — fetch only symbols missing from cache or with stale data."""
     start_date = (date.today() - timedelta(days=lookback_months * 30)).isoformat()
 
     existing = pd.DataFrame()
     if _CACHE_PATH.exists():
         try:
             existing = pd.read_parquet(_CACHE_PATH)
-            if not existing.empty:
-                last_date = existing.index[-1]
-                age_days = (pd.Timestamp.today() - last_date).days
-                if age_days < _FRESHNESS_DAYS:
-                    log.info("[SecFilings] Cache fresh (last=%s, age=%dd) — skipping EDGAR fetch",
-                             last_date.date(), age_days)
-                    return existing
         except Exception:
             pass
 
-    panel = build_sec_signal_panel(symbols, start_date=start_date)
+    # Determine which symbols need fetching: absent from cache or all-NaN
+    if not existing.empty:
+        last_date = existing.index[-1]
+        age_days = (pd.Timestamp.today() - last_date).days
+        cached_cols = set(existing.columns)
+        # Symbol is "fresh" if it's in cache, has ≥1 non-null value, and cache age < 90 days
+        fresh = {s for s in symbols
+                 if s in cached_cols and existing[s].notna().any() and age_days < _FRESHNESS_DAYS}
+        to_fetch = [s for s in symbols if s not in fresh]
+    else:
+        to_fetch = list(symbols)
+
+    if not to_fetch:
+        log.info("[SecFilings] All %d symbols fresh — skipping EDGAR fetch", len(symbols))
+        return existing
+
+    log.info("[SecFilings] Fetching %d symbols from EDGAR: %s", len(to_fetch), to_fetch)
+    panel = build_sec_signal_panel(to_fetch, start_date=start_date)
     if panel.empty:
         return existing
 
     if not existing.empty:
-        combined = pd.concat([existing, panel]).groupby(level=0).last()
+        combined = pd.concat([existing, panel], axis=1)
+        combined = combined.loc[:, ~combined.columns.duplicated(keep="last")]
     else:
         combined = panel
 

@@ -363,12 +363,39 @@ def run_devils_advocate(portfolio_state: dict) -> str:
             )
         scenario_context = "\n".join(lines)
 
+    # Inject weekend scenario plan (flagged scenarios only — highest-prob tail risks)
+    weekend_scenario_context = ""
+    try:
+        import json as _json
+        from pathlib import Path as _Path
+        from datetime import date as _date, timedelta as _td
+        sp = _Path("data_cache/scenario_plan.json")
+        if sp.exists():
+            sp_data = _json.loads(sp.read_text())
+            cutoff = (_date.today() - _td(days=8)).isoformat()
+            if sp_data.get("as_of", "") >= cutoff:
+                flagged = [s for s in sp_data.get("scenarios", []) if s.get("flagged")]
+                if flagged:
+                    lines = ["\nWeekend adversarial scenario plan — FLAGGED (prob ≥40%):"]
+                    for s in flagged:
+                        prob = s.get("probability", 0)
+                        impact = s.get("impact", {}).get("total_impact_pct", 0)
+                        lines.append(
+                            f"  {s['name']}: {prob:.0%} prob | portfolio impact {impact:+.1f}% | "
+                            f"action: {s.get('pre_emptive_action', 'n/a')}"
+                        )
+                    weekend_scenario_context = "\n".join(lines)
+    except Exception:
+        pass
+
     regime       = portfolio_state.get("us_regime", "unknown")
     cred_context = load_credibility_context(regime)
     track_record = _get_agent_track_record("devils_advocate", regime)
     user_prompt  = f"Portfolio context:\n{context}"
     if scenario_context:
         user_prompt += f"\n{scenario_context}"
+    if weekend_scenario_context:
+        user_prompt += f"\n{weekend_scenario_context}"
     if cred_context:
         user_prompt += f"\n\n{cred_context}"
     user_prompt += "\n\nWhat is the most dangerous blind spot? Use the scenario numbers."

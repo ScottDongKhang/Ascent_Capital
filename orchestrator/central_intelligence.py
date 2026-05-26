@@ -56,6 +56,38 @@ EM_COMMODITY_CAP = 0.20
 EM_COMMODITY_BUCKETS = {"em_equity", "commodities", "gold"}
 
 
+MAX_POSITION_WEIGHT = 0.10  # hard cap per symbol after all blending
+
+
+def _cap_positions(weights: Dict[str, float], max_w: float = MAX_POSITION_WEIGHT) -> Dict[str, float]:
+    """
+    Single-pass water-fill cap on the merged portfolio.
+    Symbols above max_w are capped; overflow redistributed pro-rata to uncapped names.
+    Prevents orchestrator blending from pushing a single name over the per-agent cap.
+    """
+    capped: Dict[str, float] = {}
+    overflow = 0.0
+    uncapped_total = 0.0
+
+    for sym, w in weights.items():
+        if w > max_w:
+            overflow += w - max_w
+            capped[sym] = max_w
+        else:
+            capped[sym] = w
+            uncapped_total += w
+
+    if overflow > 0 and uncapped_total > 0:
+        for sym in capped:
+            if capped[sym] < max_w:
+                capped[sym] = round(capped[sym] + overflow * (capped[sym] / uncapped_total), 6)
+
+    total = sum(capped.values())
+    if total > 0:
+        capped = {s: round(w / total, 6) for s, w in capped.items()}
+    return capped
+
+
 def _cap_em_commodity(weights: Dict[str, float]) -> Dict[str, float]:
     """
     Hard cap: sum of symbols in em_equity + commodities + gold <= 20%.
@@ -105,11 +137,13 @@ CRISIS_VETO_FLOOR  = 0.40   # macro agent controls at least 40% of merged weight
 CRISIS_VETO_BLEND  = 0.60   # 60% macro, 40% remaining agents in crisis veto
 
 # Base capital allocation (when no skill data or agents warming up)
+# Raised US equity from 0.60 → 0.70 in calm_bull: realized beta was 0.827,
+# costing ~2.4% in the Apr–May rally. Macro/intl/alts trimmed proportionally.
 BASE_ALLOCATION = {
-    "us_equities":  0.60,
-    "macro":        0.15,
-    "international": 0.15,
-    "alternatives": 0.10,
+    "us_equities":   0.70,
+    "macro":         0.10,
+    "international": 0.12,
+    "alternatives":  0.08,
 }
 
 # Stressed regime — shift toward macro and alternatives
@@ -376,6 +410,12 @@ def merge_agent_outputs(
                    if any(s in FACTOR_BUCKETS.get(b, set()) for b in EM_COMMODITY_BUCKETS))
     if abs(em_before - em_after) > 0.005:
         print(f"[Orchestrator] EM+commodity cap applied: {em_before:.1%} → {em_after:.1%}")
+
+    # Per-position cap — prevent multi-agent overlap pushing any name above max_weight
+    overcapped = {s: w for s, w in merged.items() if w > MAX_POSITION_WEIGHT}
+    if overcapped:
+        print(f"[Orchestrator] Position cap applied: {', '.join(f'{s} {w:.1%}→{MAX_POSITION_WEIGHT:.0%}' for s, w in overcapped.items())}")
+        merged = _cap_positions(merged)
 
     return merged
 

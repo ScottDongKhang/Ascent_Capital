@@ -38,3 +38,4 @@
 {"date": "2026-05-19", "nav": 143441.19, "return": -0.012173, "agent_id": "international", "source": "forward_pnl_tracker", "timestamp": "2026-05-19T19:14:44.027154"}
 {"date": "2026-05-20", "nav": 146779.22, "return": 0.023271, "agent_id": "international", "source": "forward_pnl_tracker", "timestamp": "2026-05-20T17:12:19.695568"}
 {"date": "2026-05-21", "nav": 149660.03, "return": 0.019627, "agent_id": "international", "source": "forward_pnl_tracker", "timestamp": "2026-05-21T19:06:20.175457"}
+{"date": "2026-05-22", "nav": 149599.57, "return": -0.000404, "agent_id": "international", "source": "forward_pnl_tracker", "timestamp": "2026-05-22T19:21:30.148981"}

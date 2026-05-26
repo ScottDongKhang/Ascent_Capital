@@ -385,7 +385,7 @@ def test_altdata_sleeve_in_stack_at_zero_weight():
 # ── Task 1 (SEC detail JSON + freshness gate) ─────────────────────────────────
 
 def test_update_sec_signals_writes_detail_json(tmp_path):
-    """All 5 classified signals written to altdata_sec_detail.json keyed by symbol."""
+    """All classified signals written to altdata_sec_detail.json keyed by symbol."""
     import json
     from unittest.mock import patch
     from ascent.data.ingest.sec_filings import update_sec_signals
@@ -393,13 +393,14 @@ def test_update_sec_signals_writes_detail_json(tmp_path):
     mock_text = "Revenue grew 15%. Margins expanded. Guidance raised."
     mock_signals = {
         "revenue_momentum": 0.7, "margin_trend": 0.5, "tone": 0.6,
-        "liquidity_risk": 0.1, "guidance": 0.8,
+        "liquidity_risk": 0.1, "guidance": 0.8, "risk_trend": 0.2, "guidance_specificity": 0.6,
     }
     detail_path = tmp_path / "altdata_sec_detail.json"
     cache_path  = tmp_path / "altdata_sec.parquet"
 
-    with patch("ascent.data.ingest.sec_filings._get", return_value='{"hits":{"hits":[{"_source":{"biz_location":"http://fake"}}]}}'), \
-         patch("ascent.data.ingest.sec_filings.generate_structured", return_value=mock_signals), \
+    # Mock at the fetch + classify level — tests detail-JSON write, not EDGAR plumbing
+    with patch("ascent.data.ingest.sec_filings.fetch_full_text_filing", return_value=mock_text), \
+         patch("ascent.data.ingest.sec_filings.classify_filing_signal", return_value=mock_signals), \
          patch("ascent.data.ingest.sec_filings._CACHE_PATH", cache_path), \
          patch("ascent.data.ingest.sec_filings._DETAIL_PATH", detail_path):
         update_sec_signals(["AAPL"])
@@ -507,16 +508,24 @@ def test_classify_filing_signal_yoy_improvement():
 # ── Task 3: EDGAR 8-K fetcher ─────────────────────────────────────────────────
 
 def test_fetch_recent_8k_transcripts_returns_records():
-    """EDGAR returns a hit with Item 2.02 content → list with one record."""
+    """EDGAR returns a hit with Item 2.02 via submissions API; one record returned."""
     import json
     from unittest.mock import patch
     from ascent.data.ingest.earnings_transcripts import fetch_recent_8k_transcripts
 
+    adsh = "0000320193-26-000001"
+    cik = "0000320193"
     hit = {"_source": {
-        "biz_location": "http://fake-8k-url",
+        "adsh": adsh,
+        "ciks": [cik],
+        "items": ["2.02"],
         "file_date": "2026-04-01",
     }}
     search_resp = json.dumps({"hits": {"hits": [hit]}})
+    submissions_resp = json.dumps({"filings": {"recent": {
+        "accessionNumber": [adsh],
+        "primaryDocument": ["aapl-8k.htm"],
+    }}})
     filing_text = (
         "SECURITIES AND EXCHANGE COMMISSION\n"
         "ITEM 2.02 RESULTS OF OPERATIONS AND FINANCIAL CONDITION\n"
@@ -524,7 +533,7 @@ def test_fetch_recent_8k_transcripts_returns_records():
     )
 
     with patch("ascent.data.ingest.earnings_transcripts._get",
-               side_effect=[search_resp, filing_text]):
+               side_effect=[search_resp, submissions_resp, filing_text]):
         records = fetch_recent_8k_transcripts(["AAPL"])
 
     assert len(records) == 1
@@ -532,7 +541,6 @@ def test_fetch_recent_8k_transcripts_returns_records():
     assert "transcript_text" in records[0]
     assert "earnings_date" in records[0]
     assert "Revenue increased" in records[0]["transcript_text"]
-
 
 def test_fetch_recent_8k_transcripts_empty_on_no_hits():
     """No EDGAR hits → returns empty list, no exception."""
@@ -548,21 +556,19 @@ def test_fetch_recent_8k_transcripts_empty_on_no_hits():
 
 
 def test_fetch_recent_8k_transcripts_skips_no_item_2_02():
-    """8-K without Item 2.02 section → symbol skipped, no record."""
+    """8-K with items=[1.01] (no 2.02) skips symbol, returns no record."""
     import json
     from unittest.mock import patch
     from ascent.data.ingest.earnings_transcripts import fetch_recent_8k_transcripts
 
-    hit = {"_source": {"biz_location": "http://fake", "file_date": "2026-04-01"}}
+    hit = {"_source": {"adsh": "0000320193-26-000001", "ciks": ["0000320193"],
+                        "items": ["1.01"], "file_date": "2026-04-01"}}
     search_resp = json.dumps({"hits": {"hits": [hit]}})
-    filing_no_item = "EXHIBIT 99.1\nPress release about unrelated matters."
 
-    with patch("ascent.data.ingest.earnings_transcripts._get",
-               side_effect=[search_resp, filing_no_item]):
+    with patch("ascent.data.ingest.earnings_transcripts._get", return_value=search_resp):
         records = fetch_recent_8k_transcripts(["AAPL"])
 
     assert records == []
-
 
 # ── Task 4: Collection orchestrator ──────────────────────────────────────────
 

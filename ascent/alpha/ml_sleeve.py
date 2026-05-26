@@ -199,26 +199,71 @@ def build_ml_alpha(
         print(f"[ML] No cache found, training fresh model (agent={agent_id})")
         model = None
 
+    # ── Check for weekend GridSearch retrain flag ─────────────────────────────
+    _use_gridsearch = False
+    _retrain_flag_path = None
+    try:
+        from pathlib import Path as _Path
+        import json as _json
+        _retrain_flag_path = _Path("data_cache/ml_retrain_requested.json")
+        if _retrain_flag_path.exists():
+            _flag = _json.loads(_retrain_flag_path.read_text())
+            if _flag.get("use_gridsearch") and _flag.get("requested"):
+                _use_gridsearch = True
+                model = None  # force retrain regardless of cache freshness
+                print(f"[ML] GridSearch retrain requested by weekend flag (agent={agent_id})")
+    except Exception:
+        pass
+
     # ── Train if needed ───────────────────────────────────────────────────────
     if model is None:
         X_train = train_data[available].values
         y_train = train_data["fwd_ret"].values
 
-        model = xgb.XGBRegressor(
-            n_estimators=n_estimators,
-            max_depth=max_depth,
-            learning_rate=learning_rate,
-            min_child_weight=min_child_weight,
-            subsample=0.8,
-            colsample_bytree=0.8,
-            reg_alpha=0.1,
-            reg_lambda=1.0,
-            objective="reg:squarederror",
-            n_jobs=-1,
-            verbosity=0,
-            random_state=42,
-        )
-        model.fit(X_train, y_train)
+        if _use_gridsearch:
+            from sklearn.model_selection import GridSearchCV
+            _param_grid = {
+                "n_estimators": [100, 200],
+                "max_depth":    [2, 3, 4],
+                "learning_rate": [0.03, 0.05, 0.10],
+            }
+            _base = xgb.XGBRegressor(
+                min_child_weight=min_child_weight,
+                subsample=0.8,
+                colsample_bytree=0.8,
+                reg_alpha=0.1,
+                reg_lambda=1.0,
+                objective="reg:squarederror",
+                n_jobs=-1,
+                verbosity=0,
+                random_state=42,
+            )
+            _gs = GridSearchCV(_base, _param_grid, cv=3, scoring="neg_mean_squared_error",
+                               n_jobs=-1, refit=True)
+            _gs.fit(X_train, y_train)
+            model = _gs.best_estimator_
+            print(f"[ML] GridSearch best params: {_gs.best_params_} (agent={agent_id})")
+            # Delete flag so next weekday run uses normal cache logic
+            try:
+                _retrain_flag_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+        else:
+            model = xgb.XGBRegressor(
+                n_estimators=n_estimators,
+                max_depth=max_depth,
+                learning_rate=learning_rate,
+                min_child_weight=min_child_weight,
+                subsample=0.8,
+                colsample_bytree=0.8,
+                reg_alpha=0.1,
+                reg_lambda=1.0,
+                objective="reg:squarederror",
+                n_jobs=-1,
+                verbosity=0,
+                random_state=42,
+            )
+            model.fit(X_train, y_train)
         _save_cached_model(model, train_end, available, agent_id)
 
         log.info(

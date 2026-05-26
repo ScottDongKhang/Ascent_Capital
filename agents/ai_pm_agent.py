@@ -6,7 +6,7 @@ Runs a 4-phase research loop (market context → quant baselines → signal rese
 and returns AIPMResult(portfolio, thesis). Falls back to AIPMResult(portfolio={}, fallback=True)
 if the loop exits without calling propose_portfolio.
 
-18 tools total.
+24 tools total (including propose_portfolio).
 """
 from __future__ import annotations
 
@@ -291,6 +291,25 @@ AI_PM_TOOLS = [
             },
             "required": ["override_type", "regime"],
         },
+    },
+    {
+        "name": "get_scenario_plan",
+        "description": (
+            "Get the weekend adversarial scenario plan — 5-6 stress scenarios with LLM-assessed "
+            "probabilities, portfolio impact estimates, and pre-emptive actions. FLAGGED scenarios "
+            "(probability ≥40%) are the highest-priority tail risks to address in sizing. "
+            "Call this in Phase 1 if a weekend scenario plan is available."
+        ),
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "get_weekend_research",
+        "description": (
+            "Get the AI PM weekend deep research memo — top opportunities identified from a full "
+            "universe scan, ranked by conviction. Use this to supplement Phase 2 quant baselines "
+            "with weekend fundamental research that was not available during last rebalance."
+        ),
+        "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
         "name": "propose_portfolio",
@@ -787,6 +806,67 @@ def _tool_get_analyst_estimates(inputs: dict) -> str:
         return f"Analyst data failed for {symbol}: {e}"
 
 
+def _tool_get_scenario_plan(_: dict) -> str:
+    try:
+        p = _REPO_ROOT / "data_cache" / "scenario_plan.json"
+        if not p.exists():
+            return "No weekend scenario plan available."
+        data = json.loads(p.read_text())
+        as_of = data.get("as_of", "unknown")
+        scenarios = data.get("scenarios", [])
+        if not scenarios:
+            return f"Scenario plan ({as_of}): no scenarios computed."
+        lines = [f"=== WEEKEND SCENARIO PLAN (as of {as_of}) ==="]
+        flagged = [s for s in scenarios if s.get("flagged")]
+        if flagged:
+            lines.append(f"\n⚠️  FLAGGED SCENARIOS (prob ≥40%) — address in sizing:")
+            for s in flagged:
+                prob = s.get("probability", 0)
+                impact = s.get("impact", {})
+                lines.append(
+                    f"  {s['name']}: {prob:.0%} prob | "
+                    f"impact {impact.get('total_impact_pct', 0):+.1f}% | "
+                    f"action: {s.get('pre_emptive_action', 'n/a')}"
+                )
+        lines.append("\nAll scenarios:")
+        for s in scenarios:
+            prob = s.get("probability", 0)
+            impact = s.get("impact", {})
+            flag = " [FLAGGED]" if s.get("flagged") else ""
+            lines.append(
+                f"  {s['name']}{flag}: {s.get('description', '')} | "
+                f"{prob:.0%} prob | impact {impact.get('total_impact_pct', 0):+.1f}%"
+            )
+        return "\n".join(lines)
+    except Exception as exc:
+        return f"Scenario plan unavailable: {exc}"
+
+
+def _tool_get_weekend_research(_: dict) -> str:
+    try:
+        p = _REPO_ROOT / "data_cache" / "weekend_research.json"
+        if not p.exists():
+            return "No weekend research memo available."
+        data = json.loads(p.read_text())
+        as_of = data.get("as_of", "unknown")
+        opps = data.get("opportunities", [])
+        if not opps:
+            return f"Weekend research memo ({as_of}): no opportunities identified."
+        lines = [f"=== WEEKEND RESEARCH MEMO (as of {as_of}) ==="]
+        lines.append(f"\nTop opportunities ({len(opps)} identified):")
+        for i, opp in enumerate(opps[:5], 1):
+            sym = opp.get("symbol", "?")
+            thesis = opp.get("thesis", "")
+            conviction = opp.get("conviction", "")
+            lines.append(f"  {i}. {sym} [{conviction}]: {thesis[:120]}")
+        summary = data.get("summary", "")
+        if summary:
+            lines.append(f"\nSummary: {summary[:200]}")
+        return "\n".join(lines)
+    except Exception as exc:
+        return f"Weekend research unavailable: {exc}"
+
+
 def _tool_propose_portfolio(inputs: dict, result_store: list) -> str:
     weights = inputs.get("weights", {})
     thesis = inputs.get("thesis", {})
@@ -841,6 +921,8 @@ def _make_executor(result_store: list, precomputed: dict | None = None):
         "get_alpha_wedge":              _tool_get_alpha_wedge,
         "query_decision_history":       _tool_query_decision_history,
         "check_override_conviction":    _tool_check_override_conviction,
+        "get_scenario_plan":            _tool_get_scenario_plan,
+        "get_weekend_research":         _tool_get_weekend_research,
         "propose_portfolio":            lambda i: _tool_propose_portfolio(i, result_store),
     }
 

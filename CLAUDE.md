@@ -356,7 +356,7 @@ Python 3.12.13 Homebrew, venv at `.venv/`. Use `.venv/bin/python`. API keys via 
 
 **Regime**: calm_bull (refitted May 7). Regime signal in `dashboard/regime_signal.json`.
 
-**Tests**: 506 passing, 1 skipped.
+**Tests**: 589 passing, 1 skipped.
 
 **Kill switches pending paper validation (~July 2026)**: `EVENT_TRADING_ENABLED=False`, `TWAP_ENABLED=False`, `SELF_MODIFY_ENABLED=False`.
 
@@ -488,3 +488,38 @@ Python 3.12.13 Homebrew, venv at `.venv/`. Use `.venv/bin/python`. API keys via 
 - 569 → 589 tests (20 new across 3 test files). 589 passed, 1 skipped.
 - Files: `ascent/data/ingest/sec_filings.py`, `ascent/data/ingest/earnings_transcripts.py`, `run_all_agents.py`, `ascent/memory/decision_memory.py`, `ascent/strategy/conviction_gate.py`, `tests/test_altdata_pipeline.py`, `tests/test_decision_memory.py`, `tests/test_conviction_gate.py`.
 - Open: ML conviction model needs 30 matured overrides to activate (~6–8 weeks of AI PM rebalances). SEC detail JSON and Trends cache already live; SEC 7-signal + transcript enrichment fires on next EDGAR-eligible symbols.
+
+### 2026-05-24 continued (alt data pipeline debugging — all 3 sources live ✅)
+- **Root cause fixed**: `signal_date = date.today()` falls on Sunday → not in `bdate_range` → all SEC signals land as NaN. Fixed by rolling back to last business day via while-loop dayofweek check.
+- **Freshness gate fixed**: `update_sec_signals` returned stale all-NaN cache immediately (age_days=0 < 90). Fixed check to: only treat cache as fresh if the symbol has ≥1 non-null value AND age < 90 days. Now fetches only symbols missing from cache.
+- **Incremental SEC logic**: `update_sec_signals` now determines `to_fetch` per-symbol (absent from cache OR all-NaN OR stale). Merges new panel into existing via `axis=1` concat + `drop_duplicates(keep="last")`.
+- **Dead code removed**: `fetch_full_text_filing` had two consecutive `accepted_forms = ...` assignments (leftover from prior session). Removed the unreachable first assignment.
+- **Transcript test mocks updated**: `test_fetch_recent_8k_transcripts_returns_records` and `_skips_no_item_2_02` used old EDGAR field format (`biz_location`). Updated to use actual fields (`adsh`, `ciks`, `items`, `file_date`) and 3-call side_effect chain (search → submissions → document).
+- **SEC detail test updated**: `test_update_sec_signals_writes_detail_json` mocked `_get` with old EFTS format. Now mocks `fetch_full_text_filing` and `classify_filing_signal` directly — tests the write behavior, not EDGAR plumbing.
+- **Live data confirmed**: SEC 9/9 equity names, Transcripts 7/9 equity names, Trends 19/19 portfolio symbols. All signals flow to `data_cache/`. VRT strongest SEC signal (+0.65 revenue, +0.55 tone); SNDK weakest (-0.70 risk_trend).
+- 589 → 589 tests (no count change — 3 existing tests updated, none added). 589 passed, 1 skipped.
+- Files: `ascent/data/ingest/sec_filings.py`, `tests/test_altdata_pipeline.py`.
+
+### 2026-05-25 (live alpha reconstruction + orchestrator beta fix)
+- **Live alpha audit**: built `scripts/reconstruct_live_alpha.py` — fetches full Alpaca portfolio history + SPY via yfinance, computes daily and cumulative alpha for every trading day since Apr 1. Writes `logs/live_alpha_history.jsonl` and `logs/live_alpha_summary.json`.
+- **Real alpha picture**: Apr 1–May 22 (37 days): portfolio +5.12%, SPY +13.80%, cumulative alpha **-8.68%**. Realized beta 0.827. Attribution: Apr 1–15 contributed -7.59% (initial defensive book missed tariff relief rally); Apr 16–May 5 book was alpha-positive (+3.60%).
+- **Fix 1 — calm_bull allocation**: raised US equity from 0.60→0.70, macro 0.15→0.10, intl 0.15→0.12, alts 0.10→0.08. Targets beta ~0.90 vs prior ~0.83. Files: `orchestrator/central_intelligence.py`.
+- **Fix 2 — post-blend position cap**: added `_cap_positions()` + `MAX_POSITION_WEIGHT=0.10` enforcement in `merge_agent_outputs()`. Prevents multi-agent overlap pushing any symbol above 10% (EWY had hit 11.5%). Single-pass water-fill; fires after EM cap and before return.
+- 589 passed, 1 skipped throughout.
+
+### 2026-05-25 (weekend mode ✅)
+- **Weekend gate**: `run_all_agents.py` detects `weekday() >= 5` → branches to weekend pipeline. Second run same ISO week prints "Already ran this weekend (date)" and exits. State in `data_cache/weekend_run_state.json`.
+- **`ascent/monitoring/weekend_runner.py`**: Orchestrates 10 jobs sequentially. Each job wrapped in `_run_job()` with try/except + timing log. Per-job `once_per_weekend` flag: ML retrain, factor discovery, self-improve, AI PM research run once; alt-data sweep, debrief, scenario planning, conviction retrain run every time. State tracks completed jobs so second run only re-runs "every run" jobs (~$0.30 vs ~$1.50 first run).
+- **`ascent/monitoring/weekly_debrief.py`**: Haiku post-mortem on week's attribution, AI PM override performance, debate verdicts. Outputs `data_cache/weekly_debrief.json` with `what_worked`, `what_didnt`, `systematic_bias`, `watch_next_week`, `top_risk`. Feeds into Monday's AI PM context.
+- **`ascent/monitoring/scenario_planner.py`**: 5 fixed adversarial scenarios (risk-off shock, regime flip, largest-position blowup, rates spike 50bps, EM selloff) + 1 dynamic from debrief. Sonnet assesses probability + pre-emptive action. Flags anything ≥40% probability with console alert. Outputs `data_cache/scenario_plan.json`.
+- Weekend self-improve uses 20 variants vs weekday 5. ML retrain clears pkl cache + writes GridSearch flag. AI PM research runs across full 901-symbol universe, no trade output.
+- 589 → 604 tests (15 new in `tests/monitoring/test_weekend_mode.py`). 604 passed, 1 skipped.
+
+### 2026-05-25 continued (weekend ↔ weekday wiring ✅)
+- **`rebalance_brief.py`** (weekend→weekday pipe #1): `_load_weekend_context()` reads `weekly_debrief.json`, `weekend_research.json`, `scenario_plan.json` if ≤8 days old. Haiku prompt now includes systematic_bias, top_risk, opportunities, and flagged scenarios. Result dict gains `weekly_debrief`, `weekend_research`, `flagged_scenarios` fields for downstream AI PM.
+- **`agents/ai_pm_agent.py`** (weekend→weekday pipe #2): Added tools #23 `get_scenario_plan` and #24 `get_weekend_research`. `get_scenario_plan` reads `data_cache/scenario_plan.json`, surfaces flagged scenarios with probability + impact + pre-emptive action. `get_weekend_research` reads `data_cache/weekend_research.json`, surfaces top 5 opportunities. Both wired into `_make_executor()` and `AI_PM_TOOLS`. Tool count updated to 24.
+- **`debate/agents.py`** (weekend→weekday pipe #3): `run_devils_advocate()` now loads `data_cache/scenario_plan.json` (if ≤8 days) and appends flagged scenarios to the user prompt alongside Monte Carlo context. Devil's advocate sees actual LLM-assessed probability + impact for weekend stress tests.
+- **`ascent/alpha/ml_sleeve.py`** (weekend→weekday pipe #4): `build_ml_alpha()` checks for `data_cache/ml_retrain_requested.json` flag (written by weekend `_job_ml_retrain()`). If `use_gridsearch=True`, runs `GridSearchCV` over 18 hyperparameter combos before fitting — selects best params automatically. Deletes flag after use so subsequent weekday runs resume normal cache logic.
+- Weekday→weekend direction was already wired: weekend reads from the same JSONL logs weekday writes (attribution, decision_memory, calibration, debate verdicts).
+- 604 passed, 1 skipped throughout.
+- Files: `ascent/monitoring/rebalance_brief.py`, `agents/ai_pm_agent.py`, `debate/agents.py`, `ascent/alpha/ml_sleeve.py`.

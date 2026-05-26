@@ -108,6 +108,30 @@ def _write_brief(data: Dict, path: str) -> None:
             pass
 
 
+def _load_weekend_context() -> Dict:
+    """
+    Load weekly_debrief, weekend_research, and scenario_plan if fresh (≤8 days).
+    Weekend → weekday wiring: these files are written by weekend_runner and
+    injected into the Monday rebalance brief so the AI PM benefits from them.
+    """
+    from datetime import date as _date, timedelta as _td
+    cutoff = (_date.today() - _td(days=8)).isoformat()
+    out: Dict = {}
+    for key, path in [
+        ("weekly_debrief",   Path("data_cache/weekly_debrief.json")),
+        ("weekend_research", Path("data_cache/weekend_research.json")),
+        ("scenario_plan",    Path("data_cache/scenario_plan.json")),
+    ]:
+        if path.exists():
+            try:
+                d = json.loads(path.read_text())
+                if d.get("as_of", "") >= cutoff:
+                    out[key] = d
+            except Exception:
+                pass
+    return out
+
+
 def generate_rebalance_brief(
     date: str,
     intel_dir: str = _INTEL_DIR,
@@ -155,6 +179,12 @@ def generate_rebalance_brief(
 
     health_summary = _extract_health_summary(entries)
 
+    # Weekend → weekday: load debrief, research memo, scenario plan if fresh
+    weekend_ctx = _load_weekend_context()
+    has_weekend = bool(weekend_ctx)
+    if has_weekend:
+        log.info("[RebalanceBrief] Weekend intelligence available: %s", list(weekend_ctx.keys()))
+
     summary_lines = [
         f"Period: last {len(entries)} trading days ending {date}",
         f"Deteriorating positions: {stale_positions or 'none'}",
@@ -174,6 +204,33 @@ def generate_rebalance_brief(
         f"  {sym}: {thesis[:100]}"
         for sym, thesis in list(entries[-1].get("position_theses", {}).items())[:8]
     ]
+
+    # Inject weekend intelligence into Haiku prompt
+    if has_weekend:
+        summary_lines.append("\n=== WEEKEND INTELLIGENCE (from weekend pipeline) ===")
+        debrief = weekend_ctx.get("weekly_debrief", {})
+        if debrief:
+            synth = debrief.get("synthesis", {})
+            summary_lines += [
+                f"Weekly debrief — systematic bias: {synth.get('systematic_bias', 'n/a')}",
+                f"What worked: {synth.get('what_worked', [])}",
+                f"What didn't: {synth.get('what_didnt', [])}",
+                f"Watch next week: {synth.get('watch_next_week', [])}",
+                f"Top risk identified: {synth.get('top_risk', 'n/a')}",
+            ]
+        research = weekend_ctx.get("weekend_research", {})
+        if research:
+            opps = research.get("opportunities", [])[:3]
+            if opps:
+                summary_lines.append(f"AI PM weekend research — top opportunities: {opps}")
+        scenario = weekend_ctx.get("scenario_plan", {})
+        if scenario:
+            flagged = [s for s in scenario.get("scenarios", []) if s.get("flagged")]
+            if flagged:
+                summary_lines.append(
+                    f"FLAGGED SCENARIOS (prob ≥40%): "
+                    + "; ".join(f"{s['name']} ({s.get('probability','?'):.0%})" for s in flagged)
+                )
 
     synthesis = ""
     try:
@@ -206,6 +263,10 @@ def generate_rebalance_brief(
         "analogue_signal":    analogue_signal,
         "adversarial_themes": adversarial_themes[-3:],
         "n_entries":          len(entries),
+        "weekly_debrief":     weekend_ctx.get("weekly_debrief", {}).get("synthesis"),
+        "weekend_research":   weekend_ctx.get("weekend_research"),
+        "flagged_scenarios":  [s for s in weekend_ctx.get("scenario_plan", {})
+                               .get("scenarios", []) if s.get("flagged")],
     }
     _write_brief(result, brief_path)
     return result

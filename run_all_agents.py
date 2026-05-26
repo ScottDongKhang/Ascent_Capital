@@ -230,25 +230,30 @@ def _get_portfolio_symbols() -> list:
 
 def _collect_altdata(portfolio_symbols: list, all_symbols: list) -> None:
     """
-    Run all four alt data collection sources before agents start.
+    Run alt data collection before agents start. Reddit excluded (no credentials).
     Each source is independently wrapped — one failure never blocks the rest.
+    SEC/Transcripts skip ETFs automatically (no 10-K/8-K filings for fund tickers).
     """
     from ascent.data.ingest.sec_filings import update_sec_signals
     from ascent.data.ingest.earnings_transcripts import (
         fetch_recent_8k_transcripts, update_transcript_signals,
     )
-    from ascent.data.ingest.reddit_sentiment import build_reddit_panel
     from ascent.data.ingest.google_trends import update_trends_signals
 
     today = date.today()
     is_sunday = today.weekday() == 6
     targets = portfolio_symbols if portfolio_symbols else all_symbols[:50]
 
+    # Filter ETFs out of SEC/Transcripts targets — they don't file 10-K/8-K earnings
+    _ETF_SUFFIXES = {"ETF", "EW", "EEM", "TLT", "IEF", "GLD", "SLV", "USO", "UUP",
+                     "HYG", "LQD", "TIP", "SGOV", "BIL", "DBB", "KMLM", "PDBC",
+                     "DBA", "IFRA", "VNQ", "VIXY"}
+    equity_targets = [s for s in targets if s not in _ETF_SUFFIXES]
+
     sources = [
-        ("SEC",         lambda: update_sec_signals(all_symbols)),
+        ("SEC",         lambda: update_sec_signals(equity_targets) if equity_targets else None),
         ("Transcripts", lambda: update_transcript_signals(
-                            fetch_recent_8k_transcripts(targets))),
-        ("Reddit",      lambda: build_reddit_panel(targets)),
+                            fetch_recent_8k_transcripts(equity_targets)) if equity_targets else None),
         ("Trends",      lambda: update_trends_signals(
                             all_symbols if is_sunday else targets)),
     ]
@@ -369,6 +374,25 @@ def main():
     dry_run             = "--dry-run" in sys.argv
     skip_sector_check   = "--skip-sector-check" in sys.argv
     today               = date.today()
+
+    # ── Weekend branch: runs before everything else ───────────────────────────
+    if today.weekday() >= 5:  # Saturday=5, Sunday=6
+        from ascent.monitoring.weekend_runner import already_ran_this_weekend, run_weekend
+        prior_run = already_ran_this_weekend()
+        if prior_run:
+            day_name = ["Monday","Tuesday","Wednesday","Thursday",
+                        "Friday","Saturday","Sunday"][today.weekday()]
+            print(f"\n{'='*60}")
+            print(f"  Ascent Capital — Weekend Mode")
+            print(f"{'='*60}")
+            print(f"  Already ran this weekend ({prior_run}).")
+            print(f"  Weekend intelligence pipeline runs once per weekend.")
+            print(f"  Come back next weekend, or run on a weekday for")
+            print(f"  the normal non-rebalance / rebalance flow.")
+            print(f"{'='*60}\n")
+            return
+        run_weekend(dry_run=dry_run)
+        return
 
     # ── Startup validation: sector data must be present before agents spawn ───
     from ascent.config.settings import UniverseConfig, get_config
