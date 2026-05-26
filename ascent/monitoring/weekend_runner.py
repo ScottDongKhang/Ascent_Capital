@@ -145,8 +145,13 @@ def _job_altdata_full_sweep(all_symbols: list, portfolio_symbols: list) -> None:
     print(f"[AltData/Weekend] Transcript sweep: {len(equity_all)} equity symbols")
     update_transcript_signals(fetch_recent_8k_transcripts(equity_all, lookback_days=14))
 
-    print(f"[AltData/Weekend] Trends sweep: {len(all_symbols)} symbols")
-    update_trends_signals(all_symbols)
+    print(f"[AltData/Weekend] Trends sweep: {len(all_symbols)} symbols "
+          f"(priority: {len(portfolio_symbols)} portfolio, cap 30 min)")
+    update_trends_signals(
+        all_symbols,
+        priority_symbols=portfolio_symbols,
+        max_minutes=30.0,
+    )
 
 
 def _job_llm_fundamental_cache(all_symbols: list) -> None:

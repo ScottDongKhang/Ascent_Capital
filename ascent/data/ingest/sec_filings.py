@@ -123,13 +123,23 @@ def _pick_primary_doc(index_html: str, cik_int: int, adsh_nodashes: str) -> str:
 
 
 def _parse_json_response(raw: str) -> dict:
-    """Extract JSON object from LLM response, handling markdown code blocks and trailing text."""
+    """Extract JSON object from LLM response.
+    Handles nested braces, markdown code blocks, and trailing text.
+    """
     if isinstance(raw, dict):
         return raw
-    m = re.search(r"\{[^{}]*\}", raw, re.DOTALL)
-    if not m:
+    start = raw.find("{")
+    if start == -1:
         raise ValueError("no JSON object in LLM response")
-    return json.loads(m.group())
+    depth = 0
+    for i, ch in enumerate(raw[start:], start):
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return json.loads(raw[start : i + 1])
+    raise ValueError("no JSON object in LLM response")
 
 
 def _get(url: str, retries: int = 3) -> Optional[str]:
@@ -212,14 +222,23 @@ def classify_filing_signal(
         if risk_factors_text:
             prompt += f"\n\nRISK FACTORS:\n{risk_factors_text[:2000]}"
 
-        raw = generate_structured(
-            system_prompt=_CLASSIFY_SYSTEM,
-            user_prompt=prompt,
-            model=HAIKU_MODEL,
-        )
-        result = _parse_json_response(raw)
+        result = None
+        last_exc: Exception = ValueError("no attempts made")
+        for _attempt in range(3):
+            try:
+                raw = generate_structured(
+                    system_prompt=_CLASSIFY_SYSTEM,
+                    user_prompt=prompt,
+                    model=HAIKU_MODEL,
+                )
+                result = _parse_json_response(raw)
+                break
+            except Exception as exc:
+                last_exc = exc
+                if _attempt < 2:
+                    time.sleep(2 ** _attempt * 2)
         if not isinstance(result, dict):
-            return _neutral.copy()
+            raise last_exc  # noqa: raise-without-from — intentional re-raise
 
         ranges = [
             ("revenue_momentum", -1.0, 1.0), ("margin_trend", -1.0, 1.0),

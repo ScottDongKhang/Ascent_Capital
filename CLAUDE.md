@@ -523,3 +523,12 @@ Python 3.12.13 Homebrew, venv at `.venv/`. Use `.venv/bin/python`. API keys via 
 - Weekday→weekend direction was already wired: weekend reads from the same JSONL logs weekday writes (attribution, decision_memory, calibration, debate verdicts).
 - 604 passed, 1 skipped throughout.
 - Files: `ascent/monitoring/rebalance_brief.py`, `agents/ai_pm_agent.py`, `debate/agents.py`, `ascent/alpha/ml_sleeve.py`.
+
+### 2026-05-25 continued (weekend pipeline speed — 6 hours → ~30 min ✅)
+- **Root cause**: Google Trends had no freshness gate; 901 symbols × 5.1s = 76 min minimum, up to 6 hours with 429 backoff. Killed after 3.5 hours of real run with 0 data saved.
+- **Google Trends fix** (`ascent/data/ingest/google_trends.py`): Added `_CACHE_FRESHNESS_DAYS=7`, `_stale_symbols()` helper (skips symbols with valid data < 7 days old), `max_seconds` param on `build_trends_panel()` (hard wall-clock cap), `priority_symbols` + `max_minutes=30.0` on `update_trends_signals()` (portfolio symbols always first). Combined effect: skip ~800 fresh symbols, guarantee completion in ≤30 min.
+- **SEC JSON parse fix** (`ascent/data/ingest/sec_filings.py`): `_parse_json_response` replaced `\{[^{}]*\}` regex (fails on nested braces, returns no match when Haiku wraps response in outer object) with depth-tracking brace scanner. Handles any nesting depth correctly. All 21 classify_filing_signal failures in weekend run caused by this.
+- **SEC retry** (`ascent/data/ingest/sec_filings.py`): `classify_filing_signal` Haiku call now retries 3× with 2s/4s backoff before surfacing error. Transient API failures no longer kill entire symbol.
+- **Weekend runner wiring** (`ascent/monitoring/weekend_runner.py`): `_job_altdata_full_sweep` now passes `priority_symbols=portfolio_symbols, max_minutes=30.0` to `update_trends_signals`.
+- 604 passed, 1 skipped (no count change — fixes only, no new test files).
+- Files: `ascent/data/ingest/google_trends.py`, `ascent/data/ingest/sec_filings.py`, `ascent/monitoring/weekend_runner.py`.

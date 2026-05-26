@@ -3,11 +3,13 @@
 Google Trends search velocity signal.
 Rate limit: 1 request per 5 seconds. For 901 symbols, full refresh ≈ 75 min.
 Schedule: weekly (Sunday 7 AM). 1-day lag.
+Freshness gate: skip symbols updated within 7 days. Priority queue puts portfolio
+symbols first so the most important signals are always fresh.
 """
 from __future__ import annotations
 import logging
 import time
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -18,6 +20,7 @@ log = logging.getLogger(__name__)
 
 _CACHE_PATH = Path("data_cache/altdata_trends.parquet")
 _REQUEST_DELAY = 5.1  # seconds between requests (rate limit: 1/5s)
+_CACHE_FRESHNESS_DAYS = 7  # skip symbols with valid data newer than this
 
 
 def fetch_trends(symbol: str, lookback_months: int = 12) -> pd.Series:
@@ -45,16 +48,45 @@ def fetch_trends(symbol: str, lookback_months: int = 12) -> pd.Series:
         return pd.Series(dtype=float)
 
 
+def _stale_symbols(
+    all_symbols: list[str],
+    existing: pd.DataFrame,
+    max_age_days: int = _CACHE_FRESHNESS_DAYS,
+) -> list[str]:
+    """Return symbols that are absent or have no valid data within max_age_days."""
+    if existing.empty:
+        return list(all_symbols)
+    cutoff = pd.Timestamp(date.today() - timedelta(days=max_age_days))
+    stale = []
+    for sym in all_symbols:
+        if sym not in existing.columns:
+            stale.append(sym)
+            continue
+        col = existing[sym].dropna()
+        if col.empty or col.index.max() < cutoff:
+            stale.append(sym)
+    return stale
+
+
 def build_trends_panel(
     symbols: list[str],
     lookback_months: int = 12,
+    max_seconds: Optional[float] = None,
 ) -> pd.DataFrame:
     """
     Fetch trends for all symbols one at a time (rate-limited).
     Returns wide panel (dates × symbols), values 0–1.
+    Stops early if max_seconds wall-clock time is exceeded.
     """
     panels = {}
+    start_time = time.monotonic()
     for i, sym in enumerate(symbols):
+        if max_seconds is not None and time.monotonic() - start_time > max_seconds:
+            log.info(
+                "[GoogleTrends] Time cap reached after %d/%d symbols (%.0fs)",
+                i, len(symbols), max_seconds,
+            )
+            break
         series = fetch_trends(sym, lookback_months=lookback_months)
         if not series.empty:
             panels[sym] = series
@@ -97,8 +129,18 @@ def compute_trends_signal(trends_panel: pd.DataFrame, lookback: int = 21) -> pd.
     return signal
 
 
-def update_trends_signals(symbols: list[str], lookback_months: int = 12) -> pd.DataFrame:
-    """Incremental weekly update."""
+def update_trends_signals(
+    symbols: list[str],
+    lookback_months: int = 12,
+    priority_symbols: Optional[list[str]] = None,
+    max_minutes: float = 30.0,
+) -> pd.DataFrame:
+    """Incremental update with freshness gate and priority queue.
+
+    priority_symbols are always fetched first (portfolio holdings).
+    Symbols with valid data within _CACHE_FRESHNESS_DAYS are skipped.
+    Stops after max_minutes wall-clock time to bound total runtime.
+    """
     existing = pd.DataFrame()
     if _CACHE_PATH.exists():
         try:
@@ -106,9 +148,30 @@ def update_trends_signals(symbols: list[str], lookback_months: int = 12) -> pd.D
         except Exception:
             pass
 
-    log.info("[GoogleTrends] Fetching trends for %d symbols (est. %.0f min)",
-             len(symbols), len(symbols) * _REQUEST_DELAY / 60)
-    raw_panel = build_trends_panel(symbols, lookback_months=lookback_months)
+    # Filter to stale symbols only
+    to_fetch = _stale_symbols(symbols, existing)
+    if not to_fetch:
+        log.info("[GoogleTrends] All %d symbols fresh — skipping fetch", len(symbols))
+        return existing
+
+    # Priority queue: portfolio symbols first, rest in original order
+    if priority_symbols:
+        priority_set = set(priority_symbols)
+        ordered = [s for s in to_fetch if s in priority_set] + \
+                  [s for s in to_fetch if s not in priority_set]
+    else:
+        ordered = to_fetch
+
+    est_min = len(ordered) * _REQUEST_DELAY / 60
+    log.info(
+        "[GoogleTrends] Fetching %d/%d stale symbols (est. %.0f min, cap %.0f min)",
+        len(ordered), len(symbols), est_min, max_minutes,
+    )
+    raw_panel = build_trends_panel(
+        ordered,
+        lookback_months=lookback_months,
+        max_seconds=max_minutes * 60,
+    )
     if raw_panel.empty:
         return existing
 
@@ -117,7 +180,9 @@ def update_trends_signals(symbols: list[str], lookback_months: int = 12) -> pd.D
         return existing
 
     if not existing.empty:
-        combined = pd.concat([existing, signal_panel]).groupby(level=0).last()
+        combined = pd.concat([existing, signal_panel], axis=1)
+        combined = combined.loc[:, ~combined.columns.duplicated(keep="last")]
+        combined = combined.sort_index()
     else:
         combined = signal_panel
 
