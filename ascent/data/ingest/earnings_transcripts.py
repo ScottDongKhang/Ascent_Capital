@@ -249,7 +249,8 @@ def classify_transcript_signal(prepared_remarks: str, qa_section: str, symbol: s
         out = {}
         for k, lo, hi in [("tone", -1, 1), ("defensiveness", 0, 1),
                            ("forward_confidence", -1, 1), ("quantitative_ratio", 0, 1)]:
-            out[k] = float(max(lo, min(hi, result.get(k, 0.0))))
+            raw = result.get(k, 0.0)
+            out[k] = float(max(lo, min(hi, float(raw) if raw is not None else 0.0)))
         return out
     except Exception as e:
         log.warning("[Transcripts] classify failed for %s: %s", symbol, e)
