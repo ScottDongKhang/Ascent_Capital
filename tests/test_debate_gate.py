@@ -3,43 +3,33 @@ import pytest
 from datetime import date
 
 
-def test_debate_fires_on_high_entropy():
+def test_debate_fires_every_rebalance_calm_bull():
+    """Adversarial Intelligence fires every rebalance — entropy gate removed."""
     from ascent.execution.debate_gate import should_run_debate
     state = {"weights": {"AAPL": 0.08}, "quant_context": {"portfolio_var_99": -0.02}}
+    regime = {"entropy": 0.0, "label": "calm_bull"}
+    assert should_run_debate(state, regime) is True
+
+
+def test_debate_fires_every_rebalance_low_entropy():
+    """Even low entropy, low concentration, low VaR — still fires."""
+    from ascent.execution.debate_gate import should_run_debate
+    state = {"weights": {"AAPL": 0.05, "MSFT": 0.05}, "quant_context": {"portfolio_var_99": -0.01},
+             "catalyst_detected": False}
+    regime = {"entropy": 0.10, "label": "calm_bull"}
+    assert should_run_debate(state, regime) is True
+
+
+def test_debate_fires_stressed_regime():
+    from ascent.execution.debate_gate import should_run_debate
+    state = {"weights": {"EWY": 0.06}, "quant_context": {"portfolio_var_99": -0.025}}
     regime = {"entropy": 0.75, "label": "stressed"}
     assert should_run_debate(state, regime) is True
 
 
-def test_debate_skipped_on_low_entropy_calm():
+def test_debate_fires_empty_portfolio():
     from ascent.execution.debate_gate import should_run_debate
-    state = {"weights": {"AAPL": 0.08, "MSFT": 0.07}, "quant_context": {"portfolio_var_99": -0.015},
-             "catalyst_detected": False}
-    regime = {"entropy": 0.40, "label": "calm_bull"}
-    assert should_run_debate(state, regime) is False
-
-
-def test_debate_fires_on_concentrated_position():
-    from ascent.execution.debate_gate import should_run_debate
-    state = {"weights": {"EWY": 0.14, "GLD": 0.08}, "quant_context": {"portfolio_var_99": -0.018},
-             "catalyst_detected": False}
-    regime = {"entropy": 0.30, "label": "calm_bull"}
-    assert should_run_debate(state, regime) is True
-
-
-def test_debate_fires_on_catalyst():
-    from ascent.execution.debate_gate import should_run_debate
-    state = {"weights": {"AAPL": 0.08}, "quant_context": {"portfolio_var_99": -0.02},
-             "catalyst_detected": True}
-    regime = {"entropy": 0.35, "label": "calm_bull"}
-    assert should_run_debate(state, regime) is True
-
-
-def test_debate_fires_on_var_tail():
-    from ascent.execution.debate_gate import should_run_debate
-    state = {"weights": {"AAPL": 0.08}, "quant_context": {"portfolio_var_99": -0.038},
-             "catalyst_detected": False}
-    regime = {"entropy": 0.30, "label": "calm_bull"}
-    assert should_run_debate(state, regime) is True
+    assert should_run_debate({}, {}) is True
 
 
 # Counterfactual tests

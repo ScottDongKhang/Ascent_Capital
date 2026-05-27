@@ -881,6 +881,13 @@ def main():
         except Exception as _di_e:
             print(f"[DailyIntel] Skipped: {_di_e}")
 
+        # Adversarial monitor — lightweight non-rebalance scan
+        try:
+            from debate.adversarial_monitor import run_adversarial_monitor
+            run_adversarial_monitor()
+        except Exception as _am_e:
+            print(f"[AdvMonitor] Skipped: {_am_e}")
+
     # ── Generate rebalance brief BEFORE AI PM so get_rebalance_brief tool reads current intel ──
     if is_rebalance:
         try:
@@ -1157,6 +1164,67 @@ def main():
                 print(f"[Runner] Holdings log skipped: {e}")
             _log_run(today, merged_weights, agent_outputs, dry_run)
             return
+
+        # ── Apply ONE adversarial position change (if warranted and not halted) ──
+        position_changes = verdict.get("position_changes", [])
+        if position_changes:
+            change   = position_changes[0]
+            sym      = change.get("symbol", "")
+            new_w    = float(change.get("new_weight", 0))
+            old_w    = float(merged_weights.get(sym, 0))
+            itype    = change.get("intervention_type", "adversarial_thesis")
+
+            if sym in merged_weights and new_w < old_w and new_w >= 0.01:
+                # Redistribute the freed weight proportionally to the other positions
+                freed = old_w - new_w
+                others = {s: w for s, w in merged_weights.items() if s != sym}
+                other_total = sum(others.values())
+                if other_total > 0:
+                    for s in others:
+                        merged_weights[s] += freed * (others[s] / other_total)
+                merged_weights[sym] = new_w
+
+                # Renormalize
+                total = sum(w for w in merged_weights.values() if w > 0)
+                if total > 0:
+                    merged_weights = {s: max(0.0, w / total)
+                                      for s, w in merged_weights.items()}
+
+                print(f"\n[AdvInt] ADVERSARIAL INTERVENTION APPLIED:")
+                print(f"  {sym}: {old_w:.1%} → {new_w:.1%} [{itype}]")
+                print(f"  Reason: {change.get('reason', '')[:100]}")
+                print(f"  10d Prediction: {change.get('prediction', '')[:100]}")
+
+                # Log the intervention for authority tracking
+                try:
+                    from debate.adversarial_authority import record_intervention
+                    record_intervention(
+                        date_str=today.isoformat(),
+                        symbol=sym,
+                        intervention_type=itype,
+                        from_weight=old_w,
+                        to_weight=new_w,
+                        prediction=change.get("prediction", ""),
+                        regime=portfolio_state.get("us_regime", "unknown"),
+                    )
+                    print(f"[AdvInt] Intervention logged for 10-day outcome tracking")
+                except Exception as _ai_e:
+                    print(f"[AdvInt] Authority log failed: {_ai_e}")
+
+                # Re-write merged_weights.json with the adjusted weights
+                weights_path = Path("execution/merged_weights.json")
+                with open(weights_path, "w") as f:
+                    json.dump({
+                        "date":         today.isoformat(),
+                        "weights":      merged_weights,
+                        "agents":       [ao.agent_id for ao in agent_outputs],
+                        "adversarial_intervention": change,
+                        "generated_at": datetime.now().isoformat(),
+                    }, f, indent=2)
+                print(f"[AdvInt] merged_weights.json updated with adversarial adjustment")
+            else:
+                print(f"[AdvInt] Position change for {sym} skipped "
+                      f"(not in weights, not a reduction, or below 1% floor)")
 
     except Exception as e:
         print(f"[Runner] Debate failed ({e}) — proceeding to execution anyway")

@@ -346,7 +346,7 @@ Python 3.12.13 Homebrew, venv at `.venv/`. Use `.venv/bin/python`. API keys via 
 
 ---
 
-## Current state (as of 2026-05-18)
+## Current state (as of 2026-05-26)
 
 **Portfolio** (post-rebalance May 19): EWY 10.9%, PDBC 6.9%, CBOE/CHRD/HUM/SATS/SNDK/STRL/VICR/VRT/WDC ~6.5% each, DBB 3.8%, EWT/EEM 3.4% each, EWC 3.3%, DBA 3.1%, BIL 2.8%, KMLM 2.4%, UUP 1.6%. 18 positions. NAV ~$103,790. Live since April 1, 2026.
 
@@ -356,7 +356,7 @@ Python 3.12.13 Homebrew, venv at `.venv/`. Use `.venv/bin/python`. API keys via 
 
 **Regime**: calm_bull (refitted May 7). Regime signal in `dashboard/regime_signal.json`.
 
-**Tests**: 589 passing, 1 skipped.
+**Tests**: 627 passing, 1 skipped.
 
 **Kill switches pending paper validation (~July 2026)**: `EVENT_TRADING_ENABLED=False`, `TWAP_ENABLED=False`, `SELF_MODIFY_ENABLED=False`.
 
@@ -382,6 +382,7 @@ Python 3.12.13 Homebrew, venv at `.venv/`. Use `.venv/bin/python`. API keys via 
 | AI PM intelligence | ✅ | 19 tools; live news, analyst estimates, calibration-aware prompt |
 | IC-decay early rebalance | ✅ | `rebalance_trigger.py`; fires when composite IC drops ≥30% after ≥5 bdays |
 | 130/30 long-short | ✅ | `long_short.py` built; `LONG_SHORT_ENABLED=False` until ≥30 paper rebalances |
+| Adversarial Intelligence | ✅ | 3-layer risk committee: per-position short thesis, regime sizing, coherence; ONE change per rebalance with falsifiable 10d prediction; earned authority by intervention type |
 
 ---
 
@@ -532,3 +533,18 @@ Python 3.12.13 Homebrew, venv at `.venv/`. Use `.venv/bin/python`. API keys via 
 - **Weekend runner wiring** (`ascent/monitoring/weekend_runner.py`): `_job_altdata_full_sweep` now passes `priority_symbols=portfolio_symbols, max_minutes=30.0` to `update_trends_signals`.
 - 604 passed, 1 skipped (no count change — fixes only, no new test files).
 - Files: `ascent/data/ingest/google_trends.py`, `ascent/data/ingest/sec_filings.py`, `ascent/monitoring/weekend_runner.py`.
+
+### 2026-05-25–26 (Adversarial Intelligence — Phase 5.1 ✅)
+- **Redesign**: Debate layer converted from performative bull/bear theatre into a genuine risk committee. Fires every rebalance (no entropy gate). Makes ONE prioritized weight change before execution with a falsifiable 10-day prediction. Tracks its own intervention accuracy and earns authority based on proven performance.
+- **`debate/adversarial_engine.py`** (new, ~260 lines): 3-layer analysis before agents run. Layer 1 — batched Haiku call generates strongest possible short thesis per position (score 0–1; >0.6 = flagged). Layer 2 — regime-conditional sizing table (`(min,opt,max)` per `(regime, position_type)`; position types: event_momentum|trend|reversion|etf|unknown). Layer 3 — narrative clustering: assigns positions to named buckets (em_equity, us_rates, commodities, etc.) then by sector from profiles.parquet; counts clusters >3% weight as "independent bets"; estimates portfolio impact of regime flip.
+- **`debate/adversarial_authority.py`** (new, ~180 lines): 4 intervention types — adversarial_thesis, regime_sizing, coherence_risk, event_risk. win_rate >70%→4% max change, >50%→2%, <40% after n≥30→suspended. Outcome measured at T+14 calendar days: sym vs SPY, success = sym lagged SPY >1pp. `score_pending_interventions()` runs in weekend calibration job. State in `data_cache/adversarial_authority.json`.
+- **`debate/adversarial_monitor.py`** (new, ~120 lines): Non-rebalance day scan — earnings within 7 days, SEC risk_trend < -0.50, |price move| > 20%. Writes alerts to `data_cache/adversarial_monitor.json`.
+- **`debate/judge.py`** (rewrite): Outputs ONE position change (validated: reduction only, min 0.5pp, min floor 1%, clamped to authority tier). Traditional halt_and_review verdict still fires for severe cases. Extended thinking via Sonnet.
+- **`debate/agents.py`** (modified): Asymmetric data injection — bull gets altdata positives + weak-short positions, bear gets adversarial engine flags + oversized positions, devil's advocate gets coherence analysis.
+- **`debate/debate_runner.py`** (modified): Adversarial engine runs before agents, injects output into `portfolio_state["adversarial_engine"]`. Position changes applied after judge with proportional weight redistribution.
+- **`ascent/execution/debate_gate.py`** (rewrite): Always returns True — removed entropy-based gate that was skipping debate in calm_bull.
+- **`run_all_agents.py`** (modified): Applies ONE position change post-verdict; freed weight redistributed proportionally to all other positions; logs to adversarial_authority. Adversarial monitor called on non-rebalance days.
+- **`ascent/monitoring/weekend_runner.py`** (modified): Added `_job_adversarial_calibration()` (step 6b) — scores pending interventions, prints calibration report. Job count 10→11.
+- **Key gotcha**: `@patch("ascent.llm.client.generate_structured")` is correct patch target for adversarial tests — `generate_structured` is imported INSIDE the function body, not at module level.
+- 604 → 627 passed, 1 skipped (23 new tests in `tests/test_adversarial_intelligence.py`, 4 updated in `tests/test_debate_gate.py`).
+- Files: `debate/adversarial_engine.py` (new), `debate/adversarial_authority.py` (new), `debate/adversarial_monitor.py` (new), `debate/judge.py`, `debate/agents.py`, `debate/debate_runner.py`, `ascent/execution/debate_gate.py`, `run_all_agents.py`, `ascent/monitoring/weekend_runner.py`, `tests/test_adversarial_intelligence.py` (new), `tests/test_debate_gate.py`.

@@ -29,6 +29,7 @@ from debate.agents import (
 )
 from debate.judge import run_judge
 from debate.outcome_tracker import score_pending_verdicts
+from debate.adversarial_engine import run_adversarial_engine, format_adversarial_context
 from simulation.scenario_simulator import run_all_scenarios
 from ascent.reporting.debrief import run_pending_debriefs, load_debrief_context
 from ascent.reporting.blind_spot_detector import detect_blind_spots, load_blind_spot_context
@@ -208,6 +209,17 @@ def run_debate(portfolio_state: dict = None, run_date: date = None, as_of_date=N
     except Exception as e:
         print(f"[Debate] Quant context skipped: {type(e).__name__}: {e}")
 
+    # ── Adversarial Intelligence — runs BEFORE agents so they can see the output ──
+    print("[Debate] Running Adversarial Intelligence engine (Layers 1-3)...")
+    adv_engine_output = {}
+    try:
+        adv_engine_output = run_adversarial_engine(portfolio_state)
+        portfolio_state["adversarial_engine"] = adv_engine_output
+        n_flags = len(adv_engine_output.get("top_flags", []))
+        print(f"[Debate] Adversarial engine complete — {n_flags} prioritized flags")
+    except Exception as e:
+        print(f"[Debate] Adversarial engine failed (non-fatal): {e}")
+
     # Bull agent
     print("[Debate] Bull agent arguing...")
     try:
@@ -312,9 +324,18 @@ def run_debate(portfolio_state: dict = None, run_date: date = None, as_of_date=N
         _disagreement_score = None
         _disagreement_context = ""
 
-    # Judge synthesizes all rounds
-    print("[Debate] Judge synthesizing verdict...")
-    verdict = run_judge(bull, bear, devil, portfolio_state, regime_arg=regime_arg, quant_check=quant_check, round2_args=round2_args, disagreement_context=_disagreement_context)
+    # Judge synthesizes all rounds + makes ONE adversarial position change
+    print("[Debate] Judge synthesizing verdict + adversarial intervention...")
+    _adv_context = format_adversarial_context(adv_engine_output) if adv_engine_output else ""
+    verdict = run_judge(
+        bull, bear, devil, portfolio_state,
+        regime_arg=regime_arg,
+        quant_check=quant_check,
+        round2_args=round2_args,
+        disagreement_context=_disagreement_context,
+        adversarial_context=_adv_context,
+        adversarial_engine=adv_engine_output,
+    )
 
     verdict["disagreement_score"]    = _disagreement_score
     verdict["pairwise_similarities"] = _sims
@@ -325,6 +346,16 @@ def run_debate(portfolio_state: dict = None, run_date: date = None, as_of_date=N
         print(f"  Risk: {risk}")
     if verdict.get("reasoning"):
         print(f"  Reasoning: {verdict['reasoning'][:150]}...")
+    position_changes = verdict.get("position_changes", [])
+    if position_changes:
+        ch = position_changes[0]
+        print(f"[Debate] ADVERSARIAL INTERVENTION: {ch['symbol']} "
+              f"{ch['current_weight']:.1%} → {ch['new_weight']:.1%} "
+              f"[{ch['intervention_type']}]")
+        print(f"  Reason:     {ch.get('reason', '')[:100]}")
+        print(f"  Prediction: {ch.get('prediction', '')[:100]}")
+    else:
+        print("[Debate] No adversarial intervention warranted this rebalance")
 
     # Save full debate record
     record = {
@@ -342,6 +373,11 @@ def run_debate(portfolio_state: dict = None, run_date: date = None, as_of_date=N
             "bear_rebuttal":              bear_r2,
             "devils_advocate_rebuttal":   devil_r2,
             "regime_specialist_rebuttal": regime_r2,
+        },
+        "adversarial_engine": {
+            "top_flags":          adv_engine_output.get("top_flags", []),
+            "n_independent_bets": adv_engine_output.get("coherence", {}).get("n_independent_bets", 0),
+            "dominant_exposure":  adv_engine_output.get("coherence", {}).get("dominant_exposure", "unknown"),
         },
         "verdict":         verdict,
         "outcome_scored":  False,  # will be updated by outcome_tracker in a future run

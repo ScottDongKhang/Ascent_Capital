@@ -222,6 +222,15 @@ def _job_conviction_retrain() -> None:
         print("[ConvictionGate/Weekend] Insufficient data for ML training (need n≥30)")
 
 
+def _job_adversarial_calibration() -> None:
+    """Score pending adversarial interventions and update earned authority per intervention type."""
+    from debate.adversarial_authority import score_pending_interventions, get_calibration_report
+    n_scored = score_pending_interventions()
+    report   = get_calibration_report()
+    print(f"[AdvAuth/Weekend] Scored {n_scored} intervention(s) against 10-day outcomes")
+    print(f"[AdvAuth/Weekend] {report}")
+
+
 def _job_ai_pm_research(all_symbols: list) -> None:
     """
     AI PM weekend deep research session.
@@ -312,6 +321,10 @@ def run_weekend(dry_run: bool = False) -> None:
     if _run_job("conviction_retrain", _job_conviction_retrain, once_per_weekend=False):
         completed.append("conviction_retrain")
 
+    # 6b. Adversarial intervention calibration — every run
+    if _run_job("adversarial_calibration", _job_adversarial_calibration, once_per_weekend=False):
+        completed.append("adversarial_calibration")
+
     # 7. AI PM deep research — once per weekend
     if _run_job("ai_pm_research",
                 lambda: _job_ai_pm_research(all_symbols),
@@ -346,7 +359,7 @@ def run_weekend(dry_run: bool = False) -> None:
     _mark_ran(completed)
 
     print(f"\n{'#'*60}")
-    print(f"# Weekend run complete: {len(completed)}/{10} jobs succeeded")
+    print(f"# Weekend run complete: {len(completed)}/{11} jobs succeeded")
     print(f"# Completed: {', '.join(completed)}")
     print(f"# Monday open: models retrained, 901-symbol alt-data fresh,")
     print(f"#              debrief + scenario plan ready in data_cache/")

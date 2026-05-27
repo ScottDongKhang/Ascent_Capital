@@ -241,12 +241,161 @@ def _section_factor_exposures(ps: dict) -> str:
         return ""
 
 
+def _section_altdata_positives(ps: dict) -> str:
+    """
+    Bull-only: alt data positives + positions the adversarial engine cannot find a strong short case for.
+    Symbols with adversarial_score < 0.3 = hard to short = structural long quality.
+    """
+    adv = ps.get("adversarial_engine", {})
+    adv_scores = adv.get("adversarial_scores", {})
+    weights    = ps.get("weights", {})
+
+    lines = []
+
+    # Positions adversarial engine failed to find a strong bear case for
+    hard_to_short = [
+        (sym, data)
+        for sym, data in adv_scores.items()
+        if data.get("adversarial_score", 0.5) < 0.30 and sym in weights
+    ]
+    if hard_to_short:
+        lines.append("Positions with weak adversarial case (structural quality — hard to short):")
+        for sym, data in sorted(hard_to_short, key=lambda x: x[1]["adversarial_score"]):
+            score = data["adversarial_score"]
+            lines.append(f"  {sym} ({weights[sym]:.1%}): adversarial_score={score:.2f} — {data.get('short_thesis', 'no compelling short case')}")
+
+    # Positive alt data signals
+    import json as _j
+    from pathlib import Path as _Path
+    sec_path = _Path("data_cache/altdata_sec_detail.json")
+    if sec_path.exists():
+        try:
+            detail = _j.loads(sec_path.read_text())
+            pos_signals = []
+            for sym in weights:
+                if sym in detail:
+                    tone = detail[sym].get("tone_score", 0) or 0
+                    rev  = detail[sym].get("revenue_momentum", 0) or 0
+                    if tone > 0.2 or rev > 0.3:
+                        pos_signals.append((sym, tone, rev))
+            if pos_signals:
+                lines.append("\nPositive SEC signals (management tone + revenue momentum):")
+                for sym, tone, rev in sorted(pos_signals, key=lambda x: -(x[1]+x[2]))[:5]:
+                    lines.append(f"  {sym}: tone={tone:+.2f} revenue_mom={rev:+.2f}")
+        except Exception:
+            pass
+
+    return "\n".join(lines) if lines else "(No strong alt-data positives or weak-short positions identified)"
+
+
+def _section_adversarial_flags(ps: dict) -> str:
+    """
+    Bear-only: adversarial engine flags + positions that moved >15% since entry (event risk).
+    Gives Bear evidence-based ammunition rather than generic risk arguments.
+    """
+    adv      = ps.get("adversarial_engine", {})
+    scores   = adv.get("adversarial_scores", {})
+    sizing   = adv.get("sizing_recommendations", {})
+    top_flags = adv.get("top_flags", [])
+    weights  = ps.get("weights", {})
+
+    lines = []
+
+    # Top adversarial flags
+    if top_flags:
+        lines.append("Adversarial Intelligence — top risk flags (pre-computed):")
+        for flag in top_flags[:4]:
+            sym  = flag["symbol"]
+            lines.append(
+                f"  {sym} ({flag['current_weight']:.1%}): {flag['reason'][:80]}"
+            )
+            if flag.get("suggested_weight"):
+                lines.append(f"    → Suggested trim to {flag['suggested_weight']:.1%} "
+                             f"[type: {flag['intervention_type']}]")
+
+    # Event momentum positions (single-day >15% since entry = elevated revert risk)
+    event_movers = [
+        (sym, d)
+        for sym, d in sizing.items()
+        if d.get("position_type") == "event_momentum" and sym in weights
+    ]
+    if event_movers:
+        lines.append("\nEvent-momentum positions (>15% single-day move in past 30d — mean-revert risk):")
+        for sym, d in event_movers:
+            lines.append(
+                f"  {sym}: current={d['current_weight']:.1%}, "
+                f"optimal={d['optimal_weight']:.1%}, deviation={d['deviation']:+.1%}"
+            )
+
+    # Oversized positions
+    oversized = [(sym, d) for sym, d in sizing.items() if d.get("oversized") and sym in weights]
+    if oversized:
+        lines.append("\nOversized positions per regime-conditional rules:")
+        for sym, d in oversized[:4]:
+            lines.append(f"  {sym}: {d['recommendation'][:80]}")
+
+    # Upcoming earnings (from catalyst context)
+    cat = ps.get("catalyst_context", {})
+    if isinstance(cat, dict) and cat.get("upcoming_events"):
+        events = [e for e in cat["upcoming_events"] if e.get("days_away", 99) <= 7]
+        if events:
+            lines.append("\nEarnings within 7 days (binary event risk):")
+            for e in events[:4]:
+                lines.append(f"  {e.get('symbol', '?')}: {e.get('event_type', '?')} in {e.get('days_away', '?')} days")
+
+    return "\n".join(lines) if lines else "(No adversarial flags — engine data not available)"
+
+
+def _section_coherence(ps: dict) -> str:
+    """
+    Devil's Advocate only: portfolio coherence analysis from the adversarial engine.
+    This is what the quant model and AI PM cannot see — emergent portfolio-level risk.
+    """
+    adv = ps.get("adversarial_engine", {})
+    coh = adv.get("coherence", {})
+    if not coh:
+        return "(Portfolio coherence data not available)"
+
+    n_pos  = coh.get("n_positions", 0)
+    n_bets = coh.get("n_independent_bets", 0)
+    dom    = coh.get("dominant_exposure", "unknown")
+    flip   = coh.get("regime_flip_impact_estimate", "N/A")
+    lw     = coh.get("largest_cluster_weight", 0)
+
+    lines = [
+        "Portfolio Coherence Analysis (what the quant model cannot see):",
+        f"  {n_pos} positions → {n_bets} independent bets",
+        f"  Dominant exposure: {dom} ({lw:.1%} of portfolio)",
+        f"  Regime flip sensitivity: {flip}",
+    ]
+
+    clusters = coh.get("narrative_clusters", [])
+    if clusters:
+        lines.append("  Narrative clusters (each is one bet, not many):")
+        for c in clusters[:5]:
+            syms = ", ".join(p["symbol"] for p in c["positions"][:3])
+            extra = f" +{len(c['positions'])-3}" if len(c["positions"]) > 3 else ""
+            lines.append(f"    {c['name']}: {c['total_weight']:.1%} [{syms}{extra}]")
+
+    em_w   = coh.get("em_weight", 0)
+    comm_w = coh.get("commodity_weight", 0)
+    if em_w > 0.15:
+        lines.append(f"  WARNING: EM exposure {em_w:.1%} — single policy/currency event affects entire cluster")
+    if comm_w > 0.15:
+        lines.append(f"  WARNING: Commodity exposure {comm_w:.1%} — correlated to same supply/demand shock")
+
+    return "\n".join(lines)
+
+
 # ── Agent context assembler ────────────────────────────────────────────────────
 
 _AGENT_SECTIONS = {
-    "bull": [_section_weights, _section_momentum, _section_fundamental, _section_allocation],
-    "bear": [_section_weights, _section_concentration, _section_regime, _section_allocation],
-    "devils_advocate": [_section_weights, _section_regime, _section_tail, _section_factor_exposures, _section_allocation],
+    "bull": [_section_weights, _section_momentum, _section_fundamental,
+             _section_altdata_positives, _section_allocation],
+    "bear": [_section_weights, _section_adversarial_flags, _section_concentration,
+             _section_regime, _section_allocation],
+    "devils_advocate": [_section_weights, _section_coherence, _section_regime,
+                        _section_tail, _section_factor_exposures, _section_allocation],
     "regime_specialist": [_section_regime, _section_macro],
 }
 
