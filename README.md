@@ -1,12 +1,12 @@
 # Ascent Capital
 
-![Tests](https://img.shields.io/badge/tests-604%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-627%20passing-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.12-blue)
 ![Status](https://img.shields.io/badge/status-live%20paper%20trading-informational)
 ![AI PM](https://img.shields.io/badge/AI%20PM-Claude%20Opus%204.6-blueviolet)
 ![Alpha Stack](https://img.shields.io/badge/alpha%20sleeves-14-orange)
 
-**A full-stack AI-native quantitative fund built from scratch.** Data ingestion → 14-sleeve alpha → MVO/Black-Litterman portfolio construction → regime-adaptive multi-agent orchestration → AI portfolio manager that earns trading authority by proving itself in live markets → adversarial debate before every trade.
+**A full-stack AI-native quantitative fund built from scratch.** Data ingestion → 14-sleeve alpha → MVO/Black-Litterman portfolio construction → regime-adaptive multi-agent orchestration → AI portfolio manager that earns trading authority by proving itself in live markets → adversarial risk committee before every trade.
 
 Runs daily at 1:45 PM ET via launchd. Orders go to Alpaca. Every decision is logged, hashed, and auditable.
 
@@ -19,7 +19,10 @@ Most quant repos are backtests dressed up as systems. This one has four things t
 **1. An AI PM that learns from its own mistakes — permanently.**
 Every override the AI PM makes is stored with full context: override type, regime, weights, momentum. 21 days later, the realized return fills in automatically. Before any future override of the same type in the same regime, the AI PM queries its own historical win rate. If it's been losing valuation calls in calm_bull markets, the conviction gate reduces its size or blocks the override. This is a compounding proprietary database — nobody starting from scratch has it, and it gets more accurate every week.
 
-**2. Adversarial self-play before every trade.**
+**2. A risk committee that earns its authority by being right.**
+Before every rebalance, an adversarial engine runs three layers of analysis the quant model structurally cannot see: (1) strongest possible short thesis per position via a batched Haiku call, scored 0–1; (2) regime-conditional sizing check — is each position the right size for this regime and position type; (3) narrative clustering — how many truly independent bets does the book contain, and what happens to the whole thing if the regime flips? The engine makes ONE prioritized weight change per rebalance, with a falsifiable 10-day prediction. That prediction is tracked. If an intervention type falls below 40% accuracy after 30 outcomes, it loses authority and gets suspended. This is not a veto layer — it's a calibrated specialist that gets stronger the longer it runs.
+
+**2b. Adversarial self-play before the AI PM commits.**
 After the AI PM proposes a portfolio, a separate Sonnet red team agent attacks it — not a general critique, a specific challenge to each delta vs the quant baseline: *"The quant wanted SATS at 6.5%. You removed it. If the quant is right, what does that cost?"* The AI PM then revises or defends with a 6-tool research pass. Only the portfolio that survives adversarial pressure gets submitted.
 
 **3. An AI PM that earns its authority incrementally.**
@@ -32,7 +35,7 @@ Every weekend, the system runs a closed intelligence loop: full alt-data sweep (
 
 ## Live Track Record
 
-> 604 tests · Paper trading since April 1, 2026 · AI PM in shadow period since May 19
+> 627 tests · Paper trading since April 1, 2026 · AI PM in shadow period since May 19
 
 52 days of paper trading is not statistically significant — Sharpe standard error after 52 days is ≈ 2.8. We track this honestly, which is why authority is earned over 21 rebalances, not calendar time.
 
@@ -45,6 +48,7 @@ Every weekend, the system runs a closed intelligence loop: full alt-data sweep (
 | May 22, 2026 | Decision memory + conviction gate live |
 | May 23, 2026 | Position health monitor grounded in live return data |
 | May 25, 2026 | Weekend intelligence pipeline + bidirectional weekday ↔ weekend wiring |
+| May 26, 2026 | Adversarial Intelligence live — 3-layer risk committee, earned authority, ONE change per rebalance |
 
 **Current portfolio (May 2026):** EWY 10.9%, PDBC 6.9%, CBOE/CHRD/HUM/SATS/SNDK/STRL/VICR/VRT/WDC ~6.5% each, DBB 3.8%, EWT/EEM/EWC ~3.4% each, DBA 3.1%, BIL 2.8%, KMLM 2.4%, UUP 1.6%. 18 positions.
 
@@ -73,7 +77,7 @@ pip install -r requirements.txt
 
 python run_all_agents.py            # daily pipeline (or weekend mode on Sat/Sun)
 python run_all_agents.py --dry-run  # all logic, no orders
-python -m pytest --tb=short -q     # 604 passed, 1 skipped
+python -m pytest --tb=short -q     # 627 passed, 1 skipped
 streamlit run demo_app.py           # investor demo
 streamlit run ascent/dashboard/live_dashboard.py --server.port 8502
 ```
@@ -161,7 +165,15 @@ python run_all_agents.py  ·  daily  ·  1:45 PM ET via launchd
 │
 ├── Earned authority blend (Phase 0→1→2→3 · hard cap 0.80)
 │
-├── Debate (advisory · 5 agents · 2 rounds · Monte Carlo + weekend scenarios)
+├── Adversarial Intelligence (fires every rebalance · 3 layers · 1 falsifiable weight change)
+│   ├── Layer 1: Short thesis per position (batched Haiku · score 0–1 · >0.6 = flagged)
+│   ├── Layer 2: Regime-conditional sizing (event_momentum/trend/reversion/etf/unknown × 5 regimes)
+│   ├── Layer 3: Narrative coherence (cluster → independent bets · regime flip sensitivity)
+│   ├── Asymmetric agents: bull sees altdata positives · bear sees flags · devil sees coherence
+│   ├── Judge → ONE position change + falsifiable 10-day prediction + traditional verdict
+│   └── Earned authority: win_rate >70%→4% · >50%→2% · <40% after 30 scored → suspended
+│
+├── Debate (advisory continuation · 5 agents · 2 rounds · Monte Carlo + weekend scenarios)
 │   └── Judge → proceed / reduce_size / halt_and_review
 │
 └── Execution
@@ -228,7 +240,7 @@ At n ≥ 30 matured cases, a logistic regression trains automatically on overrid
 
 ## Weekend Intelligence Pipeline
 
-`run_all_agents.py` auto-detects Saturday/Sunday and branches into a 10-job intelligence run. Second run the same weekend: expensive once-per-weekend jobs are skipped.
+`run_all_agents.py` auto-detects Saturday/Sunday and branches into an 11-job intelligence run. Second run the same weekend: expensive once-per-weekend jobs are skipped.
 
 | Job | Frequency | Cost driver |
 |-----|-----------|-------------|
@@ -238,6 +250,7 @@ At n ≥ 30 matured cases, a logistic regression trains automatically on overrid
 | Factor discovery | Once | PySR + Haiku proposals |
 | Self-improve (20 variants) | Once | No LLM · walk_forward_lightweight |
 | Conviction gate retrain | Every run | No LLM · sklearn |
+| Adversarial calibration | Every run | No LLM · yfinance T+14d outcome scoring |
 | AI PM deep research | Once | Opus · full universe |
 | Weekly debrief | Every run | Haiku · one synthesis call |
 | Adversarial scenario plan | Every run | Sonnet · 6 scenarios |
@@ -271,6 +284,7 @@ Alpha scores → Distressed filter → Black-Litterman (tau scales with IC IR)
 | MVO + Black-Litterman | ✅ live | CLARABEL/SCS/rank-weight fallback chain |
 | 4 specialist agents | ✅ live | US equities · macro · international · alternatives |
 | Multi-agent orchestration | ✅ live | Skill blend · correlation guard · coherence · position cap |
+| Adversarial Intelligence | ✅ live | 3-layer engine · ONE falsifiable change per rebalance · earned authority by type |
 | Debate layer | ✅ live | 5 agents · 2 rounds · Monte Carlo + weekend scenario injection |
 | AI PM agent | ✅ shadow | Phase 0 (0% weight) since May 19, 2026 · 24 tools |
 | Adversarial self-play | ✅ live | Sonnet red team attacks before every submission |
@@ -313,7 +327,8 @@ ascent/
 agents/          us_equities_agent, macro_agent, international_agent,
                  alternatives_agent, ai_pm_agent, red_team_agent
 orchestrator/    central_intelligence.py
-debate/          debate_runner, agents, judge, outcome_tracker
+debate/          adversarial_engine, adversarial_authority, adversarial_monitor,
+                 debate_runner, agents, judge, outcome_tracker
 compliance/      audit_trail (SHA-256 hash chain), performance_report
 ```
 
