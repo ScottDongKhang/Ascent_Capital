@@ -1,7 +1,7 @@
 {
   "date": "2026-04-12",
   "data_as_of": "2026-04-12",
-  "timestamp": "2026-05-25T17:32:49.709915",
+  "timestamp": "2026-05-26T17:24:24.989852",
   "portfolio_state": {
     "date": "2026-04-12",
     "us_regime": "calm_bull",
@@ -63,10 +63,91 @@
         {
           "sym1": "AAPL",
           "sym2": "MSFT",
-          "correlation": 0.279
+          "correlation": 0.294
         }
       ],
       "summary_text": "QUANTITATIVE RISK CONTEXT (pre-computed):\n\nPortfolio VaR (historical simulation, 63 trading days):\n  95th percentile (1-day): -1.88%  (1 in 20 chance of loss >= this)\n  99th percentile (1-day): -2.32%  (1 in 100 chance of loss >= this)\n\nFactor exposures (sum of position weights per factor):\n  us_tech            100.0%\n\nCorrelation: No high-correlation pairs (>0.65) detected.\n\nConcentration warning: us_tech is 100.0% of portfolio"
+    },
+    "adversarial_engine": {
+      "adversarial_scores": {
+        "AAPL": {
+          "short_thesis": "Deteriorating risk trend signals margin compression ahead. Services growth masks iPhone saturation; China exposure vulnerable to geopolitical escalation.",
+          "adversarial_score": 0.58,
+          "flagged": false
+        },
+        "MSFT": {
+          "short_thesis": "AI capex cycle unsustainable; Azure margin pressure mounting. Valuation assumes perpetual cloud dominance despite intensifying AWS/GCP competition.",
+          "adversarial_score": 0.52,
+          "flagged": false
+        }
+      },
+      "sizing_recommendations": {
+        "AAPL": {
+          "position_type": "unknown",
+          "optimal_weight": 0.065,
+          "min_weight": 0.04,
+          "max_weight": 0.1,
+          "current_weight": 0.5,
+          "deviation": 0.435,
+          "oversized": true,
+          "recommendation": "Trim AAPL to 6.5% \u2014 currently 50.0%, max for unknown in calm_bull is 10.0%"
+        },
+        "MSFT": {
+          "position_type": "unknown",
+          "optimal_weight": 0.065,
+          "min_weight": 0.04,
+          "max_weight": 0.1,
+          "current_weight": 0.5,
+          "deviation": 0.435,
+          "oversized": true,
+          "recommendation": "Trim MSFT to 6.5% \u2014 currently 50.0%, max for unknown in calm_bull is 10.0%"
+        }
+      },
+      "coherence": {
+        "n_positions": 2,
+        "n_independent_bets": 1,
+        "narrative_clusters": [
+          {
+            "name": "technology",
+            "total_weight": 1.0,
+            "positions": [
+              {
+                "symbol": "AAPL",
+                "weight": 0.5
+              },
+              {
+                "symbol": "MSFT",
+                "weight": 0.5
+              }
+            ]
+          }
+        ],
+        "dominant_exposure": "technology",
+        "largest_cluster_weight": 1.0,
+        "regime_flip_impact_estimate": "calm_bull\u2192stressed: est -10.0%",
+        "em_weight": 0.0,
+        "commodity_weight": 0.0
+      },
+      "top_flags": [
+        {
+          "symbol": "AAPL",
+          "reason": "regime_sizing: Trim AAPL to 6.5% \u2014 currently 50.0%, max for unknown in calm_bull is 10.0%",
+          "intervention_type": "regime_sizing",
+          "current_weight": 0.5,
+          "suggested_weight": 0.065,
+          "adversarial_score": 0.58,
+          "priority_score": 2.61
+        },
+        {
+          "symbol": "MSFT",
+          "reason": "regime_sizing: Trim MSFT to 6.5% \u2014 currently 50.0%, max for unknown in calm_bull is 10.0%",
+          "intervention_type": "regime_sizing",
+          "current_weight": 0.5,
+          "suggested_weight": 0.065,
+          "adversarial_score": 0.52,
+          "priority_score": 2.61
+        }
+      ]
     }
   },
   "arguments": {
@@ -79,6 +160,30 @@
     "bear_rebuttal": "bear_r2",
     "devils_advocate_rebuttal": "devil_r2",
     "regime_specialist_rebuttal": "regime_r2"
+  },
+  "adversarial_engine": {
+    "top_flags": [
+      {
+        "symbol": "AAPL",
+        "reason": "regime_sizing: Trim AAPL to 6.5% \u2014 currently 50.0%, max for unknown in calm_bull is 10.0%",
+        "intervention_type": "regime_sizing",
+        "current_weight": 0.5,
+        "suggested_weight": 0.065,
+        "adversarial_score": 0.58,
+        "priority_score": 2.61
+      },
+      {
+        "symbol": "MSFT",
+        "reason": "regime_sizing: Trim MSFT to 6.5% \u2014 currently 50.0%, max for unknown in calm_bull is 10.0%",
+        "intervention_type": "regime_sizing",
+        "current_weight": 0.5,
+        "suggested_weight": 0.065,
+        "adversarial_score": 0.52,
+        "priority_score": 2.61
+      }
+    ],
+    "n_independent_bets": 1,
+    "dominant_exposure": "technology"
   },
   "verdict": {
     "confidence": 0.7,

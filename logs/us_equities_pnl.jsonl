@@ -24,3 +24,5 @@
 {"date": "2026-05-20", "nav": 135129.58, "return": 0.013124, "agent_id": "us_equities", "source": "forward_pnl_tracker", "timestamp": "2026-05-20T17:12:19.695904"}
 {"date": "2026-05-21", "nav": 134348.86, "return": -0.005778, "agent_id": "us_equities", "source": "forward_pnl_tracker", "timestamp": "2026-05-21T19:06:20.175833"}
 {"date": "2026-05-22", "nav": 134338.13, "return": -8e-05, "agent_id": "us_equities", "source": "forward_pnl_tracker", "timestamp": "2026-05-22T19:21:30.149296"}
+{"date": "2026-05-25", "nav": 134091.63, "return": -0.001835, "agent_id": "us_equities", "source": "forward_pnl_tracker", "timestamp": "2026-05-25T17:57:42.352370"}
+{"date": "2026-05-26", "nav": 141209.37, "return": 0.053081, "agent_id": "us_equities", "source": "forward_pnl_tracker", "timestamp": "2026-05-26T14:15:43.942783"}
