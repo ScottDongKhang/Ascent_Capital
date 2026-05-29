@@ -10,6 +10,7 @@ Usage:
     python3 run_all_agents.py --dry-run      # no order submission
 """
 
+import subprocess
 import sys
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -1355,6 +1356,19 @@ def _log_holdings(today):
               f"portfolio {day_ret:+.2%} vs SPY {spy_ret:+.2%} ({sign})")
     except Exception as e:
         print(f"[Runner] Holdings log skipped ({e})")
+
+    # ── Regenerate GitHub Pages dashboard ─────────────────────────────────────
+    try:
+        result = subprocess.run(
+            [sys.executable, "scripts/generate_performance_page.py", "--push"],
+            capture_output=True, text=True, timeout=120,
+        )
+        if result.returncode == 0:
+            print("[Dashboard] GitHub Pages updated and pushed.")
+        else:
+            print(f"[Dashboard] Generator exited {result.returncode}: {result.stderr[-200:]}")
+    except Exception as e:
+        print(f"[Dashboard] Skipped ({e})")
 
 
 if __name__ == "__main__":
