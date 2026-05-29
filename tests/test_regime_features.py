@@ -38,6 +38,54 @@ def test_credit_spread_feature_built_when_hyg_lqd_present():
         "credit_spread_level must be in regime feature panel"
 
 
+def _macro_panel(n=300):
+    """Simulate a wide FRED macro panel keyed by series_id (as main.py pivots it)."""
+    idx = pd.bdate_range(end="2026-04-18", periods=n)
+    np.random.seed(11)
+    return pd.DataFrame({
+        "DGS10":        np.random.uniform(3.5, 4.5, n),
+        "DFF":          np.random.uniform(4.5, 5.5, n),
+        "T10Y2Y":       np.random.uniform(-0.5, 0.5, n),
+        "BAMLH0A0HYM2": np.random.uniform(3.0, 5.0, n),  # HY OAS
+        "BAMLC0A0CM":   np.random.uniform(0.8, 1.5, n),  # IG OAS
+    }, index=idx)
+
+
+def test_ig_hy_differential_features_present():
+    """IG-HY differential features must appear when both OAS series are in macro."""
+    from ascent.regime.features import RegimeFeatureBuilder
+    spy = _spy_prices()
+    mkt = _market_prices()
+    macro = _macro_panel()
+
+    builder = RegimeFeatureBuilder(spy_prices=spy, market_prices=mkt, macro_df=macro)
+    panel = builder.build()
+
+    for col in ("ig_spread_chg_21d", "hy_ig_differential", "hy_ig_diff_chg_21d"):
+        assert col in panel.columns, f"missing {col}"
+
+    # differential must equal HY - IG on aligned non-NaN rows
+    macro_aligned = macro.reindex(spy.index, method="ffill")
+    expected = (macro_aligned["BAMLH0A0HYM2"] - macro_aligned["BAMLC0A0CM"]).dropna()
+    actual = panel["hy_ig_differential"].dropna()
+    common = expected.index.intersection(actual.index)
+    assert len(common) > 0
+    assert np.allclose(expected.loc[common].values, actual.loc[common].values)
+
+
+def test_ig_hy_differential_absent_without_macro():
+    """No macro → no IG-HY features, but build must still succeed."""
+    from ascent.regime.features import RegimeFeatureBuilder
+    spy = _spy_prices()
+    mkt = _market_prices()
+
+    builder = RegimeFeatureBuilder(spy_prices=spy, market_prices=mkt)
+    panel = builder.build()
+
+    assert "hy_ig_differential" not in panel.columns
+    assert len(panel) > 0
+
+
 def test_yield_curve_feature_built_when_tlt_ief_present():
     """When TLT and IEF are in market_prices, yield_curve_slope must appear."""
     from ascent.regime.features import RegimeFeatureBuilder
