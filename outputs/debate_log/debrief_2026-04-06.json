@@ -1,0 +1,15 @@
+{
+  "date": "2026-04-06",
+  "verdict_recommendation": "reduce_size",
+  "verdict_confidence": 0.35,
+  "regime": "stressed",
+  "nav_change": -0.004306,
+  "outcome_correctness": "PARTIALLY CORRECT",
+  "lesson": "**Lesson: Regime divergence creates dangerous false comfort\u2014trust the stressed equity signal over calm macro backdrop.** The debate correctly identified that a calm_bull macro regime lagging stressed equity conditions is a regime *divergence trap*, not a reason to ignore equity stress; the 35% confidence REDUCE_SIZE verdict was directionally right (portfolio fell 0.43%), but the debate failed to act decisively because the bull case exploited the macro calm to justify 60% US equities and only 4.5% defensives. Next time: when equity regime and macro regime conflict, weight the equity regime signal more heavily\u2014macro calm is often a *lagging* indicator that breaks, not a leading signal that saves you. The 22% cyclicals + 15.4% EM in a stressed equity regime should have triggered a higher-confidence reduction; the debate's hesitation (35% confidence) reflected overweighting the bull's reasonable-sounding diversification arguments rather than the regime specialist's structural warning. Defensive allocation below 10% in a stressed regime is a red flag that overrides individual security quality.",
+  "lesson_tags": [
+    "regime",
+    "concentration",
+    "macro",
+    "confidence"
+  ]
+}

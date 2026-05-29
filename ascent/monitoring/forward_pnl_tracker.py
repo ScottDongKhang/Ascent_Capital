@@ -150,10 +150,29 @@ def _load_previous_snapshot(agent_id: str, as_of: date) -> Optional[dict]:
 
 # ── PnL writing ────────────────────────────────────────────────────────────────
 
+def _has_entry_for_date(agent_id: str, run_date: date) -> bool:
+    """Return True if the PnL log already has an entry for run_date."""
+    log_path = PNL_LOGS.get(agent_id)
+    if not log_path or not log_path.exists():
+        return False
+    date_str = run_date.isoformat()
+    for line in log_path.read_text().splitlines():
+        try:
+            if json.loads(line).get("date") == date_str:
+                return True
+        except Exception:
+            pass
+    return False
+
+
 def _write_pnl_entry(agent_id: str, run_date: date, nav: float, daily_return: float):
-    """Append a PnL entry to the agent's log."""
+    """Append a PnL entry to the agent's log. Skips if entry for run_date already exists."""
     log_path = PNL_LOGS.get(agent_id)
     if not log_path:
+        return
+
+    if _has_entry_for_date(agent_id, run_date):
+        print(f"[ForwardPnL] {agent_id}: entry for {run_date} already exists — skipping duplicate")
         return
 
     log_path.parent.mkdir(parents=True, exist_ok=True)

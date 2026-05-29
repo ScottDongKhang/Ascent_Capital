@@ -548,3 +548,12 @@ Python 3.12.13 Homebrew, venv at `.venv/`. Use `.venv/bin/python`. API keys via 
 - **Key gotcha**: `@patch("ascent.llm.client.generate_structured")` is correct patch target for adversarial tests — `generate_structured` is imported INSIDE the function body, not at module level.
 - 604 → 627 passed, 1 skipped (23 new tests in `tests/test_adversarial_intelligence.py`, 4 updated in `tests/test_debate_gate.py`).
 - Files: `debate/adversarial_engine.py` (new), `debate/adversarial_authority.py` (new), `debate/adversarial_monitor.py` (new), `debate/judge.py`, `debate/agents.py`, `debate/debate_runner.py`, `ascent/execution/debate_gate.py`, `run_all_agents.py`, `ascent/monitoring/weekend_runner.py`, `tests/test_adversarial_intelligence.py` (new), `tests/test_debate_gate.py`.
+
+### 2026-05-28 (daily run — monitoring only)
+- Ran `run_all_agents.py` — clean exit (code 0), 43.2s, non-rebalance day.
+- Forward PnL: US equities +1.86%, intl +1.10%, macro +0.47%, alt −0.27%.
+- Attribution: portfolio +1.48% vs SPY +0.55% → **+0.93% alpha today**. NAV $111,334.
+- Top contributors: STRL +7.8% (+0.55%), SATS +7.0% (+0.53%), EWY +4.1% (+0.38%). Top drag: WMG −2.9% (−0.20%).
+- Regime: calm_bull. All 4 agents clean. 1 fetch failure (MET — cosmetic). ETF 404s on analyst estimates (expected).
+- Merged weights written (13 positions): EWY 10%, APP/BWA/DOCN/HUM/NUE/ORA/STRL/VICR/WDC ~8.8% each, EWT/EEM ~4.5%, EFA 1.7%.
+- No code changes this session.

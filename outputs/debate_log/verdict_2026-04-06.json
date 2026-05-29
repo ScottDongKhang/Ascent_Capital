@@ -132,5 +132,13 @@
     ],
     "reasoning": "The portfolio is fundamentally misaligned with a stressed equity regime. While the bull case makes reasonable points about defensive equity names and commodity diversification, the weight of evidence from bear, devil's advocate, regime specialist, and even the quant check (only 4.5% defensive) all converge on the same conclusion: this portfolio is positioned for a benign environment, not a stressed one. The regime divergence between calm_bull macro and stressed equities is the most dangerous element \u2014 the portfolio implicitly bets macro wins, but when equity stress leads, macro typically follows downward. The 15.4% EM exposure (EWZ, EWY, EWT) adds correlated beta risk, not diversification. SEDG at 5.56% is poor risk budgeting given its fundamental deterioration. PDBC at 11.5% could compound losses if stress transmits to commodities. I would reduce overall position size by ~30%, specifically: eliminate SEDG, cut EM exposure by half, reduce PDBC to 7%, double GLD to ~9%, increase KMLM to ~10%, and add bond duration. The quant check passes mechanically but the 4.5% defensive reading in a stressed regime is a glaring red flag that demands immediate rebalancing before full deployment."
   },
-  "outcome_scored": false
+  "outcome_scored": true,
+  "outcome_nav_change": -0.004306,
+  "outcome_window_end": "2026-04-21",
+  "outcome_score": 0.5,
+  "agent_scores": {
+    "bull": 0.5,
+    "bear": 0.5,
+    "devils_advocate": 0.5
+  }
 }

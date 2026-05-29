@@ -1,0 +1,105 @@
+{
+  "market_view": "Calm bull regime with uncertain stability (0-day tenure, no confidence data). Macro data feed unavailable but NFP in ~10 days represents key catalyst risk. Environment favors quality momentum with defensive hedges. Extreme momentum names pose mean-reversion risk \u2014 sizing these conservatively while maintaining broad diversification across geographies and asset classes.",
+  "regime_assessment": "Calm bull classification with zero documented stability. No historical realized returns from past calm_bull episodes (all pending). This is either a freshly entered regime or a classification lag. Treating as uncertain calm \u2014 maintaining equity exposure but with defensive hedges (UUP, KMLM, VNQ) and reduced concentration in extended names. NFP release sensitivity rated 4 \u2014 a hot print could trigger regime transition.",
+  "quant_baseline_summary": "Four quant agents propose: US Equities (10 equal-weight names including 6 with >200% momentum), Macro (UUP/PDBC/DBB/KMLM), International (heavy Korea/Taiwan/EM), Alternatives (IFRA/VNQ/PDBC). Key issues: EWY double-counted across US equities and international (~20% combined), extreme momentum concentration in US equities sleeve, no skill scores available for any agent.",
+  "ai_pm_portfolio": {
+    "EBAY": 8,
+    "STRL": 7,
+    "IFRA": 7,
+    "PDBC": 7,
+    "EWT": 7,
+    "HUM": 6,
+    "EEM": 6,
+    "EFA": 6,
+    "VRSN": 5,
+    "WMG": 5,
+    "DBB": 5,
+    "VNQ": 5,
+    "EWY": 5,
+    "WDC": 4,
+    "UUP": 4,
+    "VICR": 3,
+    "SATS": 3,
+    "DOCN": 3,
+    "KMLM": 3
+  },
+  "quant_agreement": [
+    "EBAY \u2014 moderate momentum (+54.5%), reasonable valuation (16x fwd P/E), 27 analysts, fits value-quality thesis",
+    "STRL \u2014 extreme momentum but supported by consensus Strong Buy, +141% earnings growth, +92% revenue growth. Real infrastructure/data center construction boom",
+    "PDBC \u2014 broad commodity exposure, reasonable diversifier in calm bull",
+    "DBB \u2014 base metals exposure, infrastructure theme alignment",
+    "EWT \u2014 Taiwan exposure (+101% mom), semiconductor/AI theme, moderate momentum",
+    "EEM \u2014 broad EM exposure (+52% mom), diversifying",
+    "EFA \u2014 developed international (+21.5% mom), low-risk diversifier",
+    "IFRA \u2014 infrastructure theme (+30% mom), secular tailwind",
+    "HUM \u2014 healthcare managed care (+37% mom), defensive quality",
+    "VRSN \u2014 internet infrastructure (+11% mom), stable cash flows",
+    "WMG \u2014 music/media (+30% mom), non-cyclical growth",
+    "VNQ \u2014 REITs, rate-sensitive but defensive income",
+    "UUP \u2014 USD hedge against EM exposure",
+    "KMLM \u2014 managed futures, portfolio-level diversification"
+  ],
+  "quant_overrides": [
+    {
+      "symbol": "WDC",
+      "ai_action": "reduce 10% to 4%",
+      "reason": "+928% 252d momentum. 30x fwd P/E, 25x P/B. Earnings growth +483% is real but extreme multiple expansion. No SEC filing data available to confirm sustainability. Data quality flag \u2014 cannot verify momentum driver.",
+      "override_type": "data_quality"
+    },
+    {
+      "symbol": "VICR",
+      "ai_action": "reduce 10% to 3%",
+      "reason": "+714% 252d momentum. Only 4 analysts. 62x fwd P/E with 20% revenue growth is extreme. Earnings growth +701% may not persist. Insufficient coverage to validate.",
+      "override_type": "data_quality"
+    },
+    {
+      "symbol": "SATS",
+      "ai_action": "reduce 10% to 3%",
+      "reason": "+505% momentum with NEGATIVE forward P/E (-1074x), declining revenue (-5.2%), and Hold consensus (2.0). Momentum likely M&A/speculative driven, not fundamental.",
+      "override_type": "data_quality"
+    },
+    {
+      "symbol": "DOCN",
+      "ai_action": "reduce 10% to 3%",
+      "reason": "+422% momentum with 87x fwd P/E and DECLINING earnings (-61.7% YoY). Revenue growth 22% doesn't justify valuation. Classic momentum-without-fundamentals pattern.",
+      "override_type": "data_quality"
+    },
+    {
+      "symbol": "EWY",
+      "ai_action": "reduce combined ~20% to 5%",
+      "reason": "Double-counted across US equities (10%) and international (29.1%) agents \u2014 hidden concentration to ~20%. Geopolitical risk (US-China tensions, NK), Korean household debt at 105% disposable income, KRW sensitivity to US rates. NFP catalyst in 10 days could trigger simultaneous: KRW depreciation, credit stress, tech earnings compression.",
+      "override_type": "correlation_risk"
+    }
+  ],
+  "position_rationale": {
+    "EBAY": "Largest position at 8%. Value-quality play. 16x fwd P/E, 27 analysts, consensus 2.65. Moderate momentum (+55%) supported by 19.5% revenue growth and 7.1% earnings growth. Fits calm bull thesis.",
+    "STRL": "7%. All 5 analysts rate Strong Buy (1.0). Exceptional fundamentals: +141% EPS growth, +92% revenue growth. Infrastructure/data center construction boom is a durable secular trend. Extreme momentum (+309%) but fundamentally justified.",
+    "IFRA": "7%. Infrastructure ETF. Secular theme alignment with US infrastructure spending. Moderate momentum (+30%). Diversifying exposure.",
+    "PDBC": "7%. Broad commodity basket. Macro hedge and inflation protection. Moderate momentum (+43%).",
+    "EWT": "7%. Taiwan semiconductor exposure. AI/chip supercycle thesis. +101% momentum is elevated but not extreme. Diversifies from Korea-specific risks.",
+    "HUM": "6%. Managed care/healthcare. Defensive quality in uncertain regime. +37% momentum, steady business.",
+    "EEM": "6%. Broad emerging markets. Geographic diversification. +52% momentum.",
+    "EFA": "6%. Developed international markets. Low-risk diversifier. +22% momentum.",
+    "VRSN": "5%. Internet infrastructure. Stable recurring revenue model. Low momentum (+11%) but quality defensive.",
+    "WMG": "5%. Music/media. Non-cyclical growth, streaming tailwinds. +30% momentum.",
+    "DBB": "5%. Base metals. Infrastructure theme alignment, industrial cycle exposure. +41% momentum.",
+    "VNQ": "5%. REITs. Income/defensive allocation. Rate-sensitive but low momentum (+14%) suggests not overextended.",
+    "EWY": "5%. Korea. Reduced from quant's combined ~20% to 5% due to double-counting across agents and geopolitical/rate risk. Maintains exposure to Samsung/SK Hynix AI memory thesis at prudent size.",
+    "WDC": "4%. Storage/NAND recovery. Real earnings growth (+483%) but extreme multiple expansion (30x P/E). Reduced from 10% as data quality flag.",
+    "UUP": "4%. USD long. Partial hedge against EM/international exposure. Small position acknowledges directional contradiction with EM longs.",
+    "VICR": "3%. AI power delivery theme. Reduced from 10% due to extreme valuation (62x P/E), low analyst coverage (4), and +714% momentum without proportional revenue growth.",
+    "SATS": "3%. Satellite/broadband. Minimal position due to negative P/E, declining revenue, and speculative momentum profile.",
+    "DOCN": "3%. Cloud SMB. Minimal position due to 87x P/E, declining earnings, and momentum-without-fundamentals pattern.",
+    "KMLM": "3%. Managed futures. Portfolio-level diversifier. Low correlation to equity positions."
+  },
+  "key_risks": [
+    "Momentum reversal: 6 names above 200% 252d momentum. Even at reduced sizing (3-4% each), a coordinated reversal would hit ~20% of portfolio",
+    "NFP catalyst in ~10 days (sensitivity 4): Hot print could trigger hawkish Fed repricing, hurting rate-sensitive names (VNQ, HUM) and EM (EWY, EWT, EEM) simultaneously",
+    "Korean geopolitical risk: EWY + EWT = 12% Asia semiconductor/memory exposure vulnerable to US-China escalation",
+    "Commodity concentration: PDBC + DBB = 12% commodity exposure that would correlate near 1.0 in a demand shock",
+    "Infrastructure theme concentration: STRL + IFRA = 14% exposed to same CapEx/construction cycle",
+    "Data gaps: No SEC filing signals, no earnings cache, no macro data feed, no attribution history available. Operating with limited signal validation."
+  ],
+  "what_could_be_wrong": "My biggest blind spot is the lack of macro data (yield curve, credit spreads, oil). I'm constructing a calm-bull portfolio without being able to verify the regime is actually calm. If credit spreads are widening or the yield curve is inverting, this portfolio is too risk-on. Additionally, my data quality overrides on WDC/VICR/STRL may be penalizing names where the quant is correctly identifying genuine AI-infrastructure alpha. The conviction gate approved all overrides, but with zero historical track record, I have no calibration on whether my judgment adds or subtracts value. I'm being conservative by construction, which could mean underperformance in a genuine momentum regime.",
+  "as_of_date": "2026-05-27"
+}

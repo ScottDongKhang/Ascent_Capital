@@ -1,0 +1,16 @@
+{
+  "date": "2026-04-15",
+  "verdict_recommendation": "reduce_size",
+  "verdict_confidence": 0.88,
+  "regime": "RegimeLabel.STRESSED",
+  "nav_change": 0.056262,
+  "outcome_correctness": "WRONG",
+  "lesson": "**Lesson: Correlation stress-testing must override Monte Carlo confidence intervals; regime-divergence debates need decision rules, not just flag-raising.** The bear case correctly identified that 46% of the portfolio (EM + cyclicals + commodities) would correlate sharply in a true liquidation cascade, and the quant recheck of actual defensive allocation (7.5% vs. claimed 19.4%) was the decisive fact\u2014yet the debate still voted REDUCE_SIZE with only 88% confidence and the portfolio gained 5.63% in 14 days, suggesting either the stressed regime label was premature or the reduction wasn't executed decisively enough. The critical error: the bull's argument that \"defensive allocation is higher than historical comparables\" won credibility despite failing the objective quant sanity check; next time, when a quant recheck contradicts the bull's core claim (defensive %), treat that as a veto, not a debate point. The system should adopt a hard rule: if actual defensive allocation falls below 10% in a STRESSED regime *and* the largest 46% of holdings share a common liquidation trigger (EM/commodity stress), the confidence floor for REDUCE_SIZE jumps to 92%+, and execution must be immediate rather than flagged for future review.",
+  "lesson_tags": [
+    "regime",
+    "timing",
+    "concentration",
+    "macro",
+    "confidence"
+  ]
+}

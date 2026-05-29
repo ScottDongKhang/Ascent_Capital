@@ -1,7 +1,7 @@
 {
   "date": "2026-04-12",
   "data_as_of": "2026-04-12",
-  "timestamp": "2026-05-26T17:24:24.989852",
+  "timestamp": "2026-05-27T20:44:52.894462",
   "portfolio_state": {
     "date": "2026-04-12",
     "us_regime": "calm_bull",
@@ -33,14 +33,14 @@
         ]
       },
       {
-        "date": "2026-04-05",
-        "recommendation": "halt_and_review",
-        "reasoning": "The convergence of bear, devil's advocate, and regime specialist arguments is overwhelming and internally consistent. We are in a STRESSED equity regime, and this portfolio is constructed as if calm_bull macro will persist indefinitely and equity stress is a temporary dislocation. That's a bet, not ",
-        "regime": "stressed",
+        "date": "2026-05-27",
+        "recommendation": "proceed",
+        "reasoning": "The calm_bull regime warrants continuation (72% base rate, bull accuracy leads at 30%), so a halt or broad reduce_size is not justified \u2014 my own track record confirms overcaution has been the primary drag in prior stressed/calm decisions. However, the adversarial case for EWY is the strongest single",
+        "regime": "calm_bull",
         "key_risks": [
-          "Portfolio is fundamentally misaligned with STRESSED equity regime \u2014 only 5.1% defensive allocation vs. 11.8% risk-on, with no bond or tail-hedge exposure",
-          "~32% combined EM/commodity exposure (EWZ, EWT, EWY, PDBC, DBA, DBB) creates correlated liquidation risk in a dollar spike or risk-off cascade that the Monte Carlo likely underestimates",
-          "Cyclical names (CAT, SEDG, MPC) totaling ~16.7% are max-pain positions if stressed regime deepens into full drawdown, and macro calm_bull can lag-flip rapidly"
+          "EM cluster correlation collapse: EWY/EWT/EEM at 17.5% combined behave as a single factor under stress, with true tail exposure estimated at 3.5-4.2% vs. the model's -1.2% Monte Carlo estimate",
+          "Parabolic momentum divergence: WDC (+928%), SATS (+505%), VICR (+714%) show distribution-top characteristics with SATS carrying a -0.70 negative earnings transcript signal",
+          "VaR-99 at -3.31% consumes ~79% of calm_bull historical drawdown budget in a single stress day, leaving minimal buffer before regime-flip dynamics activate"
         ]
       }
     ],
@@ -63,7 +63,7 @@
         {
           "sym1": "AAPL",
           "sym2": "MSFT",
-          "correlation": 0.294
+          "correlation": 0.286
         }
       ],
       "summary_text": "QUANTITATIVE RISK CONTEXT (pre-computed):\n\nPortfolio VaR (historical simulation, 63 trading days):\n  95th percentile (1-day): -1.88%  (1 in 20 chance of loss >= this)\n  99th percentile (1-day): -2.32%  (1 in 100 chance of loss >= this)\n\nFactor exposures (sum of position weights per factor):\n  us_tech            100.0%\n\nCorrelation: No high-correlation pairs (>0.65) detected.\n\nConcentration warning: us_tech is 100.0% of portfolio"
@@ -71,13 +71,13 @@
     "adversarial_engine": {
       "adversarial_scores": {
         "AAPL": {
-          "short_thesis": "Deteriorating risk trend signals margin compression ahead. Services growth masks iPhone saturation; China exposure vulnerable to geopolitical escalation.",
+          "short_thesis": "Deteriorating risk trend signals margin compression ahead. Services growth slowing; iPhone saturation in developed markets pressures revenue. China exposure amplifies geopolitical risk.",
           "adversarial_score": 0.58,
           "flagged": false
         },
         "MSFT": {
-          "short_thesis": "AI capex cycle unsustainable; Azure margin pressure mounting. Valuation assumes perpetual cloud dominance despite intensifying AWS/GCP competition.",
-          "adversarial_score": 0.52,
+          "short_thesis": "AI hype cycle peaking; Azure growth deceleration likely. Enterprise software spending cycles turning; valuation stretched at 30x forward earnings amid rising rates.",
+          "adversarial_score": 0.45,
           "flagged": false
         }
       },
@@ -144,7 +144,7 @@
           "intervention_type": "regime_sizing",
           "current_weight": 0.5,
           "suggested_weight": 0.065,
-          "adversarial_score": 0.52,
+          "adversarial_score": 0.45,
           "priority_score": 2.61
         }
       ]
@@ -178,7 +178,7 @@
         "intervention_type": "regime_sizing",
         "current_weight": 0.5,
         "suggested_weight": 0.065,
-        "adversarial_score": 0.52,
+        "adversarial_score": 0.45,
         "priority_score": 2.61
       }
     ],

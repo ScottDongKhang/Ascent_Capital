@@ -26,6 +26,11 @@ from ascent.config.types import AgentOutput
 
 SKILL_SCORES_PATH = Path("dashboard/agent_skill_scores.json")
 
+# Early-zero: agents warming up but clearly losing get zeroed before 63-day threshold.
+# Threshold: ≥21 days logged AND negative rolling Sharpe.
+# Recovers automatically — rechecked every run, no manual intervention needed.
+EARLY_ZERO_MIN_DAYS = 21
+
 # Factor buckets for partial contradiction detection
 FACTOR_BUCKETS = {
     "rates_long":      {"TLT", "IEF", "LQD"},
@@ -163,6 +168,86 @@ CRISIS_ALLOCATION = {
 }
 
 
+# ── Early-zero check ──────────────────────────────────────────────────────────
+
+def _compute_early_sharpe(agent_id: str) -> Optional[float]:
+    """
+    Compute rolling Sharpe from the agent's PnL log for the early-zero check.
+    Returns None if fewer than EARLY_ZERO_MIN_DAYS entries exist.
+    Uses all available entries (not capped at 63) so warming-up agents get a
+    fair assessment across their full history.
+    """
+    from ascent.monitoring.forward_pnl_tracker import PNL_LOGS
+    log_path = PNL_LOGS.get(agent_id)
+    if not log_path or not log_path.exists():
+        return None
+
+    rets = []
+    for line in log_path.read_text().splitlines():
+        try:
+            entry = json.loads(line)
+            r = entry.get("return")
+            if r is not None:
+                rets.append(float(r))
+        except Exception:
+            pass
+
+    if len(rets) < EARLY_ZERO_MIN_DAYS:
+        return None
+
+    mean = sum(rets) / len(rets)
+    variance = sum((r - mean) ** 2 for r in rets) / (len(rets) - 1)
+    if variance <= 0:
+        return 0.0
+    return float(mean / variance ** 0.5 * (252 ** 0.5))
+
+
+def _apply_early_zeros(
+    agent_ids: list,
+    base: dict,
+) -> tuple:
+    """
+    Zero out warming-up agents that have ≥ EARLY_ZERO_MIN_DAYS of data
+    and a negative rolling Sharpe. Redistribute their base allocation
+    proportionally to the remaining agents.
+
+    Returns (zeroed_ids, adjusted_base).
+    Agents that recover (Sharpe turns positive) are automatically reinstated
+    on the next run — no manual intervention needed.
+    """
+    zeroed = []
+    for aid in agent_ids:
+        sharpe = _compute_early_sharpe(aid)
+        if sharpe is not None and sharpe <= 0:
+            zeroed.append((aid, sharpe))
+
+    if not zeroed:
+        return [], base
+
+    zeroed_ids = [aid for aid, _ in zeroed]
+    for aid, sharpe in zeroed:
+        print(f"[Orchestrator] Early-zero: {aid} Sharpe={sharpe:.3f} (≥{EARLY_ZERO_MIN_DAYS}d, negative) — zeroing allocation")
+
+    # Redistribute freed base weight proportionally to surviving agents
+    freed = sum(base.get(aid, 0.0) for aid in zeroed_ids)
+    survivors = [aid for aid in agent_ids if aid not in zeroed_ids]
+    survivor_total = sum(base.get(aid, 0.0) for aid in survivors)
+
+    adjusted = dict(base)
+    for aid in zeroed_ids:
+        adjusted[aid] = 0.0
+    if survivor_total > 0 and freed > 0:
+        for aid in survivors:
+            adjusted[aid] = round(adjusted[aid] + freed * (base.get(aid, 0.0) / survivor_total), 4)
+
+    # Renormalize
+    total = sum(adjusted.values())
+    if total > 0:
+        adjusted = {k: round(v / total, 4) for k, v in adjusted.items()}
+
+    return zeroed_ids, adjusted
+
+
 # ── Conviction scorer ─────────────────────────────────────────────────────────
 
 def _compute_conviction_scores(agent_outputs: List[AgentOutput]) -> Dict[str, float]:
@@ -292,8 +377,14 @@ def _compute_allocation(
         print(f"[Orchestrator] Warming up (base alloc): {agents_warming_up}")
 
     if not agents_with_skill:
+        # Apply early-zero to warming-up agents with ≥21 days of negative Sharpe.
+        # Recovers automatically when Sharpe turns positive.
+        early_zeroed, base = _apply_early_zeros(agent_ids, base)
         allocation = {aid: base.get(aid, 0.0) for aid in agent_ids}
-        print(f"[Orchestrator] Base allocation (all warming up): {allocation}")
+        label = "Base allocation (all warming up)"
+        if early_zeroed:
+            label += f" [early-zeroed: {early_zeroed}]"
+        print(f"[Orchestrator] {label}: {allocation}")
         return allocation
 
     # Zero out agents with non-positive skill score (within those that have data)

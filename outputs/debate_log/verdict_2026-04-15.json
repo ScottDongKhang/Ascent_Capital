@@ -212,5 +212,13 @@
     ],
     "reasoning": "The convergence of evidence is overwhelming. Three consecutive stressed-regime reviews recommended reduce_size or halt_and_review, and the portfolio's fundamental structure hasn't materially improved. The quant sanity check objectively confirms only 7.5% defensive allocation \u2014 the bull's 19.4% figure is inflated by counting PDBC (commodity beta), HYG (equity-correlated credit), and NEM (a miner, not gold) as defensive, which is exactly the kind of regime-blind categorization that fails in stress. The devil's advocate and regime specialist both correctly identify that 46% of the portfolio sits in positions that correlate 0.7-0.85+ during stress liquidations, meaning the Monte Carlo's -2.9% worst case dramatically understates true tail risk. The bull's rebuttal that PDBC-EWY correlation was 0.35 in 2022 is cherry-picked \u2014 in acute stress episodes (March 2020, Q4 2018), commodity and EM correlations spiked well above 0.7. The devil's advocate Round 2 point about unknown macro potentially signaling regime transition is the most underappreciated risk \u2014 it means we cannot even trust that traditional hedges (TLT, GLD) will perform as expected. With FOMC in 21 days adding binary event risk, the prudent action is to reduce size by cutting EM equity exposure (EWY from 10.8% to 5%, eliminate EWZ/EWT), trimming cyclicals (CAT, MPWR by half), replacing HYG with SGOV, and raising true defensive allocation to 20%+ before re-engaging."
   },
-  "outcome_scored": false
+  "outcome_scored": true,
+  "outcome_nav_change": 0.056262,
+  "outcome_window_end": "2026-04-30",
+  "outcome_score": 0.0,
+  "agent_scores": {
+    "bull": 0.1,
+    "bear": 0.0,
+    "devils_advocate": 0.0
+  }
 }
