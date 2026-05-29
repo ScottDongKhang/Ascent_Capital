@@ -308,6 +308,22 @@ class RegimeFeatureBuilder:
             features["credit_spread_level"]   = ratio.pct_change(63)
             log.info("regime.features: credit spread features included (HYG/LQD)")
 
+        # ── IG-HY differential (systemic vs idiosyncratic stress) ────────────
+        # HY widening alone = idiosyncratic credit stress; IG widening too =
+        # systemic stress. The differential separates the two — exactly the
+        # signal the regime model needs to distinguish a calm-bull wobble from
+        # a genuine stress transition. Sourced from FRED OAS series (self.macro).
+        if self.macro is not None:
+            macro_aligned = self.macro.reindex(self.spy.index, method="ffill")
+            if "BAMLH0A0HYM2" in macro_aligned.columns and "BAMLC0A0CM" in macro_aligned.columns:
+                hy = macro_aligned["BAMLH0A0HYM2"].ffill()   # HY OAS (pct points)
+                ig = macro_aligned["BAMLC0A0CM"].ffill()     # IG OAS (pct points)
+                diff = hy - ig                               # junk premium
+                features["ig_spread_chg_21d"]   = ig.diff(21)         # systemic stress: IG widening
+                features["hy_ig_differential"]  = diff               # level of the junk premium
+                features["hy_ig_diff_chg_21d"]  = diff.diff(21)       # widening = idiosyncratic, narrowing-while-rising = systemic
+                log.info("regime.features: IG-HY differential included (BAMLC0A0CM / BAMLH0A0HYM2)")
+
         if "TLT" in mkt.columns and "IEF" in mkt.columns:
             tlt = mkt["TLT"].ffill()
             ief = mkt["IEF"].ffill()

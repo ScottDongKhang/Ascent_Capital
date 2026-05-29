@@ -24,6 +24,7 @@ DEFAULT_SERIES = {
     "DCOILWTICO": "oil_wti",
     "DEXUSEU": "usd_eur",
     "BAMLH0A0HYM2": "hy_spread",
+    "BAMLC0A0CM": "ig_spread",   # IG OAS — IG-HY differential separates systemic from idiosyncratic stress
 }
 
 
