@@ -557,3 +557,12 @@ Python 3.12.13 Homebrew, venv at `.venv/`. Use `.venv/bin/python`. API keys via 
 - Regime: calm_bull. All 4 agents clean. 1 fetch failure (MET — cosmetic). ETF 404s on analyst estimates (expected).
 - Merged weights written (13 positions): EWY 10%, APP/BWA/DOCN/HUM/NUE/ORA/STRL/VICR/WDC ~8.8% each, EWT/EEM ~4.5%, EFA 1.7%.
 - No code changes this session.
+
+### 2026-05-28 (GitHub Pages performance dashboard ✅)
+- **Repo cleanup**: untracked `logs/`, `execution/`, `dashboard/*.json` with `git rm --cached`; added `dashboard/*.json`, `memory/*.jsonl`, `outputs/scenarios/` to `.gitignore` — `git status` is now clean after every daily run.
+- **`scripts/generate_performance_page.py`** (new): pulls Alpaca portfolio history, SPY via yfinance, verdict files, regime_labels.csv, earned_authority.json, AI PM thesis. Generates `docs/index.html` and updates README stats table. Called at end of `run_all_agents.py` with `--push` to auto-commit and push after every run.
+- **`docs/index.html`** (new): static GitHub Pages dashboard at `https://scottdongkhang.github.io/Ascent_Capital`. Full redesign includes: animated hero (NAV/return/alpha/SPY counters), regime indicator ring, equity curve vs SPY with annotation markers, drawdown from peak chart, cumulative alpha chart, AI intelligence section (earned authority phase tracker, agent allocation doughnut, latest AI PM decision card), debate accordion (5 sessions with full bull/bear/devil/judge text), holdings table, event timeline.
+- **README**: live stats table (`<!-- LIVE_STATS_START/END -->` sentinels) + prominent dashboard link after badges. Auto-updated on every run.
+- **Accuracy fixes**: Apr 12 verdict (garbage test entry, reasoning="ok") excluded. May 27 confirmed as Rebalance #4 (in rebalance_calendar.csv). Debate-only sessions (Apr 4/5/6) labeled correctly — no verdict badge, no position count. Sharpe (2.919) shown with ±2.5 SE caveat and walk-forward OOS reference.
+- **Key gotcha**: web scraper confused Event Timeline with Debate Accordion — actual accordion has correct 5 entries (Apr 4, 5, 6, 15, May 27).
+- Files: `scripts/generate_performance_page.py` (new), `docs/index.html` (new), `docs/.nojekyll` (new), `README.md`, `run_all_agents.py`, `.gitignore`.
