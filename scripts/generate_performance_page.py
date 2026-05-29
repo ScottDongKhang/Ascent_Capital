@@ -133,8 +133,11 @@ REGIME_COLORS = {
 
 # Dates that resulted in actual Alpaca order execution.
 # Apr 4/5/6/12 were debate-only sessions (no orders placed).
-# May 5 / May 19 are confirmed rebalances but have no verdict file.
-ACTUAL_REBALANCE_DATES = {"2026-04-15", "2026-05-05", "2026-05-19"}
+# May 5 / May 19 / May 27 are confirmed rebalances (May 27 in rebalance_calendar.csv).
+ACTUAL_REBALANCE_DATES = {"2026-04-15", "2026-05-05", "2026-05-19", "2026-05-27"}
+
+# Verdict files that are garbage test entries and should be skipped entirely.
+EXCLUDE_VERDICT_DATES = {"2026-04-12"}  # n_positions=2, reasoning="ok" — early test artifact
 
 # Known milestones without verdict files — added verbatim to the timeline.
 HARDCODED_EVENTS = [
@@ -179,6 +182,9 @@ HARDCODED_EVENTS = [
     },
 ]
 
+# May 27 verdict file exists and is a real rebalance — override will be loaded from file.
+# Listed here just for documentation; ACTUAL_REBALANCE_DATES handles the labeling.
+
 
 def load_verdicts() -> list[dict]:
     events = list(HARDCODED_EVENTS)  # start with known milestones
@@ -192,6 +198,10 @@ def load_verdicts() -> list[dict]:
                 continue
 
             ev_date = v.get("date", Path(f).stem.replace("verdict_", ""))
+
+            # Skip garbage test entries
+            if ev_date in EXCLUDE_VERDICT_DATES:
+                continue
 
             # Skip if already covered by a hardcoded event
             if ev_date in {e["date"] for e in HARDCODED_EVENTS}:
@@ -507,7 +517,12 @@ def build_html(
 
         badge_text = ev["label"].split("—")[-1].strip() if "—" in ev["label"] else ev["label"]
         regime_str = ev.get("regime", "").replace("_", " ").replace("RegimeLabel.", "")
-        n_pos_str  = f'{ev.get("n_pos", "?")} positions' if ev.get("n_pos") else ""
+        # Debate-only sessions: omit position count (data is unreliable) and verdict badge
+        if ev_type == "debate_only":
+            n_pos_str  = ""
+            badge_text = "Debate Only — No Orders"
+        else:
+            n_pos_str  = f'{ev.get("n_pos", "?")} positions' if ev.get("n_pos") else ""
         meta_extra = " · ".join(filter(None, [n_pos_str, regime_str]))
 
         tl_html += f"""
