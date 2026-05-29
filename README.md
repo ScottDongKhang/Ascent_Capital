@@ -7,6 +7,9 @@
 ![Alpha](https://img.shields.io/badge/alpha%20sleeves-14-orange)
 ![OOS Sharpe](https://img.shields.io/badge/OOS%20Sharpe-0.518-green)
 
+### [📊 Live Performance Dashboard →](https://scottdongkhang.github.io/Ascent_Capital)
+> Equity curve vs SPY · Current holdings · Full rebalance debate history · Updates automatically after every daily run.
+
 **An AI-native quantitative investment fund built from scratch.** Not a backtest. Not a demo. A live system that reads SEC filings every night, debates its own trades before placing them, and earns the right to manage capital by being demonstrably right in live markets.
 
 ---
@@ -68,9 +71,22 @@ Total cost: approximately $1.50 in API calls.
 
 ## Live Track Record
 
-> Paper trading since April 1, 2026 · AI PM shadow period began May 19, 2026
+> Paper trading since April 1, 2026 · AI PM shadow period began May 19, 2026 · **[Full dashboard with equity curve →](https://scottdongkhang.github.io/Ascent_Capital)**
 
-52 days of paper trading is not statistically significant — Sharpe standard error over 52 days is approximately 2.8. This is tracked honestly, which is why authority is earned over 21 rebalances, not calendar time.
+<!-- LIVE_STATS_START -->
+| Metric | Value |
+|--------|-------|
+| Current NAV | $110,100 |
+| Total Return | +9.21% |
+| Alpha vs SPY | -5.32% |
+| Sharpe (Ann.) | 2.957 |
+| Max Drawdown | -4.32% |
+| Days Live | 39 |
+| Open Positions | 17 |
+| Last Updated | 2026-05-28 |
+<!-- LIVE_STATS_END -->
+
+*Sharpe standard error over ~40 days is ~2.8 — not statistically significant yet. This is tracked honestly, which is why authority is earned over 21 rebalances, not calendar time.*
 
 | Date | Event |
 |------|-------|
@@ -82,8 +98,6 @@ Total cost: approximately $1.50 in API calls.
 | May 23, 2026 | Position health monitor grounded in live return data |
 | May 25, 2026 | Weekend intelligence pipeline + bidirectional wiring |
 | May 26, 2026 | Adversarial Intelligence live — 3-layer engine, earned authority, one falsifiable change per rebalance |
-
-**Current portfolio (May 2026):** EWY 10.9%, PDBC 6.9%, CBOE/CHRD/HUM/SATS/SNDK/STRL/VICR/VRT/WDC ~6.5% each, DBB 3.8%, EWT/EEM/EWC ~3.4% each, DBA 3.1%, BIL 2.8%, KMLM 2.4%, UUP 1.6% · 18 positions.
 
 ---
 

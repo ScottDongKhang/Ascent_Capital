@@ -627,6 +627,51 @@ new Chart(ctx, {{
 </html>"""
 
 
+# ── README stats updater ──────────────────────────────────────────────────────
+
+def _update_readme_stats(stats: dict, positions: list, dates: list) -> None:
+    readme = Path("README.md")
+    if not readme.exists():
+        return
+    text = readme.read_text(encoding="utf-8")
+    start_tag = "<!-- LIVE_STATS_START -->"
+    end_tag   = "<!-- LIVE_STATS_END -->"
+    if start_tag not in text or end_tag not in text:
+        return
+
+    nav     = stats.get("current_nav", 0)
+    tr      = stats.get("total_return")
+    alpha   = stats.get("alpha")
+    sharpe  = stats.get("sharpe", "N/A")
+    max_dd  = stats.get("max_drawdown")
+    n_days  = stats.get("days_live", len(dates))
+    n_pos   = len(positions)
+    updated = date.today().isoformat()
+
+    def fmt(v, show_sign=True):
+        if v is None: return "N/A"
+        sign = "+" if (v >= 0 and show_sign) else ""
+        return f"{sign}{v:.2f}%"
+
+    block = f"""{start_tag}
+| Metric | Value |
+|--------|-------|
+| Current NAV | ${nav:,.0f} |
+| Total Return | {fmt(tr)} |
+| Alpha vs SPY | {fmt(alpha)} |
+| Sharpe (Ann.) | {sharpe} |
+| Max Drawdown | {fmt(max_dd, False)} |
+| Days Live | {n_days} |
+| Open Positions | {n_pos} |
+| Last Updated | {updated} |
+{end_tag}"""
+
+    before = text[:text.index(start_tag)]
+    after  = text[text.index(end_tag) + len(end_tag):]
+    readme.write_text(before + block + after, encoding="utf-8")
+    print(f"      Updated README.md live stats table")
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
@@ -679,6 +724,8 @@ def main():
     OUTPUT_PATH.write_text(html, encoding="utf-8")
     print(f"      Wrote {OUTPUT_PATH} ({len(html):,} bytes)")
 
+    _update_readme_stats(stats, positions, dates)
+
     # Key stats
     print(f"\n{'='*48}")
     print(f"  Total return : {_fmt_pct(stats.get('total_return'))}")
@@ -691,7 +738,7 @@ def main():
     if push:
         print("[Git] Committing and pushing…")
         today = date.today().isoformat()
-        subprocess.run(["git", "add", str(OUTPUT_PATH)], check=True)
+        subprocess.run(["git", "add", str(OUTPUT_PATH), "README.md"], check=True)
         subprocess.run([
             "git", "commit", "-m",
             f"chore: update performance dashboard {today}\n\nCo-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
