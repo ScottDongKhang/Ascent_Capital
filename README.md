@@ -79,7 +79,7 @@ Total cost: approximately $1.50 in API calls.
 | Current NAV | $110,100 |
 | Total Return | +9.21% |
 | Alpha vs SPY | -5.32% |
-| Sharpe (Ann.) | 2.957 |
+| Sharpe (Ann.) | 2.919 |
 | Max Drawdown | -4.32% |
 | Days Live | 39 |
 | Open Positions | 17 |

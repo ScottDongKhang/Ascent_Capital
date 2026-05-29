@@ -28,6 +28,7 @@ header p{color:#8b949e;font-size:14px;margin-top:6px}
 .stat-card{background:#161b22;border:1px solid #30363d;border-radius:10px;padding:14px 16px}
 .stat-label{font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
 .stat-value{font-size:21px;font-weight:700}
+.stat-note{font-size:10px;color:#6e7681;margin-top:3px}
 
 /* chart */
 .chart-card{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:20px 24px;margin-bottom:24px}
@@ -61,6 +62,7 @@ tbody tr:last-child td{border-bottom:none}
 .tl-date{font-size:12px;color:#8b949e;font-family:monospace}
 .tl-badge{font-size:11px;font-weight:600;border:1px solid;border-radius:12px;padding:1px 8px}
 .tl-pos{font-size:11px;color:#6e7681}
+.tl-label{font-size:13px;font-weight:600;color:#c9d1d9;margin-bottom:3px}
 .tl-reason{font-size:12px;color:#8b949e;line-height:1.6;margin-bottom:6px}
 .risks{font-size:11px;color:#6e7681;padding-left:14px;margin-bottom:6px;display:flex;flex-direction:column;gap:2px}
 .outcome{font-size:12px;font-weight:600}
@@ -95,8 +97,9 @@ footer{text-align:center;color:#21262d;font-size:12px;margin-top:40px;padding-to
           <div class="stat-value" style="color:#3fb950">+14.53%</div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">Sharpe (Ann.)</div>
-          <div class="stat-value" style="">2.957</div>
+          <div class="stat-label">Sharpe (Ann.) ⚠</div>
+          <div class="stat-value">2.919</div>
+          <div class="stat-note">±5.8 SE · N=39 days</div>
         </div>
         <div class="stat-card">
           <div class="stat-label">Max Drawdown</div>
@@ -111,7 +114,7 @@ footer{text-align:center;color:#21262d;font-size:12px;margin-top:40px;padding-to
           <div class="stat-value" style="color:#f85149">-2.55%</div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">Days Live</div>
+          <div class="stat-label">Trading Days</div>
           <div class="stat-value" style="">39</div>
         </div>
         <div class="stat-card">
@@ -129,6 +132,10 @@ footer{text-align:center;color:#21262d;font-size:12px;margin-top:40px;padding-to
     <div class="leg"><div class="leg-dot" style="background:#f85149"></div>Rebalance: Halt & Review</div>
   </div>
   <div class="chart-wrap"><canvas id="chart"></canvas></div>
+  <p style="font-size:11px;color:#6e7681;margin-top:10px">
+    ⚠ Sharpe ratio shown is annualized from 39 trading days — standard error ≈ ±5.8.
+    Statistically unreliable at this sample size. The walk-forward OOS Sharpe (0.518 over 2020–2026) is the more honest number.
+  </p>
 </div>
 
 <div class="grid2">
@@ -142,10 +149,10 @@ footer{text-align:center;color:#21262d;font-size:12px;margin-top:40px;padding-to
           <tbody>
             <tr>
               <td class="sym">EWY</td>
-              <td>9.6%</td>
-              <td>$10,350</td>
-              <td>$203.60</td>
-              <td style="color:#3fb950">+20.20%</td>
+              <td>9.7%</td>
+              <td>$10,371</td>
+              <td>$204.00</td>
+              <td style="color:#3fb950">+20.44%</td>
             </tr>
             <tr>
               <td class="sym">SATS</td>
@@ -212,7 +219,7 @@ footer{text-align:center;color:#21262d;font-size:12px;margin-top:40px;padding-to
             </tr>
             <tr>
               <td class="sym">PDBC</td>
-              <td>5.7%</td>
+              <td>5.6%</td>
               <td>$6,067</td>
               <td>$17.67</td>
               <td style="color:#f85149">-1.35%</td>
@@ -265,15 +272,44 @@ footer{text-align:center;color:#21262d;font-size:12px;margin-top:40px;padding-to
     <h2>Rebalance History</h2>
     <div class="timeline">
         <div class="tl-item">
-          <div class="tl-dot" style="background:#3fb950;color:#0d1117">✓</div>
+          <div class="tl-dot" style="background:#6e7681;color:#0d1117">◌</div>
           <div class="tl-body">
             <div class="tl-meta">
               <span class="tl-date">2026-05-27</span>
-              <span class="tl-badge" style="border-color:#3fb950;color:#3fb950">Proceed</span>
-              <span class="tl-pos">17 positions · calm bull</span>
+              <span class="tl-badge" style="border-color:#6e7681;color:#6e7681">Proceed</span>
+              <span class='tl-pos'>17 positions · calm bull</span>
             </div>
+            <div class="tl-label">Debate Only (no orders)</div>
             <div class="tl-reason">The calm_bull regime warrants continuation (72% base rate, bull accuracy leads at 30%), so a halt or broad reduce_size is not justified — my own track record confirms overcaution has been the primary drag in prior stressed/calm decisions. However, the adversarial case for EWY is…</div>
             <ul class="risks"><li>EM cluster correlation collapse: EWY/EWT/EEM at 17.5% combined behave as a single factor under stress, with true tail exposure estimated at 3.5-4.2% vs. the model's -1.2% Monte Carlo estimate</li><li>Parabolic momentum divergence: WDC (+928%), SATS (+505%), VICR (+714%) show distribution-top characteristics with SATS carrying a -0.70 negative earnings transcript signal</li><li>VaR-99 at -3.31% consumes ~79% of calm_bull historical drawdown budget in a single stress day, leaving minimal buffer before regime-flip dynamics activate</li></ul>
+            
+          </div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-dot" style="background:#3fb950;color:#0d1117">✓</div>
+          <div class="tl-body">
+            <div class="tl-meta">
+              <span class="tl-date">2026-05-19</span>
+              <span class="tl-badge" style="border-color:#3fb950;color:#3fb950">Executed · AI PM Shadow Begins</span>
+              <span class='tl-pos'>18 positions · calm bull</span>
+            </div>
+            <div class="tl-label">Rebalance #3</div>
+            <div class="tl-reason">30 orders placed. 18 positions. NAV $103,790 (portfolio pulled back from $110K peak). AI PM Phase 0 shadow period begins — tracks performance in parallel with 0% capital authority. Needs 21 rebalances with Sharpe edge ≥0.05 to earn any allocation.</div>
+            
+            
+          </div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-dot" style="background:#3fb950;color:#0d1117">✓</div>
+          <div class="tl-body">
+            <div class="tl-meta">
+              <span class="tl-date">2026-05-05</span>
+              <span class="tl-badge" style="border-color:#3fb950;color:#3fb950">Executed</span>
+              <span class='tl-pos'>22 positions · calm bull</span>
+            </div>
+            <div class="tl-label">Rebalance #2</div>
+            <div class="tl-reason">Full portfolio rotation. 40 orders placed. NAV ~$107,025 after a strong end-of-April rally (+2.90% on Apr 30).</div>
+            
             
           </div>
         </div>
@@ -283,62 +319,81 @@ footer{text-align:center;color:#21262d;font-size:12px;margin-top:40px;padding-to
             <div class="tl-meta">
               <span class="tl-date">2026-04-15</span>
               <span class="tl-badge" style="border-color:#d29922;color:#d29922">Reduce Size</span>
-              <span class="tl-pos">22 positions · STRESSED</span>
+              <span class='tl-pos'>22 positions · STRESSED</span>
             </div>
+            <div class="tl-label">Rebalance Executed</div>
             <div class="tl-reason">The convergence of evidence is overwhelming. Three consecutive stressed-regime reviews recommended reduce_size or halt_and_review, and the portfolio's fundamental structure hasn't materially improved. The quant sanity check objectively confirms only 7.5% defensive allocation — th…</div>
             <ul class="risks"><li>Correlated EM/cyclical liquidation cascade: 46% of portfolio (EWY+EWZ+EWT+CAT+TRGP+PDBC+DBB) correlates heavily in stress, creating -5% to -7% tail risk far exceeding Monte Carlo estimates</li><li>Defensive allocation is genuinely only 7.5% (BIL+LQD+MRK per quant check), not the 19.4% the bull claims — PDBC, HYG, and NEM are not true safe havens in stressed regimes</li><li>Unknown macro regime may signal transition state where traditional diversification fails, compounding the STRESSED equity regime with potential macro deterioration</li></ul>
             <div class="outcome" style="color:#3fb950">Realized +14d: +5.63%</div>
           </div>
         </div>
         <div class="tl-item">
-          <div class="tl-dot" style="background:#3fb950;color:#0d1117">✓</div>
+          <div class="tl-dot" style="background:#6e7681;color:#0d1117">◌</div>
           <div class="tl-body">
             <div class="tl-meta">
               <span class="tl-date">2026-04-12</span>
-              <span class="tl-badge" style="border-color:#3fb950;color:#3fb950">Proceed</span>
-              <span class="tl-pos">2 positions · calm bull</span>
+              <span class="tl-badge" style="border-color:#6e7681;color:#6e7681">Proceed</span>
+              <span class='tl-pos'>2 positions · calm bull</span>
             </div>
+            <div class="tl-label">Debate Only (no orders)</div>
             <div class="tl-reason">ok</div>
             
             
           </div>
         </div>
         <div class="tl-item">
-          <div class="tl-dot" style="background:#d29922;color:#0d1117">↓</div>
+          <div class="tl-dot" style="background:#6e7681;color:#0d1117">◌</div>
           <div class="tl-body">
             <div class="tl-meta">
               <span class="tl-date">2026-04-06</span>
-              <span class="tl-badge" style="border-color:#d29922;color:#d29922">Reduce Size</span>
-              <span class="tl-pos">20 positions · stressed</span>
+              <span class="tl-badge" style="border-color:#6e7681;color:#6e7681">Reduce Size</span>
+              <span class='tl-pos'>20 positions · stressed</span>
             </div>
+            <div class="tl-label">Debate Only (no orders)</div>
             <div class="tl-reason">The portfolio is fundamentally misaligned with a stressed equity regime. While the bull case makes reasonable points about defensive equity names and commodity diversification, the weight of evidence from bear, devil's advocate, regime specialist, and even the quant check (only 4…</div>
             <ul class="risks"><li>Regime divergence trap: calm_bull macro lagging stressed equities creates false comfort — historically resolves with macro deteriorating, not equities recovering</li><li>Cyclical and EM overexposure (~22% cyclicals + 15.4% EM) amplifies downside in stressed regime with correlated selloff risk</li><li>Insufficient defensive allocation (4.5% vs. 15-25% regime-appropriate level) with no bond duration, minimal gold, and no volatility hedge</li></ul>
             <div class="outcome" style="color:#f85149">Realized +14d: -0.43%</div>
           </div>
         </div>
         <div class="tl-item">
-          <div class="tl-dot" style="background:#f85149;color:#0d1117">✗</div>
+          <div class="tl-dot" style="background:#6e7681;color:#0d1117">◌</div>
           <div class="tl-body">
             <div class="tl-meta">
               <span class="tl-date">2026-04-05</span>
-              <span class="tl-badge" style="border-color:#f85149;color:#f85149">Halt And Review</span>
-              <span class="tl-pos">20 positions · stressed</span>
+              <span class="tl-badge" style="border-color:#6e7681;color:#6e7681">Halt And Review</span>
+              <span class='tl-pos'>20 positions · stressed</span>
             </div>
+            <div class="tl-label">Debate Only (no orders)</div>
             <div class="tl-reason">The convergence of bear, devil's advocate, and regime specialist arguments is overwhelming and internally consistent. We are in a STRESSED equity regime, and this portfolio is constructed as if calm_bull macro will persist indefinitely and equity stress is a temporary dislocation…</div>
             <ul class="risks"><li>Portfolio is fundamentally misaligned with STRESSED equity regime — only 5.1% defensive allocation vs. 11.8% risk-on, with no bond or tail-hedge exposure</li><li>~32% combined EM/commodity exposure (EWZ, EWT, EWY, PDBC, DBA, DBB) creates correlated liquidation risk in a dollar spike or risk-off cascade that the Monte Carlo likely underestimates</li><li>Cyclical names (CAT, SEDG, MPC) totaling ~16.7% are max-pain positions if stressed regime deepens into full drawdown, and macro calm_bull can lag-flip rapidly</li></ul>
             
           </div>
         </div>
         <div class="tl-item">
-          <div class="tl-dot" style="background:#f85149;color:#0d1117">✗</div>
+          <div class="tl-dot" style="background:#6e7681;color:#0d1117">◌</div>
           <div class="tl-body">
             <div class="tl-meta">
               <span class="tl-date">2026-04-04</span>
-              <span class="tl-badge" style="border-color:#f85149;color:#f85149">Halt And Review</span>
-              <span class="tl-pos">? positions · </span>
+              <span class="tl-badge" style="border-color:#6e7681;color:#6e7681">Halt And Review</span>
+              <span class='tl-pos'>? positions</span>
             </div>
+            <div class="tl-label">Debate Only (no orders)</div>
             <div class="tl-reason">This portfolio exhibits fundamental strategic incoherence rather than sophisticated diversification. The bull case mistakes complexity for conviction—you cannot simultaneously bet on inflation (21% commodities) and dollar strength (6% UUP) as these are negatively correlated. The…</div>
             <ul class="risks"><li>Contradictory macro positioning: simultaneous long commodities/inflation AND dollar strength creates offsetting exposures that guarantee mediocre returns</li><li>USO structural decay from contango and roll costs will significantly underperform spot oil even if directional call is correct; 12.52% allocation to a flawed instrument is unacceptable</li><li>Internal portfolio hedging: SEDG and NEE positions directly offset the energy/commodity thesis, paying transaction costs for zero net directional exposure</li></ul>
+            
+          </div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-dot" style="background:#58a6ff;color:#0d1117">★</div>
+          <div class="tl-body">
+            <div class="tl-meta">
+              <span class="tl-date">2026-04-01</span>
+              <span class="tl-badge" style="border-color:#58a6ff;color:#58a6ff">Initial Portfolio</span>
+              <span class='tl-pos'>9 positions</span>
+            </div>
+            <div class="tl-label">Paper Trading Live</div>
+            <div class="tl-reason">29 orders placed on first day of live paper trading. 9 initial positions. Starting NAV ~$100,800.</div>
+            
             
           </div>
         </div></div>
@@ -346,7 +401,7 @@ footer{text-align:center;color:#21262d;font-size:12px;margin-top:40px;padding-to
 </div>
 
 <footer>
-  Generated 2026-05-28 20:42 UTC &nbsp;·&nbsp; Data: Alpaca paper trading API + SPY via Yahoo Finance &nbsp;·&nbsp;
+  Generated 2026-05-28 20:52 UTC &nbsp;·&nbsp; Data: Alpaca paper trading API + SPY via Yahoo Finance &nbsp;·&nbsp;
   <a href="https://github.com/ScottDongKhang/Ascent_Capital">Source on GitHub</a>
 </footer>
 
@@ -404,11 +459,11 @@ const ANNOTATIONS = {
       "xAdjust": 4
     }
   },
-  "reb2": {
+  "reb0": {
     "type": "line",
-    "xMin": "2026-04-06",
-    "xMax": "2026-04-06",
-    "borderColor": "#d29922",
+    "xMin": "2026-04-01",
+    "xMax": "2026-04-01",
+    "borderColor": "#58a6ff",
     "borderWidth": 2,
     "borderDash": [
       5,
@@ -416,10 +471,10 @@ const ANNOTATIONS = {
     ],
     "label": {
       "display": true,
-      "content": "Reduce Size",
+      "content": "Live Start",
       "position": "end",
-      "backgroundColor": "#d2992222",
-      "color": "#d29922",
+      "backgroundColor": "#58a6ff22",
+      "color": "#58a6ff",
       "font": {
         "size": 10,
         "weight": "600"
@@ -428,7 +483,7 @@ const ANNOTATIONS = {
       "yAdjust": 6
     }
   },
-  "reb4": {
+  "reb5": {
     "type": "line",
     "xMin": "2026-04-15",
     "xMax": "2026-04-15",
@@ -452,10 +507,34 @@ const ANNOTATIONS = {
       "yAdjust": 6
     }
   },
-  "reb5": {
+  "reb6": {
     "type": "line",
-    "xMin": "2026-05-27",
-    "xMax": "2026-05-27",
+    "xMin": "2026-05-05",
+    "xMax": "2026-05-05",
+    "borderColor": "#3fb950",
+    "borderWidth": 2,
+    "borderDash": [
+      5,
+      4
+    ],
+    "label": {
+      "display": true,
+      "content": "Proceed",
+      "position": "end",
+      "backgroundColor": "#3fb95022",
+      "color": "#3fb950",
+      "font": {
+        "size": 10,
+        "weight": "600"
+      },
+      "padding": 3,
+      "yAdjust": 6
+    }
+  },
+  "reb7": {
+    "type": "line",
+    "xMin": "2026-05-19",
+    "xMax": "2026-05-19",
     "borderColor": "#3fb950",
     "borderWidth": 2,
     "borderDash": [

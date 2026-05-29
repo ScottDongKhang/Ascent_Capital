@@ -131,8 +131,58 @@ REGIME_COLORS = {
 }
 
 
+# Dates that resulted in actual Alpaca order execution.
+# Apr 4/5/6/12 were debate-only sessions (no orders placed).
+# May 5 / May 19 are confirmed rebalances but have no verdict file.
+ACTUAL_REBALANCE_DATES = {"2026-04-15", "2026-05-05", "2026-05-19"}
+
+# Known milestones without verdict files — added verbatim to the timeline.
+HARDCODED_EVENTS = [
+    {
+        "date":    "2026-04-01",
+        "type":    "milestone",
+        "verdict": None,
+        "label":   "Paper Trading Live — Initial Portfolio",
+        "n_pos":   9,
+        "regime":  "",
+        "reason":  "29 orders placed on first day of live paper trading. "
+                   "9 initial positions. Starting NAV ~$100,800.",
+        "risks":   [],
+        "outcome": None,
+    },
+    {
+        "date":    "2026-05-05",
+        "type":    "rebalance",
+        "verdict": "proceed",
+        "label":   "Rebalance #2 — Executed",
+        "n_pos":   22,
+        "regime":  "calm_bull",
+        "reason":  "Full portfolio rotation. 40 orders placed. NAV ~$107,025 "
+                   "after a strong end-of-April rally (+2.90% on Apr 30).",
+        "risks":   [],
+        "outcome": None,
+    },
+    {
+        "date":    "2026-05-19",
+        "type":    "rebalance",
+        "verdict": "proceed",
+        "label":   "Rebalance #3 — Executed · AI PM Shadow Begins",
+        "n_pos":   18,
+        "regime":  "calm_bull",
+        "reason":  "30 orders placed. 18 positions. NAV $103,790 (portfolio "
+                   "pulled back from $110K peak). AI PM Phase 0 shadow period "
+                   "begins — tracks performance in parallel with 0% capital "
+                   "authority. Needs 21 rebalances with Sharpe edge ≥0.05 to "
+                   "earn any allocation.",
+        "risks":   [],
+        "outcome": None,
+    },
+]
+
+
 def load_verdicts() -> list[dict]:
-    events = []
+    events = list(HARDCODED_EVENTS)  # start with known milestones
+
     for f in sorted(glob.glob("outputs/debate_log/verdict_*.json")):
         try:
             with open(f) as fh:
@@ -140,7 +190,14 @@ def load_verdicts() -> list[dict]:
             verdict_block = v.get("verdict", {})
             if not isinstance(verdict_block, dict):
                 continue
-            rec   = verdict_block.get("recommendation", "proceed")
+
+            ev_date = v.get("date", Path(f).stem.replace("verdict_", ""))
+
+            # Skip if already covered by a hardcoded event
+            if ev_date in {e["date"] for e in HARDCODED_EVENTS}:
+                continue
+
+            rec    = verdict_block.get("recommendation", "proceed")
             reason = verdict_block.get("reasoning", "")
             risks  = verdict_block.get("key_risks", [])
             ps     = v.get("portfolio_state", {})
@@ -150,12 +207,20 @@ def load_verdicts() -> list[dict]:
                 regime = regime.replace("RegimeLabel.", "")
             outcome = v.get("outcome_nav_change")
 
+            is_execution = ev_date in ACTUAL_REBALANCE_DATES
+            if is_execution:
+                label = f"Rebalance Executed — {rec.replace('_', ' ').title()}"
+                ev_type = "rebalance"
+            else:
+                label = f"Debate Only (no orders) — {rec.replace('_', ' ').title()}"
+                ev_type = "debate_only"
+
             short_reason = reason[:280].rstrip() + ("…" if len(reason) > 280 else "")
             events.append({
-                "date":    v.get("date", Path(f).stem.replace("verdict_", "")),
-                "type":    "rebalance",
-                "verdict": rec,
-                "label":   f"Rebalance — {rec.replace('_', ' ').title()}",
+                "date":    ev_date,
+                "type":    ev_type,
+                "verdict": rec if is_execution else None,
+                "label":   label,
                 "n_pos":   n_pos,
                 "regime":  regime,
                 "reason":  short_reason,
@@ -164,6 +229,8 @@ def load_verdicts() -> list[dict]:
             })
         except Exception as e:
             print(f"  [WARN] Could not parse {f}: {e}")
+
+    events.sort(key=lambda x: x["date"])
     return events
 
 
@@ -208,7 +275,8 @@ def compute_stats(records: list[dict], spy: dict[str, float]) -> dict:
         peak  = max(peak, e)
         max_dd = min(max_dd, (e - peak) / peak * 100)
 
-    daily = [r["day_return"] for r in records if r["day_return"] != 0]
+    # Use ALL trading days including flat days — filtering zeros inflates Sharpe
+    daily = [r["day_return"] for r in records]
     sharpe = 0.0
     if len(daily) > 2:
         mu  = statistics.mean(daily)
@@ -223,12 +291,16 @@ def compute_stats(records: list[dict], spy: dict[str, float]) -> dict:
     best  = max(daily) * 100 if daily else 0.0
     worst = min(daily) * 100 if daily else 0.0
 
+    # Standard error of annualized Sharpe: sqrt((1 + S²/2) * 252/n)
+    sharpe_se = math.sqrt((1 + sharpe**2 / 2) * 252 / max(len(daily), 1)) if len(daily) > 2 else None
+
     return {
         "total_return": round(total_ret, 2),
         "spy_return":   round(spy_ret, 2) if spy_ret is not None else None,
         "alpha":        round(alpha, 2) if alpha is not None else None,
         "max_drawdown": round(max_dd, 2),
         "sharpe":       round(sharpe, 3),
+        "sharpe_se":    round(sharpe_se, 2) if sharpe_se else None,
         "best_day":     round(best, 2),
         "worst_day":    round(worst, 2),
         "days_live":    len(dates),
@@ -307,12 +379,18 @@ def build_html(
             },
         }
 
-    # Rebalance lines
+    # Rebalance / milestone lines — only draw for actual executions and milestones
     for i, ev in enumerate(verdicts):
         if ev["date"] not in dates:
             continue
-        color = VERDICT_COLORS.get(ev["verdict"], "#8b949e")
-        short = ev["verdict"].replace("_", " ").title()
+        if ev["type"] == "debate_only":
+            continue  # don't clutter chart with debate-only sessions
+        color = VERDICT_COLORS.get(ev["verdict"], "#58a6ff")
+        if ev["type"] == "milestone":
+            color = "#58a6ff"
+            short = "Live Start"
+        else:
+            short = (ev["verdict"] or "executed").replace("_", " ").title()
         annotations[f"reb{i}"] = {
             "type":        "line",
             "xMin":        ev["date"],
@@ -340,23 +418,37 @@ def build_html(
           <div class="stat-value" style="{extra_style}">{value}</div>
         </div>"""
 
-    nav  = stats.get("current_nav", 0)
-    base = stats.get("start_nav", 0)
-    tr   = stats.get("total_return")
+    nav   = stats.get("current_nav", 0)
+    base  = stats.get("start_nav", 0)
+    tr    = stats.get("total_return")
     spy_r = stats.get("spy_return")
     alph  = stats.get("alpha")
+    sharpe    = stats.get("sharpe", "N/A")
+    sharpe_se = stats.get("sharpe_se")
+    n_days    = stats.get("days_live", "?")
+
+    sharpe_str = str(sharpe)
+    sharpe_note = (
+        f'<div class="stat-note">±{sharpe_se:.1f} SE · N={n_days} days</div>'
+        if sharpe_se else ""
+    )
 
     stats_html = (
-        stat("Portfolio Return",   _fmt_pct(tr),   f"color:{_pct_color(tr)}")
+        stat("Portfolio Return",   _fmt_pct(tr),    f"color:{_pct_color(tr)}")
       + stat("vs SPY (Alpha)",     _fmt_pct(alph),  f"color:{_pct_color(alph)}")
       + stat("SPY Return",         _fmt_pct(spy_r), f"color:{_pct_color(spy_r)}")
-      + stat("Sharpe (Ann.)",      str(stats.get("sharpe", "N/A")))
-      + stat("Max Drawdown",       _fmt_pct(stats.get("max_drawdown"), False),
+      + f"""
+        <div class="stat-card">
+          <div class="stat-label">Sharpe (Ann.) ⚠</div>
+          <div class="stat-value">{sharpe_str}</div>
+          {sharpe_note}
+        </div>"""
+      + stat("Max Drawdown",  _fmt_pct(stats.get("max_drawdown"), False),
              f"color:{_pct_color(stats.get('max_drawdown'))}")
-      + stat("Best Day",           _fmt_pct(stats.get("best_day")), "color:#3fb950")
-      + stat("Worst Day",          _fmt_pct(stats.get("worst_day"), False), "color:#f85149")
-      + stat("Days Live",          str(stats.get("days_live", "?")))
-      + stat("Current NAV",        f"${nav:,.0f}")
+      + stat("Best Day",      _fmt_pct(stats.get("best_day")), "color:#3fb950")
+      + stat("Worst Day",     _fmt_pct(stats.get("worst_day"), False), "color:#f85149")
+      + stat("Trading Days",  str(n_days))
+      + stat("Current NAV",   f"${nav:,.0f}")
     )
 
     # ── Positions table ───────────────────────────────────────────────────────
@@ -387,10 +479,19 @@ def build_html(
     all_events = sorted(verdicts, key=lambda x: x["date"])
     tl_html = ""
     for ev in reversed(all_events):   # newest first
-        color = VERDICT_COLORS.get(ev["verdict"], "#8b949e")
-        icon_map = {"proceed": "✓", "reduce_size": "↓", "halt_and_review": "✗"}
-        icon   = icon_map.get(ev["verdict"], "↻")
-        label  = ev["verdict"].replace("_", " ").title()
+        ev_type = ev.get("type", "rebalance")
+        verdict = ev.get("verdict")
+
+        if ev_type == "milestone":
+            color = "#58a6ff"
+            icon  = "★"
+        elif ev_type == "debate_only":
+            color = "#6e7681"
+            icon  = "◌"
+        else:
+            color = VERDICT_COLORS.get(verdict, "#8b949e")
+            icon_map = {"proceed": "✓", "reduce_size": "↓", "halt_and_review": "✗"}
+            icon = icon_map.get(verdict, "↻")
 
         risks_html = ""
         for r in ev.get("risks", []):
@@ -404,15 +505,21 @@ def build_html(
             oc_color = "#3fb950" if oc >= 0 else "#f85149"
             outcome_html = f'<div class="outcome" style="color:{oc_color}">Realized +14d: {"+" if oc>=0 else ""}{oc:.2f}%</div>'
 
+        badge_text = ev["label"].split("—")[-1].strip() if "—" in ev["label"] else ev["label"]
+        regime_str = ev.get("regime", "").replace("_", " ").replace("RegimeLabel.", "")
+        n_pos_str  = f'{ev.get("n_pos", "?")} positions' if ev.get("n_pos") else ""
+        meta_extra = " · ".join(filter(None, [n_pos_str, regime_str]))
+
         tl_html += f"""
         <div class="tl-item">
           <div class="tl-dot" style="background:{color};color:#0d1117">{icon}</div>
           <div class="tl-body">
             <div class="tl-meta">
               <span class="tl-date">{ev['date']}</span>
-              <span class="tl-badge" style="border-color:{color};color:{color}">{label}</span>
-              <span class="tl-pos">{ev.get('n_pos','?')} positions · {ev.get('regime','').replace('_',' ')}</span>
+              <span class="tl-badge" style="border-color:{color};color:{color}">{badge_text}</span>
+              {"<span class='tl-pos'>" + meta_extra + "</span>" if meta_extra else ""}
             </div>
+            <div class="tl-label">{ev['label'].split('—')[0].strip()}</div>
             <div class="tl-reason">{ev.get('reason','')}</div>
             {risks_html}
             {outcome_html}
@@ -456,6 +563,7 @@ header p{{color:#8b949e;font-size:14px;margin-top:6px}}
 .stat-card{{background:#161b22;border:1px solid #30363d;border-radius:10px;padding:14px 16px}}
 .stat-label{{font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}}
 .stat-value{{font-size:21px;font-weight:700}}
+.stat-note{{font-size:10px;color:#6e7681;margin-top:3px}}
 
 /* chart */
 .chart-card{{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:20px 24px;margin-bottom:24px}}
@@ -489,6 +597,7 @@ tbody tr:last-child td{{border-bottom:none}}
 .tl-date{{font-size:12px;color:#8b949e;font-family:monospace}}
 .tl-badge{{font-size:11px;font-weight:600;border:1px solid;border-radius:12px;padding:1px 8px}}
 .tl-pos{{font-size:11px;color:#6e7681}}
+.tl-label{{font-size:13px;font-weight:600;color:#c9d1d9;margin-bottom:3px}}
 .tl-reason{{font-size:12px;color:#8b949e;line-height:1.6;margin-bottom:6px}}
 .risks{{font-size:11px;color:#6e7681;padding-left:14px;margin-bottom:6px;display:flex;flex-direction:column;gap:2px}}
 .outcome{{font-size:12px;font-weight:600}}
@@ -521,6 +630,10 @@ footer{{text-align:center;color:#21262d;font-size:12px;margin-top:40px;padding-t
     <div class="leg"><div class="leg-dot" style="background:#f85149"></div>Rebalance: Halt & Review</div>
   </div>
   <div class="chart-wrap"><canvas id="chart"></canvas></div>
+  <p style="font-size:11px;color:#6e7681;margin-top:10px">
+    ⚠ Sharpe ratio shown is annualized from {n_days} trading days — standard error ≈ ±{round(stats.get('sharpe_se', 0), 1)}.
+    Statistically unreliable at this sample size. The walk-forward OOS Sharpe (0.518 over 2020–2026) is the more honest number.
+  </p>
 </div>
 
 <div class="grid2">
