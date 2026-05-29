@@ -167,63 +167,15 @@ PDBC↔KMLM correlation (~0.81) frequently triggers the correlation guard — KM
 
 ## AI PM Agent (`agents/ai_pm_agent.py`)
 
-Claude Opus 4.6, 16 tools, `max_tool_calls=14`.
+**Two-phase, AI-native architecture** (as of 2026-05-28):
 
-**4-phase research loop:**
-1. Phase 1 — Market context: `get_regime_state`, `get_macro_data`
-2. Phase 2 — Quant baseline: `run_quant_agent` ×4 (hits precomputed cache — no pipeline re-run)
-3. Phase 3 — Signal research: up to 6 of 10 signal tools
-4. Phase 4 — Submit: `propose_portfolio(weights, thesis)`
-
-**19 tools**: `get_rebalance_brief`, `get_regime_state`, `get_macro_data`, `run_quant_agent`, `get_sec_signal`, `get_transcript_signal`, `get_attribution_history`, `get_earnings_signal`, `get_past_verdicts`, `get_factor_exposures`, `get_var_estimate`, `get_sector_concentration`, `get_position_momentum`, `get_narrative_shift`, `get_regime_memory`, `get_calibration_report`, `get_live_news`, `get_analyst_estimates`, `propose_portfolio`.
-
-**After initial proposal — adversarial self-play:**
-- `red_team_agent.py` (Sonnet) attacks proposal: per-position worst-case + systemic kill shot
-- AI PM gets one revision pass (`max_tool_calls=6`) — revises or defends
-- If revision produces no `propose_portfolio`, initial proposal used silently
-- Red team failure → "" → skip revision, use initial (never blocks)
-
-**Precomputed cache**: `run_ai_pm(quant_outputs=agent_outputs)` builds a cache from `AgentOutput` objects passed in. `run_quant_agent` tool hits cache first — saves ~160s and 4 pipeline re-runs per run.
-
-**Pre-blend risk validator** (`ascent/risk/pm_risk_validator.py`): position cap 15%, sector cap 40%, distressed filter (mom_252d < −0.65), min 5 positions, no shorts. Negative-weight short-circuit fires before other checks (normalization would inflate remaining weights otherwise).
-
-**Thesis schema** (what `propose_portfolio` receives):
-- `weights`: {symbol: float}
-- `thesis`: {market_view, regime_assessment, quant_baseline_summary, quant_agreement (list), quant_overrides (list of {symbol, ai_action, reason}), position_rationale (dict), key_risks (list), what_could_be_wrong}
-
-**Calibration logging**: `_tool_propose_portfolio` calls `log_prediction(date, weights, thesis)` after each submission. Conviction derived from thesis structure: `high` = in quant_overrides, `medium` = in position_rationale only, `quant_agreed` = rest.
-
----
-
-## Earned authority (`ascent/strategy/earned_authority.py`)
-
-`PHASE_WEIGHTS = [0.0, 0.25, 0.50, 0.75]`, `HARD_CAP = 0.80`. State in `data_cache/earned_authority.json`.
-
-Advances phase after 21 rebalance days with AI Sharpe > quant + 0.05. Auto-reverts to Phase 0 if AI 21d drawdown > quant + 5pp. Same-day dedup guard prevents double-appending returns. Shadow returns logged to `data_cache/ai_pm_shadow_returns.jsonl`.
-
-Authority update runs BEFORE the rebalance/non-rebalance branch split in `run_all_agents.py` — runs every day.
-
----
-
-## Episodic memory (`memory/regime_memory.py`)
-
-`log_episode(date, regime, quant_weights, ai_weights=None)` → `logs/regime_episodes.jsonl`. Deduplicates by date. `query_episodes(regime, n=5)` returns last n matching episodes; uses prefix match (querying "calm" matches "calm_bull"). `update_outcomes(price_returns)` fills `realized_return_21d` for episodes ≥21 calendar days old.
-
-AI PM tool `get_regime_memory(regime)` calls `query_episodes`. Called at startup in `run_all_agents.py`.
-
----
-
-## Calibration tracker (`ascent/strategy/calibration_tracker.py`)
-
-`log_prediction(date, portfolio, thesis)` → `logs/ai_pm_calibration.jsonl`. `update_outcomes(price_returns, as_of_date)` fills `realized_21d`. `get_calibration_report(n_rebalances=10)` computes Spearman IC between conviction order and realized return. IC ≥ 0.20 = Calibrated, ≥ 0.05 = Weak, < 0.05 = Uncalibrated. All deterministic — no LLM calls.
-
----
-
-## Narrative alpha (`ascent/alpha/narrative_alpha.py`)
-
-Reads `data_cache/llm_fundamental_cache.json` (keys: `{symbol}_{quarter_end_date}`, values: `{direction, confidence, key_trend, uncertainty}`). Finds last 2 entries per symbol. Calls Haiku to score shift from −1 to +1. Caches results to `data_cache/narrative_shift_cache.json` (keyed by md5 of content). Returns cross-sectionally z-scored Series. Zero weight in stack until cache matures.
-
-AI PM tool `get_narrative_shift(symbol)` calls internal helpers directly.
+- **Phase 1 — Pre-thesis** (Sonnet, before quant runs): AI reads macro, SEC filings, earnings calls, narratives, crowding signals → forms original thesis (8-15 names with written reasons) → seals via `propose_prethesis`. Tools: `PRE_THESIS_TOOLS` (16, no `run_quant_agent`). `run_ai_pm_prethesis()` → `AIPreThesis`.
+- **Phase 2 — Synthesis** (Opus, after quant): receives sealed prethesis + quant validation. Quant confirms → concentrate (9-10%). Quant neutral → hold thesis weight. Quant contradicts → defend with catalyst or stand down. Quant-only finds → include if macro-fits. `run_ai_pm(quant_outputs=..., prethesis=...)` → `AIPMResult`.
+- **Red team**: Sonnet attacks Phase 2 proposal. AI PM revision pass (`max_tool_calls=6`). Fallback to initial on no revision.
+- **Conviction gate** (`ascent/strategy/conviction_gate.py`): `momentum_exhaustion` type requires crowding=OVERCROWDED. `data_quality` has 0.85 friction, blocked if win rate <35%. Max 2 overrides enforced by prompt.
+- **Earned authority**: `PHASE_WEIGHTS=[0,0.25,0.50,0.75]`, `HARD_CAP=0.80`. Advances after 21 rebalance days with Sharpe edge >0.05. State: `data_cache/earned_authority.json`. Runs daily before rebalance split.
+- **Calibration**: `logs/ai_pm_calibration.jsonl`. Spearman IC conviction-vs-realized. IC<0.05 triggers warning in synthesis prompt.
+- **Crowding signal tool** (`get_crowding_signal`): momentum trajectory + short interest % of float + analyst rec drift. CLEAN/WATCH/OVERCROWDED. Required before any REDUCE.
 
 ---
 
@@ -331,6 +283,9 @@ Cache names: `prices_live` (Yahoo live), `prices_simulated` (GBM), `prices_live_
 - **`run_ai_pm(quant_outputs=...)`**: pass `agent_outputs` list to skip redundant pipeline runs. Without it, AI PM re-runs all 4 agents from scratch (~160s extra).
 - **Red team**: fires AFTER initial proposal, not before. Revision pass limited to `max_tool_calls=6`.
 - **Authority update**: runs before the rebalance/non-rebalance branch split — runs every day regardless.
+- **AI PM two-phase**: `run_ai_pm_prethesis()` uses `SONNET_MODEL` (not Opus) — reads data, forms thesis. `run_ai_pm(prethesis=...)` uses `DEFAULT_MODEL` (Opus) for synthesis. Never swap these — Sonnet for breadth, Opus for judgment.
+- **`propose_prethesis` vs `propose_portfolio`**: Phase 1 ends with `propose_prethesis` (stores `AIPreThesis`). Phase 2 ends with `propose_portfolio` (stores `AIPMResult`). They are different tools, different result stores.
+- **Pre-thesis runs before quant agents** in `run_all_agents.py`. If it fails, `prethesis=None` → `run_ai_pm()` falls back to standard single-phase mode gracefully.
 
 ---
 
@@ -346,23 +301,19 @@ Python 3.12.13 Homebrew, venv at `.venv/`. Use `.venv/bin/python`. API keys via 
 
 ---
 
-## Current state (as of 2026-05-26)
+## Current state (as of 2026-05-28)
 
-**Portfolio** (post-rebalance May 19): EWY 10.9%, PDBC 6.9%, CBOE/CHRD/HUM/SATS/SNDK/STRL/VICR/VRT/WDC ~6.5% each, DBB 3.8%, EWT/EEM 3.4% each, EWC 3.3%, DBA 3.1%, BIL 2.8%, KMLM 2.4%, UUP 1.6%. 18 positions. NAV ~$103,790. Live since April 1, 2026.
+**Portfolio** (post-rebalance May 27): 17 positions, NAV ~$110,100. Live since April 1, 2026. Rebalance #4 on May 27.
 
-**AI PM**: Phase 0 (`ai_weight=0.0`), shadow period started 2026-05-19. Advances to 25% after 21 rebalance days with Sharpe edge > 0.05. `data_cache/earned_authority.json` is the ground truth.
+**AI PM**: Phase 0 (`ai_weight=0.0`), shadow period started 2026-05-19. 8/21 days evaluated. AI cumulative +2.75% vs quant +6.20% (underperforming — anti-momentum bias being corrected by redesign). `data_cache/earned_authority.json` is ground truth.
 
-**Skill scores**: all agents warming up (need 63 days from April 1 → June 3, 2026).
+**Regime**: calm_bull. **Tests**: 627 passing, 1 skipped.
 
-**Regime**: calm_bull (refitted May 7). Regime signal in `dashboard/regime_signal.json`.
+**GitHub Pages**: `https://scottdongkhang.github.io/Ascent_Capital` — auto-updated after every daily run.
 
-**Tests**: 627 passing, 1 skipped.
+**Kill switches pending paper validation (~July 2026)**: `EVENT_TRADING_ENABLED=False`, `TWAP_ENABLED=False`, `SELF_MODIFY_ENABLED=False`, `LONG_SHORT_ENABLED=False`.
 
-**Kill switches pending paper validation (~July 2026)**: `EVENT_TRADING_ENABLED=False`, `TWAP_ENABLED=False`, `SELF_MODIFY_ENABLED=False`.
-
-**R2R semantic memory**: built, `R2R_API_KEY` not configured, BM25 fallback active.
-
-**Operational next steps (not code)**: Deploy TimescaleDB (Docker), configure WebSocket (`ALPACA_KEY`), transfer real capital (~May–June 2026). YC-ready at April 2027 (12-month live track record).
+**Operational next steps**: Deploy TimescaleDB, configure WebSocket, transfer real capital. YC-ready April 2027.
 
 ---
 
@@ -371,181 +322,32 @@ Python 3.12.13 Homebrew, venv at `.venv/`. Use `.venv/bin/python`. API keys via 
 | Component | Status | Notes |
 |-----------|--------|-------|
 | Plans 1–7 | ✅ | Factor risk, MVO/BL, events, alt data, execution, real-time infra, compliance |
-| AI PM Agent | ✅ | 16 tools, Opus, 4-phase loop, thesis audit trail |
-| Adversarial self-play | ✅ | Red team (Sonnet) attacks proposal; AI PM revises or defends |
-| Episodic memory | ✅ | Per-regime outcome log; queried by AI PM before proposing |
-| Calibration tracking | ✅ | Conviction-vs-realized IC; AI PM checks own hit rate |
-| Narrative alpha | ✅ | Q-o-Q thesis shift detection (Haiku); 3% weight; returns zeros if cache absent |
-| Non-rebalance intelligence | ✅ | 7 daily monitors → rebalance brief → AI PM tool #17 `get_rebalance_brief` |
-| LLM cost tracking | ✅ | Per-model token + cost accounting; `logs/cost_log.jsonl` per run |
-| Alpha signal activation | ✅ | Narrative alpha 3%, sector-rel-mom, HY-spread-dir; ML retrain forced |
-| AI PM intelligence | ✅ | 19 tools; live news, analyst estimates, calibration-aware prompt |
-| IC-decay early rebalance | ✅ | `rebalance_trigger.py`; fires when composite IC drops ≥30% after ≥5 bdays |
-| 130/30 long-short | ✅ | `long_short.py` built; `LONG_SHORT_ENABLED=False` until ≥30 paper rebalances |
-| Adversarial Intelligence | ✅ | 3-layer risk committee: per-position short thesis, regime sizing, coherence; ONE change per rebalance with falsifiable 10d prediction; earned authority by intervention type |
+| AI PM — two-phase AI-native | ✅ | Phase 1 Sonnet pre-thesis (before quant) + Phase 2 Opus synthesis. Quant validates AI, not vice versa. |
+| Adversarial self-play | ✅ | Red team (Sonnet) attacks Phase 2 proposal; AI PM revision pass |
+| Crowding signal tool | ✅ | `get_crowding_signal`: momentum trajectory + short interest + analyst drift. Gating check before any reduce. |
+| Conviction gate | ✅ | `momentum_exhaustion` type (replaces valuation abuse). `data_quality` has friction. Max 2 overrides. |
+| GitHub Pages dashboard | ✅ | Equity curve, drawdown, alpha charts, AI intelligence section, debate accordion. Auto-push daily. |
+| Episodic + calibration memory | ✅ | Per-regime outcome log; conviction-vs-realized IC; AI PM checks own track record |
+| Adversarial Intelligence | ✅ | 3-layer risk committee; ONE falsifiable change per rebalance; earned authority by intervention type |
+| Non-rebalance intelligence | ✅ | 7 daily monitors → rebalance brief → AI PM tool `get_rebalance_brief` |
+| Alpha signals | ✅ | Narrative alpha 3%, sector-rel-mom, HY-spread-dir, 14 sleeves total |
+| Weekend pipeline | ✅ | ML retrain, scenario planning, debrief, factor discovery — feeds Monday AI PM |
 
 ---
 
 ## Session log
 
-### 2026-04-09 — 2026-05-09 (foundation + AI-native Tiers 1–3)
-- First rebalance Apr 15 (27 orders). Second May 5 (40 orders, full rotation). NAV $104,815 as of May 7.
-- Key bugs: RegimeEngine takes config=dict; bdate_range empty on weekends; apply_hedge_overlay must accept str; ML sleeve cache must store feature_names.
-- PDBC↔KMLM correlation (0.81) halves KMLM via correlation guard — expected recurring behavior.
-- Debate is conditional circuit breaker via debate_gate.py, not a daily veto.
+> Sessions before 2026-05-25 archived to `docs/session_log_archive.md`.
 
-### 2026-05-10 (Plans 1–7 ✅)
-- 420→446 tests. BL tau scales with IC IR. MVO CLARABEL → SCS fallback. weasyprint unavailable → reportlab for all PDF. TimescaleDB/WebSocket require Docker + ALPACA_KEY — all DB calls return False/empty if unavailable.
+### 2026-04-09 — 2026-05-24 (summary)
+- Rebalances: Apr 1 (initial, 29 orders), Apr 15 (#1, 27 orders), May 5 (#2, 40 orders), May 19 (#3, 30 orders).
+- Built: Plans 1-7 (factor risk, MVO/BL, execution), AI PM agent, red team self-play, episodic memory, calibration tracker, narrative alpha, non-rebalance intelligence stack (7 monitors + rebalance brief), alt-data pipeline (SEC, transcripts, Trends), decision memory, conviction gate, weekend pipeline, adversarial intelligence (Phase 5.1).
+- Key architectural bugs fixed: kill_switch key was `"tripped"` not `"halted"`, approval gate blocked paper trading batches, optimizer re-cap needed after renorm, atomic writes for JSONL logs.
+- 420 → 627 tests over this period.
 
-### 2026-05-16 (AI PM Agent ✅)
-- pm_risk_validator: negative-weight short-circuit fires first (normalization inflates remaining weights otherwise).
-- earned_authority: same-day dedup guard, PHASE_WEIGHTS=[0.0,0.25,0.50,0.75], HARD_CAP=0.80.
-- ai_pm_agent: portfolio dict must be injected into thesis JSON explicitly after tool call.
-- Authority update moved before rebalance/non-rebalance split — runs every day.
-- 465 passing.
-
-### 2026-05-17 (adversarial self-play + episodic memory + narrative alpha + calibration ✅)
-- red_team_agent.py: Sonnet, per-position worst-case + systemic kill shot, returns "" on failure.
-- Red team fires AFTER initial proposal; revision pass max_tool_calls=6; fallback to initial if no revision.
-- run_ai_pm now accepts quant_outputs — builds precomputed cache, saves ~160s per run.
-- Approval gate removed from eod_runner.py (was blocking every 29-order paper batch).
-- regime_memory: prefix match on regime query ("calm" matches "calm_bull").
-- narrative_alpha: cache key is md5(content) not (symbol, dates).
-- calibration_tracker: pure structural conviction — no LLM. Both stack.py and self_improve.py updated.
-- Debate agents switched from Opus → Sonnet (significant cost reduction).
-- 465→492 tests (27 new this session).
-
-### 2026-05-17 (bug hunt + fixes)
-- Full system audit: alpha math, portfolio construction, AI PM, orchestrator, debate, execution, workflow.
-- **CRITICAL fix**: pre_rebalance_checklist.py was checking `state.get("halted") or state.get("triggered")` — kill_switch.py writes key `"tripped"`. Kill switch was functionally disabled at checklist level. Fixed.
-- **CRITICAL fix**: eod_runner.py multi-agent path still had approval gate (single-agent path was cleaned prior session, multi-agent missed). Removed. Paper trading now submits all orders directly.
-- **Integrity fix**: optimizer.py (rank_weighted + sector_constrained_weighted) — after _water_fill_cap, zeroing min-weight names and renormalizing could push remaining weights above max_weight cap. Added re-cap pass after renorm.
-- **Validator fix**: pm_risk_validator.py — negative weight check now runs before normalization. Mixed-sign portfolios were producing distorted position-cap violations after normalization inflated weights.
-- **Data safety fix**: regime_memory.py and calibration_tracker.py rewrote log files with open("w") (truncate-then-write). Now use tempfile + os.replace for atomic writes — data loss on crash is no longer possible.
-- Removed leftover reddit_sentiment import from run_all_agents.py altdata validation block (missed in prior revert).
-- Added 2026-05-18 to rebalance_calendar.csv — Monday is now a rebalance day.
-- 492 tests passing throughout.
-
-### 2026-05-18 (rebalance #3 — cancelled)
-- Pipeline ran: 29 orders generated (15 sells, 14 buys), submitted pre-market.
-- Orders manually cancelled: FRED API was down at time of submission; user pulled back to May 5 holdings.
-- Hub gracefully handles FRED outage — falls back to cached macro_live.parquet without crashing.
-- AI PM Phase 0, shadow period tracking started. SNDK excluded by AI PM (3196% momentum = SanDisk/WDC merger artifact) — correct call, not reflected in live book at 0% weight.
-- May 19 also a rebalance day — re-run pending FRED recovery; cache is 1 day old, safe to proceed on.
-
-### 2026-05-19 (rebalance #3 — retry)
-- FRED back up; re-run clean. 30 orders submitted (15 sells, 15 buys). NAV $103,790. 18 positions.
-- Same portfolio as May 18 proposed book (CBOE/HUM/SATS/SNDK/STRL + EWY/EWT/EEM/EWC international tilt).
-- Macro agent shifted calm_bull → neutral vs yesterday; minor weight changes only.
-- Attribution: -0.95% vs SPY -0.67%. VRT worst (-0.263%, -5.0%). Debate gate skipped (calm_bull, entropy 0.00).
-- May 18 logs fully cleaned before re-run (10 JSONL entries, 4 snapshots, AI PM thesis, shadow returns, earned_authority).
-
-### 2026-05-20 (non-rebalance intelligence stack ✅)
-- Added `_PRICING`, `_record_usage()`, `get_usage_summary()`, `log_costs()` to `ascent/llm/client.py` — per-process cost accumulation logged to `logs/cost_log.jsonl` at run end.
-- Added `use_cache=True` to AI PM `tool_completion` calls (both main + revision pass) and bear/devil debate agents — prompt cache hits reduce Opus cost ~90%.
-- AI PM gated to rebalance days only in `run_all_agents.py` (was running daily, burning ~$0.50–$2 per non-rebalance day).
-- Built 7 non-rebalance intelligence modules in `ascent/monitoring/`: conviction_tracker, signal_health, regime_trajectory, analogue_search, position_thesis, adversarial_daily, macro_calendar.
-- Built `ascent/monitoring/daily_intelligence.py` — orchestrates all 7 with independent `_safe()` wrappers, atomic write to `data_cache/daily_intelligence/YYYY-MM-DD.json`.
-- Built `ascent/monitoring/rebalance_brief.py` — Haiku synthesizes 9 days of intelligence into `data_cache/rebalance_brief.json`.
-- Added `get_rebalance_brief` as tool #17 in AI PM (called first in Phase 1 prompt); brief is pre-digested 9-day intelligence.
-- Fixed execution order: brief generation moved BEFORE AI PM block (was after weights write — AI PM would have read stale brief from previous cycle).
-- 492 → 506 tests (14 new in `tests/monitoring/`).
-- Files: ascent/llm/client.py, run_all_agents.py, agents/ai_pm_agent.py, debate/agents.py, ascent/monitoring/ (7 new + orchestrator + brief), tests/monitoring/ (6 test files).
-
-### 2026-05-21–22 (alpha signal activation + AI PM intelligence + portfolio evolution ✅)
-- **Alpha signals (Plan 1)**: LLM fundamental cache seeder (`scripts/seed_llm_cache.py`) — batch-populates 4 quarters for all symbols to activate narrative alpha. Narrative alpha weight raised 0%→3% (trend 41%→38%). Sector-relative momentum feature added (`feature_defs.py`, `build_features.py`, `ML_FEATURES` — now 11 items). HY-spread direction feature added (12th ML feature; `_SKIP_CS_NORMALIZE` bypass so CS z-score doesn't zero the broadcast signal). ML model cache cleared — retrain required on next run.
-- **AI PM upgrades (Plan 2)**: Added tools #18 `get_live_news` (72h headlines via yfinance) and #19 `get_analyst_estimates` (forward PE, target price, rec mean via yfinance). Added calibration-aware system prompt: `_build_system_prompt(ic)` prepends ⚠️ CALIBRATION WARNING when conviction IC < 0.05. `_get_calibration_ic_safe()` parses IC float from `get_calibration_report()` string output via regex (returns a string, not a dict — key gotcha).
-- **Portfolio mechanics (Plan 3)**: IC-decay triggered early rebalance (`ascent/monitoring/rebalance_trigger.py`) — writes flag file when composite IC drops ≥30% from baseline after ≥5 bdays; `run_all_agents.py` reads flag and promotes to rebalance day. 130/30 long-short framework (`ascent/portfolio/long_short.py`) — kill-switched `LONG_SHORT_ENABLED=False` until ≥30 paper rebalances (~August 2026). `allow_shorts=False` added to `pm_risk_validator.validate()`.
-- **Key gotcha**: water-fill cap in `build_long_short_weights` must be single-pass (not iterative): cap symbols initially above threshold, redistribute overflow only to symbols initially below threshold. Iterative cap breaks when all symbols start above threshold and redistributed names get re-capped in the next iteration.
-- 506 → 536 tests (30 new across 3 plans).
-- Files: scripts/seed_llm_cache.py, ascent/features/feature_defs.py, ascent/features/build_features.py, ascent/alpha/ml_sleeve.py, ascent/alpha/stack.py, ascent/research/self_improve.py, agents/ai_pm_agent.py, ascent/monitoring/rebalance_trigger.py, ascent/portfolio/long_short.py, ascent/risk/pm_risk_validator.py, run_all_agents.py.
-
-### 2026-05-22 (proprietary decision memory + conviction gate — AI PM is not a wrapper ✅)
-- **Decision memory** (`ascent/memory/decision_memory.py`): every AI PM override stored with context features (type, regime, ai_weight, quant_weight, momentum_252d). After 21d, realized wedge filled in. Per-(type, regime) win rate, avg wedge, best/worst tracked. This is a compounding knowledge base — the AI PM literally learns from its own mistakes.
-- **Conviction gate** (`ascent/strategy/conviction_gate.py`): data-driven go/no-go before each override. Rules-based now; ML-ready (logistic regression when n≥30 cases). Structural always-approve: `data_quality`, `correlation_risk`, `news_event`. Valuation gated by calibration IC AND historical win rate. `regime_macro` fully rules-driven by win rate.
-- **AI PM tools #21, #22**: `query_decision_history(override_type, regime)` → past win rate + recent cases; `check_override_conviction(override_type, regime)` → gate result with size multiplier. Phase 3 of AI PM now requires consulting both before finalizing any override.
-- **Thesis schema updated**: `override_type` required per override entry; `pre_mortem` field added (what kills this trade in 30d).
-- **run_all_agents.py wiring**: after each rebalance AI PM run, each override ingested into decision_memory.jsonl. Daily `_fill_wedge_and_decision_outcomes()` fetches 21d cumulative prices via yfinance → fills alpha_wedge_tracker → propagates realized wedge to decision_memory.
-- **Red team**: now receives `quant_weights` so it attacks AI PM vs quant deltas explicitly.
-- 536 → 562 tests (21 new, 1 skipped). Note: 541 was the test count from the previous session snapshot; actual was 541→562.
-- Files: ascent/memory/decision_memory.py (new), ascent/strategy/conviction_gate.py (new), agents/ai_pm_agent.py, run_all_agents.py, tests/test_decision_memory.py (new), tests/test_conviction_gate.py (new).
-- Open: third part of "all three" — proprietary signals via factor discovery activation (proposal-only mode). ML conviction model training when n_cases≥30 (infrastructure is ML-ready; needs data accumulation).
-
-### 2026-05-23 (position health monitor + intelligence upgrade ✅)
-- **Position health** (`ascent/monitoring/position_health.py`): pure-Python per-position metrics: return since last rebalance, 252d/21d momentum, alpha rank percentile in 900-symbol universe, flag (OK/WATCH/DETERIORATING). Runs first, before any LLM.
-- **adversarial_daily.py upgraded**: now receives PositionHealth dict; Haiku sees actual return-since-rebalance, momentum, rank per position — not just symbol names.
-- **position_thesis.py upgraded**: each position gets health data in prompt; DETERIORATING positions flagged explicitly for thesis review.
-- **daily_intelligence.py**: position_health runs first, passed downstream to all LLM monitors; health snapshot added to JSON output.
-- **rebalance_brief.py**: health table (sorted worst-first) added to Haiku synthesis prompt; deteriorating/watching lists in output dict for AI PM tool.
-- 562 → 569 tests (7 new). Files: ascent/monitoring/position_health.py (new), adversarial_daily.py, position_thesis.py, daily_intelligence.py, rebalance_brief.py, tests/monitoring/test_position_health.py (new).
-
-### 2026-05-24 (alt data pipeline + decision memory enrichment ✅)
-- **SEC bug fix**: `build_sec_signal_panel` was silently dropping 4 of 5 Haiku-classified signals. Now stores all 7 signals to `data_cache/altdata_sec_detail.json` per symbol via `_update_detail_cache()`. Parquet retains `revenue_momentum` only (unchanged for alpha stack).
-- **SEC depth**: Added `extract_risk_factors_section()` (boundary-safe, 4000-char cap). `classify_filing_signal()` now classifies 7 signals (added `risk_trend`, `guidance_specificity`). YoY comparison via second Haiku call when prior quarter signals available. 90-day freshness gate prevents redundant EDGAR fetches.
-- **Transcripts bug fix**: `altdata_transcripts.parquet` was always empty — nothing was calling EDGAR. Added `fetch_recent_8k_transcripts(symbols, lookback_days=90)` that hits EDGAR EFTS API for 8-K Item 2.02 filings with retry/429 backoff.
-- **Collection orchestrator**: `_collect_altdata(portfolio_symbols, all_symbols)` in `run_all_agents.py` (line 231). Runs all 4 sources (SEC, transcripts, Reddit, Trends) before agent loop. Portfolio-symbols-only daily for Trends (~100s), full 901-symbol sweep on Sundays. Each source wrapped in try/except — one failure never blocks agent run.
-- **Decision memory enrichment**: `OverrideRecord` gains 4 new `Optional[float]` fields: `sec_tone`, `transcript_sentiment`, `reddit_buzz`, `trends_direction`. `_read_altdata_context(symbol)` auto-fills from caches at ingest time. Old records without new fields deserialize correctly (all default to None).
-- **ML conviction gate**: `_build_feature_vector()` produces 15-dim one-hot + numeric vector. `_get_ml_model()` trains `LogisticRegression(C=1.0)` at n≥30 matured cases, cached in-process and to pkl. ML path in `evaluate()` fires before rules for non-structural types; falls back to rules if |prob−0.5| < 0.05. `wr is not None` guards added for all win-rate comparisons (bug: unmatured records leave wr=None).
-- 569 → 589 tests (20 new across 3 test files). 589 passed, 1 skipped.
-- Files: `ascent/data/ingest/sec_filings.py`, `ascent/data/ingest/earnings_transcripts.py`, `run_all_agents.py`, `ascent/memory/decision_memory.py`, `ascent/strategy/conviction_gate.py`, `tests/test_altdata_pipeline.py`, `tests/test_decision_memory.py`, `tests/test_conviction_gate.py`.
-- Open: ML conviction model needs 30 matured overrides to activate (~6–8 weeks of AI PM rebalances). SEC detail JSON and Trends cache already live; SEC 7-signal + transcript enrichment fires on next EDGAR-eligible symbols.
-
-### 2026-05-24 continued (alt data pipeline debugging — all 3 sources live ✅)
-- **Root cause fixed**: `signal_date = date.today()` falls on Sunday → not in `bdate_range` → all SEC signals land as NaN. Fixed by rolling back to last business day via while-loop dayofweek check.
-- **Freshness gate fixed**: `update_sec_signals` returned stale all-NaN cache immediately (age_days=0 < 90). Fixed check to: only treat cache as fresh if the symbol has ≥1 non-null value AND age < 90 days. Now fetches only symbols missing from cache.
-- **Incremental SEC logic**: `update_sec_signals` now determines `to_fetch` per-symbol (absent from cache OR all-NaN OR stale). Merges new panel into existing via `axis=1` concat + `drop_duplicates(keep="last")`.
-- **Dead code removed**: `fetch_full_text_filing` had two consecutive `accepted_forms = ...` assignments (leftover from prior session). Removed the unreachable first assignment.
-- **Transcript test mocks updated**: `test_fetch_recent_8k_transcripts_returns_records` and `_skips_no_item_2_02` used old EDGAR field format (`biz_location`). Updated to use actual fields (`adsh`, `ciks`, `items`, `file_date`) and 3-call side_effect chain (search → submissions → document).
-- **SEC detail test updated**: `test_update_sec_signals_writes_detail_json` mocked `_get` with old EFTS format. Now mocks `fetch_full_text_filing` and `classify_filing_signal` directly — tests the write behavior, not EDGAR plumbing.
-- **Live data confirmed**: SEC 9/9 equity names, Transcripts 7/9 equity names, Trends 19/19 portfolio symbols. All signals flow to `data_cache/`. VRT strongest SEC signal (+0.65 revenue, +0.55 tone); SNDK weakest (-0.70 risk_trend).
-- 589 → 589 tests (no count change — 3 existing tests updated, none added). 589 passed, 1 skipped.
-- Files: `ascent/data/ingest/sec_filings.py`, `tests/test_altdata_pipeline.py`.
-
-### 2026-05-25 (live alpha reconstruction + orchestrator beta fix)
-- **Live alpha audit**: built `scripts/reconstruct_live_alpha.py` — fetches full Alpaca portfolio history + SPY via yfinance, computes daily and cumulative alpha for every trading day since Apr 1. Writes `logs/live_alpha_history.jsonl` and `logs/live_alpha_summary.json`.
-- **Real alpha picture**: Apr 1–May 22 (37 days): portfolio +5.12%, SPY +13.80%, cumulative alpha **-8.68%**. Realized beta 0.827. Attribution: Apr 1–15 contributed -7.59% (initial defensive book missed tariff relief rally); Apr 16–May 5 book was alpha-positive (+3.60%).
-- **Fix 1 — calm_bull allocation**: raised US equity from 0.60→0.70, macro 0.15→0.10, intl 0.15→0.12, alts 0.10→0.08. Targets beta ~0.90 vs prior ~0.83. Files: `orchestrator/central_intelligence.py`.
-- **Fix 2 — post-blend position cap**: added `_cap_positions()` + `MAX_POSITION_WEIGHT=0.10` enforcement in `merge_agent_outputs()`. Prevents multi-agent overlap pushing any symbol above 10% (EWY had hit 11.5%). Single-pass water-fill; fires after EM cap and before return.
-- 589 passed, 1 skipped throughout.
-
-### 2026-05-25 (weekend mode ✅)
-- **Weekend gate**: `run_all_agents.py` detects `weekday() >= 5` → branches to weekend pipeline. Second run same ISO week prints "Already ran this weekend (date)" and exits. State in `data_cache/weekend_run_state.json`.
-- **`ascent/monitoring/weekend_runner.py`**: Orchestrates 10 jobs sequentially. Each job wrapped in `_run_job()` with try/except + timing log. Per-job `once_per_weekend` flag: ML retrain, factor discovery, self-improve, AI PM research run once; alt-data sweep, debrief, scenario planning, conviction retrain run every time. State tracks completed jobs so second run only re-runs "every run" jobs (~$0.30 vs ~$1.50 first run).
-- **`ascent/monitoring/weekly_debrief.py`**: Haiku post-mortem on week's attribution, AI PM override performance, debate verdicts. Outputs `data_cache/weekly_debrief.json` with `what_worked`, `what_didnt`, `systematic_bias`, `watch_next_week`, `top_risk`. Feeds into Monday's AI PM context.
-- **`ascent/monitoring/scenario_planner.py`**: 5 fixed adversarial scenarios (risk-off shock, regime flip, largest-position blowup, rates spike 50bps, EM selloff) + 1 dynamic from debrief. Sonnet assesses probability + pre-emptive action. Flags anything ≥40% probability with console alert. Outputs `data_cache/scenario_plan.json`.
-- Weekend self-improve uses 20 variants vs weekday 5. ML retrain clears pkl cache + writes GridSearch flag. AI PM research runs across full 901-symbol universe, no trade output.
-- 589 → 604 tests (15 new in `tests/monitoring/test_weekend_mode.py`). 604 passed, 1 skipped.
-
-### 2026-05-25 continued (weekend ↔ weekday wiring ✅)
-- **`rebalance_brief.py`** (weekend→weekday pipe #1): `_load_weekend_context()` reads `weekly_debrief.json`, `weekend_research.json`, `scenario_plan.json` if ≤8 days old. Haiku prompt now includes systematic_bias, top_risk, opportunities, and flagged scenarios. Result dict gains `weekly_debrief`, `weekend_research`, `flagged_scenarios` fields for downstream AI PM.
-- **`agents/ai_pm_agent.py`** (weekend→weekday pipe #2): Added tools #23 `get_scenario_plan` and #24 `get_weekend_research`. `get_scenario_plan` reads `data_cache/scenario_plan.json`, surfaces flagged scenarios with probability + impact + pre-emptive action. `get_weekend_research` reads `data_cache/weekend_research.json`, surfaces top 5 opportunities. Both wired into `_make_executor()` and `AI_PM_TOOLS`. Tool count updated to 24.
-- **`debate/agents.py`** (weekend→weekday pipe #3): `run_devils_advocate()` now loads `data_cache/scenario_plan.json` (if ≤8 days) and appends flagged scenarios to the user prompt alongside Monte Carlo context. Devil's advocate sees actual LLM-assessed probability + impact for weekend stress tests.
-- **`ascent/alpha/ml_sleeve.py`** (weekend→weekday pipe #4): `build_ml_alpha()` checks for `data_cache/ml_retrain_requested.json` flag (written by weekend `_job_ml_retrain()`). If `use_gridsearch=True`, runs `GridSearchCV` over 18 hyperparameter combos before fitting — selects best params automatically. Deletes flag after use so subsequent weekday runs resume normal cache logic.
-- Weekday→weekend direction was already wired: weekend reads from the same JSONL logs weekday writes (attribution, decision_memory, calibration, debate verdicts).
-- 604 passed, 1 skipped throughout.
-- Files: `ascent/monitoring/rebalance_brief.py`, `agents/ai_pm_agent.py`, `debate/agents.py`, `ascent/alpha/ml_sleeve.py`.
-
-### 2026-05-25 continued (weekend pipeline speed — 6 hours → ~30 min ✅)
-- **Root cause**: Google Trends had no freshness gate; 901 symbols × 5.1s = 76 min minimum, up to 6 hours with 429 backoff. Killed after 3.5 hours of real run with 0 data saved.
-- **Google Trends fix** (`ascent/data/ingest/google_trends.py`): Added `_CACHE_FRESHNESS_DAYS=7`, `_stale_symbols()` helper (skips symbols with valid data < 7 days old), `max_seconds` param on `build_trends_panel()` (hard wall-clock cap), `priority_symbols` + `max_minutes=30.0` on `update_trends_signals()` (portfolio symbols always first). Combined effect: skip ~800 fresh symbols, guarantee completion in ≤30 min.
-- **SEC JSON parse fix** (`ascent/data/ingest/sec_filings.py`): `_parse_json_response` replaced `\{[^{}]*\}` regex (fails on nested braces, returns no match when Haiku wraps response in outer object) with depth-tracking brace scanner. Handles any nesting depth correctly. All 21 classify_filing_signal failures in weekend run caused by this.
-- **SEC retry** (`ascent/data/ingest/sec_filings.py`): `classify_filing_signal` Haiku call now retries 3× with 2s/4s backoff before surfacing error. Transient API failures no longer kill entire symbol.
-- **Weekend runner wiring** (`ascent/monitoring/weekend_runner.py`): `_job_altdata_full_sweep` now passes `priority_symbols=portfolio_symbols, max_minutes=30.0` to `update_trends_signals`.
-- 604 passed, 1 skipped (no count change — fixes only, no new test files).
-- Files: `ascent/data/ingest/google_trends.py`, `ascent/data/ingest/sec_filings.py`, `ascent/monitoring/weekend_runner.py`.
-
-### 2026-05-25–26 (Adversarial Intelligence — Phase 5.1 ✅)
-- **Redesign**: Debate layer converted from performative bull/bear theatre into a genuine risk committee. Fires every rebalance (no entropy gate). Makes ONE prioritized weight change before execution with a falsifiable 10-day prediction. Tracks its own intervention accuracy and earns authority based on proven performance.
-- **`debate/adversarial_engine.py`** (new, ~260 lines): 3-layer analysis before agents run. Layer 1 — batched Haiku call generates strongest possible short thesis per position (score 0–1; >0.6 = flagged). Layer 2 — regime-conditional sizing table (`(min,opt,max)` per `(regime, position_type)`; position types: event_momentum|trend|reversion|etf|unknown). Layer 3 — narrative clustering: assigns positions to named buckets (em_equity, us_rates, commodities, etc.) then by sector from profiles.parquet; counts clusters >3% weight as "independent bets"; estimates portfolio impact of regime flip.
-- **`debate/adversarial_authority.py`** (new, ~180 lines): 4 intervention types — adversarial_thesis, regime_sizing, coherence_risk, event_risk. win_rate >70%→4% max change, >50%→2%, <40% after n≥30→suspended. Outcome measured at T+14 calendar days: sym vs SPY, success = sym lagged SPY >1pp. `score_pending_interventions()` runs in weekend calibration job. State in `data_cache/adversarial_authority.json`.
-- **`debate/adversarial_monitor.py`** (new, ~120 lines): Non-rebalance day scan — earnings within 7 days, SEC risk_trend < -0.50, |price move| > 20%. Writes alerts to `data_cache/adversarial_monitor.json`.
-- **`debate/judge.py`** (rewrite): Outputs ONE position change (validated: reduction only, min 0.5pp, min floor 1%, clamped to authority tier). Traditional halt_and_review verdict still fires for severe cases. Extended thinking via Sonnet.
-- **`debate/agents.py`** (modified): Asymmetric data injection — bull gets altdata positives + weak-short positions, bear gets adversarial engine flags + oversized positions, devil's advocate gets coherence analysis.
-- **`debate/debate_runner.py`** (modified): Adversarial engine runs before agents, injects output into `portfolio_state["adversarial_engine"]`. Position changes applied after judge with proportional weight redistribution.
-- **`ascent/execution/debate_gate.py`** (rewrite): Always returns True — removed entropy-based gate that was skipping debate in calm_bull.
-- **`run_all_agents.py`** (modified): Applies ONE position change post-verdict; freed weight redistributed proportionally to all other positions; logs to adversarial_authority. Adversarial monitor called on non-rebalance days.
-- **`ascent/monitoring/weekend_runner.py`** (modified): Added `_job_adversarial_calibration()` (step 6b) — scores pending interventions, prints calibration report. Job count 10→11.
-- **Key gotcha**: `@patch("ascent.llm.client.generate_structured")` is correct patch target for adversarial tests — `generate_structured` is imported INSIDE the function body, not at module level.
+### 2026-05-25 (Adversarial Intelligence — Phase 5.1 ✅)
+- Debate layer redesigned: genuine risk committee, ONE falsifiable change per rebalance, earned authority by intervention type. `adversarial_engine.py`, `adversarial_authority.py`, `adversarial_monitor.py` added. Weekend pipeline sped up from 6 hours → ~30 min (Google Trends freshness gate, SEC JSON brace scanner fix).
+- 604 → 627 tests.
 - 604 → 627 passed, 1 skipped (23 new tests in `tests/test_adversarial_intelligence.py`, 4 updated in `tests/test_debate_gate.py`).
 - Files: `debate/adversarial_engine.py` (new), `debate/adversarial_authority.py` (new), `debate/adversarial_monitor.py` (new), `debate/judge.py`, `debate/agents.py`, `debate/debate_runner.py`, `ascent/execution/debate_gate.py`, `run_all_agents.py`, `ascent/monitoring/weekend_runner.py`, `tests/test_adversarial_intelligence.py` (new), `tests/test_debate_gate.py`.
 
@@ -577,3 +379,13 @@ Python 3.12.13 Homebrew, venv at `.venv/`. Use `.venv/bin/python`. API keys via 
 - **Design principle**: quant is the prior, AI PM is the Bayesian update — only overrides on genuine orthogonal information (text, crowding, coherence). Never on valuation opinion.
 - 627 passing, 1 skipped (unchanged).
 - Files: `agents/ai_pm_agent.py`, `ascent/strategy/conviction_gate.py`, `tests/test_conviction_gate.py`.
+
+### 2026-05-28 (two-phase AI-native architecture ✅)
+- **Root cause of AI PM underperformance**: -3.45% vs quant over 8 shadow days. Single cause: Day 6 (May 26) where WDC/VICR/SATS were cut from 10%→3-4% citing `data_quality`, then rallied hard. Systematic anti-momentum bias = low IC × zero breadth = negative IR.
+- **Two-phase AI PM**: `run_ai_pm_prethesis()` (Sonnet, max 10 tools, before quant) reads macro/SEC/earnings/narratives, forms original thesis with 8-15 named positions and written reasons, seals via `propose_prethesis`. `run_ai_pm(prethesis=...)` (Opus, synthesis) receives sealed thesis + quant validation. Quant confirms → concentrate. Quant neutral → hold. Quant contradicts → defend or stand down. AI is the alpha source; quant is the validator.
+- **New tool `get_crowding_signal`**: momentum trajectory (21d vs 252d decel) + short interest % of float + analyst rec drift. CLEAN/WATCH/OVERCROWDED. Required before any REDUCE.
+- **`momentum_exhaustion` override type**: requires crowding=OVERCROWDED + text signal. `data_quality` has 0.85 friction (no longer auto-approved). Max 2 overrides hard-capped in prompt.
+- **Cost**: Phase 1 Sonnet (~$0.06) + Phase 2 Opus (~$0.34) = ~$0.40/rebalance vs ~$0.27 before (+48%). ~$3/yr extra at 26 rebalances.
+- **GitHub Pages dashboard**: `https://scottdongkhang.github.io/Ascent_Capital`. Hero with animated counters, equity curve vs SPY, drawdown chart, cumulative alpha chart, AI intelligence section (earned authority, allocation doughnut, AI PM decision card, debate accordion with 5 sessions). Auto-updates after every daily run. README has live stats table.
+- 627 passing, 1 skipped.
+- Files: `agents/ai_pm_agent.py`, `run_all_agents.py`, `ascent/strategy/conviction_gate.py`, `tests/test_conviction_gate.py`, `scripts/generate_performance_page.py`, `docs/index.html`, `README.md`, `.gitignore`.

@@ -17,7 +17,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from ascent.llm.client import tool_completion, DEFAULT_MODEL
+from ascent.llm.client import tool_completion, DEFAULT_MODEL, SONNET_MODEL
 
 log = logging.getLogger(__name__)
 
@@ -1382,7 +1382,7 @@ def run_ai_pm_prethesis() -> Optional[AIPreThesis]:
             ),
             tools=PRE_THESIS_TOOLS,
             tool_executor=executor,
-            model=DEFAULT_MODEL,
+            model=SONNET_MODEL,   # Sonnet reads + summarises; Opus reserved for synthesis judgment
             max_tokens=6000,
             max_tool_calls=10,
             use_cache=True,
