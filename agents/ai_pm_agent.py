@@ -312,6 +312,30 @@ AI_PM_TOOLS = [
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
+        "name": "get_crowding_signal",
+        "description": (
+            "Check whether positions are crowded, exhausted, or clean using three orthogonal signals: "
+            "(1) momentum trajectory — is the 21d pace materially below the 252d pace? (deceleration = exhaustion), "
+            "(2) short interest % of float — >15% means informed short sellers are positioned against it, "
+            "(3) analyst consensus drift — recommendation mean >2.5 (scale 1-5) with ≥5 analysts means fading conviction. "
+            "Returns CLEAN / WATCH / OVERCROWDED per symbol. "
+            "REQUIRED before any REDUCE override — do not reduce a position without calling this first. "
+            "OVERCROWDED + one text signal (sec_tone < -0.3 or transcript_sentiment < -0.3) = valid reduce. "
+            "CLEAN = amplify candidate — overweight these, do not reduce on valuation alone."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "symbols": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of ticker symbols to check (max 8 per call)",
+                },
+            },
+            "required": ["symbols"],
+        },
+    },
+    {
         "name": "propose_portfolio",
         "description": "REQUIRED: Submit your final portfolio and investment thesis. Call this to end the research loop.",
         "input_schema": {
@@ -327,8 +351,10 @@ AI_PM_TOOLS = [
                     "description": (
                         "Investment memo. Required keys: market_view, regime_assessment, "
                         "quant_baseline_summary, quant_agreement (list), "
+                        "amplify (list of {symbol, crowding_signal, text_signal, reason} — positions you are overweighting because quant + non-quant signals align), "
                         "quant_overrides (list of {symbol, ai_action, reason, override_type} where "
-                        "override_type ∈ [data_quality, regime_macro, news_event, correlation_risk, valuation]), "
+                        "override_type ∈ [momentum_exhaustion, regime_macro, news_event, correlation_risk, data_quality] "
+                        "— max 2 overrides; data_quality only for confirmed corporate actions), "
                         "position_rationale (dict), key_risks (list), what_could_be_wrong, "
                         "pre_mortem (string: the 30-day loss scenario written before submitting)."
                     ),
@@ -341,73 +367,124 @@ AI_PM_TOOLS = [
 
 _SYSTEM_PROMPT = """You are the portfolio manager of Ascent Capital, a multi-strategy quantitative fund.
 
-══ YOUR ROLE ══
-You are not competing with the quant models at stock picking. You are the judgment layer that catches what systematic models miss. Your edge lives in exactly three places:
+══ THE FUNDAMENTAL LAW (Grinold & Kahn) ══
+Information Ratio = IC × √Breadth.
 
-  1. DATA QUALITY — Momentum from mergers, spin-offs, or index rebalances is noise, not signal. When 252d momentum exceeds 200%, verify the driver is real business performance before carrying the position at full quant weight.
+Your IC (skill) is high only where you have genuine informational advantage over the quant. Your IC is NEGATIVE when you fight momentum signals with valuation logic — the quant has 6 years of OOS evidence it works; you have opinion.
 
-  2. REGIME / MACRO CONTEXT — Quant signals are backward-looking. Your job is to know when the current environment invalidates a historically valid signal: a tariff headwind building in a sector the quant likes, credit stress not yet in equity prices, a yield-curve move changing rate-sensitive names.
+Your only edges are:
+  1. TEXT & NARRATIVE — You can read SEC filings, earnings call tone, insider patterns. The quant cannot.
+  2. CROWDING DETECTION — You can identify when momentum is exhausted (decelerating + high short interest + fading analyst consensus). The quant rides signals until they break.
+  3. COHERENCE — Four quant agents run independently. You see the whole portfolio. Catch hidden factor concentrations and directional contradictions the quant agents cannot see each other.
 
-  3. CROSS-PORTFOLIO COHERENCE — The four quant agents run independently. You see the whole picture. Catch hidden factor concentrations, directional contradictions (long USD + long EM), and crowding risk before they become drawdowns.
+What is NOT your edge:
+  ✗ Valuation. In a momentum regime, high-PE stocks go higher. 60× PE becomes 80× before it reverts. You will be wrong every time you fight this with DCF logic.
+  ✗ "Data uncertainty." Not having an SEC filing for a name is not a data quality issue — it means the signal is unavailable, not that the signal is wrong.
+  ✗ Reducing EXTENDED names without crowding evidence. High 252d momentum IS the signal. It is not a risk flag.
 
-What is NOT your edge: picking better momentum stocks than the quant, valuation calls when your calibration IC is below 0.10, or overriding quant on gut feel.
+══ AMPLIFY FIRST, REDUCE SECOND ══
+Before you think about reducing anything, find your AMPLIFY picks. These are where you MAKE money.
+
+An AMPLIFY pick is a name where:
+  • The quant ranks it high (top quartile)
+  • get_crowding_signal returns CLEAN (momentum intact, shorts low)
+  • At least one text signal confirms: sec_tone > 0, transcript_sentiment > 0, OR earnings_signal positive
+
+For AMPLIFY picks: set weight to 9–10%. Log in thesis.amplify[]. These are your highest-weighted positions. Target 1–2 per rebalance.
+
+If you find no AMPLIFY picks after checking, that is fine — carry quant weights and do not reduce.
+
+══ THE REDUCE PROTOCOL — HARD RULES ══
+Maximum 2 reductions per rebalance. Non-negotiable.
+
+To reduce any position you need ALL THREE of:
+  1. get_crowding_signal returns OVERCROWDED (score ≥ 4 — deceleration + elevated shorts + fading analysts)
+  2. At least one confirming TEXT signal: sec_tone < −0.3 OR transcript_sentiment < −0.3
+  3. The conviction gate does not block it
+
+If you have only 1 or 2 of these three, carry the position at quant weight. Do not reduce.
+
+Override sizing:
+  • Soft (1-2 signals): reduce 25% max (e.g. 8% → 6%)
+  • Hard (all 3 confirmed): reduce 40% max (e.g. 8% → 5%)
+  • Floor: 4% minimum — never reduce below this
+  • Never make 5 overrides. Each one beyond 2 is destroying your information ratio.
+
+Override types:
+  momentum_exhaustion — crowding confirmed + text signal confirms decay (requires all 3 conditions above)
+  correlation_risk    — two positions that will move identically in a drawdown (hidden concentration)
+  news_event          — imminent earnings, guidance cut, M&A that changes the thesis (must be within 10 days)
+  regime_macro        — valid signal, but macro environment structurally invalidates it (yield curve, credit spread)
+  data_quality        — quant momentum is driven by a CONFIRMED CORPORATE ACTION: merger announcement date, spin-off, index addition. NOT for valuation uncertainty or missing data.
 
 ══ PHASE 1 — CONTEXT ══
-Required tools: get_rebalance_brief, get_regime_state, get_macro_data, get_regime_memory (pass current regime label). Optionally call get_alpha_wedge to see your recent track record vs the quant baseline.
+Required: get_rebalance_brief, get_regime_state, get_macro_data, get_regime_memory.
+Optional: get_alpha_wedge (see recent AI vs quant track record), get_calibration_report (check if you've been right).
 
-After completing Phase 1 tools, WRITE before any Phase 2 tool:
+After Phase 1 tools, WRITE:
 
-  MACRO THESIS: What does the current regime + macro environment mean for the next 21 trading days? Which factor tilts should be rewarded? What is your expected return range, calibrated against historical regime episodes from get_regime_memory?
+  MACRO THESIS: What factor tilts does this regime reward? What is your edge THIS rebalance?
+  SELF-ASSESSMENT: What has your AI PM track record been? Are you adding or subtracting value?
 
 ══ PHASE 2 — QUANT BASELINE ══
-Required tools: run_quant_agent for all four agents (us_equities, macro, international, alternatives).
+Required: run_quant_agent for all four agents. Then call get_position_momentum on ALL combined names.
 
-After Phase 2 tools complete, call get_position_momentum on ALL names in the combined quant baseline. Flag any with 252d momentum > 200% as ⚠️ EXTENDED. EXTENDED names are your highest-priority Phase 3 targets — they need a data_quality or regime_macro justification to stay at full quant weight.
+EXTENDED names (252d momentum > 200%) are the quant's HIGHEST CONVICTION picks. They have the most alpha signal behind them. Do not target them for reduction — verify if they are crowded.
 
-Then WRITE before any Phase 3 tool:
+After Phase 2, WRITE:
 
   QUANT ASSESSMENT:
-  • EXTENDED names flagged: list them and your initial hypothesis on whether the momentum is real
-  • Agreement: which quant picks fit your Macro Thesis and why
-  • Hypotheses to test in Phase 3: 2-3 specific, falsifiable hypotheses (not "check SATS" — say "SATS 252d momentum is +521%; I want to confirm this reflects real earnings growth not a corporate action artifact")
-  • Biggest quant risk: single largest factor or concentration risk in the combined baseline
+  • AMPLIFY candidates: 2-3 names where quant signal is strongest AND thesis aligns
+  • EXTENDED names to crowding-check: list them (to check in Phase 3, not to reduce)
+  • Biggest concentration risk: any hidden factor or sector clustering
+  • Falsifiable hypotheses for Phase 3: specific claims, not vague concerns
 
 ══ PHASE 3 — SIGNAL RESEARCH ══
-Use up to 6 signal tools. Start with EXTENDED names. For each override you are considering:
-1. Call query_decision_history(override_type, regime) — check your historical win rate for this type of call.
-2. Gather at least one confirming signal AND one that could refute your view.
-3. Call check_override_conviction(override_type, regime) — get the go/no-go recommendation.
-4. Apply the size multiplier from the conviction gate to your position sizing.
+Step 1 — AMPLIFY SCAN (required):
+  Call get_crowding_signal on your top 3-5 quant picks.
+  CLEAN names + positive text signal = AMPLIFY candidate → overweight to 9-10%.
 
-If the conviction gate blocks an override, you need a new non-quant piece of evidence to proceed.
+Step 2 — CROWDING CHECK (before any reduce):
+  Call get_crowding_signal on any EXTENDED name you are considering reducing.
+  If result is not OVERCROWDED → carry at quant weight. Stop.
+  If OVERCROWDED → proceed to text confirmation (sec_tone or transcript_sentiment).
 
-══ PHASE 4 — DELIBERATION + SUBMIT ══
-Before calling propose_portfolio, WRITE:
+Step 3 — CONVICTION GATE (for each proposed reduce):
+  Call query_decision_history(override_type, regime) → check historical win rate.
+  Call check_override_conviction(override_type, regime) → get go/no-go.
+  If blocked → drop the reduce. Accept quant weight.
 
-  PRE-MORTEM: "It is 30 days from now and this portfolio lost 7%. What is the single most likely cause?" Then: "What would cause three of my top-5 positions to underperform simultaneously?" If your answers reveal unacceptable concentration, adjust sizing now.
+Max 6 signal tools total in Phase 3. Prioritize AMPLIFY scan over reduce research.
 
-  COHERENCE CHECK: Long USD + long EM? Long volatility + long high-beta? Two commodity names in top-5 that move together? Justify or remove.
+══ PHASE 4 — DELIBERATE + SUBMIT ══
+Before propose_portfolio, WRITE:
 
-  OVERRIDE SUMMARY: List each override with its type:
-    data_quality    — quant signal is based on bad data (always justified)
-    regime_macro    — valid signal, wrong macro context
-    news_event      — recent earnings / guidance / M&A changes the thesis
-    correlation_risk — positions correlate dangerously in a drawdown
-    valuation       — overvalued name [BLOCKED when calibration IC < 0.10]
+  PRE-MORTEM: It is 30 days from now. This portfolio lost 8%. What was the single cause?
+  What would make 3 of my top-5 positions move against me simultaneously?
 
-Then call propose_portfolio. thesis.pre_mortem must contain your answer above.
+  AMPLIFY SUMMARY: List each AMPLIFY pick — crowding signal + confirming text signal.
+  REDUCE SUMMARY: List each reduction — all 3 conditions confirmed (crowding + text + gate).
+  COHERENCE: Any directional contradictions? Long USD + long EM? Two commodity names in top-5?
+
+Then call propose_portfolio. thesis must include:
+  - amplify[] — your AMPLIFY picks with evidence
+  - quant_overrides[] — reductions with all 3 conditions documented (max 2)
+  - pre_mortem — written above
 
 ══ SIZING DISCIPLINE ══
-  High conviction (macro + quant + confirming signal, no refuting signal): 8–10%
-  Medium conviction (quant + thesis fit, limited signal data): 5–7%
-  Quant-agreed, no independent view: 3–5%
-  No position above 10% without a one-sentence non-momentum reason.
+  AMPLIFY (crowding=CLEAN + text confirms): 9–10%
+  High conviction (quant + thesis, limited signal): 7–8%
+  Standard quant-agreed: 5–7%
+  Quant-agreed, no view: 3–5%
+  Reduced position (post-override floor): 4–6%
 
 ══ RULES ══
-- You MUST call propose_portfolio before finishing.
-- Target 12–20 positions. Weights will be normalized; use relative sizing.
-- For every quant override, include override_type in thesis.quant_overrides and cite the signal data.
-- If data is unavailable for a symbol, say so — do not fabricate signals.
+- Call propose_portfolio before finishing. Always.
+- 12–20 positions. Weights normalized; use relative sizing.
+- No reduce without calling get_crowding_signal first.
+- Max 2 quant_overrides. Every override beyond 2 is negative IR.
+- data_quality requires a named corporate action. "No SEC data available" is not data quality.
+- Fabricating signals is worse than having no view. If data is unavailable, say so and carry quant weight.
 """
 
 
@@ -885,6 +962,109 @@ def _tool_propose_portfolio(inputs: dict, result_store: list) -> str:
 
 # ── Tool dispatcher ────────────────────────────────────────────────────────────
 
+def _tool_get_crowding_signal(inputs: dict) -> str:
+    """
+    Crowding / momentum-exhaustion signal.
+    Combines momentum trajectory, short interest, and analyst consensus drift.
+    This is the gating check before any REDUCE override — do not reduce without it.
+    """
+    import yfinance as yf
+
+    symbols = inputs.get("symbols", [])
+    if isinstance(symbols, str):
+        symbols = [s.strip() for s in symbols.split(",")]
+    symbols = [s.upper() for s in symbols[:8]]
+
+    results = {}
+    for sym in symbols:
+        try:
+            ticker = yf.Ticker(sym)
+            info   = ticker.info or {}
+            hist   = ticker.history(period="14mo", auto_adjust=True)
+
+            row: dict = {}
+
+            # ── Momentum trajectory ──────────────────────────────────────────
+            if len(hist) >= 252:
+                c = hist["Close"]
+                m252 = (c.iloc[-1] / c.iloc[-252] - 1) * 100
+                m63  = (c.iloc[-1] / c.iloc[-63]  - 1) * 100
+                m21  = (c.iloc[-1] / c.iloc[-21]  - 1) * 100
+                # Expected 21d return if 252d trend held steady
+                expected_21d = m252 / 12.0
+                decel_ratio  = m21 / (expected_21d + 1e-6)
+                row.update(mom_252d=round(m252, 1), mom_63d=round(m63, 1),
+                           mom_21d=round(m21, 1), decelerating=decel_ratio < 0.4)
+            else:
+                row["decelerating"] = None
+
+            # ── Short interest ───────────────────────────────────────────────
+            sf = info.get("shortPercentOfFloat")
+            row["short_float_pct"] = round(sf * 100, 1) if sf is not None else None
+
+            # ── Analyst consensus ────────────────────────────────────────────
+            rec = info.get("recommendationMean")          # 1=Strong Buy, 5=Strong Sell
+            n_a = info.get("numberOfAnalystOpinions", 0)
+            row["rec_mean"]   = round(rec, 2) if rec else None
+            row["n_analysts"] = n_a
+
+            # ── Score & signal ───────────────────────────────────────────────
+            score, flags = 0, []
+
+            if row.get("decelerating"):
+                score += 2
+                m21v = row.get("mom_21d", 0)
+                exp  = row.get("mom_252d", 0) / 12
+                flags.append(f"momentum decelerating: 21d {m21v:+.0f}% vs expected {exp:+.1f}%/period")
+
+            sf_val = row.get("short_float_pct")
+            if sf_val and sf_val > 15:
+                score += 2
+                flags.append(f"short interest {sf_val}% of float — informed bears present")
+            elif sf_val and sf_val > 8:
+                score += 1
+                flags.append(f"short interest {sf_val}% of float — elevated")
+
+            if rec and n_a >= 5:
+                if rec > 2.5:
+                    score += 2
+                    flags.append(f"analyst consensus fading ({rec:.1f}/5.0, {n_a} analysts)")
+                elif rec > 2.0:
+                    score += 1
+                    flags.append(f"analyst consensus mixed ({rec:.1f}/5.0, {n_a} analysts)")
+
+            signal = "OVERCROWDED" if score >= 4 else ("WATCH" if score >= 2 else "CLEAN")
+            row.update(signal=signal, score=score, flags=flags or ["no crowding signals"])
+            results[sym] = row
+
+        except Exception as exc:
+            results[sym] = {"signal": "UNKNOWN", "error": str(exc)}
+
+    lines = ["CROWDING SIGNAL REPORT", "=" * 44]
+    for sym, r in results.items():
+        sig = r.get("signal", "UNKNOWN")
+        marker = {"OVERCROWDED": "🔴", "WATCH": "🟡", "CLEAN": "🟢"}.get(sig, "⚪")
+        lines.append(f"\n{marker} {sym}: {sig} (score {r.get('score', '?')}/6)")
+        if "mom_252d" in r:
+            lines.append(f"   Momentum  252d={r['mom_252d']:+.1f}%  63d={r['mom_63d']:+.1f}%  21d={r['mom_21d']:+.1f}%")
+            lines.append(f"   Decelerating: {r.get('decelerating')}")
+        if r.get("short_float_pct") is not None:
+            lines.append(f"   Short interest: {r['short_float_pct']}% of float")
+        if r.get("rec_mean") is not None:
+            lines.append(f"   Analyst rec:    {r['rec_mean']}/5.0  ({r.get('n_analysts', 0)} analysts)")
+        for f in r.get("flags", []):
+            lines.append(f"   ⚠  {f}")
+
+    lines += [
+        "",
+        "Signal guide:",
+        "  🟢 CLEAN       — momentum intact, shorts low, analysts bullish → AMPLIFY candidate",
+        "  🟡 WATCH       — 1-2 mild signals → hold at quant weight, no reduce without text confirmation",
+        "  🔴 OVERCROWDED — 2+ signals → valid reduce IF a text signal also confirms (sec_tone or transcript)",
+    ]
+    return "\n".join(lines)
+
+
 def _make_executor(result_store: list, precomputed: dict | None = None):
     from debate.agent_tools import (
         get_var_estimate, get_sector_concentration, get_position_momentum,
@@ -923,6 +1103,7 @@ def _make_executor(result_store: list, precomputed: dict | None = None):
         "check_override_conviction":    _tool_check_override_conviction,
         "get_scenario_plan":            _tool_get_scenario_plan,
         "get_weekend_research":         _tool_get_weekend_research,
+        "get_crowding_signal":          _tool_get_crowding_signal,
         "propose_portfolio":            lambda i: _tool_propose_portfolio(i, result_store),
     }
 

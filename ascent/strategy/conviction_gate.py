@@ -27,7 +27,9 @@ REDUCE_WIN_RATE = 0.50   # reduce size if win_rate between BLOCK and REDUCE
 STRONG_WIN_RATE = 0.60   # full conviction above this
 
 _MODEL_PATH = Path("data_cache/conviction_model.pkl")
-_OVERRIDE_TYPES = ["data_quality", "regime_macro", "news_event", "correlation_risk", "valuation"]
+# momentum_exhaustion replaces valuation — requires crowding evidence before reaching the gate
+_OVERRIDE_TYPES = ["momentum_exhaustion", "data_quality", "regime_macro", "news_event",
+                   "correlation_risk", "valuation"]
 _REGIMES       = ["calm_bull", "stressed", "crisis", "neutral", "uncertain"]
 
 _model_cache: dict = {"model": None, "n_trained": 0}
@@ -107,8 +109,8 @@ def evaluate(
     Evaluate whether the AI PM should proceed with an override of the given type.
 
     Args:
-        override_type:    One of data_quality / regime_macro / news_event /
-                          correlation_risk / valuation
+        override_type:    One of momentum_exhaustion / data_quality / regime_macro /
+                          news_event / correlation_risk / valuation
         regime:           Current regime label (e.g. 'calm_bull')
         calibration_ic:   Spearman IC from calibration tracker (optional)
         log_path:         Path to decision_memory.jsonl (uses default if None)
@@ -168,28 +170,68 @@ def evaluate(
                     )
             # model not confident enough — fall through to rules
 
-    # ── Existing rules-based logic (unchanged) ────────────────────────────────
-    # data_quality and correlation_risk are always approved — these are the AI PM's
-    # clearest edges and hardest to have bad historical track records on
-    if override_type in ("data_quality", "correlation_risk", "news_event"):
+    # ── Rules-based logic ─────────────────────────────────────────────────────
+    # correlation_risk and news_event are structural edges — approved, no historical bar needed.
+    # news_event must be within 10 days to be credible (enforced by prompt, not here).
+    if override_type in ("correlation_risk", "news_event"):
         return GateResult(
             proceed=True, size_multiplier=1.0, confidence="proceed",
-            reason=f"{override_type} overrides are always approved — structural AI PM edge",
+            reason=f"{override_type} overrides approved — structural AI PM edge",
             n_cases=n, win_rate=wr,
         )
 
-    # valuation overrides: require calibration IC AND strong historical win rate
-    if override_type == "valuation":
-        if calibration_ic is not None and calibration_ic < 0.10:
+    # data_quality: only approved when the AI PM cites a confirmed corporate action.
+    # We cannot inspect the text here, so we apply a 0.85 multiplier as a friction cost —
+    # the AI PM absorbs a small penalty unless historical track record is strong.
+    if override_type == "data_quality":
+        if n >= MIN_BLOCK_CASES and wr is not None and wr >= STRONG_WIN_RATE:
             return GateResult(
-                proceed=False, size_multiplier=0.0, confidence="block",
-                reason=f"Valuation overrides blocked: calibration IC={calibration_ic:.3f} < 0.10 threshold",
+                proceed=True, size_multiplier=1.0, confidence="strong",
+                reason=f"data_quality: strong track record {wr:.0%} over {n} cases",
                 n_cases=n, win_rate=wr,
             )
         if n >= MIN_BLOCK_CASES and wr is not None and wr < BLOCK_WIN_RATE:
             return GateResult(
                 proceed=False, size_multiplier=0.0, confidence="block",
-                reason=f"Valuation overrides blocked: historical win rate {wr:.0%} across {n} cases",
+                reason=f"data_quality overrides blocked: win rate {wr:.0%} — review what counts as a real corporate action",
+                n_cases=n, win_rate=wr,
+            )
+        return GateResult(
+            proceed=True, size_multiplier=0.85, confidence="caution",
+            reason=f"data_quality: {n} cases, building track record — 15% size friction applied",
+            n_cases=n, win_rate=wr,
+        )
+
+    # momentum_exhaustion: requires crowding evidence to reach the gate at all (enforced by prompt).
+    # Here we apply the same calibration + win-rate rules as other types.
+    if override_type == "momentum_exhaustion":
+        if calibration_ic is not None and calibration_ic < 0.05:
+            return GateResult(
+                proceed=False, size_multiplier=0.0, confidence="block",
+                reason=f"momentum_exhaustion blocked: calibration IC={calibration_ic:.3f} — your signal is noise",
+                n_cases=n, win_rate=wr,
+            )
+        # If we have data showing this type consistently fails, block it
+        if n >= MIN_BLOCK_CASES and wr is not None and wr < BLOCK_WIN_RATE:
+            return GateResult(
+                proceed=False, size_multiplier=0.0, confidence="block",
+                reason=f"momentum_exhaustion blocked: {wr:.0%} win rate over {n} cases",
+                n_cases=n, win_rate=wr,
+            )
+
+    # valuation: blocked in all regimes unless both calibration IC and track record are strong.
+    # This type should rarely be submitted — the prompt now requires crowding evidence instead.
+    if override_type == "valuation":
+        if calibration_ic is not None and calibration_ic < 0.10:
+            return GateResult(
+                proceed=False, size_multiplier=0.0, confidence="block",
+                reason=f"Valuation overrides blocked: calibration IC={calibration_ic:.3f} < 0.10. Use momentum_exhaustion type with crowding evidence instead.",
+                n_cases=n, win_rate=wr,
+            )
+        if n >= MIN_BLOCK_CASES and wr is not None and wr < BLOCK_WIN_RATE:
+            return GateResult(
+                proceed=False, size_multiplier=0.0, confidence="block",
+                reason=f"Valuation overrides blocked: {wr:.0%} win rate across {n} cases. Use momentum_exhaustion type with crowding evidence instead.",
                 n_cases=n, win_rate=wr,
             )
 

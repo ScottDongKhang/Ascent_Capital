@@ -33,13 +33,15 @@ def _make_record(i, override_type, regime, wedge, sec_tone=None, trends_directio
     }
 
 
-def test_data_quality_always_proceeds(tmp_path):
+def test_data_quality_proceeds_with_friction(tmp_path):
+    # data_quality no longer auto-approves at 1.0 — it carries a 15% friction cost
+    # when n_cases < MIN_BLOCK_CASES, to discourage misuse as a valuation backdoor.
     from ascent.strategy.conviction_gate import evaluate
     log_path = _write_memory_log(tmp_path, [])
     result = evaluate("data_quality", "calm_bull", log_path=log_path)
     assert result.proceed is True
-    assert result.size_multiplier == 1.0
-    assert result.confidence == "proceed"
+    assert result.size_multiplier == 0.85
+    assert result.confidence == "caution"
 
 
 def test_news_event_always_proceeds(tmp_path):
