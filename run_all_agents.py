@@ -23,7 +23,7 @@ load_dotenv()
 from ascent.data.store.parquet import has_data, load_parquet
 from ascent.portfolio.optimizer import SectorDataError
 
-from agents.ai_pm_agent import run_ai_pm, AIPMResult
+from agents.ai_pm_agent import run_ai_pm, run_ai_pm_prethesis, AIPMResult, AIPreThesis
 from ascent.risk.pm_risk_validator import validate as validate_pm_proposal
 from memory.regime_memory import log_episode, update_outcomes
 from ascent.strategy.earned_authority import blend as authority_blend, update_authority, get_state as get_authority_state
@@ -898,14 +898,35 @@ def main():
         except Exception as _rb_e:
             print(f"[RebalanceBrief] Generation failed: {_rb_e}")
 
+    # ── AI PM Phase 1: Pre-thesis (before quant agents on rebalance days) ────────
+    # AI reads broadly and forms original investment thesis BEFORE seeing quant rankings.
+    # This makes the fund genuinely AI-native: AI generates the thesis, quant validates it.
+    _ai_prethesis: AIPreThesis | None = None
+    if is_rebalance:
+        try:
+            print("[Runner] AI PM Phase 1 — forming original thesis before quant runs...")
+            _ai_prethesis = run_ai_pm_prethesis()
+            if _ai_prethesis:
+                syms = ", ".join(_ai_prethesis.conviction_symbols[:6])
+                print(f"[Runner] Pre-thesis sealed: {len(_ai_prethesis.high_conviction_names)} "
+                      f"conviction names ({syms}...)")
+            else:
+                print("[Runner] Pre-thesis returned None — synthesis will use standard mode")
+        except Exception as _pt_e:
+            print(f"[Runner] Pre-thesis failed ({_pt_e}) — continuing in standard mode")
+
     # ── AI PM Agent (rebalance days only — authority/calibration are rebalance-gated) ──
     _quant_weights_snapshot = dict(merged_weights)  # capture pure quant before any AI PM blend
     if not is_rebalance:
         print("[Runner] AI PM skipped — non-rebalance day.")
     else:
         try:
-            print("[Runner] Running AI PM agent...")
-            ai_pm_result = run_ai_pm(quant_outputs=agent_outputs, merged_weights=merged_weights)
+            print("[Runner] AI PM Phase 2 — synthesising pre-thesis with quant validation...")
+            ai_pm_result = run_ai_pm(
+                quant_outputs=agent_outputs,
+                merged_weights=merged_weights,
+                prethesis=_ai_prethesis,
+            )
 
             ok = False
             violations = []
