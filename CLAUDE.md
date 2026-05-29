@@ -566,3 +566,14 @@ Python 3.12.13 Homebrew, venv at `.venv/`. Use `.venv/bin/python`. API keys via 
 - **Accuracy fixes**: Apr 12 verdict (garbage test entry, reasoning="ok") excluded. May 27 confirmed as Rebalance #4 (in rebalance_calendar.csv). Debate-only sessions (Apr 4/5/6) labeled correctly — no verdict badge, no position count. Sharpe (2.919) shown with ±2.5 SE caveat and walk-forward OOS reference.
 - **Key gotcha**: web scraper confused Event Timeline with Debate Accordion — actual accordion has correct 5 entries (Apr 4, 5, 6, 15, May 27).
 - Files: `scripts/generate_performance_page.py` (new), `docs/index.html` (new), `docs/.nojekyll` (new), `README.md`, `run_all_agents.py`, `.gitignore`.
+
+### 2026-05-28 (AI PM redesign — amplify-first, crowding-gated ✅)
+- **Root cause of underperformance diagnosed**: AI PM was -3.45% vs quant over 8 shadow days. Single cause: Day 6 (May 26, post-Memorial Day rally) where AI had cut WDC/VICR/SATS from 10% → 3-4% citing valuation/data_quality, and all three ran hard. Systematic anti-momentum bias — applying DCF logic in a momentum regime. 5 overrides per rebalance all correlated = low IC × zero effective breadth = negative IR.
+- **New tool `get_crowding_signal`** (`agents/ai_pm_agent.py`): combines momentum trajectory (21d vs 252d deceleration), short interest % of float (>15% = informed bears), analyst consensus drift (rec_mean >2.5). Returns CLEAN / WATCH / OVERCROWDED per symbol. Required before any REDUCE override.
+- **Rewritten `_SYSTEM_PROMPT`**: Fundamental Law framing (IR = IC × √Breadth). AMPLIFY FIRST protocol — find 1-2 names where quant + crowding=CLEAN + text signal agree, overweight to 9-10%. REDUCE PROTOCOL: max 2 per rebalance, requires crowding=OVERCROWDED + text confirmation + gate approval. EXTENDED names (>200% mom) are the quant's highest conviction, not override targets.
+- **`momentum_exhaustion` override type** added — the correct way to reduce a crowded momentum name. Replaces `valuation` abuse. `data_quality` now has 0.85 friction cost (was auto-approved at 1.0) and is blocked if win rate <35% over 8+ cases.
+- **`conviction_gate.py`**: added `momentum_exhaustion` to `_OVERRIDE_TYPES`. `valuation` gate now redirects to `momentum_exhaustion` in block message. `correlation_risk` and `news_event` remain structurally approved.
+- **`propose_portfolio` schema updated**: added `amplify[]` list alongside `quant_overrides[]`.
+- **Design principle**: quant is the prior, AI PM is the Bayesian update — only overrides on genuine orthogonal information (text, crowding, coherence). Never on valuation opinion.
+- 627 passing, 1 skipped (unchanged).
+- Files: `agents/ai_pm_agent.py`, `ascent/strategy/conviction_gate.py`, `tests/test_conviction_gate.py`.
