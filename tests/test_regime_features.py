@@ -41,6 +41,7 @@ def test_credit_spread_feature_built_when_hyg_lqd_present():
 def _macro_panel(n=300):
     """Simulate a wide FRED macro panel keyed by series_id (as main.py pivots it)."""
     idx = pd.bdate_range(end="2026-04-18", periods=n)
+    n = len(idx)  # bdate_range(end=, periods=) can return n-1 — match the actual index
     np.random.seed(11)
     return pd.DataFrame({
         "DGS10":        np.random.uniform(3.5, 4.5, n),
