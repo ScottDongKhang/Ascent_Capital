@@ -464,20 +464,24 @@ def _thesis_html(thesis: dict) -> str:
 
 
 def _debate_html(verdicts: list) -> str:
-    items = [v for v in verdicts if v.get("type") in ("rebalance",) and v.get("args", {}).get("bull")]
+    # Include any session (rebalance or debate-only) that has real argument text
+    items = [v for v in verdicts if len(v.get("args", {}).get("bull", "")) > 50]
     if not items:
         return '<p class="empty">No debate records with full argument data yet.</p>'
     html = ""
     for ev in reversed(items):
-        args    = ev.get("args", {})
-        verdict = ev.get("verdict","proceed")
-        color   = VERDICT_COLORS.get(verdict, "#8b949e")
-        vname   = verdict.replace("_"," ").title()
-        regime  = ev.get("regime","").replace("RegimeLabel.","").replace("_"," ")
-        n_pos   = ev.get("n_pos","?")
-        risks   = ev.get("risks",[])
-        outcome = ev.get("outcome")
-        oc_html = ""
+        args     = ev.get("args", {})
+        ev_type  = ev.get("type", "rebalance")
+        verdict  = ev.get("verdict")
+        is_exec  = ev_type == "rebalance"
+        color    = VERDICT_COLORS.get(verdict, "#6e7681") if is_exec else "#6e7681"
+        vname    = (verdict or "no orders").replace("_"," ").title()
+        regime   = ev.get("regime","").replace("RegimeLabel.","").replace("_"," ")
+        n_pos    = ev.get("n_pos","?")
+        risks    = ev.get("risks",[])
+        outcome  = ev.get("outcome")
+        exec_tag = "" if is_exec else '<span style="font-size:10px;color:#6e7681;background:#21262d;padding:1px 6px;border-radius:4px">debate only · no orders</span>'
+        oc_html  = ""
         if outcome is not None:
             oc = outcome * 100
             oc_html = f'<span class="oc-pill" style="color:{"#3fb950" if oc>=0 else "#f85149"}">14d outcome: {"+" if oc>=0 else ""}{oc:.2f}%</span>'
@@ -492,6 +496,7 @@ def _debate_html(verdicts: list) -> str:
   <summary class="debate-summary">
     <span class="di-date">{ev['date']}</span>
     <span class="di-verdict" style="border-color:{color};color:{color}">{vname}</span>
+    {exec_tag}
     <span class="di-meta">{n_pos} positions · {regime}</span>
     {oc_html}
     <span class="di-caret">▸</span>
