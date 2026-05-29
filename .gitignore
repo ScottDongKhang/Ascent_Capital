@@ -12,3 +12,6 @@ build/
 .streamlit/secrets.toml
 logs/
 execution/
+dashboard/*.json
+memory/*.jsonl
+outputs/scenarios/
