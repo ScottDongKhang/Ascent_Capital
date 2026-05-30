@@ -15,3 +15,4 @@ execution/
 dashboard/*.json
 memory/*.jsonl
 outputs/scenarios/
+.superpowers/
