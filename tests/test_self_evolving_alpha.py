@@ -90,7 +90,8 @@ def test_stack_falls_back_to_global_for_unknown_regime(tmp_path, monkeypatch):
     import ascent.alpha.stack as stack_mod
     importlib.reload(stack_mod)
 
-    loaded = stack_mod._load_active_alpha_weights(regime="euphoric")
+    # Use a truly unknown regime name (euphoric/uncertain are now in DEFAULT_ALPHA_WEIGHTS_BY_REGIME)
+    loaded = stack_mod._load_active_alpha_weights(regime="alien_regime")
     assert abs(loaded.get("trend", 0) - 0.70) < 0.001
 
 

@@ -184,3 +184,58 @@ def test_feature_builder_accepts_fundamentals_df():
     sig = inspect.signature(FeatureBuilder.__init__)
     assert "fundamentals_df" in sig.parameters, \
         "FeatureBuilder.__init__ must accept fundamentals_df parameter"
+
+
+# ── Task 3 new tests ────────────────────────────────────────────────────────────
+
+import json
+
+
+def test_calm_bull_zeroes_fundamental():
+    from ascent.alpha.stack import _load_active_alpha_weights
+    weights = _load_active_alpha_weights(regime="calm_bull")
+    assert weights["fundamental"] == 0.0
+    assert weights["trend"] > 0.38
+
+
+def test_stressed_keeps_fundamental():
+    from ascent.alpha.stack import _load_active_alpha_weights
+    weights = _load_active_alpha_weights(regime="stressed")
+    assert weights["fundamental"] > 0.0
+
+
+def test_ic_gate_zeroes_negative_sleeve(tmp_path):
+    from ascent.alpha.stack import _get_gated_weights, IC_GATE_THRESHOLD
+    ic_log = tmp_path / "sleeve_ic_log.jsonl"
+    lines = []
+    for i in range(5):
+        entry = {
+            "date": f"2026-05-{20+i:02d}",
+            "sleeves": {
+                "fundamental": {"mean_ic": -0.015, "t_stat": -3.5, "n": 900},
+                "trend":       {"mean_ic":  0.016, "t_stat":  3.8, "n": 900},
+            }
+        }
+        lines.append(json.dumps(entry))
+    ic_log.write_text("\n".join(lines) + "\n")
+
+    base = {"fundamental": 0.05, "trend": 0.38, "meanrev": 0.05}
+    result = _get_gated_weights(base, ic_log_path=str(ic_log))
+    assert result["fundamental"] == 0.0
+    assert result["trend"] > 0.38
+
+
+def test_ic_gate_preserves_positive_sleeve(tmp_path):
+    from ascent.alpha.stack import _get_gated_weights
+    ic_log = tmp_path / "sleeve_ic_log.jsonl"
+    lines = []
+    for i in range(5):
+        entry = {
+            "date": f"2026-05-{20+i:02d}",
+            "sleeves": {"fundamental": {"mean_ic": 0.01, "t_stat": 2.1, "n": 900}}
+        }
+        lines.append(json.dumps(entry))
+    ic_log.write_text("\n".join(lines) + "\n")
+    base = {"fundamental": 0.05, "trend": 0.38}
+    result = _get_gated_weights(base, ic_log_path=str(ic_log))
+    assert result["fundamental"] == pytest.approx(0.05)

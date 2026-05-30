@@ -30,27 +30,131 @@ DEFAULT_ALPHA_WEIGHTS = {
     "narrative":       0.03,   # activate narrative alpha
 }
 
+IC_GATE_THRESHOLD = -0.010  # auto-zero any sleeve with 5-day rolling mean IC below this
+
+DEFAULT_ALPHA_WEIGHTS_BY_REGIME = {
+    "calm_bull": {
+        **DEFAULT_ALPHA_WEIGHTS,
+        "fundamental": 0.00,
+        "trend":       0.43,
+    },
+    "stressed": {
+        **DEFAULT_ALPHA_WEIGHTS,
+        "fundamental": 0.08,
+        "trend":       0.35,
+    },
+    "crisis": {
+        **DEFAULT_ALPHA_WEIGHTS,
+        "fundamental": 0.08,
+        "trend":       0.30,
+        "volatility":  0.10,
+    },
+    "euphoric": {
+        **DEFAULT_ALPHA_WEIGHTS,
+        "fundamental": 0.00,
+        "trend":       0.43,
+    },
+    "uncertain": {
+        **DEFAULT_ALPHA_WEIGHTS,
+    },
+}
+
+
 def _load_active_alpha_weights(regime: str = None) -> dict:
     import json as _json
     from pathlib import Path as _Path
 
     config_path = _Path("data_cache/active_alpha_config.json")
-    if not config_path.exists():
-        return DEFAULT_ALPHA_WEIGHTS.copy()
+    config_regime_weights = None
+    config_global_weights = None
+    if config_path.exists():
+        try:
+            config = _json.loads(config_path.read_text())
+            if regime:
+                rw = config.get("by_regime", {}).get(str(regime).lower())
+                if rw and isinstance(rw, dict):
+                    config_regime_weights = {k: float(v) for k, v in rw.items()}
+            gw = config.get("global")
+            if gw and isinstance(gw, dict):
+                config_global_weights = {k: float(v) for k, v in gw.items()}
+        except Exception as exc:
+            log.warning("_load_active_alpha_weights: failed to load config (%s) — using defaults", exc)
 
-    try:
-        config = _json.loads(config_path.read_text())
-        if regime:
-            regime_weights = config.get("by_regime", {}).get(str(regime).lower())
-            if regime_weights and isinstance(regime_weights, dict):
-                return {k: float(v) for k, v in regime_weights.items()}
-        global_weights = config.get("global")
-        if global_weights and isinstance(global_weights, dict):
-            return {k: float(v) for k, v in global_weights.items()}
-    except Exception as exc:
-        log.warning("_load_active_alpha_weights: failed to load config (%s) — using defaults", exc)
-
+    # Priority: config by_regime → DEFAULT_ALPHA_WEIGHTS_BY_REGIME → config global → flat default
+    if config_regime_weights is not None:
+        return config_regime_weights
+    if regime:
+        regime_key = str(regime).lower()
+        if regime_key in DEFAULT_ALPHA_WEIGHTS_BY_REGIME:
+            return DEFAULT_ALPHA_WEIGHTS_BY_REGIME[regime_key].copy()
+    if config_global_weights is not None:
+        return config_global_weights
     return DEFAULT_ALPHA_WEIGHTS.copy()
+
+
+def _get_gated_weights(
+    alpha_weights: dict,
+    ic_log_path: str = "logs/sleeve_ic_log.jsonl",
+    window: int = 5,
+) -> dict:
+    """
+    Read last `window` unique-date entries from sleeve_ic_log.jsonl.
+    Zero out any sleeve whose rolling mean IC < IC_GATE_THRESHOLD.
+    Freed weight redistributed to trend.
+    """
+    import json as _json
+    from collections import defaultdict as _defaultdict
+    from pathlib import Path as _Path
+
+    log_path = _Path(ic_log_path)
+    if not log_path.exists():
+        return alpha_weights
+
+    lines = [l for l in log_path.read_text().splitlines() if l.strip()]
+    seen, recent = set(), []
+    for line in reversed(lines):
+        try:
+            entry = _json.loads(line)
+            d = entry.get("date", "")
+            if d and d not in seen:
+                seen.add(d)
+                recent.append(entry)
+            if len(recent) >= window:
+                break
+        except Exception:
+            continue
+
+    if not recent:
+        return alpha_weights
+
+    sleeve_ics: dict = _defaultdict(list)
+    for entry in recent:
+        for sleeve, stats in entry.get("sleeves", {}).items():
+            ic = stats.get("mean_ic")
+            if ic is not None:
+                sleeve_ics[sleeve].append(float(ic))
+
+    gated = {
+        sleeve: sum(ics) / len(ics)
+        for sleeve, ics in sleeve_ics.items()
+        if len(ics) >= window and sum(ics) / len(ics) < IC_GATE_THRESHOLD
+    }
+
+    if not gated:
+        return alpha_weights
+
+    result = dict(alpha_weights)
+    freed = sum(result.get(s, 0.0) for s in gated)
+    for sleeve, avg_ic in gated.items():
+        log.warning(
+            "[Stack] IC gate: zeroing %s (rolling mean_ic=%.4f < %.3f)",
+            sleeve, avg_ic, IC_GATE_THRESHOLD,
+        )
+        result[sleeve] = 0.0
+    if freed > 0 and "trend" in result and result.get("trend", 0) > 0:
+        result["trend"] = round(result["trend"] + freed, 4)
+
+    return result
 
 
 def _load_sector_map():
@@ -91,6 +195,7 @@ def build_alpha_stack(features, alpha_weights=None, regime_signal=None, agent_id
             except Exception:
                 pass
         alpha_weights = _load_active_alpha_weights(regime=regime_label)
+        alpha_weights = _get_gated_weights(alpha_weights)
     if regime_signal is not None:
         try:
             from ascent.regime import regime_adjust_sleeve_weights
