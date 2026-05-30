@@ -301,13 +301,13 @@ Python 3.12.13 Homebrew, venv at `.venv/`. Use `.venv/bin/python`. API keys via 
 
 ---
 
-## Current state (as of 2026-05-28)
+## Current state (as of 2026-05-30)
 
-**Portfolio** (post-rebalance May 27): 17 positions, NAV ~$110,100. Live since April 1, 2026. Rebalance #4 on May 27.
+**Portfolio** (post-rebalance May 27): 17 positions, NAV ~$110,200. Live since April 1, 2026. Rebalance #4 on May 27.
 
-**AI PM**: Phase 0 (`ai_weight=0.0`), shadow period started 2026-05-19. 8/21 days evaluated. AI cumulative +2.75% vs quant +6.20% (underperforming — anti-momentum bias being corrected by redesign). `data_cache/earned_authority.json` is ground truth.
+**AI PM**: Phase 0 (`ai_weight=0.0`), shadow period started 2026-05-19. Two-phase redesign live (Sonnet pre-thesis + Opus synthesis). Track record before redesign was invalid (wrong comparison universe). `data_cache/earned_authority.json` is ground truth.
 
-**Regime**: calm_bull. **Tests**: 627 passing, 1 skipped.
+**Regime**: calm_bull. **Tests**: 663 passing, 1 skipped.
 
 **GitHub Pages**: `https://scottdongkhang.github.io/Ascent_Capital` — auto-updated after every daily run.
 
@@ -433,7 +433,7 @@ Python 3.12.13 Homebrew, venv at `.venv/`. Use `.venv/bin/python`. API keys via 
 - **A4 survivorship bias**: Already fixed — `walk_forward_runner.py` calls `get_universe_on_date()` on line 211 per fold. CLAUDE.md was stale. ✅
 - **ML sleeve cache**: 7.1 days old, within 21-day window, `feature_names` stored in pickle — no drift risk. ✅
 - **launchd**: No plist registered, daily run is manual. Not fixing (intentional for now).
-- **StatArb IC**: 0/29 positive IC days, mean=-0.0007, trending from -0.0000 → -0.0016 and worsening. Sector-residual mean reversion doesn't work in calm_bull momentum regime — same structural problem as fundamental. **Needs same regime-conditional fix** (0% calm_bull/euphoric, keep weight in stressed/crisis). Deferred — applying next session.
+- **StatArb IC**: Already fixed — `DEFAULT_ALPHA_WEIGHTS_BY_REGIME` in `stack.py` already has statarb=0% in calm_bull/euphoric, 15% in stressed/crisis. CLAUDE.md note was stale. ✅
 - **R2R**: Not deployed, no `R2R_API_KEY`. BM25 keyword search running as fallback. Corpus too small (4 rebalances) to justify deploying now. Revisit Q3/Q4 2026. ✅ (deferred intentionally)
 - **self_improve**: Disabled, no launchd, last ran Apr 19, never promoted to production, not AI-native (random perturbation). Not worth building until 30 consecutive days positive OOS Sharpe.
 
@@ -447,4 +447,27 @@ Python 3.12.13 Homebrew, venv at `.venv/`. Use `.venv/bin/python`. API keys via 
 - **AI_BLEND_MAX_ALPHA fix**: reverted from 0.60 → 0.30 (spec). Test uses `patch.object(_eng, "AI_BLEND_MAX_ALPHA", 1.0)` to exercise label-override branch without changing production cap.
 - 661 → 663 tests. Commits: `8e39847`, `ef642c8`, `ae00e77`.
 - Files: `ascent/alpha/meta_learner.py` (new), `ascent/strategy/ai_calibration.py` (new), `ascent/regime/engine.py`, `ascent/alpha/stack.py`, `agents/ai_pm_agent.py`, `run_all_agents.py`, `ascent/main.py`, `tests/alpha/test_meta_learner.py` (new), `tests/strategy/test_ai_calibration.py` (new), `tests/regime/test_ai_regime_blend.py` (new), `tests/test_ai_pm_agent.py`.
-- **Deferred**: statarb regime-conditional weight fix (0% in calm_bull, same pattern as fundamental).
+- **Statarb deferred note**: confirmed already done — `DEFAULT_ALPHA_WEIGHTS_BY_REGIME` already has statarb=0% in calm_bull/euphoric. Nothing to do.
+
+### 2026-05-30 (weekend run + weekend_runner bug fixes ✅)
+
+**Weekend run** (Saturday, first of ISO week): 7/11 jobs succeeded on first attempt.
+
+**4 bugs found and fixed in `ascent/monitoring/weekend_runner.py`:**
+- `llm_fundamental_cache`: was calling `seed_cache(symbols=..., force_stale_only=True)` — wrong signature (seed_cache takes a DataFrame, not symbols list). Fixed: load fundamentals parquet via `load_parquet("fundamentals")`, compute ratios via `_compute_ratios()`, call `llm_fundamental_alpha()` directly.
+- `factor_discovery`: `run_discovery` → `run_factor_discovery` (correct function name in discovery_runner.py).
+- `conviction_retrain`: `ConvictionGate` class never existed — conviction gate is lazy-evaluated. Fixed: call `_get_ml_model(matured_records)` directly with matured outcomes log.
+- `ai_pm_research`: `run_ai_pm_weekend_research` never existed. Fixed: call `run_ai_pm_prethesis()`, save result to `data_cache/weekend_research.json` for Monday's run.
+
+**Statarb check**: confirmed already fixed — `stack.py` `DEFAULT_ALPHA_WEIGHTS_BY_REGIME` already has statarb=0% in calm_bull/euphoric. CLAUDE.md was stale.
+
+**Weekend run results:**
+- Alt-data sweep: 901 symbols refreshed (62 min — Google Trends is the slow sub-step)
+- ML retrain: 2 cached models cleared, GridSearch flag written for Monday
+- Weekly debrief: +1.91% alpha this week, top risk = micro-cap mean reversion concentration
+- 4 previously-failed jobs re-ran after fixes: factor_discovery ran (no proposals, insufficient data — expected); conviction_retrain skipped (no outcomes log yet — expected); llm_fundamental_cache hit schema mismatch (fixed with `_compute_ratios`); ai_pm_research ran clean
+
+**Analyst agents discussion**: Evaluated sector-specialist analyst agents (~$339/yr smart hybrid). Deferred — AI PM at 0% weight, LLM fundamental sleeve has negative IC, existing signals unvalidated. Revisit Q4 2026 when LLM signals have 30+ rebalance track record.
+
+- 663 tests (unchanged). Commits: `ad8903e`, `7e98272`.
+- Files: `ascent/monitoring/weekend_runner.py`.
