@@ -648,14 +648,29 @@ def run_pipeline(
         spy_close         = spy_close[~spy_close.index.duplicated(keep="last")]
         spy_ma200         = spy_close.rolling(200, min_periods=150).mean()
         spy_below_ma      = spy_close < spy_ma200
-        spy_below_aligned = spy_below_ma.reindex(target_weights.index, method="ffill").fillna(False)
+
+        # VIX confirmation: only cut exposure when both SPY < 200MA AND VIX > 20.
+        # SPY-alone fires during relief rallies (e.g. April 2026) where markets
+        # recover faster than the MA catches up. VIX < 20 = options market disagrees.
+        from ascent.regime.engine import VIX_STRESSED_CONFIRMATION as _VIX_MA_THRESHOLD
+        if vix_series is not None and not (hasattr(vix_series, "empty") and vix_series.empty):
+            if hasattr(vix_series, "columns"):
+                _vix_close = vix_series["Close"] if "Close" in vix_series.columns else vix_series.iloc[:, 0]
+            else:
+                _vix_close = vix_series
+            _vix_aligned      = _vix_close.reindex(spy_below_ma.index, method="ffill").fillna(25.0)
+            spy_below_confirmed = spy_below_ma & _vix_aligned.gt(_VIX_MA_THRESHOLD)
+        else:
+            spy_below_confirmed = spy_below_ma  # no VIX data — fall back to MA-only
+
+        spy_below_aligned = spy_below_confirmed.reindex(target_weights.index, method="ffill").fillna(False)
         below_dates       = spy_below_aligned[spy_below_aligned].index
         if len(below_dates) > 0:
             target_weights.loc[below_dates] = target_weights.loc[below_dates] * 0.70
             pct = len(below_dates) / max(len(target_weights), 1) * 100
-            print(f"[Portfolio] SPY 200d MA filter: {len(below_dates)} dates below MA ({pct:.1f}%) → 30% exposure cut")
+            print(f"[Portfolio] SPY 200d MA filter: {len(below_dates)} dates below MA+VIX>{_VIX_MA_THRESHOLD:.0f} ({pct:.1f}%) → 30% exposure cut")
         else:
-            print("[Portfolio] SPY 200d MA filter: SPY above MA on all dates — no cuts applied")
+            print("[Portfolio] SPY 200d MA filter: no confirmed stress dates — no cuts applied")
     except Exception as _e:
         print(f"[Portfolio] SPY 200d MA filter skipped: {_e}")
 
