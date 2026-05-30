@@ -428,3 +428,11 @@ Python 3.12.13 Homebrew, venv at `.venv/`. Use `.venv/bin/python`. API keys via 
 
 - 629 → 636 tests. Commits: `dc7238f`, `32ea69d`, `2a63d08`, `9311035`, `613c0d5`.
 - Files: `orchestrator/central_intelligence.py`, `ascent/regime/engine.py`, `ascent/main.py`, `ascent/alpha/stack.py`, `ascent/strategy/earned_authority.py`, `run_all_agents.py`, `tests/test_regime_features.py`, `tests/alpha/test_fundamental_alpha.py`, `tests/test_ai_pm_agent.py`, `tests/test_self_evolving_alpha.py`.
+
+**Investigations / status checks:**
+- **A4 survivorship bias**: Already fixed — `walk_forward_runner.py` calls `get_universe_on_date()` on line 211 per fold. CLAUDE.md was stale. ✅
+- **ML sleeve cache**: 7.1 days old, within 21-day window, `feature_names` stored in pickle — no drift risk. ✅
+- **launchd**: No plist registered, daily run is manual. Not fixing (intentional for now).
+- **StatArb IC**: 0/29 positive IC days, mean=-0.0007, trending from -0.0000 → -0.0016 and worsening. Sector-residual mean reversion doesn't work in calm_bull momentum regime — same structural problem as fundamental. **Needs same regime-conditional fix** (0% calm_bull/euphoric, keep weight in stressed/crisis). Deferred — applying next session.
+- **R2R**: Not deployed, no `R2R_API_KEY`. BM25 keyword search running as fallback. Corpus too small (4 rebalances) to justify deploying now. Revisit Q3/Q4 2026. ✅ (deferred intentionally)
+- **self_improve**: Disabled, no launchd, last ran Apr 19, never promoted to production, not AI-native (random perturbation). Not worth building until 30 consecutive days positive OOS Sharpe.
