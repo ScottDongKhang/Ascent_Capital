@@ -5,6 +5,7 @@ End-to-end: data → features → alpha → portfolio → backtest → report
 """
 from __future__ import annotations
 import argparse
+import json
 import time
 from pathlib import Path
 
@@ -480,6 +481,21 @@ def run_pipeline(
             regime_engine = None
             regime_signal = None
 
+    # Blend AI regime assessment into regime engine if pre-thesis wrote one today
+    _ai_sleeve_prior: dict = {}
+    _ai_assess_path = Path("data_cache/ai_regime_assessment.json")
+    if _ai_assess_path.exists():
+        try:
+            _ai_assess = json.loads(_ai_assess_path.read_text())
+            _assess_date = _ai_assess.get("as_of_date", "")
+            if _assess_date and regime_engine is not None:
+                regime_engine.blend_with_ai(_ai_assess, as_of_date=_assess_date)
+                print(f"[Regime] AI blend applied: {_ai_assess.get('label', 'n/a')} "
+                      f"conf={_ai_assess.get('confidence', 0):.2f}")
+            _ai_sleeve_prior = dict(_ai_assess.get("sleeve_weight_prior") or {})
+        except Exception as _blend_e:
+            print(f"[Regime] AI blend skipped: {_blend_e}")
+
     print("\n" + "=" * 70)
     print("  STEP 2: FEATURE ENGINEERING")
     print("=" * 70)
@@ -551,10 +567,12 @@ def run_pipeline(
     if "fwd_ret_21d" in targets:
         features["targets"] = targets["fwd_ret_21d"]
 
-    alpha = build_alpha_stack(features, regime_signal=None)
+    alpha = build_alpha_stack(
+        features,
+        regime_signal=regime_signal,
+        ai_prior=_ai_sleeve_prior or None,
+    )
     print(f"[Alpha] Composite alpha computed: {alpha.shape}")
-    print("[Alpha] NOTE: regime adjustment disabled in full-mode (look-ahead risk). "
-          "Regime is applied causally in walk-forward mode only.")
 
     if "fwd_ret_21d" in targets:
         fwd    = targets["fwd_ret_21d"]

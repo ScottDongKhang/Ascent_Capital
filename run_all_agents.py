@@ -38,6 +38,16 @@ REGIME_STALE_DAYS   = 5
 
 LONG_SHORT_ENABLED = False  # 130/30 — enable after ≥30 paper rebalances (~August 2026)
 
+# One-time: seed meta-learner posteriors from existing IC log if posteriors don't exist yet
+if not Path("data_cache/sleeve_posteriors.json").exists():
+    try:
+        from ascent.alpha.meta_learner import SleeveMetaLearner as _BootstrapML
+        _n = _BootstrapML().seed_from_ic_log()
+        if _n > 0:
+            print(f"[Startup] Meta-learner: seeded from {_n} IC log entries")
+    except Exception as _seed_e:
+        print(f"[Startup] Meta-learner seed failed: {_seed_e}")
+
 
 def _is_regime_stale() -> bool:
     """Return True if regime_signal.json is missing, is the old list schema, or last_refit_date > 5 days ago."""
@@ -910,6 +920,20 @@ def main():
                 syms = ", ".join(_ai_prethesis.conviction_symbols[:6])
                 print(f"[Runner] Pre-thesis sealed: {len(_ai_prethesis.high_conviction_names)} "
                       f"conviction names ({syms}...)")
+                # Write AI regime assessment + sleeve prior for main.py to pick up
+                if _ai_prethesis.regime_assessment or _ai_prethesis.sleeve_weight_prior:
+                    _assess_path = Path("data_cache/ai_regime_assessment.json")
+                    try:
+                        _assess_path.write_text(json.dumps({
+                            **(_ai_prethesis.regime_assessment or {}),
+                            "sleeve_weight_prior": _ai_prethesis.sleeve_weight_prior or {},
+                            "as_of_date": today.isoformat(),
+                        }))
+                        print(f"[Runner] AI regime assessment written: "
+                              f"{(_ai_prethesis.regime_assessment or {}).get('label', 'n/a')} "
+                              f"sleeves={list((_ai_prethesis.sleeve_weight_prior or {}).keys())}")
+                    except Exception as _ae:
+                        print(f"[Runner] AI regime assessment write failed: {_ae}")
             else:
                 print("[Runner] Pre-thesis returned None — synthesis will use standard mode")
         except Exception as _pt_e:
@@ -944,6 +968,21 @@ def main():
                 _snap_ai_weights = dict(ai_pm_result.portfolio)  # capture for authority snapshot
 
                 format_thesis({**ai_pm_result.thesis, "ai_pm_portfolio": ai_pm_result.portfolio})
+
+                # Log AI market character prediction for calibration tracking
+                if _ai_prethesis and _ai_prethesis.market_character:
+                    try:
+                        from ascent.strategy.ai_calibration import log_thesis as _log_cal_thesis
+                        _log_cal_thesis(
+                            thesis_date=today.isoformat(),
+                            regime=_get_current_regime(),
+                            market_character=_ai_prethesis.market_character,
+                            sleeve_weight_prior=_ai_prethesis.sleeve_weight_prior or {},
+                        )
+                        print(f"[Runner] Calibration: logged market_character="
+                              f"{_ai_prethesis.market_character}")
+                    except Exception as _cal_e:
+                        print(f"[Runner] Calibration log failed: {_cal_e}")
 
                 # Record AI PM vs quant wedge for feedback loop
                 try:
@@ -1082,6 +1121,53 @@ def main():
                 write_portfolio_state(today, _ao.agent_id, _ao.target_weights)
     except Exception:
         pass
+
+    # ── Post-rebalance: update meta-learner and calibration from holding-period sleeve IC ──
+    if is_rebalance:
+        try:
+            from ascent.alpha.meta_learner import SleeveMetaLearner as _SML
+            from ascent.strategy.ai_calibration import update_outcome as _update_cal_outcome
+
+            _sleeve_ic_log = Path("logs/sleeve_ic_log.jsonl")
+            _ml_snap_path = Path("data_cache/authority_rebalance_snapshot.json")
+            _realized_ic: dict = {}
+
+            if _sleeve_ic_log.exists() and _ml_snap_path.exists():
+                _prev_snap = json.loads(_ml_snap_path.read_text())
+                _prev_date = _prev_snap.get("rebalance_date", "")
+                if _prev_date:
+                    from collections import defaultdict as _dd
+                    _sleeve_sums: dict = _dd(list)
+                    for _line in _sleeve_ic_log.read_text().splitlines():
+                        _line = _line.strip()
+                        if not _line:
+                            continue
+                        try:
+                            _e = json.loads(_line)
+                            if _e.get("date", "") >= _prev_date:
+                                for _sl, _st in _e.get("sleeves", {}).items():
+                                    _ic = _st.get("mean_ic")
+                                    if _ic is not None:
+                                        _sleeve_sums[_sl].append(float(_ic))
+                        except Exception:
+                            continue
+                    _realized_ic = {
+                        _sl: sum(_ics) / len(_ics)
+                        for _sl, _ics in _sleeve_sums.items() if _ics
+                    }
+
+            if _realized_ic:
+                _current_regime = _get_current_regime()
+                _ml = _SML()
+                _ml.update_rebalance(_current_regime, _realized_ic)
+                print(f"[Runner] Meta-learner updated: regime={_current_regime} "
+                      f"sleeves={list(_realized_ic.keys())}")
+                _update_cal_outcome(_realized_ic)
+                print("[Runner] Calibration outcome updated")
+            else:
+                print("[Runner] Meta-learner: no IC data since prior rebalance — skipping")
+        except Exception as _ml_upd_e:
+            print(f"[Runner] Meta-learner/calibration update failed: {_ml_upd_e}")
 
     # ── Update earned authority (rebalance days only, full holding-period comparison) ──
     # Fair comparison: both AI PM and quant measured over the same holding period
