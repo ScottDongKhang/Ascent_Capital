@@ -312,3 +312,31 @@ def test_tool_executor_never_raises():
     for tool_name, inputs in bad_inputs:
         result = executor(tool_name, inputs)
         assert isinstance(result, str), f"Tool {tool_name} returned {type(result)}, expected str"
+
+
+# ── pre-thesis schema additions ───────────────────────────────────────────────
+
+def test_prethesis_dataclass_has_new_fields():
+    from agents.ai_pm_agent import AIPreThesis
+    pt = AIPreThesis(
+        macro_view="Rates are stabilizing.",
+        regime_interpretation="HMM says calm_bull, I agree.",
+        high_conviction_names=[{"symbol": "VICR", "thesis": "Margin expansion"}],
+        names_to_avoid=[],
+        sector_tilts=[],
+        regime_assessment={"label": "calm_bull", "confidence": 0.8, "reasoning": "VIX low"},
+        sleeve_weight_prior={"trend": 0.004, "statarb": -0.002},
+        market_character="momentum_continuation",
+    )
+    assert pt.regime_assessment["label"] == "calm_bull"
+    assert pt.sleeve_weight_prior["trend"] == 0.004
+    assert pt.market_character == "momentum_continuation"
+
+
+def test_propose_prethesis_tool_accepts_new_fields():
+    """Tool schema must include regime_assessment, sleeve_weight_prior, market_character."""
+    from agents.ai_pm_agent import _PROPOSE_PRETHESIS_TOOL
+    props = _PROPOSE_PRETHESIS_TOOL["input_schema"]["properties"]
+    assert "regime_assessment" in props
+    assert "sleeve_weight_prior" in props
+    assert "market_character" in props

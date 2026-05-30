@@ -56,6 +56,9 @@ class AIPreThesis:
     high_conviction_names: List[Dict]   # [{symbol, thesis, what_quant_should_confirm, what_would_change_my_mind}]
     names_to_avoid: List[Dict]          # [{symbol, reason}]
     sector_tilts: List[Dict]            # [{sector, tilt: overweight|underweight, reason}]
+    regime_assessment: Dict = field(default_factory=dict)    # {label, confidence, reasoning}
+    sleeve_weight_prior: Dict = field(default_factory=dict)  # {sleeve: delta_ic}
+    market_character: str = ""                               # e.g. "momentum_continuation"
     raw: Dict = field(default_factory=dict)
 
     @property
@@ -437,6 +440,26 @@ _PROPOSE_PRETHESIS_TOOL = {
                     },
                 },
             },
+            "regime_assessment": {
+                "type": "object",
+                "description": "Your assessment of the current regime. label must be one of: calm_bull, stressed, crisis, euphoric, uncertain.",
+                "properties": {
+                    "label":      {"type": "string"},
+                    "confidence": {"type": "number", "description": "0.0 to 1.0"},
+                    "reasoning":  {"type": "string"},
+                },
+            },
+            "sleeve_weight_prior": {
+                "type": "object",
+                "description": "IC delta adjustments for sleeves this rebalance. Keys: trend, statarb, meanrev, ml, fundamental, earnings, volatility. Values: IC deltas in [-0.010, +0.010]. Positive=boost, negative=reduce. Omit sleeves you have no view on.",
+                "additionalProperties": {"type": "number"},
+            },
+            "market_character": {
+                "type": "string",
+                "description": "Single most important characteristic of this market period for sleeve selection.",
+                "enum": ["momentum_continuation", "sector_rotation", "risk_off", "risk_on",
+                         "mean_reversion", "flight_to_quality", "uncertain"],
+            },
         },
         "required": ["macro_view", "high_conviction_names"],
     },
@@ -619,6 +642,13 @@ Each name needs:
   • A specific, falsifiable thesis (1-3 sentences)
   • What signal evidence you EXPECT the quant to confirm if you're right
   • What evidence would make you change your mind
+
+Also include in propose_prethesis:
+  • regime_assessment: your own regime call (label, confidence 0-1, one sentence reasoning)
+  • market_character: which of the 7 characters best describes this period
+  • sleeve_weight_prior: IC delta adjustments for sleeves you have a view on
+    (e.g. {"trend": 0.004} if momentum is clearly working; {"statarb": -0.003} if not)
+    Omit sleeves you have no view on. Delta range: -0.010 to +0.010.
 
 This thesis is sealed before quant runs. In Phase 2, you will see where the quant agreed,
 disagreed, and what it found that you missed. Your final portfolio integrates both.
@@ -1402,6 +1432,9 @@ def run_ai_pm_prethesis() -> Optional[AIPreThesis]:
         high_conviction_names=raw.get("high_conviction_names", []),
         names_to_avoid=raw.get("names_to_avoid", []),
         sector_tilts=raw.get("sector_tilts", []),
+        regime_assessment=dict(raw.get("regime_assessment") or {}),
+        sleeve_weight_prior=dict(raw.get("sleeve_weight_prior") or {}),
+        market_character=str(raw.get("market_character") or ""),
         raw=raw,
     )
     log.info(
