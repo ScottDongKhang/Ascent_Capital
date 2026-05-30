@@ -153,3 +153,51 @@ def test_regime_engine_fit_accepts_market_prices():
     engine.fit(spy_prices=spy, universe_prices=univ, market_prices=mkt,
                run_model_selection=False)
     assert engine.best_k >= 2
+
+
+# ── VIX confirmation tests ────────────────────────────────────────────────────
+
+import pytest
+from ascent.regime.engine import _apply_vix_confirmation, VIX_STRESSED_CONFIRMATION
+
+
+def _make_signal_cache(labels, risk_mults, dates=None):
+    if dates is None:
+        dates = pd.date_range("2026-01-01", periods=len(labels), freq="B")
+    return pd.DataFrame({
+        "label": labels,
+        "risk_multiplier": risk_mults,
+        "entropy": [0.3] * len(labels),
+        "transition_flag": [False] * len(labels),
+        "dwell_days": [1] * len(labels),
+    }, index=dates)
+
+
+def _make_vix(dates, values):
+    return pd.Series(values, index=dates, name="Close")
+
+
+def test_vix_confirmation_moderates_stressed_when_vix_low():
+    dates = pd.date_range("2026-01-01", periods=3, freq="B")
+    cache = _make_signal_cache(["stressed", "stressed", "calm_bull"], [0.65, 0.65, 1.0], dates)
+    vix = _make_vix(dates, [15.0, 18.0, 12.0])
+    result = _apply_vix_confirmation(cache, vix)
+    assert result.loc[dates[0], "risk_multiplier"] == pytest.approx(1.0)
+    assert result.loc[dates[1], "risk_multiplier"] == pytest.approx(1.0)
+    assert result.loc[dates[2], "risk_multiplier"] == pytest.approx(1.0)
+
+
+def test_vix_confirmation_keeps_cut_when_vix_high():
+    dates = pd.date_range("2026-01-01", periods=2, freq="B")
+    cache = _make_signal_cache(["stressed", "stressed"], [0.65, 0.65], dates)
+    vix = _make_vix(dates, [25.0, 32.0])
+    result = _apply_vix_confirmation(cache, vix)
+    assert result.loc[dates[0], "risk_multiplier"] == pytest.approx(0.65)
+    assert result.loc[dates[1], "risk_multiplier"] == pytest.approx(0.65)
+
+
+def test_vix_confirmation_graceful_on_missing_vix():
+    dates = pd.date_range("2026-01-01", periods=2, freq="B")
+    cache = _make_signal_cache(["stressed", "stressed"], [0.65, 0.65], dates)
+    result = _apply_vix_confirmation(cache, None)
+    assert result.loc[dates[0], "risk_multiplier"] == pytest.approx(0.65)

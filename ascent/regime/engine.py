@@ -53,6 +53,12 @@ EMERGENCY_CORR_THRESHOLD = 0.30          # SPY/TLT 5-day corr > this = liquidity
 EMERGENCY_BREAK_ZSCORE_THRESHOLD = 3.5   # BreakDetector z-score threshold
 EMERGENCY_REFIT_LOG = "logs/regime_emergency_refit.jsonl"
 
+# VIX below this level means the HMM's "stressed" call is unconfirmed by fear.
+# When stressed but VIX < 20, keep the label (sleeve weighting stays defensive)
+# but restore risk_multiplier to 1.0 — no gross exposure cut.
+VIX_STRESSED_CONFIRMATION = 20.0
+VIX_CONFIRMATION_LABELS   = {"stressed"}
+
 
 def check_emergency_refit_triggers(
     spy: pd.Series,
@@ -124,6 +130,46 @@ def check_emergency_refit_triggers(
         return True, f"Structural break z-score={break_zscore:.1f}σ"
 
     return False, ""
+
+
+def _apply_vix_confirmation(
+    signal_df: pd.DataFrame,
+    vix_prices,
+) -> pd.DataFrame:
+    """
+    Post-process the regime signal cache: for any day labeled "stressed",
+    if VIX < VIX_STRESSED_CONFIRMATION, restore risk_multiplier to 1.0.
+
+    The HMM can fire "stressed" on price momentum alone during a relief rally.
+    VIX < 20 means options markets don't confirm stress — no exposure cut applied.
+    Label is kept as "stressed" so sleeve weighting still tilts defensive.
+    """
+    if vix_prices is None or signal_df.empty:
+        return signal_df
+
+    df = signal_df.copy()
+
+    if hasattr(vix_prices, "columns"):
+        vix_close = vix_prices.iloc[:, 0] if "Close" not in vix_prices.columns else vix_prices["Close"]
+    else:
+        vix_close = vix_prices
+
+    vix_aligned = vix_close.reindex(df.index, method="ffill")
+
+    mask = (
+        df["label"].isin(VIX_CONFIRMATION_LABELS)
+        & vix_aligned.fillna(999).lt(VIX_STRESSED_CONFIRMATION)
+    )
+    df.loc[mask, "risk_multiplier"] = 1.0
+    moderated = int(mask.sum())
+
+    if moderated > 0:
+        log.info(
+            "regime.engine: VIX confirmation moderated %d stressed dates "
+            "(VIX < %.0f) → risk_multiplier restored to 1.0",
+            moderated, VIX_STRESSED_CONFIRMATION,
+        )
+    return df
 
 
 class RegimeEngine:
@@ -261,6 +307,7 @@ class RegimeEngine:
             )
 
         self._signal_cache = self._decision_engine.process_to_frame(prob_df)
+        self._signal_cache = _apply_vix_confirmation(self._signal_cache, vix_prices)
         self._last_fit_date = self._feature_panel.index[-1]
         self._fitted = True
 
