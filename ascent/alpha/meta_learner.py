@@ -75,6 +75,9 @@ class SleeveMetaLearner:
         if min_n < _MIN_OBS_TRUST:
             return None
 
+        if any(sleeve not in regime_state for sleeve in regime_defaults):
+            return None
+
         raw_weights: Dict[str, float] = {}
         for sleeve in regime_defaults:
             s = regime_state.get(sleeve)
@@ -108,7 +111,7 @@ class SleeveMetaLearner:
         result = {s: w / total for s, w in result.items()}
         result = _enforce_cap(result, _MAX_SINGLE_SLEEVE)
 
-        if abs(sum(result.values()) - 1.0) > 0.02:
+        if abs(sum(result.values()) - 1.0) > 1e-4:
             t = sum(result.values()) or 1.0
             result = {s: w / t for s, w in result.items()}
 
@@ -129,6 +132,11 @@ class SleeveMetaLearner:
             self._state[regime] = {}
 
         for sleeve, ic_obs in sleeve_ic.items():
+            _ic = float(ic_obs)
+            if not math.isfinite(_ic):
+                log.warning("[MetaLearner] Non-finite IC for sleeve=%s (%.4g) — skipping", sleeve, _ic)
+                continue
+
             if sleeve not in self._state[regime]:
                 self._state[regime][sleeve] = {"mu": 0.0, "var": _PRIOR_VAR, "n": 0}
 
@@ -138,7 +146,7 @@ class SleeveMetaLearner:
             precision_prior = 1.0 / var
             precision_obs = 1.0 / _OBS_NOISE
             precision_post = precision_prior + precision_obs
-            mu_post = (mu * precision_prior + float(ic_obs) * precision_obs) / precision_post
+            mu_post = (mu * precision_prior + _ic * precision_obs) / precision_post
             var_post = 1.0 / precision_post
 
             self._state[regime][sleeve] = {
@@ -173,7 +181,8 @@ class SleeveMetaLearner:
         for entry in entries:
             regime = str(entry.get("regime", "")).lower()
             if not regime or regime not in _VALID_LABELS:
-                regime = "calm_bull"
+                log.debug("[MetaLearner] seed: skipping entry with unknown regime '%s'", entry.get("regime", ""))
+                continue
             for sleeve, stats in entry.get("sleeves", {}).items():
                 ic = stats.get("mean_ic")
                 if ic is not None:
@@ -242,5 +251,8 @@ def log_weight_proposal(regime: str, weights: Dict[str, float], source: str) -> 
         "source": source,
         "weights": {s: round(w, 4) for s, w in weights.items()},
     }
-    with open(WEIGHTS_LOG_PATH, "a") as f:
-        f.write(json.dumps(entry) + "\n")
+    try:
+        with open(WEIGHTS_LOG_PATH, "a") as f:
+            f.write(json.dumps(entry) + "\n")
+    except Exception as e:
+        log.warning("[MetaLearner] log_weight_proposal write failed: %s", e)

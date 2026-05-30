@@ -86,8 +86,8 @@ def test_seed_from_ic_log_sets_mu():
     with tempfile.TemporaryDirectory() as tmp:
         ic_log = Path(tmp) / "sleeve_ic_log.jsonl"
         entries = [
-            {"date": "2026-05-01", "sleeves": {"trend": {"mean_ic": 0.015}, "statarb": {"mean_ic": -0.002}}},
-            {"date": "2026-05-02", "sleeves": {"trend": {"mean_ic": 0.012}, "statarb": {"mean_ic": -0.003}}},
+            {"date": "2026-05-01", "regime": "calm_bull", "sleeves": {"trend": {"mean_ic": 0.015}, "statarb": {"mean_ic": -0.002}}},
+            {"date": "2026-05-02", "regime": "calm_bull", "sleeves": {"trend": {"mean_ic": 0.012}, "statarb": {"mean_ic": -0.003}}},
         ]
         ic_log.write_text("\n".join(json.dumps(e) for e in entries))
         learner = _make_learner(tmp)
@@ -95,6 +95,27 @@ def test_seed_from_ic_log_sets_mu():
         assert count == 2
         assert "calm_bull" in learner._state
         assert learner._state["calm_bull"]["trend"]["mu"] == pytest.approx(0.0135, abs=0.001)
+
+
+def test_seed_from_ic_log_skips_unknown_regime():
+    """Entries with missing or unknown regime must be skipped, not defaulted to calm_bull."""
+    with tempfile.TemporaryDirectory() as tmp:
+        ic_log = Path(tmp) / "sleeve_ic_log.jsonl"
+        entries = [
+            # No regime field — should be skipped
+            {"date": "2026-05-01", "sleeves": {"trend": {"mean_ic": 0.015}}},
+            # Unknown regime — should be skipped
+            {"date": "2026-05-02", "regime": "unknown_regime", "sleeves": {"trend": {"mean_ic": 0.012}}},
+            # Valid entry — should be seeded
+            {"date": "2026-05-03", "regime": "stressed", "sleeves": {"trend": {"mean_ic": 0.010}}},
+        ]
+        ic_log.write_text("\n".join(json.dumps(e) for e in entries))
+        learner = _make_learner(tmp)
+        learner.seed_from_ic_log(ic_log_path=ic_log)
+        # Only the valid stressed entry should be seeded
+        assert "calm_bull" not in learner._state
+        assert "stressed" in learner._state
+        assert learner._state["stressed"]["trend"]["mu"] == pytest.approx(0.010, abs=0.001)
 
 
 def test_ai_prior_affects_single_call_not_posterior():
