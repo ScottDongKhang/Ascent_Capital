@@ -36,23 +36,27 @@ DEFAULT_ALPHA_WEIGHTS_BY_REGIME = {
     "calm_bull": {
         **DEFAULT_ALPHA_WEIGHTS,
         "fundamental": 0.00,
-        "trend":       0.43,
+        "statarb":     0.00,
+        "trend":       0.58,   # absorbs fundamental(0.05) + statarb(0.15)
     },
     "stressed": {
         **DEFAULT_ALPHA_WEIGHTS,
         "fundamental": 0.08,
         "trend":       0.35,
+        # statarb kept at 0.15 — sector-residual mean reversion works in high-dispersion regimes
     },
     "crisis": {
         **DEFAULT_ALPHA_WEIGHTS,
         "fundamental": 0.08,
         "trend":       0.30,
         "volatility":  0.10,
+        # statarb kept at 0.15 — sector dispersion is highest in crisis
     },
     "euphoric": {
         **DEFAULT_ALPHA_WEIGHTS,
         "fundamental": 0.00,
-        "trend":       0.43,
+        "statarb":     0.00,
+        "trend":       0.58,   # same logic as calm_bull — momentum dominates
     },
     "uncertain": {
         **DEFAULT_ALPHA_WEIGHTS,
