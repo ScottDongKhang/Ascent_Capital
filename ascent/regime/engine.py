@@ -28,6 +28,7 @@ Usage pattern (from main.py or walk-forward runner):
 """
 from __future__ import annotations
 
+import json
 import logging
 import warnings
 from pathlib import Path
@@ -58,6 +59,51 @@ EMERGENCY_REFIT_LOG = "logs/regime_emergency_refit.jsonl"
 # but restore risk_multiplier to 1.0 — no gross exposure cut.
 VIX_STRESSED_CONFIRMATION = 20.0
 VIX_CONFIRMATION_LABELS   = {"stressed"}
+
+# ── AI Regime Blend constants ─────────────────────────────────────────────────
+AI_BLEND_INITIAL_ALPHA = 0.05
+AI_BLEND_MAX_ALPHA = 0.60
+AI_BLEND_STEP = 0.03
+AI_BLEND_STATE_PATH = "data_cache/regime_blend_state.json"
+AI_BLEND_LOG_PATH = "logs/regime_blend_log.jsonl"
+_AI_BLEND_VALID_LABELS = {"calm_bull", "stressed", "crisis", "euphoric", "uncertain"}
+
+
+def _load_blend_state() -> dict:
+    p = Path(AI_BLEND_STATE_PATH)
+    if p.exists():
+        try:
+            return json.loads(p.read_text())
+        except Exception:
+            pass
+    return {"alpha": AI_BLEND_INITIAL_ALPHA, "history": []}
+
+
+def _save_blend_state(state: dict) -> None:
+    p = Path(AI_BLEND_STATE_PATH)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.parent / (p.name + ".tmp")
+    tmp.write_text(json.dumps(state, indent=2))
+    tmp.replace(p)
+
+
+def _log_blend(as_of_date: str, hmm_label: str, ai_label: str, alpha: float,
+               blended_label: str, blended_risk: float) -> None:
+    p = Path(AI_BLEND_LOG_PATH)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    entry = {
+        "as_of_date": as_of_date,
+        "hmm_label": hmm_label,
+        "ai_label": ai_label,
+        "alpha": round(alpha, 4),
+        "blended_label": blended_label,
+        "blended_risk_multiplier": round(blended_risk, 4),
+    }
+    try:
+        with open(p, "a") as f:
+            f.write(json.dumps(entry) + "\n")
+    except Exception as e:
+        log.warning("[Engine] _log_blend write failed: %s", e)
 
 
 def check_emergency_refit_triggers(
@@ -355,6 +401,62 @@ class RegimeEngine:
 
     def get_feature_panel(self) -> pd.DataFrame:
         return self._feature_panel.copy() if self._feature_panel is not None else pd.DataFrame()
+
+    def blend_with_ai(
+        self,
+        ai_regime_assessment: dict,
+        as_of_date: str,
+    ) -> None:
+        """
+        Blend AI regime assessment into the most recent signal cache entry.
+
+        ai_regime_assessment: {"label": str, "confidence": float, "reasoning": str}
+
+        AI label changes the final label only when alpha * ai_conf > 0.50 (strong pull).
+        risk_multiplier is always modulated proportionally when labels disagree.
+        alpha starts at AI_BLEND_INITIAL_ALPHA=0.05, capped at AI_BLEND_MAX_ALPHA=0.30.
+        """
+        if not self._fitted or self._signal_cache is None:
+            log.debug("[Engine] blend_with_ai called before fit — skipping")
+            return
+
+        ai_label = str(ai_regime_assessment.get("label", "")).lower()
+        ai_conf = float(ai_regime_assessment.get("confidence", 0.5))
+
+        if ai_label not in _AI_BLEND_VALID_LABELS:
+            log.warning("[Engine] blend_with_ai: invalid label '%s' — skipping", ai_label)
+            return
+
+        state = _load_blend_state()
+        alpha = min(float(state.get("alpha", AI_BLEND_INITIAL_ALPHA)), AI_BLEND_MAX_ALPHA)
+
+        last_date = self._signal_cache.index[-1]
+        hmm_label = str(self._signal_cache.loc[last_date, "label"])
+        hmm_risk_mult = float(self._signal_cache.loc[last_date, "risk_multiplier"])
+
+        pull_weight = alpha * ai_conf
+
+        if ai_label == hmm_label:
+            blended_label = hmm_label
+            blended_risk_mult = hmm_risk_mult
+        elif pull_weight > 0.50:
+            blended_label = ai_label
+            blended_risk_mult = float(
+                self._cfg.get("regime_risk_multiplier", {}).get(ai_label, hmm_risk_mult)
+            )
+        else:
+            blended_label = hmm_label
+            ai_risk = float(self._cfg.get("regime_risk_multiplier", {}).get(ai_label, 1.0))
+            blended_risk_mult = (1 - pull_weight) * hmm_risk_mult + pull_weight * ai_risk
+
+        self._signal_cache.loc[last_date, "label"] = blended_label
+        self._signal_cache.loc[last_date, "risk_multiplier"] = round(blended_risk_mult, 4)
+
+        _log_blend(as_of_date, hmm_label, ai_label, alpha, blended_label, blended_risk_mult)
+        log.info(
+            "[Engine] AI blend: HMM=%s AI=%s(conf=%.2f) α=%.3f → %s risk=%.2f",
+            hmm_label, ai_label, ai_conf, alpha, blended_label, blended_risk_mult,
+        )
 
     # ── particle filter helpers ───────────────────────────────────────────────
 
