@@ -12,12 +12,14 @@ STATE_PATH = Path(__file__).resolve().parent.parent.parent / "data_cache" / "ear
 SHADOW_RETURNS_PATH = Path(__file__).resolve().parent.parent.parent / "data_cache" / "ai_pm_shadow_returns.jsonl"
 
 ADVANCE_EDGE = 0.05
-ADVANCE_WINDOW = 21
+ADVANCE_WINDOW = 10        # rebalance periods (~5 months); was 21 daily returns (wrong unit)
 REVERT_DRAWDOWN_EDGE = 0.05
 MIN_WEIGHT = 0.02
 HARD_CAP = 0.80
 # Phases 0-3: shadow → 25% → 50% → 75%. HARD_CAP is the absolute ceiling.
 PHASE_WEIGHTS = [0.0, 0.25, 0.50, 0.75]
+# Each return is a ~10-business-day holding-period return. ~26 rebalances/year.
+_PERIODS_PER_YEAR = 26
 
 
 def get_state() -> dict:
@@ -46,7 +48,7 @@ def _sharpe(returns: List[float]) -> float:
     import statistics
     mean = statistics.mean(returns)
     stdev = statistics.stdev(returns) if len(returns) > 1 else 0.0
-    return 0.0 if stdev == 0 else mean / stdev * (252 ** 0.5)
+    return 0.0 if stdev == 0 else mean / stdev * (_PERIODS_PER_YEAR ** 0.5)
 
 
 def _max_drawdown(returns: List[float]) -> float:

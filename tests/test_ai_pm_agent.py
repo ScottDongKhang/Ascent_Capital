@@ -213,17 +213,18 @@ def test_authority_stays_if_no_edge():
 
 def test_auto_revert_on_drawdown():
     """AI drawdown > quant+5% at phase>0 reverts to phase 0."""
-    ai_returns = [-0.03] * 10 + [0.01] * 11
-    qt_returns  = [0.001] * 21
+    # 9 bad returns in buffer, trigger on the 10th (matches ADVANCE_WINDOW=10)
+    ai_returns = [-0.03] * 9
+    qt_returns  = [0.001] * 9
     with tempfile.TemporaryDirectory() as tmp:
         state_path = Path(tmp) / "earned_authority.json"
-        state = _make_state(phase=2, ai_weight=0.5, ai_returns=ai_returns[:20], qt_returns=qt_returns[:20])
+        state = _make_state(phase=2, ai_weight=0.5, ai_returns=ai_returns, qt_returns=qt_returns)
         state_path.write_text(json.dumps(state))
         shadow_path = Path(tmp) / "shadow.jsonl"
         with patch("ascent.strategy.earned_authority.STATE_PATH", state_path):
             with patch("ascent.strategy.earned_authority.SHADOW_RETURNS_PATH", shadow_path):
                 import ascent.strategy.earned_authority as ea
-                result = ea.update_authority(ai_returns[-1], qt_returns[-1])
+                result = ea.update_authority(-0.03, 0.001)
     assert result["phase"] == 0
     assert result["ai_weight"] == 0.0
     assert result["auto_revert_count"] == 1

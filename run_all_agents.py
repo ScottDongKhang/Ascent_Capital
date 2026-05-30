@@ -917,6 +917,7 @@ def main():
 
     # ── AI PM Agent (rebalance days only — authority/calibration are rebalance-gated) ──
     _quant_weights_snapshot = dict(merged_weights)  # capture pure quant before any AI PM blend
+    _snap_ai_weights = None  # set below on successful AI PM run (used for authority snapshot)
     if not is_rebalance:
         print("[Runner] AI PM skipped — non-rebalance day.")
     else:
@@ -940,6 +941,7 @@ def main():
                     print(f"[Runner] AI PM blend applied (ai_weight={ai_weight * 100:.0f}%)")
                 else:
                     print(f"[Runner] AI PM proposal rejected: {violations} — using quant 100%")
+                _snap_ai_weights = dict(ai_pm_result.portfolio)  # capture for authority snapshot
 
                 format_thesis({**ai_pm_result.thesis, "ai_pm_portfolio": ai_pm_result.portfolio})
 
@@ -1081,43 +1083,59 @@ def main():
     except Exception:
         pass
 
-    # ── Update earned authority shadow returns (every day, rebalance or not) ──
-    try:
-        import json as _json
-        ai_portfolio = {}
-        thesis_dir = Path("outputs/ai_pm_theses")
-        if thesis_dir.exists():
-            thesis_files = sorted(thesis_dir.glob("*-thesis.json"), reverse=True)
-            if thesis_files:
-                last_thesis = _json.loads(thesis_files[0].read_text())
-                ai_portfolio = last_thesis.get("ai_pm_portfolio", {})
+    # ── Update earned authority (rebalance days only, full holding-period comparison) ──
+    # Fair comparison: both AI PM and quant measured over the same holding period
+    # on the same full multi-asset portfolio, not daily returns of stale weights.
+    _AUTHORITY_SNAPSHOT = Path("data_cache/authority_rebalance_snapshot.json")
+    if is_rebalance:
+        try:
+            import yfinance as _yf
 
-        ai_ret = 0.0
-        if ai_portfolio:
-            import yfinance as yf
-            syms = list(ai_portfolio.keys())
-            prices = yf.download(syms, period="5d", auto_adjust=True, progress=False)
-            if hasattr(prices.columns, "levels"):
-                prices = prices["Close"]
-            daily_rets = prices.pct_change().iloc[-1]
-            raw_weights = {s: float(ai_portfolio.get(s, 0)) for s in syms}
-            total_w = sum(raw_weights.values()) or 1.0
-            ai_ret = float(sum((raw_weights[s] / total_w) * float(daily_rets.get(s, 0)) for s in syms))
+            # Step 1: compute holding-period return vs previous rebalance snapshot
+            if _AUTHORITY_SNAPSHOT.exists():
+                _prev = json.loads(_AUTHORITY_SNAPSHOT.read_text())
+                _prev_date = _prev["rebalance_date"]
+                _prev_ai   = _prev["ai_weights"]
+                _prev_qt   = _prev["quant_weights"]
+                _all_syms  = list(set(_prev_ai) | set(_prev_qt))
 
-        quant_ret = 0.0
-        pnl_log = Path("logs/us_equities_pnl.jsonl")
-        if pnl_log.exists():
-            lines = pnl_log.read_text().strip().split("\n")
-            if lines and lines[-1].strip():
-                last = _json.loads(lines[-1])
-                quant_ret = float(last.get("portfolio_return", last.get("return", 0.0)))
+                _px = _yf.download(_all_syms, start=_prev_date,
+                                   end=today.isoformat(), auto_adjust=True, progress=False)
+                if hasattr(_px.columns, "levels"):
+                    _px = _px["Close"]
 
-        if ai_portfolio:
-            update_authority(ai_ret, quant_ret)
-        else:
-            print("[Runner] No AI PM thesis found yet — skipping authority update")
-    except Exception as exc:
-        print(f"[Runner] Earned authority update failed: {exc}")
+                if len(_px) >= 2:
+                    _period_rets = (_px.iloc[-1] / _px.iloc[0] - 1).fillna(0)
+
+                    def _port_ret(weights):
+                        tw = sum(weights.values()) or 1.0
+                        return float(sum(
+                            (w / tw) * float(_period_rets.get(s, 0))
+                            for s, w in weights.items()
+                        ))
+
+                    _ai_ret = _port_ret(_prev_ai)
+                    _qt_ret = _port_ret(_prev_qt)
+                    update_authority(_ai_ret, _qt_ret)
+                    print(f"[Runner] Authority updated: AI {_ai_ret*100:.2f}% vs Quant "
+                          f"{_qt_ret*100:.2f}% ({_prev_date} → {today.isoformat()})")
+
+            # Step 2: save snapshot for next rebalance comparison
+            # Use AI PM portfolio if it ran successfully, else fall back to quant
+            _snap = {
+                "rebalance_date": today.isoformat(),
+                "ai_weights":    _snap_ai_weights or _quant_weights_snapshot,
+                "quant_weights": _quant_weights_snapshot,
+            }
+            _AUTHORITY_SNAPSHOT.write_text(json.dumps(_snap, indent=2))
+            _ai_src = "AI PM" if _snap_ai_weights else "quant (AI PM unavailable)"
+            print(f"[Runner] Authority snapshot saved — {_ai_src}, "
+                  f"{len(_snap['ai_weights'])} AI / {len(_snap['quant_weights'])} quant positions")
+
+        except Exception as exc:
+            print(f"[Runner] Earned authority update failed: {exc}")
+    else:
+        print("[Runner] Authority update: waiting for next rebalance (rebalance-period comparison only)")
 
     # ── Non-rebalance day: stop here ──────────────────────────────────────────
     if not is_rebalance:
