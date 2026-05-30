@@ -154,6 +154,7 @@ def _read_log() -> list:
 
 
 def _write_log(entries: list) -> None:
+    OUTCOMES_LOG.parent.mkdir(parents=True, exist_ok=True)
     tmp = OUTCOMES_LOG.parent / (OUTCOMES_LOG.name + ".tmp")
     tmp.write_text("\n".join(json.dumps(e) for e in entries) + "\n")
     tmp.replace(OUTCOMES_LOG)
