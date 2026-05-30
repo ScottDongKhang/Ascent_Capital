@@ -45,17 +45,20 @@ def test_blend_with_ai_changes_label_on_strong_disagreement():
         from ascent.regime import engine as _eng
         state_p = Path(tmp) / "blend_state.json"
         log_p = Path(tmp) / "blend_log.jsonl"
-        # Set alpha to 0.55 to force label change (pull_weight = 0.55 * 1.0 = 0.55 > 0.50)
+        # alpha=0.55 with confidence=1.0 → pull_weight=0.55 > 0.50 → label override.
+        # Patch MAX_ALPHA to 1.0 so the production cap (0.30) doesn't clamp alpha in tests,
+        # allowing us to exercise the label-override branch without changing production limits.
         state_p.write_text(json.dumps({"alpha": 0.55, "history": []}))
         with patch.object(_eng, "AI_BLEND_STATE_PATH", str(state_p)):
             with patch.object(_eng, "AI_BLEND_LOG_PATH", str(log_p)):
-                engine = _make_engine_with_cache(["calm_bull"], risk_mults=[1.0])
-                engine._cfg["regime_risk_multiplier"] = {"stressed": 0.8}
-                engine.blend_with_ai(
-                    {"label": "stressed", "confidence": 1.0, "reasoning": "Seeing stress"},
-                    as_of_date="2026-06-09",
-                )
-                last_label = engine._signal_cache.iloc[-1]["label"]
+                with patch.object(_eng, "AI_BLEND_MAX_ALPHA", 1.0):
+                    engine = _make_engine_with_cache(["calm_bull"], risk_mults=[1.0])
+                    engine._cfg["regime_risk_multiplier"] = {"stressed": 0.8}
+                    engine.blend_with_ai(
+                        {"label": "stressed", "confidence": 1.0, "reasoning": "Seeing stress"},
+                        as_of_date="2026-06-09",
+                    )
+                    last_label = engine._signal_cache.iloc[-1]["label"]
         assert last_label == "stressed"
 
 

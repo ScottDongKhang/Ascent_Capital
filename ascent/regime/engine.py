@@ -62,7 +62,7 @@ VIX_CONFIRMATION_LABELS   = {"stressed"}
 
 # ── AI Regime Blend constants ─────────────────────────────────────────────────
 AI_BLEND_INITIAL_ALPHA = 0.05
-AI_BLEND_MAX_ALPHA = 0.60
+AI_BLEND_MAX_ALPHA = 0.30
 AI_BLEND_STEP = 0.03
 AI_BLEND_STATE_PATH = "data_cache/regime_blend_state.json"
 AI_BLEND_LOG_PATH = "logs/regime_blend_log.jsonl"
