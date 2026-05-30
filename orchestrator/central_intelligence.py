@@ -31,6 +31,13 @@ SKILL_SCORES_PATH = Path("dashboard/agent_skill_scores.json")
 # Recovers automatically — rechecked every run, no manual intervention needed.
 EARLY_ZERO_MIN_DAYS = 21
 
+# Defensive agents are regime-conditional diversifiers. They are designed to
+# underperform in calm_bull — that's not a signal of bad strategy, it's intended
+# behavior. Only zero them if they're losing in the regimes they're built for
+# (stressed / crisis). In calm_bull, give them a free pass.
+DEFENSIVE_AGENTS = {"macro", "alternatives"}
+DEFENSIVE_AGENT_REGIMES = {"stressed", "crisis"}  # regimes where early-zero applies
+
 # Factor buckets for partial contradiction detection
 FACTOR_BUCKETS = {
     "rates_long":      {"TLT", "IEF", "LQD"},
@@ -205,6 +212,7 @@ def _compute_early_sharpe(agent_id: str) -> Optional[float]:
 def _apply_early_zeros(
     agent_ids: list,
     base: dict,
+    current_regime: Optional[str] = None,
 ) -> tuple:
     """
     Zero out warming-up agents that have ≥ EARLY_ZERO_MIN_DAYS of data
@@ -214,11 +222,17 @@ def _apply_early_zeros(
     Returns (zeroed_ids, adjusted_base).
     Agents that recover (Sharpe turns positive) are automatically reinstated
     on the next run — no manual intervention needed.
+
+    Defensive agents (macro, alternatives) are exempt when regime is calm_bull
+    or neutral — they are designed to underperform in risk-on regimes.
     """
     zeroed = []
     for aid in agent_ids:
         sharpe = _compute_early_sharpe(aid)
         if sharpe is not None and sharpe <= 0:
+            if aid in DEFENSIVE_AGENTS and current_regime not in DEFENSIVE_AGENT_REGIMES:
+                print(f"[Orchestrator] Early-zero skipped: {aid} Sharpe={sharpe:.3f} but regime={current_regime} (defensive agent — exempt outside stressed/crisis)")
+                continue
             zeroed.append((aid, sharpe))
 
     if not zeroed:
@@ -379,7 +393,7 @@ def _compute_allocation(
     if not agents_with_skill:
         # Apply early-zero to warming-up agents with ≥21 days of negative Sharpe.
         # Recovers automatically when Sharpe turns positive.
-        early_zeroed, base = _apply_early_zeros(agent_ids, base)
+        early_zeroed, base = _apply_early_zeros(agent_ids, base, current_regime=us_regime)
         allocation = {aid: base.get(aid, 0.0) for aid in agent_ids}
         label = "Base allocation (all warming up)"
         if early_zeroed:
