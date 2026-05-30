@@ -156,13 +156,26 @@ def _job_altdata_full_sweep(all_symbols: list, portfolio_symbols: list) -> None:
 
 def _job_llm_fundamental_cache(all_symbols: list) -> None:
     """Update LLM fundamental cache for stale/missing symbols."""
+    import pandas as pd
+    from ascent.alpha.llm_fundamental import llm_fundamental_alpha
+    from ascent.data.store.parquet import load_parquet
+
     try:
-        from scripts.seed_llm_cache import seed_cache
-        seed_cache(symbols=all_symbols, force_stale_only=True)
-    except ImportError:
-        # Fallback: call the seeder directly
-        from ascent.alpha.llm_fundamental import update_llm_fundamental_cache
-        update_llm_fundamental_cache(all_symbols)
+        fundamentals = load_parquet("fundamentals")
+    except Exception:
+        fundamentals = pd.DataFrame()
+
+    if fundamentals.empty:
+        print("[LLMFundamental/Weekend] No fundamentals data — skipping cache update")
+        return
+
+    equity_symbols = set(all_symbols)
+    if "symbol" in fundamentals.columns:
+        fundamentals = fundamentals[fundamentals["symbol"].isin(equity_symbols)]
+
+    n = len(fundamentals["symbol"].unique()) if "symbol" in fundamentals.columns else 0
+    print(f"[LLMFundamental/Weekend] Updating cache for {n} symbols")
+    llm_fundamental_alpha(fundamentals)
 
 
 def _job_ml_retrain() -> None:
@@ -195,8 +208,8 @@ def _job_ml_retrain() -> None:
 
 def _job_factor_discovery() -> None:
     """Run factor discovery: PySR + LLM template proposals."""
-    from ascent.research.factor_discovery.discovery_runner import run_discovery
-    run_discovery(mode="weekend")
+    from ascent.research.factor_discovery.discovery_runner import run_factor_discovery
+    run_factor_discovery()
 
 
 def _job_self_improve(n_variants: int = 20) -> None:
@@ -212,14 +225,23 @@ def _job_self_improve(n_variants: int = 20) -> None:
 
 
 def _job_conviction_retrain() -> None:
-    """Retrain conviction gate logistic regression on latest decision history."""
-    from ascent.strategy.conviction_gate import ConvictionGate
-    gate = ConvictionGate()
-    result = gate._train_ml_model()
-    if result:
-        print("[ConvictionGate/Weekend] ML model retrained successfully")
+    """Warm conviction gate model on latest matured decision history."""
+    import json
+    from pathlib import Path as _Path
+    from ascent.strategy.conviction_gate import _get_ml_model
+
+    records_path = _Path("logs/conviction_outcomes.jsonl")
+    if not records_path.exists():
+        print("[ConvictionGate/Weekend] No outcomes log yet — skipping")
+        return
+
+    records = [json.loads(l) for l in records_path.read_text().splitlines() if l.strip()]
+    matured = [r for r in records if r.get("outcome_realized")]
+    model = _get_ml_model(matured)
+    if model is not None:
+        print(f"[ConvictionGate/Weekend] Model warmed on {len(matured)} matured records")
     else:
-        print("[ConvictionGate/Weekend] Insufficient data for ML training (need n≥30)")
+        print(f"[ConvictionGate/Weekend] Insufficient matured data ({len(matured)}/30) — skipping")
 
 
 def _job_adversarial_calibration() -> None:
@@ -234,16 +256,36 @@ def _job_adversarial_calibration() -> None:
 def _job_ai_pm_research(all_symbols: list) -> None:
     """
     AI PM weekend deep research session.
-    Analyzes full universe — no trade output, produces research memo.
+    Runs pre-thesis to form a fresh thesis before Monday's quant run.
+    Result cached so Monday's run_all_agents.py skips Phase 1 if fresh.
     """
-    from agents.ai_pm_agent import run_ai_pm_weekend_research
-    memo = run_ai_pm_weekend_research(universe=all_symbols)
-    out_path = Path("data_cache/weekend_research.json")
     import tempfile, os
+    from agents.ai_pm_agent import run_ai_pm_prethesis
+    from dataclasses import asdict
+
+    prethesis = run_ai_pm_prethesis()
+    if prethesis is None:
+        print("[AIPMResearch] Pre-thesis returned None — skipping memo write")
+        return
+
+    memo = {
+        "as_of_date": date.today().isoformat(),
+        "macro_view": prethesis.macro_view,
+        "regime_interpretation": prethesis.regime_interpretation,
+        "high_conviction_names": prethesis.high_conviction_names,
+        "names_to_avoid": prethesis.names_to_avoid,
+        "sector_tilts": prethesis.sector_tilts,
+        "regime_assessment": prethesis.regime_assessment,
+        "sleeve_weight_prior": prethesis.sleeve_weight_prior,
+        "market_character": prethesis.market_character,
+    }
+    out_path = Path("data_cache/weekend_research.json")
     tmp = Path(tempfile.mktemp(dir=out_path.parent, suffix=".tmp"))
     tmp.write_text(json.dumps(memo, indent=2))
     os.replace(tmp, out_path)
-    print(f"[AIPMResearch] Memo written: {len(memo.get('opportunities', []))} opportunities identified")
+    n = len(prethesis.high_conviction_names)
+    print(f"[AIPMResearch] Pre-thesis written: {n} high-conviction names, "
+          f"regime={prethesis.regime_assessment.get('label','?')}")
 
 
 def _job_weekly_debrief() -> dict:
