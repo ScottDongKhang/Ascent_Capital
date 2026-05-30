@@ -64,7 +64,7 @@ DEFAULT_ALPHA_WEIGHTS_BY_REGIME = {
 }
 
 
-def _load_active_alpha_weights(regime: str = None) -> dict:
+def _load_active_alpha_weights(regime: str = None, ai_prior: dict = None) -> dict:
     import json as _json
     from pathlib import Path as _Path
 
@@ -84,13 +84,27 @@ def _load_active_alpha_weights(regime: str = None) -> dict:
         except Exception as exc:
             log.warning("_load_active_alpha_weights: failed to load config (%s) — using defaults", exc)
 
-    # Priority: config by_regime → DEFAULT_ALPHA_WEIGHTS_BY_REGIME → config global → flat default
+    # Priority: config by_regime → meta-learner → DEFAULT_ALPHA_WEIGHTS_BY_REGIME → config global → flat default
     if config_regime_weights is not None:
         return config_regime_weights
+
     if regime:
         regime_key = str(regime).lower()
+        try:
+            from ascent.alpha.meta_learner import SleeveMetaLearner, log_weight_proposal
+            regime_defaults = DEFAULT_ALPHA_WEIGHTS_BY_REGIME.get(regime_key, DEFAULT_ALPHA_WEIGHTS)
+            ml = SleeveMetaLearner()
+            ml_weights = ml.get_weights(regime_key, regime_defaults, ai_prior=ai_prior)
+            if ml_weights is not None:
+                log.info("_load_active_alpha_weights: meta-learner weights for regime=%s", regime_key)
+                log_weight_proposal(regime_key, ml_weights, "meta_learner")
+                return ml_weights
+        except Exception as exc:
+            log.warning("_load_active_alpha_weights: meta-learner error (%s) — using regime defaults", exc)
+
         if regime_key in DEFAULT_ALPHA_WEIGHTS_BY_REGIME:
             return DEFAULT_ALPHA_WEIGHTS_BY_REGIME[regime_key].copy()
+
     if config_global_weights is not None:
         return config_global_weights
     return DEFAULT_ALPHA_WEIGHTS.copy()
@@ -179,7 +193,7 @@ def _cs_normalize(df):
     std = df.std(axis=1).replace(0, np.nan)
     return df.sub(mean, axis=0).div(std, axis=0).clip(-3, 3).fillna(0)
 
-def build_alpha_stack(features, alpha_weights=None, regime_signal=None, agent_id: str = "us_equities"):
+def build_alpha_stack(features, alpha_weights=None, regime_signal=None, agent_id: str = "us_equities", ai_prior: dict = None):
     """
     Build composite alpha from all enabled sleeves.
 
@@ -198,7 +212,7 @@ def build_alpha_stack(features, alpha_weights=None, regime_signal=None, agent_id
                 regime_label = str(regime_signal.label.value).lower()
             except Exception:
                 pass
-        alpha_weights = _load_active_alpha_weights(regime=regime_label)
+        alpha_weights = _load_active_alpha_weights(regime=regime_label, ai_prior=ai_prior)
         alpha_weights = _get_gated_weights(alpha_weights)
     if regime_signal is not None:
         try:

@@ -162,3 +162,42 @@ def test_weights_sum_to_one():
         result = learner.get_weights("stressed", defaults)
         assert result is not None
         assert abs(sum(result.values()) - 1.0) < 0.02
+
+
+# ── stack integration ──────────────────────────────────────────────────────────
+
+def test_stack_uses_meta_learner_when_posteriors_exist(monkeypatch, tmp_path):
+    """When meta-learner has sufficient posteriors, _load_active_alpha_weights uses them."""
+    from ascent.alpha import meta_learner as _ml_mod
+
+    # Create a learner with 5 observations for all 14 sleeves
+    state = {
+        "calm_bull": {
+            s: {"mu": 0.010, "var": 0.003, "n": 5}
+            for s in ["trend", "meanrev", "statarb", "ml", "fundamental",
+                      "earnings", "analyst", "options_flow", "insider",
+                      "short_interest", "altdata", "narrative", "llm_fundamental", "volatility"]
+        }
+    }
+    import json as _json
+    p = tmp_path / "posteriors.json"
+    p.write_text(_json.dumps(state))
+    monkeypatch.setattr(_ml_mod, "POSTERIORS_PATH", p)
+
+    from ascent.alpha.stack import _load_active_alpha_weights
+    weights = _load_active_alpha_weights(regime="calm_bull")
+    assert isinstance(weights, dict)
+    assert abs(sum(weights.values()) - 1.0) < 0.02
+
+
+def test_stack_falls_back_to_regime_defaults_when_meta_learner_returns_none(monkeypatch, tmp_path):
+    """When meta-learner returns None (sparse data), defaults are used."""
+    from ascent.alpha import meta_learner as _ml_mod
+
+    p = tmp_path / "posteriors.json"
+    p.write_text("{}")
+    monkeypatch.setattr(_ml_mod, "POSTERIORS_PATH", p)
+
+    from ascent.alpha.stack import _load_active_alpha_weights, DEFAULT_ALPHA_WEIGHTS_BY_REGIME
+    weights = _load_active_alpha_weights(regime="calm_bull")
+    assert weights == DEFAULT_ALPHA_WEIGHTS_BY_REGIME["calm_bull"]
