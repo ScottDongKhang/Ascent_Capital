@@ -389,3 +389,42 @@ Python 3.12.13 Homebrew, venv at `.venv/`. Use `.venv/bin/python`. API keys via 
 - **GitHub Pages dashboard**: `https://scottdongkhang.github.io/Ascent_Capital`. Hero with animated counters, equity curve vs SPY, drawdown chart, cumulative alpha chart, AI intelligence section (earned authority, allocation doughnut, AI PM decision card, debate accordion with 5 sessions). Auto-updates after every daily run. README has live stats table.
 - 627 passing, 1 skipped.
 - Files: `agents/ai_pm_agent.py`, `run_all_agents.py`, `ascent/strategy/conviction_gate.py`, `tests/test_conviction_gate.py`, `scripts/generate_performance_page.py`, `docs/index.html`, `README.md`, `.gitignore`.
+
+### 2026-05-29 (alpha performance fixes + authority comparison fix ✅)
+
+**Daily run:** portfolio -0.69% vs SPY +0.25% (NAV $110,173). Non-rebalance day. Macro/alternatives early-zeroed by orchestrator (negative Sharpe ≥21 days).
+
+**Fix 1 — Early-zero exemption for defensive agents** (`orchestrator/central_intelligence.py`):
+- Macro and alternatives are designed to underperform in calm_bull — that's their job, not a failure signal.
+- Added `DEFENSIVE_AGENTS = {"macro", "alternatives"}` exempt from early-zero unless regime is stressed/crisis.
+- Recovers automatically when regime changes.
+
+**Fix 2 — VIX confirmation for stressed regime exposure cut** (`ascent/regime/engine.py`):
+- HMM calls "stressed" on price momentum alone — fired during April VIX-calm relief rally, triggered 35% exposure cut while SPY ran +6.8%.
+- Added `_apply_vix_confirmation()`: post-processes signal cache, restores `risk_multiplier=1.0` when regime=stressed but VIX < 20. Label kept (sleeve weighting still defensive), only gross exposure restored.
+- `VIX_STRESSED_CONFIRMATION = 20.0` exported so other modules stay in sync.
+
+**Fix 3 — VIX confirmation for SPY 200MA overlay** (`ascent/main.py`):
+- 200MA overlay imported `VIX_STRESSED_CONFIRMATION` from engine.py (single source of truth).
+- Now requires VIX > 20 to confirm before applying 30% exposure cut. `fillna(25.0)` so NaN VIX dates stay conservative (cut can still fire).
+
+**Fix 4 — Fundamental sleeve: regime-conditional weights + IC gate** (`ascent/alpha/stack.py`):
+- Fundamental had IC=-0.0078, t=-4.63 — value factors systematically underperform momentum bull markets.
+- `DEFAULT_ALPHA_WEIGHTS_BY_REGIME`: fundamental=0% in calm_bull/euphoric (→trend 0.43%), 8% in stressed/crisis (→trend 0.33%).
+- `_get_gated_weights()`: reads last 5 unique-date entries from `sleeve_ic_log.jsonl`, zeroes any sleeve with rolling mean IC < -0.010, redistributes to trend.
+- `_load_active_alpha_weights()` priority: `active_alpha_config.json` by_regime → `DEFAULT_ALPHA_WEIGHTS_BY_REGIME` → config global → flat default.
+- Calm_bull allocation was already 70% US equity from prior session (commit `3f400c1`).
+
+**Fix 5 — Earned authority comparison fixed** (`ascent/strategy/earned_authority.py`, `run_all_agents.py`):
+- Prior comparison was broken: `ai_ret` = daily return of stale multi-asset AI PM portfolio; `quant_ret` = US equities PnL log only. Wrong universe, wrong frequency.
+- Now: on each rebalance day, snapshot both AI PM portfolio and full quant merged portfolio. On the next rebalance, compute holding-period return for both over the same symbols and same window. Apples to apples.
+- `ADVANCE_WINDOW`: 21 daily returns → 10 rebalance periods (~5 months). Annualization: sqrt(252) → sqrt(26).
+- Stale daily return buffers cleared. Old AI PM scorecard (−3.45%) was invalid — two-phase redesign hasn't run a rebalance yet.
+- `data_cache/authority_rebalance_snapshot.json` saves each rebalance's portfolios for the next comparison.
+
+**R2R memory status:** NOT deployed. `memory/r2r_interface.py` falls back to BM25 keyword search over `outputs/debate_log/` (no `R2R_API_KEY` set). What IS running: regime episode log, reflection agent (`reflections.jsonl`), decision memory (AI PM override outcomes).
+
+**self_improve status:** Disabled (`SELF_MODIFY_ENABLED=False`), no launchd agent registered, last ran April 19. Has never promoted a config to production. Not AI-native (random perturbation). Won't enable until 30 consecutive days positive OOS Sharpe.
+
+- 629 → 636 tests. Commits: `dc7238f`, `32ea69d`, `2a63d08`, `9311035`, `613c0d5`.
+- Files: `orchestrator/central_intelligence.py`, `ascent/regime/engine.py`, `ascent/main.py`, `ascent/alpha/stack.py`, `ascent/strategy/earned_authority.py`, `run_all_agents.py`, `tests/test_regime_features.py`, `tests/alpha/test_fundamental_alpha.py`, `tests/test_ai_pm_agent.py`, `tests/test_self_evolving_alpha.py`.
