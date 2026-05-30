@@ -159,6 +159,7 @@ def _job_llm_fundamental_cache(all_symbols: list) -> None:
     import pandas as pd
     from ascent.alpha.llm_fundamental import llm_fundamental_alpha
     from ascent.data.store.parquet import load_parquet
+    from scripts.seed_llm_cache import _compute_ratios
 
     try:
         fundamentals = load_parquet("fundamentals")
@@ -172,6 +173,11 @@ def _job_llm_fundamental_cache(all_symbols: list) -> None:
     equity_symbols = set(all_symbols)
     if "symbol" in fundamentals.columns:
         fundamentals = fundamentals[fundamentals["symbol"].isin(equity_symbols)]
+
+    # Convert raw accounting columns → ratio columns expected by llm_fundamental_alpha
+    ratio_cols = {"gross_profitability", "accruals", "asset_growth"}
+    if not ratio_cols.issubset(set(fundamentals.columns)):
+        fundamentals = _compute_ratios(fundamentals)
 
     n = len(fundamentals["symbol"].unique()) if "symbol" in fundamentals.columns else 0
     print(f"[LLMFundamental/Weekend] Updating cache for {n} symbols")
