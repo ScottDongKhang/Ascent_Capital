@@ -195,3 +195,36 @@ def test_narrative_in_stack_default_weights():
         "DEFAULT_ALPHA_WEIGHTS must include 'narrative' sleeve"
     assert abs(DEFAULT_ALPHA_WEIGHTS["narrative"] - 0.03) < 0.001, \
         "narrative sleeve activated at 3% (cache seeder built in Task #13)"
+
+
+def test_system_prompt_contains_grounding_instruction():
+    """System prompt must instruct model to reason only from provided summaries."""
+    from ascent.alpha.narrative_alpha import _SYSTEM_PROMPT
+    lowered = _SYSTEM_PROMPT.lower()
+    assert ("only" in lowered or "provided" in lowered), \
+        "System prompt must restrict model to the provided data"
+    assert ("training" in lowered or "outside" in lowered or "do not" in lowered), \
+        "System prompt must forbid using external knowledge"
+
+
+def test_compute_shift_uses_json_schema():
+    """_compute_shift must pass json_schema to generate_structured."""
+    import ascent.alpha.narrative_alpha as mod
+    from unittest.mock import patch
+
+    calls = []
+
+    def mock_generate(system_prompt, user_prompt, **kwargs):
+        calls.append(kwargs)
+        return '{"shift": 0.5, "reason": "direction improved"}'
+
+    current = {"direction": "UP",   "confidence": 0.8, "key_trend": "improving margins"}
+    prior   = {"direction": "DOWN", "confidence": 0.6, "key_trend": "declining margins"}
+
+    with patch.object(mod, "generate_structured", mock_generate):
+        with patch.object(mod, "_load_narrative_cache", return_value={}):
+            with patch.object(mod, "_save_narrative_cache", return_value=None):
+                mod._compute_shift("AAPL", current, prior)
+
+    assert any("json_schema" in c for c in calls), \
+        "_compute_shift must pass json_schema= to generate_structured"

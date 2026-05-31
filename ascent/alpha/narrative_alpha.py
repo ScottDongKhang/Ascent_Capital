@@ -30,8 +30,21 @@ except ImportError:
 
 _SYSTEM_PROMPT = (
     "You are a financial analyst comparing two quarterly investment narrative summaries. "
+    "Reason ONLY from the two summaries provided — do not use any outside knowledge "
+    "about the company, sector, or market conditions from your training data. "
+    "Your entire analysis must be grounded in the direction, confidence, and trend text given. "
     "Respond only with valid JSON. No other text."
 )
+
+_NARRATIVE_SHIFT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "shift":  {"type": "number"},
+        "reason": {"type": "string"},
+    },
+    "required": ["shift", "reason"],
+    "additionalProperties": False,
+}
 
 
 def _load_narrative_cache() -> dict:
@@ -118,6 +131,7 @@ def _compute_shift(symbol: str, current: dict, prior: dict) -> float:
             max_tokens=128,
             temperature=0.1,
             use_cache=False,
+            json_schema=_NARRATIVE_SHIFT_SCHEMA,
         )
         start = raw.find("{")
         end   = raw.rfind("}") + 1
