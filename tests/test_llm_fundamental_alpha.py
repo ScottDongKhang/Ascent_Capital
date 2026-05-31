@@ -132,3 +132,65 @@ def test_stack_includes_llm_fundamental_sleeve():
     assert DEFAULT_ALPHA_WEIGHTS["llm_fundamental"] > 0
     assert abs(sum(DEFAULT_ALPHA_WEIGHTS.values()) - 1.0) < 1e-6, \
         "Sleeve weights must sum to 1.0"
+
+
+def test_system_prompt_contains_amnesia_instruction():
+    """The system prompt must explicitly forbid using training-data knowledge."""
+    from ascent.alpha.llm_fundamental import _SYSTEM_PROMPT
+    lowered = _SYSTEM_PROMPT.lower()
+    assert ("training" in lowered or "amnesia" in lowered or "do not use" in lowered), \
+           "System prompt must instruct model not to use training-data company knowledge"
+
+
+def test_user_template_contains_quoted_evidence_field():
+    """The user template must ask for a quoted_evidence field."""
+    from ascent.alpha.llm_fundamental import _USER_TEMPLATE
+    assert "quoted_evidence" in _USER_TEMPLATE, \
+           "User template must include quoted_evidence in JSON schema"
+
+
+def test_call_llm_uses_json_schema(tmp_path):
+    """_call_llm must pass a json_schema to generate_structured."""
+    import ascent.alpha.llm_fundamental as mod
+    from unittest.mock import patch
+    calls = []
+
+    def mock_generate(system_prompt, user_prompt, **kwargs):
+        calls.append(kwargs)
+        return '{"direction": "UP", "confidence": 0.8, "key_trend": "improving", "uncertainty": "rates", "quoted_evidence": "Q0 gross_profitability=0.350"}'
+
+    with patch.object(mod, "generate_structured", mock_generate):
+        result = mod._call_llm("AAPL", "Quarter | ...\n---\nQ0 | 0.350 | 0.01 | 0.05")
+
+    assert result is not None
+    assert any("json_schema" in c for c in calls), \
+           "_call_llm must pass json_schema= to generate_structured"
+
+
+def test_quoted_evidence_stored_in_cache(tmp_path):
+    """quoted_evidence from LLM response must be stored in the cache entry."""
+    import ascent.alpha.llm_fundamental as mod
+    from unittest.mock import patch
+    import json
+
+    fund = _make_fundamentals(symbols=["AAPL"])
+
+    def mock_call(symbol, table):
+        return {
+            "direction": "UP",
+            "confidence": 0.8,
+            "key_trend": "improving",
+            "uncertainty": "macro",
+            "quoted_evidence": "Q0 gross_profitability=0.400",
+        }
+
+    cache_path = tmp_path / "c.json"
+    with patch.object(mod, "CACHE_PATH", cache_path):
+        with patch.object(mod, "_call_llm", side_effect=mock_call):
+            mod.llm_fundamental_alpha(fund)
+
+    cache = json.loads(cache_path.read_text())
+    entries = list(cache.values())
+    assert len(entries) == 1
+    assert "quoted_evidence" in entries[0], \
+           "Cache entry must store quoted_evidence for auditability"

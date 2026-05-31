@@ -23,26 +23,55 @@ log = logging.getLogger(__name__)
 
 CACHE_PATH = Path("data_cache/llm_fundamental_cache.json")
 
+try:
+    from ascent.llm.client import generate_structured, HAIKU_MODEL
+except ImportError:  # allow test environments without the full LLM stack
+    generate_structured = None  # type: ignore[assignment]
+    HAIKU_MODEL = "claude-haiku-4-5-20251001"
+
 _SYSTEM_PROMPT = (
     "You are a financial analyst evaluating anonymized company financials. "
-    "You do not know the company name, ticker, or exact dates. "
-    "Respond only with valid JSON matching the specified format. No other text."
+    "You do not know the company name, ticker, sector, or exact dates. "
+    "Do not use any knowledge about specific companies from your training data — "
+    "treat yourself as having amnesia about all individual companies. "
+    "Base your analysis ONLY on the numerical data provided in each prompt. "
+    "Respond only with valid JSON matching the specified schema. No other text."
 )
+
+_LLM_FUNDAMENTAL_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "direction":       {"type": "string", "enum": ["UP", "DOWN", "NEUTRAL"]},
+        "confidence":      {"type": "number"},
+        "key_trend":       {"type": "string"},
+        "uncertainty":     {"type": "string"},
+        "quoted_evidence": {
+            "type": "string",
+            "description": (
+                "A direct quote of one or two specific numbers from the provided "
+                "metrics table that most support your forecast direction. "
+                "Example: 'Q0 gross_profitability=0.412, Q-1=0.389 (+0.023)'. "
+                "If no supporting number exists, write 'no clear numerical support'."
+            ),
+        },
+    },
+    "required": ["direction", "confidence", "key_trend", "uncertainty", "quoted_evidence"],
+    "additionalProperties": False,
+}
 
 _USER_TEMPLATE = """Analyze these quarterly financial metrics for an anonymous company.
 
 Financial Data (Q-3 = three quarters ago, Q0 = most recent quarter):
 {metrics_table}
 
-Step 1: Identify 3 key trends in revenue growth, gross margin, and asset base (cite specific numbers).
+Step 1: Identify 3 key trends in revenue growth, gross margin, and asset base (cite specific numbers from the table above).
 Step 2: Compute: (a) gross margin change Q-3→Q0, (b) accruals ratio trend, (c) asset growth rate Q-3→Q0.
 Step 3: Interpret each economically — improving, stable, or deteriorating, and why.
 Step 4: Identify any inflection points in the last 2 quarters.
 Step 5: Forecast next-quarter earnings direction. State confidence (0.0–1.0) and primary reason.
 Step 6: State the single most important uncertainty in your forecast.
 
-Respond ONLY in this JSON format:
-{{"direction": "UP|DOWN|NEUTRAL", "confidence": 0.XX, "key_trend": "one sentence", "uncertainty": "one sentence"}}"""
+Respond ONLY with a JSON object matching the provided schema. The quoted_evidence field must contain actual numbers copied from the table above."""
 
 
 def _load_cache() -> dict:
@@ -72,7 +101,6 @@ def _format_metrics_table(ratios: dict) -> str:
 
 def _call_llm(symbol: str, metrics_table: str) -> Optional[dict]:
     try:
-        from ascent.llm.client import generate_structured, HAIKU_MODEL
         user_prompt = _USER_TEMPLATE.format(metrics_table=metrics_table)
         raw = generate_structured(
             system_prompt=_SYSTEM_PROMPT,
@@ -81,8 +109,9 @@ def _call_llm(symbol: str, metrics_table: str) -> Optional[dict]:
             max_tokens=512,
             temperature=0.2,
             use_cache=True,
+            json_schema=_LLM_FUNDAMENTAL_SCHEMA,
         )
-        # Extract JSON between first { and last }
+        # Structured outputs guarantee valid JSON; parse defensively anyway
         start = raw.find("{")
         end   = raw.rfind("}") + 1
         if start == -1 or end == 0:
@@ -97,7 +126,13 @@ def _call_llm(symbol: str, metrics_table: str) -> Optional[dict]:
         if not (0.0 <= confidence <= 1.0):
             log.warning("[LLM Fundamental] Confidence out of range %.3f for %s", confidence, symbol)
             return None
-        return {"direction": direction, "confidence": confidence}
+        return {
+            "direction":       direction,
+            "confidence":      confidence,
+            "key_trend":       parsed.get("key_trend", ""),
+            "uncertainty":     parsed.get("uncertainty", ""),
+            "quoted_evidence": parsed.get("quoted_evidence", ""),
+        }
     except Exception as exc:
         log.warning("[LLM Fundamental] Call failed for %s: %s", symbol, exc)
         return None
