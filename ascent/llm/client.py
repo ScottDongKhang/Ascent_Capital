@@ -125,6 +125,7 @@ def chat_completion(
     max_tokens: int = 2000,
     temperature: float = 0.7,
     use_cache: bool = False,
+    output_config: dict | None = None,
 ) -> str:
     """
     Send a chat completion request to Anthropic.
@@ -165,6 +166,8 @@ def chat_completion(
             ]
         else:
             kwargs["system"] = system_prompt
+    if output_config is not None:
+        kwargs["output_config"] = output_config
 
     for attempt in range(_MAX_RETRIES):
         try:
@@ -186,17 +189,29 @@ def generate_structured(
     max_tokens: int = 2000,
     temperature: float = 0.4,
     use_cache: bool = False,
+    json_schema: dict | None = None,
 ) -> str:
     """
     Convenience wrapper for structured generation tasks.
     Lower temperature for more deterministic output.
+    Pass json_schema to enforce response shape via structured outputs.
     """
+    output_config = (
+        {"format": {"type": "json_schema", "schema": json_schema}}
+        if json_schema is not None else None
+    )
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user",   "content": user_prompt},
     ]
-    return chat_completion(messages, model=model, max_tokens=max_tokens, temperature=temperature,
-                           use_cache=use_cache)
+    return chat_completion(
+        messages,
+        model=model,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        use_cache=use_cache,
+        output_config=output_config,
+    )
 
 
 def extended_thinking_completion(
