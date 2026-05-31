@@ -421,6 +421,15 @@ def _build_agent_context(portfolio_state: dict, agent_role: str) -> str:
     return "\n\n".join(sections)
 
 
+_EVIDENCE_RULE = (
+    " EVIDENCE RULE: Every number you cite (return %, position weight, scenario "
+    "percentile, ratio) must appear in the Portfolio context you were given. Write "
+    "[FROM CONTEXT] immediately after any number you quote from it. If you cannot "
+    "find a number in the context, state the observation qualitatively rather than "
+    "inventing a value."
+)
+
+
 def run_bull_agent(portfolio_state: dict) -> str:
     context      = _build_agent_context(portfolio_state, "bull")
     regime       = portfolio_state.get("us_regime", "unknown")
@@ -438,6 +447,7 @@ def run_bull_agent(portfolio_state: dict) -> str:
             "You have been given historical accuracy data for each debater — use it to "
             f"understand where the bear and devil tend to over-warn. Keep your argument under 200 words."
             f"{track_record}"
+            f"{_EVIDENCE_RULE}"  # EVIDENCE RULE — see module constant
         ),
         user_prompt=user_prompt,
         model=DEBATE_MODEL,
@@ -471,6 +481,7 @@ def run_bear_agent(portfolio_state: dict) -> str:
                 "You have been given historical accuracy data -- use it to calibrate how often "
                 "your past warnings were correct in this regime. Keep under 200 words."
                 f"{track_record}"
+                f"{_EVIDENCE_RULE}"  # EVIDENCE RULE — see module constant
             ),
             user_prompt=user_prompt,
             tools=DEBATE_TOOLS,
@@ -486,6 +497,7 @@ def run_bear_agent(portfolio_state: dict) -> str:
             system_prompt=(
                 "You are the Bear Analyst at Ascent Capital. Argue for reducing risk. "
                 "Be specific. Keep under 200 words."
+                f"{_EVIDENCE_RULE}"  # EVIDENCE RULE — see module constant
             ),
             user_prompt=user_prompt,
             model=DEBATE_MODEL,
@@ -562,6 +574,7 @@ def run_devils_advocate(portfolio_state: dict) -> str:
         "Think about: earnings surprises, geopolitical events, liquidity gaps, "
         f"correlation breakdowns. Be specific. Keep under 150 words."
         f"{track_record}"
+        f"{_EVIDENCE_RULE}"  # EVIDENCE RULE — see module constant
     )
     try:
         from debate.agent_tools import DEBATE_TOOLS, execute_tool
