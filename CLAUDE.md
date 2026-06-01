@@ -398,3 +398,13 @@ Python 3.12.13 Homebrew, venv at `.venv/`. Use `.venv/bin/python`. API keys via 
 - **`debate/agents.py`**: Added `_EVIDENCE_RULE` module constant. Appended to bull, bear (primary + fallback), and devil's advocate system prompts — requires agents to tag every cited number with `[FROM CONTEXT]` and prohibits inventing values not in the provided portfolio context.
 - 627 → 675 tests (+12 this session).
 - Files: `ascent/llm/client.py`, `ascent/alpha/llm_fundamental.py`, `ascent/alpha/narrative_alpha.py`, `debate/agents.py`, `tests/test_llm_client.py` (new), `tests/test_llm_fundamental_alpha.py`, `tests/test_narrative_alpha.py`, `tests/test_debate_agents.py` (new).
+
+### 2026-06-01 (Causal Intelligence spec — planning only)
+- Brainstormed highest-ROI next feature. Decision: Causal Intelligence for the AI PM.
+- **Design**: Two-layer system — (1) statistical macro causal DAG via PC algorithm (causallearn, weekly, free) + (2) per-symbol company causal graphs via Haiku (cached quarterly, ~$0.06/yr). Zero extra LLM cost — all additions are context injections to existing calls.
+- **Four gates to earn authority faster** (no standard lowered): Gate 1 regime-causal compatibility (blocks anti-momentum bets in calm_bull), Gate 2 priced-in filter (no concentrating on things that already ran), Gate 3 mechanism velocity score (pure Python, ranks best bets), Gate 4 intra-horizon early exit (cut losers when mechanism breaks, not at horizon end).
+- **New module**: `ascent/causal/` (dag_builder, causal_discovery, velocity, tracker, compatibility). New log: `logs/causal_predictions.jsonl`. New cache: `data_cache/causal_graphs/`, `data_cache/macro_causal_dag.json`.
+- **Implementation phases**: A (infrastructure) → B (pre-thesis gates) → C (tracker + Phase 2) → D (debate integration).
+- **Success criterion**: AI PM advances to Phase 1 (25% weight) within existing 21-trading-day window on earned merit.
+- Spec written: `docs/superpowers/specs/2026-06-01-causal-intelligence-ai-pm.md`
+- No code written this session. Implementation deferred to next session.
