@@ -305,7 +305,7 @@ Python 3.12.13 Homebrew, venv at `.venv/`. Use `.venv/bin/python`. API keys via 
 
 **Portfolio** (post-rebalance May 27): 17 positions, NAV ~$110,100. Live since April 1, 2026. Rebalance #4 on May 27.
 
-**AI PM**: Phase 0 (`ai_weight=0.0`), shadow period started 2026-05-19. 8/21 days evaluated. AI cumulative +2.75% vs quant +6.20% (underperforming — anti-momentum bias being corrected by redesign). `data_cache/earned_authority.json` is ground truth.
+**AI PM**: Phase 0 (`ai_weight=0.0`), shadow period started 2026-05-19. Scoring is rebalance-period only (`ADVANCE_WINDOW=5`). First comparison at ~Jun 15 rebalance (May 27 snapshot saved, no prior snapshot to compare yet). Phase 1 (25%) reachable ~Aug 2026 if Sharpe edge > 0.05 over 5 rebalance periods. `data_cache/earned_authority.json` is ground truth.
 
 **Regime**: calm_bull. **Tests**: 627 passing, 1 skipped.
 
@@ -408,3 +408,4 @@ Python 3.12.13 Homebrew, venv at `.venv/`. Use `.venv/bin/python`. API keys via 
 - **Success criterion**: AI PM advances to Phase 1 (25% weight) within existing 21-trading-day window on earned merit.
 - Spec written: `docs/superpowers/specs/2026-06-01-causal-intelligence-ai-pm.md`
 - No code written this session. Implementation deferred to next session.
+- **`ADVANCE_WINDOW` reduced from 10 → 5 rebalance periods** (`ascent/strategy/earned_authority.py`). Standard unchanged (Sharpe edge > 0.05 still required). Phase 1 now reachable ~Aug 2026, Phase 3 ~Feb 2027 — two months before YC April 2027. Buffer clock starts at next rebalance (~Jun 15, first real AI vs quant comparison).
