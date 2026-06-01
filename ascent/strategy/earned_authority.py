@@ -12,7 +12,7 @@ STATE_PATH = Path(__file__).resolve().parent.parent.parent / "data_cache" / "ear
 SHADOW_RETURNS_PATH = Path(__file__).resolve().parent.parent.parent / "data_cache" / "ai_pm_shadow_returns.jsonl"
 
 ADVANCE_EDGE = 0.05
-ADVANCE_WINDOW = 10        # rebalance periods (~5 months); was 21 daily returns (wrong unit)
+ADVANCE_WINDOW = 5         # rebalance periods (~2.5 months); was 10 (~5 months)
 REVERT_DRAWDOWN_EDGE = 0.05
 MIN_WEIGHT = 0.02
 HARD_CAP = 0.80
