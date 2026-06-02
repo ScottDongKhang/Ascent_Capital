@@ -1,6 +1,6 @@
 # Ascent Capital
 
-![Tests](https://img.shields.io/badge/tests-663%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-708%20passing-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.12-blue)
 ![Status](https://img.shields.io/badge/status-live%20paper%20trading-informational)
 ![AI PM](https://img.shields.io/badge/AI%20PM-Claude%20Opus%204.6-blueviolet)
@@ -112,6 +112,9 @@ Total cost: approximately $1.50 in API calls.
 | May 26, 2026 | Adversarial Intelligence live — 3-layer engine, earned authority, one falsifiable change per rebalance |
 | May 27, 2026 | Rebalance #4 · AI PM two-phase architecture live (Sonnet pre-thesis + Opus synthesis) |
 | May 30, 2026 | AI-Native Learning System — Bayesian meta-learner, AI calibration, AI regime blend all wired |
+| May 31, 2026 | Anti-hallucination hardening — structured outputs enforced on LLM fundamental, narrative alpha, and all debate agents |
+| Jun 1, 2026 | Causal Intelligence (Phases A–D) — PC-algorithm DAG, regime-causal gate, priced-in filter, early-exit tracker, devil's advocate causal attacks |
+| Jun 1, 2026 | Monthly investor letter auto-generation wired into daily run |
 
 ---
 
@@ -140,7 +143,7 @@ pip install -r requirements.txt
 
 python run_all_agents.py            # daily pipeline (auto-detects weekend mode on Sat/Sun)
 python run_all_agents.py --dry-run  # full logic, no orders submitted
-python -m pytest --tb=short -q     # 663 passed, 1 skipped
+python -m pytest --tb=short -q     # 708 passed, 1 skipped
 streamlit run demo_app.py           # interactive investor demo
 streamlit run ascent/dashboard/live_dashboard.py --server.port 8502
 ```
@@ -279,16 +282,16 @@ python run_all_agents.py  ·  daily  ·  1:45 PM ET via launchd
 
 ## Alpha Stack — 14 Sleeves
 
-Weights shown are the `calm_bull` regime baseline. The Bayesian meta-learner overrides these with empirically derived posteriors as rebalance data accumulates (100% empirical at n=20 observations per regime). IC gate zeroes any sleeve with rolling mean IC < −0.010.
+Weights shown are the `calm_bull` regime defaults from `DEFAULT_ALPHA_WEIGHTS_BY_REGIME` in `ascent/alpha/stack.py`. In calm_bull, statarb and fundamental are zeroed and their weight is absorbed by trend (38%→58%). The Bayesian meta-learner then overrides these with empirically derived posteriors as rebalance data accumulates (100% empirical at n=20 observations per regime). IC gate zeroes any sleeve with rolling mean IC < −0.010.
 
 | Sleeve | calm_bull | stressed/crisis | Signal Construction |
 |--------|----------:|----------------:|---------------------|
-| Trend | 43% | 33% | Cross-sectional momentum; `mom_252d − mom_21d` skip-month at 20% sub-weight |
-| Stat-arb | 15% | 15% | Sector-residual mean reversion (requires `profiles.parquet`) |
+| Trend | **58%** | 33–35% | Cross-sectional momentum; `mom_252d − mom_21d` skip-month at 20% sub-weight; absorbs statarb+fundamental in calm_bull |
+| Stat-arb | **0%** | 15% | Sector-residual mean reversion (requires `profiles.parquet`); zeroed in calm_bull — momentum dominates |
 | ML (XGBoost/CPCV) | 10% | 10% | C(6,2)=15 folds · 5-day purge + embargo · 12 features · weekend GridSearch |
 | Mean Reversion | 5% | 5% | Short-term reversal (z-score, 20-day window) |
 | Volatility | 5% | 5% | Long declining+stable vol: `−vol_trend_10d / vol_of_vol_21d` |
-| Fundamental | **0%** | **8%** | Gross profitability + accruals + asset growth; 45-day filing lag; IC<0 in calm_bull → zeroed |
+| Fundamental | **0%** | **8%** | Gross profitability + accruals + asset growth; 45-day filing lag; zeroed in calm_bull by regime override |
 | Earnings (PEAD) | 5% | 5% | EPS surprise z-score · OLS momentum-beta residual · 1-bday lag |
 | Analyst | 5% | 5% | Revision signal; zero-filled when cache absent |
 | LLM Fundamental | 3% | 3% | Chicago Booth 6-step chain-of-thought via Haiku; cached by (symbol, quarter) |
@@ -413,6 +416,9 @@ Regime propagates through sleeve weights, position size caps, orchestrator base 
 | Non-rebalance intelligence | ✅ live | 7 monitors daily · position health · rebalance brief |
 | Weekend intelligence pipeline | ✅ live | 11 jobs · debrief · scenarios · AI PM research · GridSearch |
 | Alt-data pipeline | ✅ live | SEC 7-signal · transcripts · Google Trends · IC gate |
+| Anti-hallucination hardening | ✅ live | Structured outputs enforced on LLM fundamental, narrative alpha, and all 4 debate agents via Anthropic `json_schema` wire-level enforcement |
+| Causal Intelligence (A–D) | ✅ live | PC-algorithm macro DAG · per-symbol causal graph (Haiku) · regime-causal Gate 1 · priced-in Gate 2 · early-exit tracker (Gate 4) · devil's advocate causal attacks |
+| Monthly investor letter | ✅ live | Auto-generated on first trading day of each month; Sonnet writes full attribution + risk narrative to `outputs/investor_reports/` |
 | Self-improve loop | ✅ built | `SELF_MODIFY_ENABLED=False` until positive Sharpe for 30 consecutive days |
 | Factor discovery | ✅ built | PySR + LLM proposals · Harvey FDR gate · human review required |
 | 130/30 long-short | ✅ built | `LONG_SHORT_ENABLED=False` until ≥30 paper rebalances (~Aug 2026) |
