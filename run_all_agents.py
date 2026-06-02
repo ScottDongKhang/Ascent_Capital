@@ -1458,6 +1458,15 @@ def _log_run(today, merged_weights, agent_outputs, dry_run):
     except Exception as e:
         print(f"[Runner] Cost log skipped ({e})")
 
+    # Monthly investor letter — triggers on first trading day of each new month
+    try:
+        from ascent.reporting.investor_letter import generate_monthly_letter
+        letter_path = generate_monthly_letter(today)
+        if letter_path:
+            print(f"[Letter] Monthly investor letter saved → {letter_path}")
+    except Exception as _le:
+        print(f"[Letter] Investor letter skipped: {_le}")
+
     print(f"[Runner] Done.\n")
 
 

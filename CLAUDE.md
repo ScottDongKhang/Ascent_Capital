@@ -409,3 +409,11 @@ Python 3.12.13 Homebrew, venv at `.venv/`. Use `.venv/bin/python`. API keys via 
 - **`debate/agents.py`**: Added `_EVIDENCE_RULE` module constant. Appended to bull, bear (primary + fallback), and devil's advocate system prompts — requires agents to tag every cited number with `[FROM CONTEXT]` and prohibits inventing values not in the provided portfolio context.
 - 627 → 675 tests (+12 this session).
 - Files: `ascent/llm/client.py`, `ascent/alpha/llm_fundamental.py`, `ascent/alpha/narrative_alpha.py`, `debate/agents.py`, `tests/test_llm_client.py` (new), `tests/test_llm_fundamental_alpha.py`, `tests/test_narrative_alpha.py`, `tests/test_debate_agents.py` (new).
+
+### 2026-06-01 (monthly investor letter auto-generation ✅)
+- **`ascent/reporting/investor_letter.py`** (new): auto-generates the Ascent Capital investor letter on the first trading day of each month after `run_all_agents.py` completes.
+- Detection: `is_first_trading_day_of_month()` — compares today's month to the prior weekday's month. Handles Mon-after-weekend correctly.
+- Data pipeline: reconstructs monthly + ITD returns from `multi_agent_run.jsonl` weights × `prices_live.parquet` daily returns. Computes max drawdown, annualized vol, beta (OLS), attribution (symbol-level weight × return). Reads debate verdicts, regime signal, kill switch state.
+- Letter generation: Sonnet call with the full Ascent Capital template (voice rules, banned words, exact section structure). Saves to `outputs/investor_reports/YYYY-MM-investor-letter.md`.
+- `run_all_agents.py`: letter generation wired in after cost logging, before `[Runner] Done.` — wrapped in try/except so failures never block the daily run.
+- No new tests (data functions are thin wrappers; LLM call is integration-only).

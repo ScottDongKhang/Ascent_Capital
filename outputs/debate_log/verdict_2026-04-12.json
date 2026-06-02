@@ -1,7 +1,7 @@
 {
   "date": "2026-04-12",
   "data_as_of": "2026-04-12",
-  "timestamp": "2026-05-27T20:44:52.894462",
+  "timestamp": "2026-06-02T12:55:18.709830",
   "portfolio_state": {
     "date": "2026-04-12",
     "us_regime": "calm_bull",
@@ -51,8 +51,8 @@
       "catalyst_text": ""
     },
     "quant_context": {
-      "portfolio_var_95": -0.018787,
-      "portfolio_var_99": -0.023159,
+      "portfolio_var_95": -0.017925,
+      "portfolio_var_99": -0.019849,
       "factor_exposures": {
         "us_tech": 1.0
       },
@@ -63,21 +63,21 @@
         {
           "sym1": "AAPL",
           "sym2": "MSFT",
-          "correlation": 0.286
+          "correlation": 0.203
         }
       ],
-      "summary_text": "QUANTITATIVE RISK CONTEXT (pre-computed):\n\nPortfolio VaR (historical simulation, 63 trading days):\n  95th percentile (1-day): -1.88%  (1 in 20 chance of loss >= this)\n  99th percentile (1-day): -2.32%  (1 in 100 chance of loss >= this)\n\nFactor exposures (sum of position weights per factor):\n  us_tech            100.0%\n\nCorrelation: No high-correlation pairs (>0.65) detected.\n\nConcentration warning: us_tech is 100.0% of portfolio"
+      "summary_text": "QUANTITATIVE RISK CONTEXT (pre-computed):\n\nPortfolio VaR (historical simulation, 63 trading days):\n  95th percentile (1-day): -1.79%  (1 in 20 chance of loss >= this)\n  99th percentile (1-day): -1.98%  (1 in 100 chance of loss >= this)\n\nFactor exposures (sum of position weights per factor):\n  us_tech            100.0%\n\nCorrelation: No high-correlation pairs (>0.65) detected.\n\nConcentration warning: us_tech is 100.0% of portfolio"
     },
     "adversarial_engine": {
       "adversarial_scores": {
         "AAPL": {
-          "short_thesis": "Deteriorating risk trend signals margin compression ahead. Services growth slowing; iPhone saturation in developed markets pressures revenue. China exposure amplifies geopolitical risk.",
+          "short_thesis": "Deteriorating risk profile amid flat sentiment. Services growth plateauing, China exposure vulnerable to geopolitical escalation, valuation stretched at 30x earnings.",
           "adversarial_score": 0.58,
           "flagged": false
         },
         "MSFT": {
-          "short_thesis": "AI hype cycle peaking; Azure growth deceleration likely. Enterprise software spending cycles turning; valuation stretched at 30x forward earnings amid rising rates.",
-          "adversarial_score": 0.45,
+          "short_thesis": "AI capex cycle unsustainable; Azure margin compression accelerating. Valuation assumes perpetual cloud dominance despite intensifying AWS/GCP competition.",
+          "adversarial_score": 0.52,
           "flagged": false
         }
       },
@@ -144,7 +144,7 @@
           "intervention_type": "regime_sizing",
           "current_weight": 0.5,
           "suggested_weight": 0.065,
-          "adversarial_score": 0.45,
+          "adversarial_score": 0.52,
           "priority_score": 2.61
         }
       ]
@@ -178,7 +178,7 @@
         "intervention_type": "regime_sizing",
         "current_weight": 0.5,
         "suggested_weight": 0.065,
-        "adversarial_score": 0.45,
+        "adversarial_score": 0.52,
         "priority_score": 2.61
       }
     ],
