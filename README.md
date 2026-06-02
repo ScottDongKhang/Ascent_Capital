@@ -1,6 +1,6 @@
 # Ascent Capital
 
-![Tests](https://img.shields.io/badge/tests-708%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-716%20passing-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.12-blue)
 ![Status](https://img.shields.io/badge/status-live%20paper%20trading-informational)
 ![AI PM](https://img.shields.io/badge/AI%20PM-Claude%20Opus%204.6-blueviolet)
@@ -143,7 +143,7 @@ pip install -r requirements.txt
 
 python run_all_agents.py            # daily pipeline (auto-detects weekend mode on Sat/Sun)
 python run_all_agents.py --dry-run  # full logic, no orders submitted
-python -m pytest --tb=short -q     # 708 passed, 1 skipped
+python -m pytest --tb=short -q     # 716 passed, 1 skipped
 streamlit run demo_app.py           # interactive investor demo
 streamlit run ascent/dashboard/live_dashboard.py --server.port 8502
 ```
