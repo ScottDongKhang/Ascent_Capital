@@ -399,7 +399,7 @@ Python 3.12.13 Homebrew, venv at `.venv/`. Use `.venv/bin/python`. API keys via 
 - **`causal-learn` package installed** in `.venv`.
 - 675 → 708 tests (+33 this session).
 - Files: `ascent/config/types.py`, `ascent/causal/__init__.py`, `ascent/causal/velocity.py`, `ascent/causal/causal_discovery.py`, `ascent/causal/dag_builder.py`, `ascent/causal/compatibility.py`, `ascent/causal/tracker.py`, `agents/ai_pm_agent.py`, `ascent/monitoring/weekend_runner.py`, `run_all_agents.py`, `debate/agents.py`, 7 new test files.
-- Open: wire `causal_mechanisms` from `AIPreThesis` into `portfolio_state` dict before debate runner call (so devil's advocate actually receives them). Currently the field is populated on `AIPreThesis` but not plumbed into `debate_runner.py`'s `portfolio_state`.
+- `run_all_agents.py`: `portfolio_state` gains `causal_mechanisms` key populated from `_ai_prethesis.causal_mechanisms` — devil's advocate now receives live mechanisms on rebalance days. Test added to verify end-to-end.
 
 ### 2026-05-31 (anti-hallucination hardening ✅)
 - **Problem**: LLMs in `llm_fundamental`, `narrative_alpha`, and debate agents could fabricate financial numbers not present in their input context.

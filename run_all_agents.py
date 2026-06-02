@@ -1295,13 +1295,17 @@ def main():
         _base_alloc = {"us_equities": 0.60, "macro": 0.15, "international": 0.15, "alternatives": 0.10}
         _orch_alloc = merged_weights.get("allocation") if isinstance(merged_weights, dict) else None
         portfolio_state = {
-            "date":         today.isoformat(),
-            "us_regime":    next((ao.regime_signal for ao in agent_outputs if ao.agent_id == "us_equities" and ao.regime_signal), _saved_regime),
-            "macro_regime": next((ao.regime_signal for ao in agent_outputs if ao.agent_id == "macro" and ao.regime_signal), "unknown"),
-            "n_positions":  len(merged_weights),
-            "allocation":   _orch_alloc or {ao.agent_id: round(_base_alloc.get(ao.agent_id, 0.0), 2)
-                            for ao in agent_outputs},
-            "weights":      merged_weights,
+            "date":              today.isoformat(),
+            "us_regime":         next((ao.regime_signal for ao in agent_outputs if ao.agent_id == "us_equities" and ao.regime_signal), _saved_regime),
+            "macro_regime":      next((ao.regime_signal for ao in agent_outputs if ao.agent_id == "macro" and ao.regime_signal), "unknown"),
+            "n_positions":       len(merged_weights),
+            "allocation":        _orch_alloc or {ao.agent_id: round(_base_alloc.get(ao.agent_id, 0.0), 2)
+                                 for ao in agent_outputs},
+            "weights":           merged_weights,
+            "causal_mechanisms": [
+                (vars(m) if hasattr(m, "__dict__") else m)
+                for m in (_ai_prethesis.causal_mechanisms if _ai_prethesis else [])
+            ],
         }
         _regime_dict = {"entropy": _regime_entropy, "label": _saved_regime}
         if not should_run_debate(portfolio_state, _regime_dict):
