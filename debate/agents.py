@@ -561,6 +561,21 @@ def run_devils_advocate(portfolio_state: dict) -> str:
         user_prompt += f"\n\n{cred_context}"
     user_prompt += "\n\nWhat is the most dangerous blind spot? Use the scenario numbers."
 
+    # Format causal mechanisms for devil's advocate attack context
+    _causal_context = ""
+    causal_mechanisms = portfolio_state.get("causal_mechanisms", [])
+    if causal_mechanisms:
+        lines = ["══ AI PM CAUSAL MECHANISMS (attack these if the thesis is broken) ══"]
+        for m in causal_mechanisms:
+            sym = m.get("symbol", "?") if isinstance(m, dict) else getattr(m, "symbol", "?")
+            mech = m.get("mechanism", "") if isinstance(m, dict) else getattr(m, "mechanism", "")
+            falsif = m.get("falsification_condition", "") if isinstance(m, dict) else getattr(m, "falsification_condition", "")
+            timing = m.get("timing", "") if isinstance(m, dict) else getattr(m, "timing", "")
+            lines.append(f"  {sym} [{timing}]: {mech}")
+            if falsif:
+                lines.append(f"    Falsification: {falsif}")
+        _causal_context = "\n" + "\n".join(lines)
+
     _da_system_prompt = (
         "You are the Devil's Advocate at Ascent Capital. Your job is to "
         "find the SINGLE most dangerous assumption in the current portfolio construction. "
@@ -571,10 +586,15 @@ def run_devils_advocate(portfolio_state: dict) -> str:
         "past warnings were prescient vs. over-cautious. "
         "Use the available tools to look up sector concentration, VaR, and momentum data "
         "to make quantitative arguments. "
+        "CAUSAL MECHANISM ATTACK: If the AI PM's causal mechanisms are listed, "
+        "look for evidence that a mechanism has already failed — supply additions that "
+        "break a supply-shortage thesis, earnings misses that break a margin-recovery thesis, "
+        "or regime shifts that invalidate the mechanism type. "
         "Think about: earnings surprises, geopolitical events, liquidity gaps, "
         f"correlation breakdowns. Be specific. Keep under 150 words."
         f"{track_record}"
         f"{_EVIDENCE_RULE}"  # EVIDENCE RULE — see module constant
+        f"{_causal_context}"
     )
     try:
         from debate.agent_tools import DEBATE_TOOLS, execute_tool

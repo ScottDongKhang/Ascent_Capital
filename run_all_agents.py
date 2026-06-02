@@ -899,6 +899,26 @@ def main():
         except Exception as _am_e:
             print(f"[AdvMonitor] Skipped: {_am_e}")
 
+        # Gate 4 — causal early exit check
+        try:
+            from ascent.causal.tracker import check_early_exits as _check_exits
+            _early_exit_symbols = _check_exits()
+            if _early_exit_symbols:
+                print(f"[Causal] Early exit flagged for: {_early_exit_symbols}")
+                import json as _json
+                _shadow_path = Path("data_cache/ai_pm_shadow_returns.jsonl")
+                _shadow_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(_shadow_path, "a") as _sf:
+                    for _sym in _early_exit_symbols:
+                        _sf.write(_json.dumps({
+                            "date": today.isoformat(),
+                            "symbol": _sym,
+                            "ai_pm_shadow_weight": 0.0,
+                            "reason": "causal_mechanism_broken",
+                        }) + "\n")
+        except Exception as _ce:
+            print(f"[Causal] Gate 4 early exit check failed: {_ce}")
+
     # ── Generate rebalance brief BEFORE AI PM so get_rebalance_brief tool reads current intel ──
     if is_rebalance:
         try:
@@ -945,12 +965,21 @@ def main():
     if not is_rebalance:
         print("[Runner] AI PM skipped — non-rebalance day.")
     else:
+        # Load causal track record for Phase 2 synthesis context
+        _causal_track_record = None
+        try:
+            from ascent.causal.tracker import get_track_record as _get_track_record
+            _causal_track_record = _get_track_record()
+        except Exception:
+            pass
+
         try:
             print("[Runner] AI PM Phase 2 — synthesising pre-thesis with quant validation...")
             ai_pm_result = run_ai_pm(
                 quant_outputs=agent_outputs,
                 merged_weights=merged_weights,
                 prethesis=_ai_prethesis,
+                causal_track_record=_causal_track_record,
             )
 
             ok = False

@@ -27,3 +27,10 @@ def test_devils_advocate_system_prompt_contains_evidence_rule():
     src = _get_source("run_devils_advocate")
     assert _EVIDENCE_RULE_FRAGMENT in src, \
         "Devil's Advocate system prompt must contain EVIDENCE RULE citation instruction"
+
+
+def test_devils_advocate_references_causal_mechanisms():
+    """Devil's advocate source must reference causal mechanism attack capability."""
+    src = _get_source("run_devils_advocate")
+    assert "causal" in src.lower() or "mechanism" in src.lower(), \
+        "Devil's advocate must reference causal mechanism attack in its prompt/code"

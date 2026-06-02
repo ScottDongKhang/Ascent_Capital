@@ -1637,6 +1637,7 @@ def run_ai_pm(
     quant_outputs: Optional[list] = None,
     merged_weights: Optional[Dict[str, float]] = None,
     prethesis: Optional[AIPreThesis] = None,
+    causal_track_record: Optional[dict] = None,
 ) -> AIPMResult:
     """
     Run the AI PM agent. Returns AIPMResult(portfolio, thesis).
@@ -1678,9 +1679,26 @@ def run_ai_pm(
                 "Prefer quant confirmation over your own overrides. Stand down when quant contradicts "
                 "your thesis unless you have a specific dated catalyst.\n\n" + _system
             )
+        _causal_track_context = ""
+        if causal_track_record and causal_track_record.get("total", 0) >= 3:
+            acc = causal_track_record.get("accuracy_pct", 0)
+            total = causal_track_record.get("total", 0)
+            conf = causal_track_record.get("confirmed", 0)
+            fals = causal_track_record.get("falsified", 0)
+            verdict = (
+                "High accuracy — trust your causal mechanisms when velocity > 0.70."
+                if acc >= 60 else
+                "Below-target accuracy — only concentrate when mechanism velocity > 0.70 AND timing=catalyst_imminent."
+            )
+            _causal_track_context = (
+                f"\n\n══ CAUSAL THESIS TRACK RECORD ══\n"
+                f"{total} resolved: {conf} confirmed, {fals} falsified, accuracy={acc:.1f}%.\n"
+                f"{verdict}"
+            )
         user_prompt = (
             f"Today is {date.today()}. Your pre-thesis is sealed above. "
             "Now run the quant agents, validate your thesis, and submit your final portfolio."
+            + _causal_track_context
         )
         log.info("[AIPMAgent] Using two-phase synthesis mode (%d pre-thesis names)",
                  len(prethesis.high_conviction_names))
