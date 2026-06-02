@@ -305,7 +305,7 @@ Python 3.12.13 Homebrew, venv at `.venv/`. Use `.venv/bin/python`. API keys via 
 
 **Portfolio** (post-rebalance May 27): 17 positions, NAV ~$110,100. Live since April 1, 2026. Rebalance #4 on May 27.
 
-**AI PM**: Phase 0 (`ai_weight=0.0`), shadow period started 2026-05-19. Scoring is rebalance-period only (`ADVANCE_WINDOW=5`). First comparison at ~Jun 15 rebalance (May 27 snapshot saved, no prior snapshot to compare yet). Phase 1 (25%) reachable ~Aug 2026 if Sharpe edge > 0.05 over 5 rebalance periods. `data_cache/earned_authority.json` is ground truth.
+**AI PM**: Phase 0 (`ai_weight=0.0`), shadow period started 2026-05-19. 8/21 days evaluated. AI cumulative +2.75% vs quant +6.20% (underperforming — anti-momentum bias being corrected by redesign). `data_cache/earned_authority.json` is ground truth.
 
 **Regime**: calm_bull. **Tests**: 627 passing, 1 skipped.
 
@@ -385,10 +385,21 @@ Python 3.12.13 Homebrew, venv at `.venv/`. Use `.venv/bin/python`. API keys via 
 - **Two-phase AI PM**: `run_ai_pm_prethesis()` (Sonnet, max 10 tools, before quant) reads macro/SEC/earnings/narratives, forms original thesis with 8-15 named positions and written reasons, seals via `propose_prethesis`. `run_ai_pm(prethesis=...)` (Opus, synthesis) receives sealed thesis + quant validation. Quant confirms → concentrate. Quant neutral → hold. Quant contradicts → defend or stand down. AI is the alpha source; quant is the validator.
 - **New tool `get_crowding_signal`**: momentum trajectory (21d vs 252d decel) + short interest % of float + analyst rec drift. CLEAN/WATCH/OVERCROWDED. Required before any REDUCE.
 - **`momentum_exhaustion` override type**: requires crowding=OVERCROWDED + text signal. `data_quality` has 0.85 friction (no longer auto-approved). Max 2 overrides hard-capped in prompt.
-- **Cost**: Phase 1 Sonnet (~$0.06) + Phase 2 Opus (~$0.34) = ~$0.40/rebalance vs ~$0.27 before (+48%). ~$3/yr extra at 26 rebalances.
+- **Cost**: Phase 1 Sonnet (~$0.06)c + Phase 2 Opus (~$0.34) = ~$0.40/rebalance vs ~$0.27 before (+48%). ~$3/yr extra at 26 rebalances.
 - **GitHub Pages dashboard**: `https://scottdongkhang.github.io/Ascent_Capital`. Hero with animated counters, equity curve vs SPY, drawdown chart, cumulative alpha chart, AI intelligence section (earned authority, allocation doughnut, AI PM decision card, debate accordion with 5 sessions). Auto-updates after every daily run. README has live stats table.
 - 627 passing, 1 skipped.
 - Files: `agents/ai_pm_agent.py`, `run_all_agents.py`, `ascent/strategy/conviction_gate.py`, `tests/test_conviction_gate.py`, `scripts/generate_performance_page.py`, `docs/index.html`, `README.md`, `.gitignore`.
+
+### 2026-06-01 (causal intelligence for the AI PM — Phases A–D ✅)
+- **Spec**: `docs/superpowers/specs/2026-06-01-causal-intelligence-ai-pm.md` — four-phase build to give AI PM structural causal reasoning. Approved and implemented in full.
+- **Phase A** — Foundation: `ascent/causal/` module created. `velocity.py` (pure Python velocity score). `causal_discovery.py` (PC algorithm via `causal-learn` on FRED + sector ETF returns → `data_cache/macro_causal_dag.json`). `dag_builder.py` (Haiku per-symbol causal graph builder; cache by `(symbol, quarter_end)` to `data_cache/causal_graphs/`). `CausalMechanism` dataclass added to `ascent/config/types.py`. `AIPreThesis.causal_mechanisms` field added.
+- **Phase B** — Gates 1+2: `ascent/causal/compatibility.py` — static regime-to-mechanism-type dict. Gate 1 (regime-causal compatibility) and Gate 2 (priced_in filter) wired into `run_ai_pm_prethesis()`. `get_causal_graph` tool added to `PRE_THESIS_TOOLS`. Velocity-ranked causal context injected into Phase 1 user prompt. Causal mechanisms assembled from cached graphs after `propose_prethesis`.
+- **Phase C** — Tracker + Gate 4: `ascent/causal/tracker.py` — `write_predictions()`, `check_outcomes()`, `check_early_exits()`, `get_track_record()`. Gate 4 early exit wired into non-rebalance daily path in `run_all_agents.py` — symbols with broken mechanisms logged to `ai_pm_shadow_returns.jsonl` with `causal_mechanism_broken` reason. `causal_track_record` passed to `run_ai_pm()` and injected into Phase 2 synthesis prompt. Weekend runner gains `causal_macro_dag` + `causal_graph_builder` jobs.
+- **Phase D** — Debate: devil's advocate receives `causal_mechanisms` from `portfolio_state`; system prompt gains CAUSAL MECHANISM ATTACK instruction to explicitly attack broken theses.
+- **`causal-learn` package installed** in `.venv`.
+- 675 → 708 tests (+33 this session).
+- Files: `ascent/config/types.py`, `ascent/causal/__init__.py`, `ascent/causal/velocity.py`, `ascent/causal/causal_discovery.py`, `ascent/causal/dag_builder.py`, `ascent/causal/compatibility.py`, `ascent/causal/tracker.py`, `agents/ai_pm_agent.py`, `ascent/monitoring/weekend_runner.py`, `run_all_agents.py`, `debate/agents.py`, 7 new test files.
+- Open: wire `causal_mechanisms` from `AIPreThesis` into `portfolio_state` dict before debate runner call (so devil's advocate actually receives them). Currently the field is populated on `AIPreThesis` but not plumbed into `debate_runner.py`'s `portfolio_state`.
 
 ### 2026-05-31 (anti-hallucination hardening ✅)
 - **Problem**: LLMs in `llm_fundamental`, `narrative_alpha`, and debate agents could fabricate financial numbers not present in their input context.
@@ -398,14 +409,3 @@ Python 3.12.13 Homebrew, venv at `.venv/`. Use `.venv/bin/python`. API keys via 
 - **`debate/agents.py`**: Added `_EVIDENCE_RULE` module constant. Appended to bull, bear (primary + fallback), and devil's advocate system prompts — requires agents to tag every cited number with `[FROM CONTEXT]` and prohibits inventing values not in the provided portfolio context.
 - 627 → 675 tests (+12 this session).
 - Files: `ascent/llm/client.py`, `ascent/alpha/llm_fundamental.py`, `ascent/alpha/narrative_alpha.py`, `debate/agents.py`, `tests/test_llm_client.py` (new), `tests/test_llm_fundamental_alpha.py`, `tests/test_narrative_alpha.py`, `tests/test_debate_agents.py` (new).
-
-### 2026-06-01 (Causal Intelligence spec — planning only)
-- Brainstormed highest-ROI next feature. Decision: Causal Intelligence for the AI PM.
-- **Design**: Two-layer system — (1) statistical macro causal DAG via PC algorithm (causallearn, weekly, free) + (2) per-symbol company causal graphs via Haiku (cached quarterly, ~$0.06/yr). Zero extra LLM cost — all additions are context injections to existing calls.
-- **Four gates to earn authority faster** (no standard lowered): Gate 1 regime-causal compatibility (blocks anti-momentum bets in calm_bull), Gate 2 priced-in filter (no concentrating on things that already ran), Gate 3 mechanism velocity score (pure Python, ranks best bets), Gate 4 intra-horizon early exit (cut losers when mechanism breaks, not at horizon end).
-- **New module**: `ascent/causal/` (dag_builder, causal_discovery, velocity, tracker, compatibility). New log: `logs/causal_predictions.jsonl`. New cache: `data_cache/causal_graphs/`, `data_cache/macro_causal_dag.json`.
-- **Implementation phases**: A (infrastructure) → B (pre-thesis gates) → C (tracker + Phase 2) → D (debate integration).
-- **Success criterion**: AI PM advances to Phase 1 (25% weight) within existing 21-trading-day window on earned merit.
-- Spec written: `docs/superpowers/specs/2026-06-01-causal-intelligence-ai-pm.md`
-- No code written this session. Implementation deferred to next session.
-- **`ADVANCE_WINDOW` reduced from 10 → 5 rebalance periods** (`ascent/strategy/earned_authority.py`). Standard unchanged (Sharpe edge > 0.05 still required). Phase 1 now reachable ~Aug 2026, Phase 3 ~Feb 2027 — two months before YC April 2027. Buffer clock starts at next rebalance (~Jun 15, first real AI vs quant comparison).
