@@ -17,6 +17,7 @@ Quant sanity checker uses no LLM.
 import logging
 
 from ascent.llm.client import generate_structured, tool_completion, SONNET_MODEL as DEBATE_MODEL, HAIKU_MODEL
+from ascent.llm.prompt_loader import get_prompt
 from debate.outcome_tracker import load_credibility_context
 
 log = logging.getLogger(__name__)
@@ -421,13 +422,7 @@ def _build_agent_context(portfolio_state: dict, agent_role: str) -> str:
     return "\n\n".join(sections)
 
 
-_EVIDENCE_RULE = (
-    " EVIDENCE RULE: Every number you cite (return %, position weight, scenario "
-    "percentile, ratio) must appear in the Portfolio context you were given. Write "
-    "[FROM CONTEXT] immediately after any number you quote from it. If you cannot "
-    "find a number in the context, state the observation qualitatively rather than "
-    "inventing a value."
-)
+_EVIDENCE_RULE = get_prompt("debate.evidence_rule")
 
 
 def run_bull_agent(portfolio_state: dict) -> str:
@@ -441,13 +436,9 @@ def run_bull_agent(portfolio_state: dict) -> str:
     user_prompt += "\n\nMake the bull case for these trades."
     return generate_structured(
         system_prompt=(
-            "You are the Bull Analyst at Ascent Capital. Your job is to make "
-            "the strongest case FOR executing the proposed trades as-is. Reference specific "
-            "positions, the current regime, and momentum signals. Be specific and data-driven. "
-            "You have been given historical accuracy data for each debater — use it to "
-            f"understand where the bear and devil tend to over-warn. Keep your argument under 200 words."
-            f"{track_record}"
-            f"{_EVIDENCE_RULE}"  # EVIDENCE RULE — see module constant
+            get_prompt("debate.bull.system")
+            + track_record
+            + _EVIDENCE_RULE
         ),
         user_prompt=user_prompt,
         model=DEBATE_MODEL,
@@ -473,15 +464,9 @@ def run_bear_agent(portfolio_state: dict) -> str:
         from debate.agent_tools import DEBATE_TOOLS, execute_tool
         return tool_completion(
             system_prompt=(
-                "You are the Bear Analyst at Ascent Capital. Your job is to argue "
-                "for REDUCING risk or WAITING. Identify the weakest positions, concentration risks, "
-                "regime fragility, or macro headwinds. Use the provided tools to compute "
-                "sector concentration, VaR, and momentum BEFORE making claims -- do not guess "
-                "at numbers you can look up. Be specific. "
-                "You have been given historical accuracy data -- use it to calibrate how often "
-                "your past warnings were correct in this regime. Keep under 200 words."
-                f"{track_record}"
-                f"{_EVIDENCE_RULE}"  # EVIDENCE RULE — see module constant
+                get_prompt("debate.bear.system")
+                + track_record
+                + _EVIDENCE_RULE
             ),
             user_prompt=user_prompt,
             tools=DEBATE_TOOLS,
@@ -495,9 +480,8 @@ def run_bear_agent(portfolio_state: dict) -> str:
         log.warning("[Bear] Tool completion failed (%s), falling back to generate_structured", e)
         return generate_structured(
             system_prompt=(
-                "You are the Bear Analyst at Ascent Capital. Argue for reducing risk. "
-                "Be specific. Keep under 200 words."
-                f"{_EVIDENCE_RULE}"  # EVIDENCE RULE — see module constant
+                get_prompt("debate.bear.fallback")
+                + _EVIDENCE_RULE
             ),
             user_prompt=user_prompt,
             model=DEBATE_MODEL,
@@ -577,24 +561,10 @@ def run_devils_advocate(portfolio_state: dict) -> str:
         _causal_context = "\n" + "\n".join(lines)
 
     _da_system_prompt = (
-        "You are the Devil's Advocate at Ascent Capital. Your job is to "
-        "find the SINGLE most dangerous assumption in the current portfolio construction. "
-        "What could go catastrophically wrong that the quant signals would NOT catch? "
-        "You have been given Monte Carlo scenario analysis showing worst-case portfolio "
-        "impacts. Use these numbers to make a specific, quantified argument. "
-        "You also have historical accuracy data — use it to understand when your "
-        "past warnings were prescient vs. over-cautious. "
-        "Use the available tools to look up sector concentration, VaR, and momentum data "
-        "to make quantitative arguments. "
-        "CAUSAL MECHANISM ATTACK: If the AI PM's causal mechanisms are listed, "
-        "look for evidence that a mechanism has already failed — supply additions that "
-        "break a supply-shortage thesis, earnings misses that break a margin-recovery thesis, "
-        "or regime shifts that invalidate the mechanism type. "
-        "Think about: earnings surprises, geopolitical events, liquidity gaps, "
-        f"correlation breakdowns. Be specific. Keep under 150 words."
-        f"{track_record}"
-        f"{_EVIDENCE_RULE}"  # EVIDENCE RULE — see module constant
-        f"{_causal_context}"
+        get_prompt("debate.devils_advocate.system")
+        + track_record
+        + _EVIDENCE_RULE
+        + _causal_context  # causal mechanisms appended at runtime — not in private_prompts.yaml
     )
     try:
         from debate.agent_tools import DEBATE_TOOLS, execute_tool
@@ -699,14 +669,8 @@ def run_regime_specialist(portfolio_state: dict) -> str:
     try:
         return generate_structured(
             system_prompt=(
-                "You are the Regime Specialist at Ascent Capital. You argue purely "
-                "from the regime signal — not from individual stock opinions. "
-                "Your job: given what this regime historically implies, is the "
-                "proposed portfolio construction appropriate? Is sizing right? "
-                "Are the right factors represented? "
-                "Be specific about the regime label and what it demands. "
-                f"Keep under 150 words."
-                f"{track_record}"
+                get_prompt("debate.regime_specialist.system")
+                + track_record
             ),
             user_prompt=f"Regime context:\n{context}\n\nIs this portfolio right for this regime?",
             model=HAIKU_MODEL,
@@ -912,12 +876,7 @@ def run_bull_rebuttal(portfolio_state: dict, round1_args: dict) -> str:
     )
     try:
         return generate_structured(
-            system_prompt=(
-                "You are the Bull Analyst at Ascent Capital in Round 2 of debate. "
-                "You have read all Round 1 arguments. Rebut the bear's and devil's "
-                "strongest concerns concisely. Do not repeat your Round 1 argument — "
-                "engage directly with their specific claims. Under 75 words."
-            ),
+            system_prompt=get_prompt("debate.bull.rebuttal"),
             user_prompt=user_prompt,
             model=DEBATE_MODEL,
             temperature=0.6,
@@ -938,12 +897,7 @@ def run_bear_rebuttal(portfolio_state: dict, round1_args: dict) -> str:
     )
     try:
         return generate_structured(
-            system_prompt=(
-                "You are the Bear Analyst at Ascent Capital in Round 2 of debate. "
-                "You have read all Round 1 arguments. Rebut the bull's and regime "
-                "specialist's strongest points. Identify the risk they are still not "
-                "taking seriously. Under 75 words."
-            ),
+            system_prompt=get_prompt("debate.bear.rebuttal"),
             user_prompt=user_prompt,
             model=DEBATE_MODEL,
             temperature=0.6,
@@ -964,12 +918,7 @@ def run_devils_advocate_rebuttal(portfolio_state: dict, round1_args: dict) -> st
     )
     try:
         return generate_structured(
-            system_prompt=(
-                "You are the Devil's Advocate at Ascent Capital in Round 2 of debate. "
-                "You have read all Round 1 arguments. Find the shared blind spot — "
-                "the assumption that even the bear is making. Make it concrete and "
-                "quantified if possible. Under 75 words."
-            ),
+            system_prompt=get_prompt("debate.devils_advocate.rebuttal"),
             user_prompt=user_prompt,
             model=DEBATE_MODEL,
             temperature=0.7,
@@ -990,12 +939,7 @@ def run_regime_specialist_rebuttal(portfolio_state: dict, round1_args: dict) -> 
     )
     try:
         return generate_structured(
-            system_prompt=(
-                "You are the Regime Specialist at Ascent Capital in Round 2 of debate. "
-                "You argue only from regime signal — not from individual stock opinions. "
-                "Has Round 1 adequately addressed the regime-specific risk? "
-                "If not, name what is still missing. Under 60 words."
-            ),
+            system_prompt=get_prompt("debate.regime_specialist.rebuttal"),
             user_prompt=user_prompt,
             model=HAIKU_MODEL,
             temperature=0.4,

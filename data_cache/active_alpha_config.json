@@ -1,12 +1,23 @@
 {
+  "_note": "PROPRIETARY WEIGHTS RESET FOR PUBLIC REPO. Equal-weight baseline for architectural demonstration only.",
   "global": {
-    "trend": 0.7428,
-    "meanrev": 0.0877,
-    "statarb": 0.0661,
-    "ml": 0.1034,
-    "volatility": 0.0
+    "trend":           0.0769,
+    "meanrev":         0.0769,
+    "statarb":         0.0769,
+    "ml":              0.0769,
+    "volatility":      0.0769,
+    "fundamental":     0.0769,
+    "llm_fundamental": 0.0769,
+    "earnings":        0.0769,
+    "analyst":         0.0769,
+    "options_flow":    0.0769,
+    "insider":         0.0769,
+    "short_interest":  0.0769,
+    "altdata":         0.0,
+    "narrative":       0.0769
   },
-  "updated_at": "2026-05-02",
-  "promoted_from": "v3_20260402",
-  "fresh_sharpe": 0.7689
+  "by_regime": {},
+  "updated_at": "2026-01-01",
+  "promoted_from": null,
+  "fresh_sharpe": 0.0
 }

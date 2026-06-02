@@ -33,22 +33,26 @@ LOG_PATH          = Path("logs/self_improve_log.jsonl")
 SHADOW_DIR        = Path("data_cache/shadow_configs")
 ACTIVE_CONFIG_PATH = Path("data_cache/active_alpha_config.json")
 
-# Match current stack.py defaults exactly
+# [PROPRIETARY WEIGHTS RESET FOR PUBLIC REPO]
+# Must mirror stack.py DEFAULT_ALPHA_WEIGHTS exactly — see stack.py for rationale.
+_N_SLEEVES = 13
+_EW = round(1.0 / _N_SLEEVES, 4)
+
 DEFAULT_ALPHA_WEIGHTS = {
-    "trend":           0.38,
-    "meanrev":         0.05,
-    "statarb":         0.15,
-    "ml":              0.10,
-    "volatility":      0.05,
-    "fundamental":     0.05,
-    "llm_fundamental": 0.03,
-    "earnings":        0.05,
-    "analyst":         0.05,
-    "options_flow":    0.02,
-    "insider":         0.02,
-    "short_interest":  0.02,
-    "altdata":         0.00,   # zero until first source passes IC gate
-    "narrative":       0.03,   # activate narrative alpha
+    "trend":           _EW,
+    "meanrev":         _EW,
+    "statarb":         _EW,
+    "ml":              _EW,
+    "volatility":      _EW,
+    "fundamental":     _EW,
+    "llm_fundamental": _EW,
+    "earnings":        _EW,
+    "analyst":         _EW,
+    "options_flow":    _EW,
+    "insider":         _EW,
+    "short_interest":  _EW,
+    "altdata":         0.00,
+    "narrative":       _EW,
 }
 
 PERTURB_RANGE  = 0.10   # max +/- 10% per sleeve per variant

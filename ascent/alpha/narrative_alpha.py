@@ -24,17 +24,13 @@ LLM_FUND_CACHE_PATH  = Path("data_cache/llm_fundamental_cache.json")
 # Lazy import — falls back gracefully if ascent.llm not available in tests
 try:
     from ascent.llm.client import generate_structured, HAIKU_MODEL as _HAIKU_MODEL
+    from ascent.llm.prompt_loader import get_prompt as _get_prompt
 except ImportError:
     generate_structured = None  # type: ignore[assignment]
     _HAIKU_MODEL = "claude-haiku-4-5-20251001"
+    _get_prompt = lambda key, **kw: "[PROMPT UNAVAILABLE]"  # noqa: E731
 
-_SYSTEM_PROMPT = (
-    "You are a financial analyst comparing two quarterly investment narrative summaries. "
-    "Reason ONLY from the two summaries provided — do not use any outside knowledge "
-    "about the company, sector, or market conditions from your training data. "
-    "Your entire analysis must be grounded in the direction, confidence, and trend text given. "
-    "Respond only with valid JSON. No other text."
-)
+_SYSTEM_PROMPT = _get_prompt("alpha.narrative.system")
 
 _NARRATIVE_SHIFT_SCHEMA = {
     "type": "object",

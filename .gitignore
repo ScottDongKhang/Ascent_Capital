@@ -16,3 +16,11 @@ dashboard/*.json
 memory/*.jsonl
 outputs/scenarios/
 .superpowers/
+
+# Proprietary — never commit
+private_prompts.yaml
+data_cache/*.pkl
+data_cache/*.onnx
+data_cache/ml_model_*.pkl
+data_cache/sleeve_posteriors.json
+data_cache/conviction_gate_model.pkl

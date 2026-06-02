@@ -25,18 +25,13 @@ CACHE_PATH = Path("data_cache/llm_fundamental_cache.json")
 
 try:
     from ascent.llm.client import generate_structured, HAIKU_MODEL
+    from ascent.llm.prompt_loader import get_prompt as _get_prompt
 except ImportError:  # allow test environments without the full LLM stack
     generate_structured = None  # type: ignore[assignment]
     HAIKU_MODEL = "claude-haiku-4-5-20251001"
+    _get_prompt = lambda key, **kw: "[PROMPT UNAVAILABLE]"  # noqa: E731
 
-_SYSTEM_PROMPT = (
-    "You are a financial analyst evaluating anonymized company financials. "
-    "You do not know the company name, ticker, sector, or exact dates. "
-    "Do not use any knowledge about specific companies from your training data — "
-    "treat yourself as having amnesia about all individual companies. "
-    "Base your analysis ONLY on the numerical data provided in each prompt. "
-    "Respond only with valid JSON matching the specified schema. No other text."
-)
+_SYSTEM_PROMPT = _get_prompt("alpha.llm_fundamental.system")
 
 _LLM_FUNDAMENTAL_SCHEMA = {
     "type": "object",

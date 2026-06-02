@@ -13,15 +13,11 @@ import logging
 from typing import Any, Dict
 
 from ascent.llm.client import get_client, SONNET_MODEL
+from ascent.llm.prompt_loader import get_prompt
 
 log = logging.getLogger(__name__)
 
-_SYSTEM_PROMPT = (
-    "You are a skeptical short-seller with unlimited capital and no position to protect. "
-    "Your job is to find every reason a proposed portfolio could blow up. "
-    "Be specific, quantitative where possible, and brutally concise. "
-    "Do not offer constructive suggestions — only attack."
-)
+_SYSTEM_PROMPT = get_prompt("red_team.system")
 
 
 def run_red_team(
@@ -94,36 +90,18 @@ def run_red_team(
                     + "\n"
                 )
 
-        prompt = f"""You are reviewing a portfolio proposal from an AI portfolio manager who has overridden the pure quant baseline.
-
-CURRENT REGIME: {regime if regime else "unknown"}
-
-PROPOSED PORTFOLIO:
-{positions_str}
-{delta_section}
-PM'S MARKET VIEW: {market_view}
-
-PM'S PRE-MORTEM: {pre_mortem}
-
-PM'S STATED RISKS:
-{risks_str}
-
-PM'S WHAT COULD BE WRONG: {what_could_be_wrong}
-
-PM'S QUANT OVERRIDES:
-{overrides_str}
-
-Your task — be brutally specific, no soft language:
-
-1. OVERRIDE ATTACKS: For each AI PM override vs the quant baseline (from the delta section above), state the worst-case outcome if the quant was RIGHT and the AI PM was WRONG. Quantify the cost: if the PM reduced SATS from 10% to 4% and SATS rallies 40%, that is a 2.4% alpha drag. Make the PM feel the cost of being wrong.
-
-2. POSITION ATTACKS: For each of the top-5 positions, identify the single most dangerous scenario specific to that name — not a generic "could fall" but a specific catalyst (earnings miss, rate shock, regulatory risk, supply chain disruption).
-
-3. SYSTEMIC BLIND SPOT: Identify ONE correlation or crowding risk the PM is ignoring that is NOT in their risk list. This must be specific — name the positions that correlate and the scenario that triggers it.
-
-4. KILL SHOT: One sentence. The single most dangerous thing about this portfolio that the PM is rationalizing away.
-
-Format: override attacks first, then position attacks, then blind spot, then kill shot. One paragraph max per item. No constructive suggestions — only attack."""
+        from ascent.llm.prompt_loader import get_prompt_formatted
+        prompt = get_prompt_formatted(
+            "red_team.attack",
+            regime=regime if regime else "unknown",
+            positions_str=positions_str,
+            delta_section=delta_section,
+            market_view=market_view,
+            pre_mortem=pre_mortem,
+            risks_str=risks_str,
+            what_could_be_wrong=what_could_be_wrong,
+            overrides_str=overrides_str,
+        )
 
         client = get_client()
         response = client.messages.create(

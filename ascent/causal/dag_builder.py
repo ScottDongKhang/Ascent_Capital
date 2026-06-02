@@ -18,23 +18,18 @@ DEFAULT_CACHE_DIR = Path("data_cache/causal_graphs")
 
 try:
     from ascent.llm.client import generate_structured, HAIKU_MODEL
+    from ascent.llm.prompt_loader import get_prompt as _get_prompt
 except ImportError:
     generate_structured = None  # type: ignore
     HAIKU_MODEL = "claude-haiku-4-5-20251001"
+    _get_prompt = lambda key, **kw: "[PROMPT UNAVAILABLE]"  # noqa: E731
 
 _MECHANISM_TYPES = (
     "momentum_catalyst", "quality_defensive", "macro_hedge",
     "mean_reversion", "valuation", "supply_demand_inflection",
 )
 
-_SYSTEM_PROMPT = (
-    "You are a financial analyst building a causal model for a portfolio holding. "
-    "Identify 1-3 causal mechanisms that explain the current investment thesis. "
-    "Each mechanism must be falsifiable: state a specific observable condition "
-    "that would break the thesis. Base your analysis only on the data provided — "
-    "do not use training-data knowledge about the company beyond what is given. "
-    "Respond with valid JSON matching the provided schema exactly. No other text."
-)
+_SYSTEM_PROMPT = _get_prompt("causal.dag_builder.system")
 
 _DAG_SCHEMA = {
     "type": "object",

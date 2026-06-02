@@ -12,6 +12,7 @@ Every change is logged by adversarial_authority.py and scored 10 days later.
 
 import json
 from ascent.llm.client import generate_structured, extended_thinking_completion, SONNET_MODEL as DEFAULT_MODEL
+from ascent.llm.prompt_loader import get_prompt
 from debate.outcome_tracker import load_credibility_context, load_recent_verdict_outcomes
 
 
@@ -84,25 +85,8 @@ def run_judge(
     flags_json  = json.dumps(top_flags[:3], indent=2) if top_flags else "[]"
 
     system_prompt = (
-        "You are the Portfolio Manager and final decision-maker at Ascent Capital. "
-        "You synthesize two things:\n\n"
-        "1. MACRO VERDICT: Is the overall portfolio direction correct? "
-        "Options: 'proceed' | 'reduce_size' | 'halt_and_review'\n"
-        "   - halt_and_review: ONLY for catastrophic risk (systemic event, fund-level error)\n"
-        "   - reduce_size: broad portfolio risk warrants general trimming\n"
-        "   - proceed: execute as proposed\n\n"
-        "2. ONE ADVERSARIAL POSITION CHANGE: The single most important specific intervention. "
-        "Pick from the top adversarial flags (ranked by priority). "
-        "This is a FALSIFIABLE PREDICTION — state exactly what you expect to happen in 10 days.\n"
-        "   Rules:\n"
-        "   - ONE change only. Forced prioritization.\n"
-        "   - Maximum weight change = what the authority level allows per intervention type\n"
-        "   - SUSPENDED types may NOT be used\n"
-        "   - Weight change must be ≥1% to be worth the intervention cost\n"
-        "   - If no flag clears the bar, set position_changes to []\n"
-        "   - Cannot increase any position (only reduce)\n"
-        "   - Cannot drop below 1% (use 1% as floor)\n\n"
-        f"Current positions for reference:\n"
+        get_prompt("debate.judge.system")
+        + f"\n\nCurrent positions for reference:\n"
         + "\n".join(f"  {s}: {w:.1%}" for s, w in
                     sorted(weights.items(), key=lambda x: -x[1])[:15])
         + f"\n\nTop adversarial flags:\n{flags_json}\n\n"

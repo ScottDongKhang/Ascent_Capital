@@ -13,54 +13,37 @@ from ascent.alpha.ml_sleeve import build_ml_alpha, build_ml_alpha_cpcv
 
 log = logging.getLogger(__name__)
 
+# [PROPRIETARY WEIGHTS RESET FOR PUBLIC REPO]
+# Live regime-conditional weights are not published.
+# Equal-weight baseline used here for architectural demonstration only.
+_N_SLEEVES = 13  # altdata excluded (IC gate not yet passed in live system)
+_EW = round(1.0 / _N_SLEEVES, 4)
+
 DEFAULT_ALPHA_WEIGHTS = {
-    "trend":           0.38,
-    "meanrev":         0.05,
-    "volatility":      0.05,
-    "statarb":         0.15,
-    "ml":              0.10,
-    "fundamental":     0.05,
-    "llm_fundamental": 0.03,
-    "earnings":        0.05,
-    "analyst":         0.05,
-    "options_flow":    0.02,
-    "insider":         0.02,
-    "short_interest":  0.02,
-    "altdata":         0.00,   # zero until first source passes IC gate
-    "narrative":       0.03,   # activate narrative alpha
+    "trend":           _EW,
+    "meanrev":         _EW,
+    "volatility":      _EW,
+    "statarb":         _EW,
+    "ml":              _EW,
+    "fundamental":     _EW,
+    "llm_fundamental": _EW,
+    "earnings":        _EW,
+    "analyst":         _EW,
+    "options_flow":    _EW,
+    "insider":         _EW,
+    "short_interest":  _EW,
+    "altdata":         0.00,
+    "narrative":       _EW,
 }
 
-IC_GATE_THRESHOLD = -0.010  # auto-zero any sleeve with 5-day rolling mean IC below this
+IC_GATE_THRESHOLD = -0.010
 
 DEFAULT_ALPHA_WEIGHTS_BY_REGIME = {
-    "calm_bull": {
-        **DEFAULT_ALPHA_WEIGHTS,
-        "fundamental": 0.00,
-        "statarb":     0.00,
-        "trend":       0.58,   # absorbs fundamental(0.05) + statarb(0.15)
-    },
-    "stressed": {
-        **DEFAULT_ALPHA_WEIGHTS,
-        "fundamental": 0.08,
-        "trend":       0.35,
-        # statarb kept at 0.15 — sector-residual mean reversion works in high-dispersion regimes
-    },
-    "crisis": {
-        **DEFAULT_ALPHA_WEIGHTS,
-        "fundamental": 0.08,
-        "trend":       0.30,
-        "volatility":  0.10,
-        # statarb kept at 0.15 — sector dispersion is highest in crisis
-    },
-    "euphoric": {
-        **DEFAULT_ALPHA_WEIGHTS,
-        "fundamental": 0.00,
-        "statarb":     0.00,
-        "trend":       0.58,   # same logic as calm_bull — momentum dominates
-    },
-    "uncertain": {
-        **DEFAULT_ALPHA_WEIGHTS,
-    },
+    "calm_bull":  {**DEFAULT_ALPHA_WEIGHTS},
+    "stressed":   {**DEFAULT_ALPHA_WEIGHTS},
+    "crisis":     {**DEFAULT_ALPHA_WEIGHTS},
+    "euphoric":   {**DEFAULT_ALPHA_WEIGHTS},
+    "uncertain":  {**DEFAULT_ALPHA_WEIGHTS},
 }
 
 

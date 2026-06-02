@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Optional
 
 from ascent.llm.client import generate_structured, HAIKU_MODEL
+from ascent.llm.prompt_loader import get_prompt
 DEBATE_LOG_DIR = Path("outputs/debate_log")
 EOD_LOG_PATH   = Path("logs/eod_log.jsonl")
 DEBRIEF_WINDOW = 14  # days after rebalance to write debrief
@@ -120,13 +121,7 @@ the recommendation, and the outcome. No fluff.
 
     try:
         lesson = generate_structured(
-            system_prompt=(
-                "You are the institutional memory of Ascent Capital. "
-                "Write concise, specific post-rebalance lessons that will help "
-                "future debate sessions make better decisions. "
-                "Focus on what was learned, not what happened. "
-                "Be direct. No preamble."
-            ),
+            system_prompt=get_prompt("reporting.debrief.system"),
             user_prompt=user_prompt,
             model=HAIKU_MODEL,
             max_tokens=300,

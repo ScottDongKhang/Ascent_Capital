@@ -28,6 +28,8 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Optional
 
+from ascent.llm.prompt_loader import get_prompt
+
 log = logging.getLogger(__name__)
 
 ADVERSARIAL_FLAG_THRESHOLD = 0.60   # short thesis score above this → flagged
@@ -191,14 +193,8 @@ def _generate_adversarial_theses(
     positions_text = "\n".join(lines)
 
     system_prompt = (
-        "You are an adversarial risk analyst at a hedge fund. For each long position, "
-        "generate the most compelling SHORT thesis a skilled short-seller would make.\n"
-        "Score adversarial strength 0.0–1.0:\n"
-        "  0.2 = trivial concern, 0.4 = legitimate worry, 0.6 = serious structural risk, "
-        "0.8 = near-bulletproof short case\n"
-        "Negative sec_tone = deteriorating fundamentals. Negative risk_trend = worsening risks.\n"
-        "Large single-day move (>15%) = event momentum stock — mean-revert risk.\n\n"
-        f"Regime: {regime}\n\n"
+        get_prompt("adversarial.short_thesis")
+        + f"\n\nRegime: {regime}\n\n"
         "Return ONLY valid JSON (no markdown, no text outside JSON):\n"
         '{\"positions\": [{\"symbol\": \"X\", \"short_thesis\": \"<30 words>\", '
         '\"adversarial_score\": 0.0}]}'

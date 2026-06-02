@@ -137,21 +137,9 @@ def detect_blind_spots(force: bool = False) -> Optional[dict]:
     payload = _build_analysis_payload(verdicts, debriefs)
 
     from ascent.llm.client import generate_structured, HAIKU_MODEL
+    from ascent.llm.prompt_loader import get_prompt
 
-    system_prompt = (
-        "You are a meta-analyst reviewing an AI investment system's debate history. "
-        "Your job is to identify SYSTEMATIC patterns of error — things the system "
-        "keeps getting wrong across multiple sessions. "
-        "Focus on: recurring risk factors that keep appearing, assumptions that are "
-        "never challenged, scenarios that are consistently underestimated, and "
-        "positions or exposures that are flagged repeatedly without resolution. "
-        "Output ONLY valid JSON with this exact structure: "
-        '{"patterns": [{"pattern": "...", "frequency": N, "first_seen": "YYYY-MM-DD", '
-        '"last_seen": "YYYY-MM-DD", "severity": "high|medium|low", '
-        '"recommendation": "specific instruction for future debate agents"}], '
-        '"summary": "one paragraph plain English"} '
-        "No markdown, no explanation, just the JSON."
-    )
+    system_prompt = get_prompt("reporting.blind_spot_detector.system")
 
     user_prompt = (
         f"Analyze this debate history and identify systematic blind spots:\n\n{payload}\n\n"
