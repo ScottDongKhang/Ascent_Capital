@@ -136,6 +136,14 @@ REGIME_COLORS = {
 # May 5 / May 19 / May 27 are confirmed rebalances (May 27 in rebalance_calendar.csv).
 ACTUAL_REBALANCE_DATES = {"2026-04-15", "2026-05-05", "2026-05-19", "2026-05-27"}
 
+# Sequential rebalance numbers (April 1 = initial deployment, not a rebalance)
+REBALANCE_NUMBERS = {
+    "2026-04-15": 1,
+    "2026-05-05": 2,
+    "2026-05-19": 3,
+    "2026-05-27": 4,
+}
+
 # Verdict files that are garbage test entries and should be skipped entirely.
 EXCLUDE_VERDICT_DATES = {"2026-04-12"}  # n_positions=2, reasoning="ok" — early test artifact
 
@@ -219,7 +227,9 @@ def load_verdicts() -> list[dict]:
 
             is_execution = ev_date in ACTUAL_REBALANCE_DATES
             if is_execution:
-                label = f"Rebalance Executed — {rec.replace('_', ' ').title()}"
+                reb_num = REBALANCE_NUMBERS.get(ev_date, "")
+                num_str = f" #{reb_num}" if reb_num else ""
+                label = f"Rebalance{num_str} — Executed · {rec.replace('_', ' ').title()}"
                 ev_type = "rebalance"
             else:
                 label = f"Debate Only (no orders) — {rec.replace('_', ' ').title()}"
@@ -287,6 +297,29 @@ def load_earned_authority() -> dict:
             return json.load(f)
     except Exception:
         return {}
+
+
+def load_latest_allocation() -> dict:
+    """Returns {agent_id: pct} from the most recent rebalance verdict file."""
+    files = sorted(glob.glob("outputs/debate_log/verdict_*.json"))
+    for f in reversed(files):
+        date_str = Path(f).stem.replace("verdict_", "")
+        if date_str in ACTUAL_REBALANCE_DATES:
+            try:
+                with open(f) as fh:
+                    d = json.load(fh)
+                alloc = d.get("portfolio_state", {}).get("allocation", {})
+                if alloc:
+                    return {
+                        "us_equities":   round(alloc.get("us_equities", 0) * 100),
+                        "international": round(alloc.get("international", 0) * 100),
+                        "macro":         round(alloc.get("macro", 0) * 100),
+                        "alternatives":  round(alloc.get("alternatives", 0) * 100),
+                    }
+            except Exception:
+                pass
+    # Fallback to CLAUDE.md orchestrator defaults for calm_bull
+    return {"us_equities": 60, "international": 15, "macro": 15, "alternatives": 10}
 
 
 def load_latest_thesis() -> dict:
@@ -588,9 +621,11 @@ def build_html(
     generated_at: str,
     authority: dict = None,
     thesis: dict = None,
+    allocation: dict = None,
 ) -> str:
-    authority = authority or {}
-    thesis    = thesis or {}
+    authority  = authority or {}
+    thesis     = thesis or {}
+    allocation = allocation or {"us_equities": 60, "international": 15, "macro": 15, "alternatives": 10}
 
     # ── Chart.js annotation objects ──────────────────────────────────────────
     annotations = {}
@@ -947,7 +982,7 @@ new Chart(document.getElementById('alphaChart'),{{type:'bar',data:{{labels:dates
 }}}});
 new Chart(document.getElementById('allocChart'),{{type:'doughnut',data:{{
   labels:['US Equities','International','Macro','Alternatives'],
-  datasets:[{{data:[70,12,10,8],backgroundColor:['#58a6ff','#3fb950','#a78bfa','#d29922'],borderWidth:0,hoverOffset:4}}]
+  datasets:[{{data:[{allocation['us_equities']},{allocation['international']},{allocation['macro']},{allocation['alternatives']}],backgroundColor:['#58a6ff','#3fb950','#a78bfa','#d29922'],borderWidth:0,hoverOffset:4}}]
 }},options:{{responsive:true,maintainAspectRatio:false,
   plugins:{{legend:{{position:'right',labels:{{color:'#8b949e',font:{{size:11}},boxWidth:10,padding:8}}}},
     tooltip:{{...TT,callbacks:{{label:ctx=>`${{ctx.label}}: ${{ctx.raw}}%`}}}}}},cutout:'65%'
@@ -1044,12 +1079,15 @@ def main():
     print("\n[5/5] Building HTML…")
     authority   = load_earned_authority()
     thesis      = load_latest_thesis()
+    allocation  = load_latest_allocation()
+    print(f"      Allocation: US={allocation['us_equities']}% Intl={allocation['international']}% "
+          f"Macro={allocation['macro']}% Alt={allocation['alternatives']}%")
     stats               = compute_stats(records, spy)
     dates, port, spy_v  = build_chart_data(records, spy)
     generated_at        = datetime.now().strftime("%Y-%m-%d %H:%M UTC")
     html                = build_html(dates, port, spy_v, verdicts, regime_bands,
                                      stats, positions, generated_at,
-                                     authority=authority, thesis=thesis)
+                                     authority=authority, thesis=thesis, allocation=allocation)
 
     DOCS_DIR.mkdir(exist_ok=True)
     OUTPUT_PATH.write_text(html, encoding="utf-8")
