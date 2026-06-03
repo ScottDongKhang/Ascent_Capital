@@ -58,11 +58,17 @@ class _HysteresisStateMachine:
         exit_threshold: float = 0.35,
         min_dwell_days: int = 3,
         entropy_uncertain_threshold: float = 0.90,
+        severity: Optional[dict] = None,
+        downgrade_threshold: Optional[float] = None,
+        upgrade_threshold: Optional[float] = None,
     ):
         self.enter_threshold = enter_threshold
         self.exit_threshold = exit_threshold
         self.min_dwell_days = min_dwell_days
         self.entropy_threshold = entropy_uncertain_threshold
+        self._severity = severity or {}
+        self._downgrade_threshold = downgrade_threshold if downgrade_threshold is not None else enter_threshold
+        self._upgrade_threshold = upgrade_threshold if upgrade_threshold is not None else enter_threshold
 
         self._current: int = initial_regime
         self._dwell: int = 0
@@ -91,25 +97,33 @@ class _HysteresisStateMachine:
             self._candidate_streak = 0
             return self._current, transition_flag, self._dwell, True
 
-        # Evaluate transition
-        if dominant != self._current and dominant_prob >= self.enter_threshold:
-            if self._candidate == dominant:
-                self._candidate_streak += 1
+        # Evaluate transition — use asymmetric threshold based on regime severity
+        if dominant != self._current:
+            current_sev = self._severity.get(self._current, -1)
+            candidate_sev = self._severity.get(dominant, -1)
+            if current_sev == -1 or candidate_sev == -1:
+                threshold = self.enter_threshold           # unknown severity → fallback
+            elif candidate_sev > current_sev:
+                threshold = self._downgrade_threshold      # transitioning to worse regime
             else:
-                self._candidate = dominant
-                self._candidate_streak = 1
+                threshold = self._upgrade_threshold        # transitioning to better regime
 
-            if self._candidate_streak >= self.min_dwell_days:
-                # Commit to transition
-                self._current = dominant
-                self._dwell = 1
+            if dominant_prob >= threshold:
+                if self._candidate == dominant:
+                    self._candidate_streak += 1
+                else:
+                    self._candidate = dominant
+                    self._candidate_streak = 1
+
+                if self._candidate_streak >= self.min_dwell_days:
+                    self._current = dominant
+                    self._dwell = 1
+                    self._candidate = None
+                    self._candidate_streak = 0
+                    transition_flag = True
+            else:
                 self._candidate = None
                 self._candidate_streak = 0
-                transition_flag = True
-        else:
-            # Reset candidate if dominant reverts
-            self._candidate = None
-            self._candidate_streak = 0
 
         return self._current, transition_flag, self._dwell, False
 
