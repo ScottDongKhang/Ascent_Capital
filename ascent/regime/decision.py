@@ -24,6 +24,9 @@ from .types import RegimeLabel, RegimeSignal
 
 log = logging.getLogger(__name__)
 
+ENTROPY_OVERCONFIDENCE_THRESHOLD = 1e-6   # below this, entropy is model lockup
+ENTROPY_OVERCONFIDENCE_PENALTY   = 0.90   # risk_multiplier reduction when frozen
+
 # Severity ordering for asymmetric hysteresis.
 # Higher = more defensive / risk-off. Used to decide which threshold to apply.
 _REGIME_SEVERITY: Dict[str, int] = {
@@ -251,6 +254,14 @@ class RegimeDecisionEngine:
             entropy = _entropy(probs)
             risk_mult = self._risk_mult.get(label.value, 0.75)
             sleeve_adj = self._sleeve_adj.get(label.value, {})
+
+            if entropy < ENTROPY_OVERCONFIDENCE_THRESHOLD:
+                log.warning(
+                    "regime.decision: entropy=%.2e on %s — model overconfidence, "
+                    "applying %.0f%% risk penalty",
+                    entropy, date.date(), (1 - ENTROPY_OVERCONFIDENCE_PENALTY) * 100,
+                )
+                risk_mult = round(risk_mult * ENTROPY_OVERCONFIDENCE_PENALTY, 6)
 
             signals.append(RegimeSignal(
                 date=date,

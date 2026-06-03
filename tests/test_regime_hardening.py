@@ -130,3 +130,41 @@ def test_decision_engine_passes_severity_to_machine():
     labels = [s.label.value for s in signals]
     assert "stressed" in labels, \
         f"Stressed should appear (downgrade fires at 0.53 > 0.40), got: {labels}"
+
+
+def test_entropy_penalty_reduces_risk_multiplier_when_frozen():
+    """Entropy below 1e-6 must reduce risk_multiplier by 0.90×."""
+    from ascent.regime.decision import RegimeDecisionEngine
+    from ascent.regime.types import RegimeLabel
+
+    state_labels = {0: RegimeLabel.STRESSED}
+    engine = RegimeDecisionEngine(state_labels=state_labels, min_dwell_days=1)
+
+    idx = pd.bdate_range("2026-01-02", periods=1)
+    # All probability in state 0 — entropy = 0.0 (< 1e-6)
+    prob_df = pd.DataFrame([[1.0]], index=idx, columns=[0])
+
+    signals = engine.process(prob_df)
+    assert len(signals) == 1
+    # stressed normal risk_mult = 0.65; with penalty = 0.65 * 0.90 = 0.585
+    expected = round(0.65 * 0.90, 6)
+    assert abs(signals[0].risk_multiplier - expected) < 1e-5, \
+        f"Expected risk_multiplier ≈ {expected}, got {signals[0].risk_multiplier}"
+
+
+def test_entropy_penalty_not_applied_at_normal_entropy():
+    """Entropy above 1e-6 must leave risk_multiplier unchanged."""
+    from ascent.regime.decision import RegimeDecisionEngine
+    from ascent.regime.types import RegimeLabel
+
+    state_labels = {0: RegimeLabel.STRESSED, 1: RegimeLabel.CALM_BULL}
+    engine = RegimeDecisionEngine(state_labels=state_labels, min_dwell_days=1)
+
+    idx = pd.bdate_range("2026-01-02", periods=1)
+    prob_df = pd.DataFrame([[0.70, 0.30]], index=idx, columns=[0, 1])
+
+    signals = engine.process(prob_df)
+    assert len(signals) == 1
+    # stressed normal risk_mult = 0.65; entropy is not frozen, no penalty
+    assert abs(signals[0].risk_multiplier - 0.65) < 1e-5, \
+        f"Expected risk_multiplier = 0.65 (no penalty), got {signals[0].risk_multiplier}"
