@@ -78,6 +78,9 @@ class ParameterOptimizer:
         self.objective_fn    = _OBJECTIVES[objective]
         self.constraint_fn   = constraint_fn
         self.rf_annual       = rf_annual
+        self._objective_needs_rf = "rf_annual" in inspect.signature(
+            _OBJECTIVES[objective]
+        ).parameters
 
     def optimize(self, is_data: pd.DataFrame) -> tuple[dict, float]:
         """
@@ -101,8 +104,7 @@ class ParameterOptimizer:
                 strategy = self.strategy_cls(**params)
                 signals  = strategy.generate_signals(is_data)
                 returns  = self.execution_model.compute_returns(is_data, signals)
-                sig = inspect.signature(self.objective_fn)
-                if "rf_annual" in sig.parameters:
+                if self._objective_needs_rf:
                     score = self.objective_fn(returns, self.rf_annual)
                 else:
                     score = self.objective_fn(returns)
