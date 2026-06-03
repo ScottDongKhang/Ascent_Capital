@@ -28,6 +28,7 @@ class SplitWindow:
     purge_start: pd.Timestamp    # first bar excluded from IS (purge begins)
     is_end: pd.Timestamp         # last bar of the raw IS window (before purge cut)
     purge_end: pd.Timestamp      # last bar of purge gap
+    embargo_start: pd.Timestamp  # first bar of embargo gap
     embargo_end: pd.Timestamp    # last bar of embargo gap
     oos_start: pd.Timestamp      # first OOS bar
     oos_end: pd.Timestamp        # last OOS bar
@@ -45,7 +46,7 @@ class SplitWindow:
             f"Fold {self.fold_id}: "
             f"IS [{self.is_start.date()} → {self.purge_start.date()}) "
             f"| purge [{self.purge_start.date()} → {self.purge_end.date()}] "
-            f"| embargo [{self.purge_end.date()} → {self.embargo_end.date()}] "
+            f"| embargo [{self.embargo_start.date()} → {self.embargo_end.date()}] "
             f"| OOS [{self.oos_start.date()} → {self.oos_end.date()}]"
         )
 
@@ -81,6 +82,8 @@ class WindowGenerator:
                 f"purge_days ({purge_days}) + embargo_days ({embargo_days}) "
                 f"must be < oos_days ({oos_days})"
             )
+        if step_days is not None and step_days < 1:
+            raise ValueError(f"step_days must be >= 1, got {step_days}")
         self.is_days = is_days
         self.oos_days = oos_days
         self.purge_days = purge_days
@@ -105,10 +108,6 @@ class WindowGenerator:
             else:
                 is_start_idx = is_end_idx - self.is_days + 1
 
-            if is_start_idx < 0:
-                is_end_idx += self.step_days
-                continue
-
             purge_start_idx = is_end_idx - self.purge_days + 1
             purge_end_idx   = is_end_idx
 
@@ -122,14 +121,15 @@ class WindowGenerator:
                 break
 
             windows.append(SplitWindow(
-                fold_id      = fold_id,
-                is_start     = dates[is_start_idx],
-                purge_start  = dates[purge_start_idx],
-                is_end       = dates[is_end_idx],
-                purge_end    = dates[purge_end_idx],
-                embargo_end  = dates[embargo_end_idx],
-                oos_start    = dates[oos_start_idx],
-                oos_end      = dates[oos_end_idx],
+                fold_id       = fold_id,
+                is_start      = dates[is_start_idx],
+                purge_start   = dates[purge_start_idx],
+                is_end        = dates[is_end_idx],
+                purge_end     = dates[purge_end_idx],
+                embargo_start = dates[embargo_start_idx],
+                embargo_end   = dates[embargo_end_idx],
+                oos_start     = dates[oos_start_idx],
+                oos_end       = dates[oos_end_idx],
             ))
 
             fold_id    += 1

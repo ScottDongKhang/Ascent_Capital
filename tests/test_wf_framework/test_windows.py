@@ -28,7 +28,7 @@ def test_is_slice_excludes_purge(dates):
     gen = WindowGenerator(is_days=252, oos_days=63, purge_days=21, embargo_days=5)
     for w in gen.generate(dates):
         is_slice = w.slice_is(dates)
-        assert is_slice.max() <= w.purge_start, \
+        assert is_slice.max() < w.purge_start, \
             "IS slice must not include dates in the purge window"
 
 def test_rolling_window_advances(dates):
