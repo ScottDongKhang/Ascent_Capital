@@ -149,10 +149,14 @@ REGIME_CONFIG_DEFAULTS: Dict = {
     "regime_wf_step_days": 63,         # step every quarter
 
     # Hysteresis
-    "regime_enter_threshold": 0.65,    # probability to enter new regime
+    "regime_enter_threshold": 0.65,    # probability to enter new regime (fallback when severity unknown)
     "regime_exit_threshold": 0.45,     # probability to exit (hysteresis band)
     "regime_min_dwell_days": 5,        # must stay K days before switch counts
     "regime_entropy_uncertain_threshold": 0.85,  # fraction of max entropy
+    # Asymmetric hysteresis — downgrade (→ worse regime) is faster to trigger
+    # than upgrade (→ better regime). See decision.py _HysteresisStateMachine.
+    "regime_downgrade_threshold": 0.40,   # prob needed to enter a worse regime
+    "regime_upgrade_threshold":   0.70,   # prob needed to enter a better regime
 
     # Integration — exposure multipliers by regime label
     "regime_risk_multiplier": {
