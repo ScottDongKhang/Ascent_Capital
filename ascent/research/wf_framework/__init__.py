@@ -6,6 +6,11 @@ except ImportError:
     pass
 
 try:
+    from .portfolio_strategy import PortfolioBaseStrategy
+except ImportError:
+    pass
+
+try:
     from .execution import ExecutionModel, ExecutionConfig
 except ImportError:
     pass
@@ -25,11 +30,18 @@ try:
 except ImportError:
     pass
 
+try:
+    from .ascent_strategy import AscentPortfolioStrategy
+except ImportError:
+    pass
+
 __all__ = [
     "WindowGenerator", "SplitWindow",
     "BaseStrategy",
+    "PortfolioBaseStrategy",
     "ExecutionModel", "ExecutionConfig",
     "ParameterOptimizer",
     "PerformanceAnalyzer",
     "WalkForwardEngine",
+    "AscentPortfolioStrategy",
 ]
