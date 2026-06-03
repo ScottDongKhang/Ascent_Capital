@@ -133,6 +133,9 @@ class WalkForwardEngine:
     ) -> tuple[pd.Series, dict]:
         data = data.copy()
         data["date"] = pd.to_datetime(data["date"])
+        # Strip tz so dates from engine and generate_signals are both tz-naive
+        if data["date"].dt.tz is not None:
+            data["date"] = data["date"].dt.tz_localize(None)
 
         # Extract unique trading dates from the long-format 'date' column
         dates = pd.DatetimeIndex(sorted(data["date"].unique()))
