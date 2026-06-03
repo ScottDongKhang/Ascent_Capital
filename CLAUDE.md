@@ -410,6 +410,15 @@ Python 3.12.13 Homebrew, venv at `.venv/`. Use `.venv/bin/python`. API keys via 
 - 627 → 675 tests (+12 this session).
 - Files: `ascent/llm/client.py`, `ascent/alpha/llm_fundamental.py`, `ascent/alpha/narrative_alpha.py`, `debate/agents.py`, `tests/test_llm_client.py` (new), `tests/test_llm_fundamental_alpha.py`, `tests/test_narrative_alpha.py`, `tests/test_debate_agents.py` (new).
 
+### 2026-06-02 (regime detection hardening ✅)
+- **Root cause diagnosed**: April 2026 Liberation Day crash — HMM frozen in "stressed" with entropy 6e-11, never escalated to crisis. Portfolio held full exposure through ~10% SPY drawdown with only 0.65× multiplier.
+- **Three fixes shipped:**
+  - (A) Hard crisis override: VIX > 30 AND SPY 5d < −7% → force `label=crisis`, `risk_multiplier=0.40`. Adds `crisis_override` column for audit. (`engine.py`)
+  - (C) Asymmetric hysteresis: downgrade threshold 0.40 (sensitive to worsening), upgrade threshold 0.70 (skeptical of recovery). Severity ordering `{calm_bull:0, euphoric:0, uncertain:1, stressed:2, crisis:3}`. (`decision.py`, `types.py`)
+  - (D) Entropy overconfidence penalty: entropy < 1e-6 → `risk_mult × 0.90`. Warns in logs. (`decision.py`)
+- 716 → 728 tests (+12 in `tests/test_regime_hardening.py`). Zero regressions.
+- Files: `ascent/regime/engine.py`, `ascent/regime/decision.py`, `ascent/regime/types.py`, `tests/test_regime_hardening.py` (new), `docs/superpowers/specs/2026-06-02-regime-hardening-design.md` (new), `docs/superpowers/plans/2026-06-02-regime-hardening.md` (new).
+
 ### 2026-06-01 (monthly investor letter auto-generation ✅)
 - **`ascent/reporting/investor_letter.py`** (new): auto-generates the Ascent Capital investor letter on the first trading day of each month after `run_all_agents.py` completes.
 - Detection: `is_first_trading_day_of_month()` — compares today's month to the prior weekday's month. Handles Mon-after-weekend correctly.
