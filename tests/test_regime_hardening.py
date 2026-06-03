@@ -96,3 +96,37 @@ def test_asymmetric_hysteresis_unknown_severity_uses_enter_threshold():
     probs = np.array([0.45, 0.55])  # state 1 at 0.55, just above fallback enter_threshold
     state, _, _, _ = machine.step(probs)
     assert state == 1, "With unknown severity, should fall back to enter_threshold=0.55"
+
+
+def test_decision_engine_passes_severity_to_machine():
+    """
+    RegimeDecisionEngine.process() must produce asymmetric behaviour end-to-end:
+    a downgrade transition fires at prob=0.53 (> downgrade_threshold 0.40,
+    below old symmetric enter_threshold 0.55).
+    """
+    from ascent.regime.decision import RegimeDecisionEngine
+    from ascent.regime.types import RegimeLabel
+
+    state_labels = {0: RegimeLabel.CALM_BULL, 1: RegimeLabel.STRESSED}
+    engine = RegimeDecisionEngine(
+        state_labels=state_labels,
+        enter_threshold=0.55,
+        exit_threshold=0.35,
+        min_dwell_days=1,
+        entropy_uncertain_threshold=1.01,  # disabled so near-50/50 probs don't trigger uncertain
+        downgrade_threshold=0.40,
+        upgrade_threshold=0.70,
+    )
+
+    idx = pd.bdate_range("2026-01-02", periods=5)
+    # First 2 days: calm_bull firmly established. Days 3-5: stressed dominant at 0.53.
+    rows = (
+        [[0.90, 0.10]] * 2
+        + [[0.47, 0.53]] * 3  # stressed dominant at 0.53, above downgrade_threshold 0.40
+    )
+    prob_df = pd.DataFrame(rows, index=idx, columns=[0, 1])
+
+    signals = engine.process(prob_df)
+    labels = [s.label.value for s in signals]
+    assert "stressed" in labels, \
+        f"Stressed should appear (downgrade fires at 0.53 > 0.40), got: {labels}"

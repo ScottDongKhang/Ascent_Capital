@@ -338,6 +338,8 @@ class RegimeEngine:
             exit_threshold=self._cfg["regime_exit_threshold"],
             min_dwell_days=self._cfg["regime_min_dwell_days"],
             entropy_uncertain_threshold=self._cfg["regime_entropy_uncertain_threshold"],
+            downgrade_threshold=self._cfg.get("regime_downgrade_threshold", 0.40),
+            upgrade_threshold=self._cfg.get("regime_upgrade_threshold", 0.70),
             risk_multipliers=self._cfg["regime_risk_multiplier"],
             sleeve_adjustments=self._cfg["regime_sleeve_adjustments"],
         )

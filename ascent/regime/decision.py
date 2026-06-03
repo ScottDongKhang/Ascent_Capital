@@ -24,6 +24,16 @@ from .types import RegimeLabel, RegimeSignal
 
 log = logging.getLogger(__name__)
 
+# Severity ordering for asymmetric hysteresis.
+# Higher = more defensive / risk-off. Used to decide which threshold to apply.
+_REGIME_SEVERITY: Dict[str, int] = {
+    "calm_bull": 0,
+    "euphoric":  0,
+    "uncertain": 1,
+    "stressed":  2,
+    "crisis":    3,
+}
+
 
 # ── Shannon entropy ────────────────────────────────────────────────────────
 
@@ -160,6 +170,8 @@ class RegimeDecisionEngine:
         exit_threshold: float = 0.35,
         min_dwell_days: int = 3,
         entropy_uncertain_threshold: float = 0.90,
+        downgrade_threshold: float = 0.40,
+        upgrade_threshold: float = 0.70,
         risk_multipliers: Optional[Dict[str, float]] = None,
         sleeve_adjustments: Optional[Dict[str, Dict[str, float]]] = None,
     ):
@@ -168,6 +180,8 @@ class RegimeDecisionEngine:
         self.exit_threshold = exit_threshold
         self.min_dwell_days = min_dwell_days
         self.entropy_threshold = entropy_uncertain_threshold
+        self.downgrade_threshold = downgrade_threshold
+        self.upgrade_threshold = upgrade_threshold
 
         # Defaults if not supplied
         self._risk_mult = risk_multipliers or {
@@ -199,7 +213,13 @@ class RegimeDecisionEngine:
             return []
 
         n_states = prob_df.shape[1]
-        # Initialize state machine at argmax of first row
+        # Build severity dict {state_idx: severity_int} for asymmetric hysteresis
+        severity = {
+            s_idx: _REGIME_SEVERITY.get(
+                lbl.value if hasattr(lbl, "value") else str(lbl), -1
+            )
+            for s_idx, lbl in self.state_labels.items()
+        }
         first_probs = prob_df.iloc[0].values
         initial_state = int(np.argmax(first_probs))
         machine = _HysteresisStateMachine(
@@ -208,6 +228,9 @@ class RegimeDecisionEngine:
             exit_threshold=self.exit_threshold,
             min_dwell_days=self.min_dwell_days,
             entropy_uncertain_threshold=self.entropy_threshold,
+            severity=severity,
+            downgrade_threshold=self.downgrade_threshold,
+            upgrade_threshold=self.upgrade_threshold,
         )
 
         signals: List[RegimeSignal] = []
