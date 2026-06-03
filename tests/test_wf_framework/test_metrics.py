@@ -55,6 +55,13 @@ def test_wfe_computed(fold_results):
     assert np.isfinite(wfe)
     assert wfe > 0
 
+def test_sortino_all_positive_returns():
+    pa = PerformanceAnalyzer()
+    all_positive = pd.Series([0.001] * 100)
+    result = pa.sortino(all_positive)
+    assert np.isfinite(result) or result == np.inf, \
+        "sortino on all-positive returns must not be NaN"
+
 def test_full_report_keys(positive_returns, benchmark_returns, fold_results):
     pa = PerformanceAnalyzer()
     report = pa.full_report(positive_returns, benchmark_returns, fold_results)

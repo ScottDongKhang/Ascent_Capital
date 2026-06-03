@@ -56,7 +56,7 @@ class PerformanceAnalyzer:
         threshold = self.rf_annual / self.periods_per_year
         downside  = returns[returns < threshold]
         dv = downside.std() * np.sqrt(self.periods_per_year)
-        if dv < 1e-10:
+        if not np.isfinite(dv) or dv < 1e-10:
             return np.inf if self.cagr(returns) > self.rf_annual else 0.0
         return (self.cagr(returns) - self.rf_annual) / dv
 
