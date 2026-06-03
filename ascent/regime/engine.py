@@ -54,6 +54,9 @@ EMERGENCY_CORR_THRESHOLD = 0.30          # SPY/TLT 5-day corr > this = liquidity
 EMERGENCY_BREAK_ZSCORE_THRESHOLD = 3.5   # BreakDetector z-score threshold
 EMERGENCY_REFIT_LOG = "logs/regime_emergency_refit.jsonl"
 
+CRISIS_VIX_THRESHOLD    = 30.0   # VIX must exceed this for crisis override
+CRISIS_SPY_5D_THRESHOLD = -0.07  # SPY 5-day return must be below this
+
 # VIX below this level means the HMM's "stressed" call is unconfirmed by fear.
 # When stressed but VIX < 20, keep the label (sleeve weighting stays defensive)
 # but restore risk_multiplier to 1.0 — no gross exposure cut.
@@ -218,6 +221,51 @@ def _apply_vix_confirmation(
     return df
 
 
+def _apply_crisis_override(
+    signal_df: pd.DataFrame,
+    spy_prices: pd.Series,
+    vix_prices: pd.Series,
+) -> pd.DataFrame:
+    """
+    Post-process signal cache: force label='crisis' and risk_multiplier=0.40
+    on any day where VIX > CRISIS_VIX_THRESHOLD AND SPY 5-day return < CRISIS_SPY_5D_THRESHOLD.
+
+    Adds boolean column 'crisis_override' — True only on rule-overridden rows,
+    not on HMM-native crisis days. Allows downstream auditing of rule vs model.
+    """
+    if signal_df.empty or spy_prices is None or vix_prices is None:
+        if "crisis_override" not in signal_df.columns:
+            signal_df = signal_df.copy()
+            signal_df["crisis_override"] = False
+        return signal_df
+
+    df = signal_df.copy()
+    if "crisis_override" not in df.columns:
+        df["crisis_override"] = False
+
+    spy_ret_5d = spy_prices.pct_change(5).reindex(df.index, method="ffill")
+    vix_aligned = vix_prices.reindex(df.index, method="ffill")
+
+    trigger_mask = (
+        (vix_aligned.fillna(0) > CRISIS_VIX_THRESHOLD)
+        & (spy_ret_5d.fillna(0) < CRISIS_SPY_5D_THRESHOLD)
+        & (df["label"] != "crisis")   # don't double-flag HMM-native crisis
+    )
+
+    n_triggered = int(trigger_mask.sum())
+    if n_triggered > 0:
+        df.loc[trigger_mask, "label"] = "crisis"
+        df.loc[trigger_mask, "risk_multiplier"] = 0.40
+        df.loc[trigger_mask, "crisis_override"] = True
+        log.warning(
+            "regime.engine: crisis override triggered on %d days "
+            "(VIX > %.0f AND SPY 5d < %.0f%%)",
+            n_triggered, CRISIS_VIX_THRESHOLD, CRISIS_SPY_5D_THRESHOLD * 100,
+        )
+
+    return df
+
+
 class RegimeEngine:
     """
     Production regime engine for Ascent Capital.
@@ -356,6 +404,9 @@ class RegimeEngine:
 
         self._signal_cache = self._decision_engine.process_to_frame(prob_df)
         self._signal_cache = _apply_vix_confirmation(self._signal_cache, vix_prices)
+        self._signal_cache = _apply_crisis_override(
+            self._signal_cache, spy_prices, vix_prices
+        )
         self._last_fit_date = self._feature_panel.index[-1]
         self._fitted = True
 

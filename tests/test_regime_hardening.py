@@ -132,6 +132,89 @@ def test_decision_engine_passes_severity_to_machine():
         f"Stressed should appear (downgrade fires at 0.53 > 0.40), got: {labels}"
 
 
+def _make_signal_df(n=10, label="stressed", risk_multiplier=0.65):
+    """Build a minimal signal DataFrame as produced by RegimeDecisionEngine."""
+    idx = pd.bdate_range("2026-04-01", periods=n)
+    return pd.DataFrame({
+        "label": label,
+        "risk_multiplier": risk_multiplier,
+        "confidence": 1.0,
+        "entropy": 6e-11,
+        "transition_flag": False,
+        "dwell_days": range(1, n + 1),
+        "crisis_override": False,
+    }, index=idx)
+
+
+def _make_spy(n=10, crash_5d=-0.10, base=500.0):
+    """SPY price series with a 5-day cumulative return of crash_5d at the end."""
+    idx = pd.bdate_range("2026-03-20", periods=n + 5)
+    step = (1 + crash_5d) ** (1 / 5) - 1
+    daily = [0.0] * (len(idx) - 5) + [step] * 5
+    px = pd.Series(base, index=idx)
+    for i in range(1, len(idx)):
+        px.iloc[i] = px.iloc[i - 1] * (1 + daily[i])
+    return px
+
+
+def _make_vix(n=15, level=35.0):
+    idx = pd.bdate_range("2026-03-20", periods=n)
+    return pd.Series(level, index=idx)
+
+
+def test_crisis_override_fires_when_vix_high_and_spy_down():
+    """Crisis override must flip stressed→crisis when VIX>30 AND SPY 5d < -7%."""
+    from ascent.regime.engine import _apply_crisis_override
+
+    signal_df = _make_signal_df(n=10, label="stressed", risk_multiplier=0.65)
+    spy = _make_spy(n=10, crash_5d=-0.10)
+    vix = _make_vix(n=15, level=35.0)
+
+    result = _apply_crisis_override(signal_df, spy, vix)
+
+    overridden = result[result["crisis_override"] == True]
+    assert len(overridden) > 0, "Expected at least one crisis_override=True row"
+    assert all(overridden["label"] == "crisis"), "Overridden rows must be labeled 'crisis'"
+    assert all(overridden["risk_multiplier"] == 0.40), "Overridden rows must have risk_multiplier=0.40"
+
+
+def test_crisis_override_does_not_fire_with_low_vix():
+    """No override when VIX < 30, even with large SPY drawdown."""
+    from ascent.regime.engine import _apply_crisis_override
+
+    signal_df = _make_signal_df(n=10, label="stressed")
+    spy = _make_spy(n=10, crash_5d=-0.10)
+    vix = _make_vix(n=15, level=22.0)
+
+    result = _apply_crisis_override(signal_df, spy, vix)
+    assert result["crisis_override"].sum() == 0, "No override when VIX < 30"
+
+
+def test_crisis_override_does_not_fire_with_small_drawdown():
+    """No override when SPY 5d > -7%, even with high VIX."""
+    from ascent.regime.engine import _apply_crisis_override
+
+    signal_df = _make_signal_df(n=10, label="stressed")
+    spy = _make_spy(n=10, crash_5d=-0.04)
+    vix = _make_vix(n=15, level=35.0)
+
+    result = _apply_crisis_override(signal_df, spy, vix)
+    assert result["crisis_override"].sum() == 0, "No override when drawdown < 7%"
+
+
+def test_crisis_override_preserves_existing_crisis_label():
+    """Rows already labeled 'crisis' (HMM-native) keep crisis_override=False."""
+    from ascent.regime.engine import _apply_crisis_override
+
+    signal_df = _make_signal_df(n=10, label="crisis", risk_multiplier=0.40)
+    spy = _make_spy(n=10, crash_5d=-0.10)
+    vix = _make_vix(n=15, level=35.0)
+
+    result = _apply_crisis_override(signal_df, spy, vix)
+    assert result["crisis_override"].sum() == 0, \
+        "crisis_override flag must be False for HMM-native crisis rows"
+
+
 def test_entropy_penalty_reduces_risk_multiplier_when_frozen():
     """Entropy below 1e-6 must reduce risk_multiplier by 0.90×."""
     from ascent.regime.decision import RegimeDecisionEngine
