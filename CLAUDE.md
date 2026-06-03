@@ -419,6 +419,12 @@ Python 3.12.13 Homebrew, venv at `.venv/`. Use `.venv/bin/python`. API keys via 
 - 716 → 728 tests (+12 in `tests/test_regime_hardening.py`). Zero regressions.
 - Files: `ascent/regime/engine.py`, `ascent/regime/decision.py`, `ascent/regime/types.py`, `tests/test_regime_hardening.py` (new), `docs/superpowers/specs/2026-06-02-regime-hardening-design.md` (new), `docs/superpowers/plans/2026-06-02-regime-hardening.md` (new).
 
+### 2026-06-03 (WF OOS framework + Ascent strategy adapter — in progress)
+- **Built**: production Walk-Forward OOS framework at `ascent/research/wf_framework/` — `WindowGenerator` (purge/embargo), `BaseStrategy` ABC + `MACrossStrategy`, `ExecutionModel` (ATR slippage/commission/borrow), `ParameterOptimizer` (grid search IS-only), `PerformanceAnalyzer` (Sharpe/Sortino/MDD/WFE), `WalkForwardEngine` orchestrator. 35 tests, all passing.
+- **Decision**: integrate Ascent quant alpha stack as a `PortfolioStrategy` — Option D smart (all params: `top_n`, `max_weight`, `trend_weight`, `statarb_weight`, `mom_window` — 243 combos × 22 folds ≈ 30 min with caching). Max accuracy, no time constraint.
+- **Next**: design + implement `AscentPortfolioStrategy` adapter extending framework with portfolio-weight output (DataFrame weights instead of {-1,0,1} signals).
+- Open: brainstorming/design in progress for portfolio strategy extension.
+
 ### 2026-06-01 (monthly investor letter auto-generation ✅)
 - **`ascent/reporting/investor_letter.py`** (new): auto-generates the Ascent Capital investor letter on the first trading day of each month after `run_all_agents.py` completes.
 - Detection: `is_first_trading_day_of_month()` — compares today's month to the prior weekday's month. Handles Mon-after-weekend correctly.
