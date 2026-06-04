@@ -90,6 +90,93 @@ Controls what the AI PM is *allowed to do* when blending with quant. Violations 
 
 ---
 
+## Anti-Hallucination Guardrails
+
+The AI PM is specifically prone to four hallucination types that current system protections don't cover: fabricated numbers, stale data cited as fresh, invented causal chains, and conviction inflation. The debate agents already have `[FROM CONTEXT]` tagging (added 2026-05-31) — the AI PM needs equivalent protection.
+
+### 1. Source Tagging (Phase 1 output)
+
+Every factual claim in Phase 1's output must carry a source tag. Tags are enforced via the Phase 1 JSON schema:
+
+```json
+"conviction_reasons": [
+  {
+    "symbol": "STRL",
+    "claim": "Revenue +8.3% YoY, backlog at record $2.1B",
+    "source": "earnings-2026-04-22",
+    "data_date": "2026-04-22",
+    "days_ago": 43
+  }
+]
+```
+
+Claims without a `source` field are **stripped by the parser before Phase 2 sees them**. Phase 2 cannot amplify Phase 1's unsourced assertions.
+
+### 2. Recency Gate
+
+Any data cited must pass a freshness check:
+- **Price / flow data**: must be within 5 calendar days
+- **Earnings / filings**: must be within 45 calendar days (matching the fundamental sleeve filing lag)
+- **Analyst consensus**: within 30 calendar days
+
+If a claim's `data_date` is older than the threshold, it is stripped and logged as `stale_claim`. The AI PM's Phase 2 prompt explicitly states: *"Today is {date}. Any data older than 45 days is stale. Do not cite it as current evidence."*
+
+### 3. Numeric Cross-Reference Check (Python, post-Phase 2)
+
+After Phase 2 completes but **before** guardrail processing, Python cross-checks numeric claims in the thesis against ground truth in the data cache:
+
+```python
+# Example: AI PM claims "STRL revenue +23%" — check against fundamentals cache
+claimed = extract_numeric_claims(thesis_summary)  # regex parse
+actual   = load_from_cache("fundamentals", symbol="STRL", field="revenue_growth")
+if abs(claimed - actual) / abs(actual) > 0.15:   # >15% error
+    log_hallucination_incident(symbol, claimed, actual)
+    reduce_conviction(symbol)  # downgrade high → medium
+```
+
+Hallucination incidents are stored in the feedback file. Three incidents for the same symbol within 21 days → that symbol is **barred from AI PM overrides for the next rebalance**. This is logged and visible on the dashboard.
+
+### 4. Conviction Inflation Check
+
+If Phase 2 marks more than **40% of proposed names as "high conviction"**, all convictions above the threshold are automatically downgraded to "medium." The prompt states this rule explicitly so the AI PM learns to self-regulate. A model that thinks everything is high-conviction has no model of risk.
+
+### 5. Temporal Context Injection
+
+Every Phase 1 and Phase 2 prompt begins with a locked header that the model cannot contradict:
+
+```
+SYSTEM CONTEXT (authoritative — do not contradict):
+Today: {date}
+Last trading day: {prev_trading_day}
+Current regime: {regime_label} (as of {regime_date})
+Data freshness cutoff: {date - 45d} (do not cite anything older as current)
+Your last rebalance: {last_rebalance_date}
+Your worst recent call: {worst_call_symbol} ({worst_call_alpha:+.1%} over 10d)
+```
+
+### 6. Phase 1 → Phase 2 Context Strip
+
+Only the following fields from Phase 1 pass into Phase 2:
+- `high_conviction_names` (symbols only, no prose)
+- `conviction_reasons` (sourced, recency-validated claims only)
+- `regime_assessment` (structured dict, not prose)
+- `causal_mechanisms` (structured)
+
+Freeform prose from Phase 1 is **not** passed to Phase 2. Phase 2 must re-derive its reasoning from the structured claims and the quantitative context it receives directly. This prevents hallucinated chains: Phase 1 invents a narrative → Phase 2 amplifies it.
+
+### Summary
+
+| Guardrail | Where | What It Catches |
+|---|---|---|
+| Source tagging | Phase 1 schema | Unsourced factual claims |
+| Recency gate | Phase 1 parser | Stale data cited as fresh |
+| Numeric cross-reference | Post-Phase 2 Python | Fabricated or misremembered numbers |
+| Conviction inflation | Post-Phase 2 Python | Everything marked "high conviction" |
+| Temporal context injection | Both phases | Date confusion, stale anchoring |
+| Phase 1 → 2 context strip | Handoff layer | Prose narrative hallucination chains |
+
+---
+
 ## Daily Run Architecture
 
 The AI PM runs once per day as part of `run_all_agents.py`.
@@ -364,3 +451,10 @@ On implementation day:
 21. **Track D weight normalization** — `ai_pm_proposed` weights normalized to sum=1.0 before Track D snapshot is written
 22. **Orphaned decisions scored as 0** — if a symbol is unavailable at scoring date (halt, delist), outcome is recorded as 0.0 return; decision counts toward `n_decisions_evaluated` so the minimum-decisions gate remains satisfiable
 23. **API failure never blocks rebalance** — Phase 2 fail → Phase 1 result; Phase 1 fail → pure quant; failure mode logged with `ai_pm_fallback` field
+24. **Source tagging is a hard schema constraint** — Phase 1 claims without `source` and `data_date` fields are stripped by the parser before Phase 2 receives them; stripping is logged
+25. **Recency gate is enforced in Python** — claims with `data_date` older than threshold are stripped regardless of AI PM's stated reasoning; the AI PM cannot override this
+26. **Numeric cross-reference runs post-Phase 2** — Python checks AI PM's numeric claims against cache ground truth; >15% discrepancy logs a hallucination incident and reduces conviction level for that symbol
+27. **Three hallucination incidents = override bar** — a symbol with 3+ hallucination incidents in 21 days is barred from AI PM overrides for the next rebalance; this is deterministic Python enforcement, not LLM self-policing
+28. **Conviction inflation cap** — >40% of proposals marked "high conviction" triggers automatic downgrade of excess; enforced post-Phase 2
+29. **Phase 1 → Phase 2 handoff strips freeform prose** — only structured, sourced fields pass through; prevents Phase 2 from amplifying Phase 1 narrative hallucinations
+30. **Temporal context header is injected, not requested** — date/regime/worst-call context is prepended by code, not left to the model to recall correctly
