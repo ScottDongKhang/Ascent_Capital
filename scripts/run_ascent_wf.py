@@ -58,9 +58,12 @@ def main():
     n_rows     = len(prices)
     print(f"  {n_symbols} symbols, {date_range}, {n_rows:,} rows")
 
-    # SPY benchmark returns
+    # SPY benchmark returns — strip tz to match engine's tz-naive date stripping
     spy_df = prices[prices["symbol"] == "SPY"][["date", "close"]].copy()
-    spy    = spy_df.sort_values("date").set_index("date")["close"].pct_change().fillna(0)
+    spy_df["date"] = pd.to_datetime(spy_df["date"])
+    if spy_df["date"].dt.tz is not None:
+        spy_df["date"] = spy_df["date"].dt.tz_localize(None)
+    spy = spy_df.sort_values("date").set_index("date")["close"].pct_change().fillna(0)
     spy.name = "SPY"
 
     # ------------------------------------------------------------------ #

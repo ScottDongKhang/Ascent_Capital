@@ -98,9 +98,9 @@ class AscentPortfolioStrategy(PortfolioBaseStrategy):
 
     @property
     def param_grid(self) -> dict[str, list]:
+        # top_n and max_weight fixed at live defaults — only optimise the 3 params
+        # that most affect signal quality. 27 combos vs 243 reduces overfitting.
         return {
-            "top_n":          [10, 15, 20],
-            "max_weight":     [0.08, 0.10, 0.12],
             "trend_weight":   [0.30, 0.38, 0.50],
             "statarb_weight": [0.10, 0.15, 0.20],
             "mom_window":     [63, 126, 252],

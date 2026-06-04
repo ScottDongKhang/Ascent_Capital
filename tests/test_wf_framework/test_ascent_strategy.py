@@ -32,17 +32,18 @@ def test_is_portfolio_base_strategy():
 
 def test_param_grid_keys():
     s = AscentPortfolioStrategy()
-    for key in ["top_n", "max_weight", "trend_weight", "statarb_weight", "mom_window"]:
+    for key in ["trend_weight", "statarb_weight", "mom_window"]:
         assert key in s.param_grid, f"Missing param_grid key: {key}"
 
 
 def test_param_grid_values():
     s = AscentPortfolioStrategy()
-    assert s.param_grid["top_n"]          == [10, 15, 20]
-    assert s.param_grid["max_weight"]     == [0.08, 0.10, 0.12]
     assert s.param_grid["trend_weight"]   == [0.30, 0.38, 0.50]
     assert s.param_grid["statarb_weight"] == [0.10, 0.15, 0.20]
     assert s.param_grid["mom_window"]     == [63, 126, 252]
+    # top_n and max_weight are fixed at live defaults — not in grid
+    assert "top_n"      not in s.param_grid
+    assert "max_weight" not in s.param_grid
 
 
 def test_generate_signals_returns_dataframe(ohlcv):
