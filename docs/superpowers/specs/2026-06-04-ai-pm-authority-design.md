@@ -49,7 +49,11 @@ All four gates must clear simultaneously:
 
 **Minimum evaluated decisions** prevents statistical luck — the AI PM cannot be promoted until enough override decisions have been scored against actual outcomes. An "evaluated decision" is one where a 10d outcome has been computed.
 
-**Regime diversity gate** (Level 2→3 and above): before advancing to Manager or higher, the AI PM must show positive cumulative alpha in at least one regime other than `calm_bull`. This prevents a strategy that only works in one environment.
+**Incremental alpha measurement**: override wins and losses are measured as `(ai_weight − quant_weight) × return` — the *delta* contribution only. If the quant had STRL at 7% and the AI PM bumped it to 9%, the AI PM owns only the 2pp of extra weight, not the full 9%. This prevents the AI PM from claiming credit for the quant's signal.
+
+**Fade penalty**: if more than 30% of the AI PM's evaluated decisions are classified as "fades" (positive outcome at 10d, negative at 21d), promotion is blocked regardless of Sortino or profit factor. Consistent fading indicates the AI PM is riding short-term momentum it mistakes for alpha.
+
+**Regime diversity gate** (Level 1→2 and above): the AI PM must show it does not *lose badly* in any observed regime (no more than −0.5% cumulative alpha in any single regime). For Level 2→3 and above, it must show *positive* cumulative alpha in at least one regime other than `calm_bull`, with a minimum of **5 consecutive trading days** observed in that regime. One lucky day does not count.
 
 ### Demotion Criteria
 
@@ -78,7 +82,11 @@ Controls what the AI PM is *allowed to do* when blending with quant. Violations 
 
 **Level 1 amplification quality constraint**: the AI PM may only amplify names that the quant ranks in the **top 50% of alpha scores** on that rebalance day. Amplifying a name the quant considers mediocre is not allowed at this level — the AI PM must agree with the quant's direction before concentrating.
 
+**Override correlation check**: simultaneous overrides in names with rolling 63-day correlation > 0.65 are blocked. The AI PM cannot burn two override slots on correlated names — they count as one concentrated bet, not two independent calls. This prevents disguised sector concentration.
+
 **Tracking error cap**: after the authority blend, compute the expected daily tracking error of the blended portfolio vs the pure quant portfolio using a diagonal covariance proxy. If the blend would exceed the level's cap, proportionally scale back all AI PM weight changes until it fits. This algorithmically enforces equity curve smoothness — the AI PM cannot make the ride bumpier.
+
+**Post-blend portfolio constraint validation**: after all AI PM adjustments and tracking error scaling, the blended portfolio is run through the existing portfolio validator. If any constraint is violated (max_weight > 10%, sector cap exceeded, total weight ≠ 1.0 ± 0.001), the AI PM's changes are rolled back to pure quant for that rebalance and the violation is logged. Portfolio integrity is non-negotiable.
 
 ---
 
@@ -213,11 +221,16 @@ This is not optional guidance — it is a structural prompt constraint that forc
 | A — Quant Only | Snapshot before `authority_blend()` on rebalance day; held constant until next rebalance | What would have happened with no AI PM |
 | B — Actual | Alpaca `last_equity` (real account) | What actually happened |
 | C — SPY | `prices_live.parquet` | Market benchmark |
+| D — Pure AI PM | `ai_pm_proposed` weights from decision log at 100% weight; held constant until next rebalance | AI PM signal quality, independent of dilution |
+
+**Track D is critical** — at Level 1 (5% AI weight), Track B and Track A are 95% identical. The difference is too small to evaluate in noise. Track D shows what the AI PM would do with full authority, allowing you to assess whether it has genuine skill before the blending dilutes the signal. Track D never affects actual execution — it is purely diagnostic.
 
 ### Data Flow
 
 **Rebalance days:**
 - Snapshot pure quant `merged_weights` BEFORE `authority_blend()` → `logs/counterfactual_quant_snapshots.jsonl`
+- Snapshot is **idempotent**: if an entry for today already exists (e.g. pipeline re-run), skip — never overwrite. This prevents a second run from corrupting Track A.
+- Also snapshot `ai_pm_proposed` weights from the decision log for Track D.
 
 **Every day (`_log_holdings()`):**
 - Load last rebalance's quant snapshot weights
@@ -239,10 +252,12 @@ Negative = demotion triggers fire.
 
 ```
 [Counterfactual] Since AI PM went live (2026-06-04 → 2026-06-10, 5 days):
-  Track A (Quant Only):  +1.24%
-  Track B (Actual):      +1.31%
-  Track C (SPY):         +0.82%
-  AI value add:          +0.07pp vs quant | +0.49pp vs SPY
+  Track A (Quant Only):    +1.24%
+  Track B (Actual):        +1.31%
+  Track C (SPY):           +0.82%
+  Track D (Pure AI PM):    +1.68%
+  AI value add (B−A):      +0.07pp vs quant | diluted by 95% quant weight
+  AI signal quality (D−A): +0.44pp — what full authority would have added
 ```
 
 ---
@@ -251,10 +266,11 @@ Negative = demotion triggers fire.
 
 Add a "AI PM Performance" section to `docs/index.html` (auto-updated on every run):
 
-- **Three-line equity curve**: Track A (blue), Track B (green), Track C (grey/SPY)
+- **Four-line equity curve**: Track A (blue/quant), Track B (green/actual), Track C (grey/SPY), Track D (orange/pure AI PM)
 - **Current level badge**: "Analyst — Day 3 of 21 | Sortino edge: +0.08 (need +0.20)"
-- **Override scorecard**: win rate, best call, worst call (last 10 decisions)
-- **Days to next promotion** countdown
+- **Override scorecard**: win rate, incremental alpha per override, best call, worst call, fade rate
+- **Signal quality panel**: Track D vs Track A — "If AI PM ran the whole fund today, it would have added +0.44pp"
+- **Gate progress**: all 7 promotion gates shown as pass/fail checklist
 
 ---
 
@@ -291,14 +307,20 @@ On implementation day:
 
 ## Integrity Constraints
 
-1. **Counterfactual Track A must use frozen quant weights** — never retroactively updated after the rebalance snapshot
+1. **Counterfactual Track A must use frozen quant weights** — never retroactively updated after the rebalance snapshot; write is idempotent (no overwrite on re-run)
 2. **Guardrail violations logged before blocking** — AI PM's true proposals are preserved even when overridden
 3. **Perf feedback outcome windows are forward-only** — a decision made on date T is scored using prices on T+5, T+10, T+21, never look-ahead
-4. **Model selection enforced in code** — Level 1–2 physically cannot use Opus for Phase 2
-5. **Authority blend still respects existing `conviction_gate`** — guardrail layer is additive, not a replacement
-6. **All four promotion gates must clear simultaneously** — Sortino edge alone is not sufficient; profit factor, hit rate, and minimum decisions must all pass
-7. **Level 1 amplification quality** — amplifying a name ranked in the bottom 50% of quant alpha scores is blocked and logged
-8. **Tracking error cap is a hard block** — if the blend would exceed the level's daily tracking error cap, AI PM weight changes are scaled back proportionally. The cap cannot be overridden
-9. **Cool-down is a hard lock** — no promotion evaluation runs during the 5-day cool-down after demotion, regardless of performance
-10. **Regime diversity gate is evaluated at promotion time** — the system checks `counterfactual_daily.jsonl` for positive alpha in at least one non-calm_bull regime before allowing Level 2→3 transition
-11. **Feedback citation is required, not optional** — if the Phase 2 response does not reference the feedback report, the response is considered incomplete and falls back to pure quant weights for that rebalance
+4. **Incremental alpha only** — override performance measured as `(ai_weight − quant_weight) × return`, not `ai_weight × return`
+5. **Model selection enforced in code** — Level 1–2 physically cannot use Opus for Phase 2
+6. **Authority blend still respects existing `conviction_gate`** — guardrail layer is additive, not a replacement
+7. **All promotion gates must clear simultaneously** — Sortino, profit factor, hit rate, minimum decisions, fade penalty, regime gate all pass or nothing advances
+8. **Level 1 amplification quality** — amplifying a name ranked in the bottom 50% of quant alpha scores is blocked and logged
+9. **Override correlation** — simultaneous overrides in names with 63-day rolling correlation > 0.65 are blocked
+10. **Tracking error cap is a hard block** — if the blend would exceed the level's daily tracking error cap, AI PM weight changes are proportionally scaled back; cap cannot be overridden
+11. **Post-blend portfolio validation** — blended weights must pass the existing portfolio constraint validator; any violation rolls back AI PM changes to pure quant for that rebalance
+12. **Cool-down is a hard lock** — no promotion evaluation during the 5-day cool-down after demotion
+13. **Regime diversity requires ≥ 5 days** — a single lucky day in a non-calm_bull regime does not satisfy the gate
+14. **Fade penalty blocks promotion** — >30% fading decisions (win 10d, lose 21d) blocks promotion regardless of other metrics
+15. **Feedback file freshness gate** — if `ai_pm_perf_feedback.json` is older than 2 calendar days, Phase 2 does not receive it and a warning is logged; stale data is worse than no data
+16. **Track D is diagnostic only** — pure AI PM weights never execute; they exist solely to measure signal quality independent of authority level dilution
+17. **Feedback citation is required** — if Phase 2 response does not reference the feedback report, falls back to pure quant weights for that rebalance
