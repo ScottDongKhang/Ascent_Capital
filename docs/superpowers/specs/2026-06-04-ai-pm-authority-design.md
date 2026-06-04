@@ -17,7 +17,7 @@ The AI PM has been in Phase 0 (0% capital authority) since April 1. The earliest
 3. Gets **better every day** through a Python-computed feedback loop (no extra LLM cost)
 4. Every decision is **logged** — what it proposed, why, what was blocked
 5. **Three-track counterfactual** proves whether AI PM is adding value vs pure quant and vs SPY
-6. **API cost under $25/year** at Level 3+, under $16/year at Level 1–2
+6. **AI PM API cost under $5/year** — $4.74/yr total; rest of system unchanged
 
 ---
 
@@ -182,31 +182,46 @@ Freeform prose from Phase 1 is **not** passed to Phase 2. Phase 2 must re-derive
 The AI PM runs once per day as part of `run_all_agents.py`.
 
 ### Non-Rebalance Days (226 days/year)
-- **Phase 1 only**: Sonnet reads perf feedback file + held positions + today's signals
-- Outputs a lightweight **daily conviction update** (not a full portfolio proposal): which names it's more/less bullish on today and why
+- **Haiku only**: reads perf feedback file + held positions + price moves
+- Outputs a lightweight **daily conviction update**: which held names changed and why
 - Written to `logs/ai_pm_daily_views.jsonl`
 - Does **not** update `merged_weights.json` — portfolio stays frozen until rebalance
-- Goes to counterfactual log as "what the AI PM would have done today"
-- Cost: ~$0.05/day
+- Used for daily view accuracy scoring (2d/5d) and counterfactual log
+- Cost: ~$0.005/day
 
 ### Rebalance Days (26 days/year)
-- **Phase 1**: Sonnet pre-thesis (reads data, forms views)
-- **Phase 2**: Sonnet (Level 1–2) or Opus (Level 3+) synthesis with perf feedback injected
+- **Phase 1**: Sonnet pre-thesis (reads data, forms views) — all rebalances
+- **Phase 2**: Sonnet (normal) or **Opus (triggered)** — see smart trigger below
+- **Red team**: Sonnet adversarial attack + revision pass — all rebalances
 - Produces full portfolio proposal → guardrail check → authority blend → `merged_weights.json`
 - Decision logged to `logs/ai_pm_decision_log.jsonl`
-- Cost: ~$0.12/rebalance (Level 1–2), ~$0.40/rebalance (Level 3+)
+
+### Smart Opus Trigger (~5 rebalances/year)
+Phase 2 automatically upgrades from Sonnet → Opus when **any** of the following are true:
+- Regime change detected since last rebalance
+- Track D divergence from quant > 2% (AI PM signal strongly disagrees with quant)
+- Phase 1 proposed 4+ potential overrides (high-complexity decision)
+- First rebalance after a demotion (high-stakes recovery moment)
+
+These are the rebalances where judgment quality matters most. Opus fires only when it's earned.
+
+### Annual Cost (AI PM components only — rest of system unchanged)
+
+| Component | Days | Cost/run | Annual |
+|---|---|---|---|
+| Haiku daily view | 226 | $0.005 | $1.19 |
+| Phase 1 Sonnet | 26 | $0.044 | $1.13 |
+| Phase 2 Sonnet | ~21 | $0.039 | $0.82 |
+| Phase 2 Opus (triggered) | ~5 | $0.195 | $0.98 |
+| Red team Sonnet | 26 | $0.024 | $0.62 |
+| **Total** | | | **$4.74/yr** |
+
+Budget: $5.00/yr. Headroom: $0.26.
 
 **Graceful degradation on API failure:**
-- Phase 2 exception/timeout → use Phase 1 result as a single-pass proposal (no synthesis, but still an informed view)
-- Phase 1 also fails → fall back to pure quant weights, log `ai_pm_fallback: "api_failure"`
-- Never block the rebalance execution due to AI PM failures — quant always runs independently
-
-### Annual Cost
-| Level | Annual |
-|---|---|
-| 1–2 | ~$16/yr |
-| 3–4 | ~$23/yr |
-| 5 | ~$23/yr |
+- Phase 2 exception/timeout → use Phase 1 result as single-pass proposal
+- Phase 1 also fails → fall back to pure quant, log `ai_pm_fallback: "api_failure"`
+- Never block rebalance execution due to AI PM failures — quant always runs independently
 
 ---
 
