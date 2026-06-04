@@ -109,6 +109,11 @@ The AI PM runs once per day as part of `run_all_agents.py`.
 - Decision logged to `logs/ai_pm_decision_log.jsonl`
 - Cost: ~$0.12/rebalance (Level 1–2), ~$0.40/rebalance (Level 3+)
 
+**Graceful degradation on API failure:**
+- Phase 2 exception/timeout → use Phase 1 result as a single-pass proposal (no synthesis, but still an informed view)
+- Phase 1 also fails → fall back to pure quant weights, log `ai_pm_fallback: "api_failure"`
+- Never block the rebalance execution due to AI PM failures — quant always runs independently
+
 ### Annual Cost
 | Level | Annual |
 |---|---|
@@ -128,31 +133,45 @@ Every day after `_log_holdings()`, a Python process computes `data_cache/ai_pm_p
   "as_of": "2026-06-04",
   "level": 1,
   "days_at_level": 3,
+  "in_cooldown": false,
+  "cooldown_days_remaining": 0,
+  "days_stuck_at_level": 3,
+  "stuck_alert": false,
   "sortino_21d_ai": 0.82,
   "sortino_21d_quant": 0.74,
   "sortino_edge": 0.08,
+  "sortino_n_days": 14,
   "hit_rate_21d": 0.52,
   "override_win_rate": 0.44,
   "amplify_avg_alpha_10d": +0.0031,
+  "amplify_n": 3,
+  "amplify_confidence": "low",
   "reduce_avg_alpha_10d": -0.0089,
+  "reduce_n": 1,
+  "reduce_ban_active": false,
   "new_position_avg_alpha_10d": +0.0012,
-  "last_5_decisions": [
-    {
-      "date": "2026-05-27",
-      "symbol": "STRL",
-      "type": "amplify",
-      "ai_w": 0.09,
-      "quant_w": 0.07,
-      "outcome_10d": +0.031,
-      "verdict": "win"
-    }
-  ],
-  "best_call_10d": {"symbol": "STRL", "type": "amplify", "alpha": +0.031},
-  "worst_call_10d": {"symbol": "HUM", "type": "hold", "alpha": -0.028},
+  "new_position_n": 0,
+  "daily_view_accuracy_2d": 0.58,
+  "daily_view_accuracy_5d": 0.52,
+  "daily_view_n": 12,
+  "last_5_decisions": [...],
+  "best_call_10d": {"symbol": "STRL", "type": "amplify", "alpha": +0.031, "n_basis": 3},
+  "worst_call_10d": {"symbol": "HUM", "type": "hold", "alpha": -0.028, "n_basis": 3},
   "days_to_next_promotion": 18,
-  "promotion_gap_sortino": 0.12
+  "promotion_gap_sortino": 0.12,
+  "promotion_gates": {
+    "sortino_edge": {"pass": false, "value": 0.08, "threshold": 0.20},
+    "hit_rate": {"pass": true, "value": 0.52, "threshold": 0.52},
+    "profit_factor": {"pass": false, "value": 1.1, "threshold": 1.2},
+    "min_decisions": {"pass": false, "value": 3, "threshold": 5},
+    "fade_rate": {"pass": true, "value": 0.20, "threshold": 0.30},
+    "regime_gate": {"pass": true, "value": "no bad regime yet"},
+    "cooldown": {"pass": true, "value": "not in cooldown"}
+  }
 }
 ```
+
+Every metric includes its **sample size** (`_n` field) and a **confidence label** (`low` < 5, `medium` 5–15, `high` > 15). The AI PM cannot claim a metric is meaningful when n < 5 — the prompt explicitly instructs it to treat low-confidence metrics as "insufficient data, do not act on."
 
 **Outcome windows**: each override decision is scored at **5d, 10d, and 21d**. The feedback file reports all three. The promotion gate uses the 10d window as primary, but the AI PM sees the full picture — a call that looks good at 5d but reverses by 21d is flagged as a "fade".
 
@@ -177,11 +196,26 @@ Every day after `_log_holdings()`, a Python process computes `data_cache/ai_pm_p
 
 `n_decisions_evaluated` is gated before promotion — must meet minimum threshold per level.
 
-On rebalance days, this file is **injected into the Phase 2 synthesis prompt** before the model reasons. The prompt includes a **mandatory feedback reference requirement**:
+On rebalance days, this file is **injected into the Phase 2 synthesis prompt** before the model reasons.
 
-> "Before proposing any portfolio changes, you MUST explicitly state: (1) what your best recent call was and why it worked, (2) what your worst recent call was and what you would do differently today, (3) whether your current override type win rates justify the action you're about to take. If your `reduce_avg_alpha` is negative, you are banned from REDUCE overrides this rebalance regardless of conviction."
+**Enforceable feedback citation**: Phase 2 response schema requires two structured fields:
+```json
+{
+  "feedback_acknowledged": true,
+  "worst_call_response": "HUM was held at 7.1% and dropped -27.6% on earnings. I should have reduced given crowding=WATCH and no catalyst. Going forward I will require crowding=CLEAN before amplifying healthcare names near earnings.",
+  "reduce_ban_respected": true,
+  ...portfolio proposal...
+}
+```
+If `feedback_acknowledged` is absent or `false`, the response is **rejected and falls back to pure quant**. This is enforced by the response parser, not trusted from the LLM. The feedback citation is a schema constraint, not a prose instruction.
 
-This is not optional guidance — it is a structural prompt constraint that forces the AI PM to confront its own track record before acting. This is how it gets better over time at zero extra cost.
+**REDUCE ban sample gate**: the REDUCE ban fires only when `reduce_n >= 5`. With fewer than 5 REDUCE decisions evaluated, the AI PM is permitted to REDUCE but receives a warning in its prompt: "REDUCE track record: only N decisions evaluated — treat as unproven."
+
+**Stuck promotion alert**: `days_stuck_at_level` is tracked in the feedback file. When it exceeds **63 trading days** (3× the evaluation window), `stuck_alert: true` is set and the daily pipeline prints a warning: `[AIPMAuthority] WARNING: AI PM has been at Level 1 for 63+ days without promoting — review promotion gates.`
+
+**Daily view scoring**: non-rebalance Phase 1 conviction updates are scored at 2d and 5d horizons. `daily_view_accuracy_2d` and `daily_view_accuracy_5d` in the feedback file show whether the AI PM's daily bullish/bearish calls are directionally correct. This is a leading indicator of skill — consistently accurate daily views (>55% over n≥20) support promotion; consistently inaccurate views (<45%) are a flag. This costs zero extra LLM calls — the scoring is Python arithmetic on existing price data.
+
+This is how it gets better over time at zero extra cost.
 
 ---
 
@@ -230,7 +264,7 @@ This is not optional guidance — it is a structural prompt constraint that forc
 **Rebalance days:**
 - Snapshot pure quant `merged_weights` BEFORE `authority_blend()` → `logs/counterfactual_quant_snapshots.jsonl`
 - Snapshot is **idempotent**: if an entry for today already exists (e.g. pipeline re-run), skip — never overwrite. This prevents a second run from corrupting Track A.
-- Also snapshot `ai_pm_proposed` weights from the decision log for Track D.
+- Also snapshot `ai_pm_proposed` weights from the decision log for Track D — **normalized to sum to 1.0** before storing. Raw AI PM proposals may not be weight-normalized pre-guardrail.
 
 **Every day (`_log_holdings()`):**
 - Load last rebalance's quant snapshot weights
@@ -323,4 +357,10 @@ On implementation day:
 14. **Fade penalty blocks promotion** — >30% fading decisions (win 10d, lose 21d) blocks promotion regardless of other metrics
 15. **Feedback file freshness gate** — if `ai_pm_perf_feedback.json` is older than 2 calendar days, Phase 2 does not receive it and a warning is logged; stale data is worse than no data
 16. **Track D is diagnostic only** — pure AI PM weights never execute; they exist solely to measure signal quality independent of authority level dilution
-17. **Feedback citation is required** — if Phase 2 response does not reference the feedback report, falls back to pure quant weights for that rebalance
+17. **Feedback citation is a schema constraint** — `feedback_acknowledged: true` and `worst_call_response` are required fields in Phase 2 response schema; absence is caught by the response parser and triggers quant fallback
+18. **REDUCE ban requires n≥5** — ban only fires on sufficient sample; fewer than 5 REDUCE decisions produces a warning, not a ban
+19. **Stuck promotion alert at 63 days** — `stuck_alert` flag set in feedback file; pipeline prints warning; no automatic action taken
+20. **Daily view scoring** — Phase 1 daily conviction updates scored at 2d/5d in Python; accuracy metrics in feedback file as leading indicator; below 45% over n≥20 is a flag
+21. **Track D weight normalization** — `ai_pm_proposed` weights normalized to sum=1.0 before Track D snapshot is written
+22. **Orphaned decisions scored as 0** — if a symbol is unavailable at scoring date (halt, delist), outcome is recorded as 0.0 return; decision counts toward `n_decisions_evaluated` so the minimum-decisions gate remains satisfiable
+23. **API failure never blocks rebalance** — Phase 2 fail → Phase 1 result; Phase 1 fail → pure quant; failure mode logged with `ai_pm_fallback` field
