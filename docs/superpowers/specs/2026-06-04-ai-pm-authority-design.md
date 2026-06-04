@@ -36,12 +36,12 @@ The AI PM has been in Phase 0 (0% capital authority) since April 1. The earliest
 
 All four gates must clear simultaneously:
 
-| Transition | Window | Sortino Edge vs Quant | Hit Rate | Profit Factor | Min Evaluated Decisions |
-|---|---|---|---|---|---|
-| 1 → 2 | 21 trading days | > 0.20 | ≥ 52% | > 1.2 | ≥ 5 |
-| 2 → 3 | 21 trading days | > 0.30 | ≥ 55% | > 1.3 | ≥ 8 |
-| 3 → 4 | 21 trading days | > 0.40 | ≥ 58% | > 1.4 | ≥ 10 |
-| 4 → 5 | 42 trading days | > 0.50 | ≥ 60% | > 1.5 | ≥ 15 |
+| Transition | Window | Primary Scoring | Sortino Edge vs Quant | Hit Rate | Profit Factor | Min Evaluated Decisions |
+|---|---|---|---|---|---|---|
+| 1 → 2 | 21 trading days | 10d outcomes | > 0.20 | ≥ 52% | > 1.2 | ≥ 5 |
+| 2 → 3 | 21 trading days | 10d outcomes | > 0.30 | ≥ 55% | > 1.3 | ≥ 8 |
+| 3 → 4 | 42 trading days | **63d outcomes** | > 0.40 | ≥ 55% | > 1.3 | ≥ 10 |
+| 4 → 5 | 63 trading days | **63d outcomes** | > 0.50 | ≥ 58% | > 1.4 | ≥ 15 |
 
 **Sortino ratio** rewards smooth upward equity curves — penalises downside volatility only.
 
@@ -91,6 +91,97 @@ Controls what the AI PM is *allowed to do* when blending with quant. Violations 
 **Post-blend portfolio constraint validation**: after all AI PM adjustments and tracking error scaling, the blended portfolio is run through the existing portfolio validator. If any constraint is violated (max_weight > 10%, sector cap exceeded, total weight ≠ 1.0 ± 0.001), the AI PM's changes are rolled back to pure quant for that rebalance and the violation is logged. Portfolio integrity is non-negotiable.
 
 **sleeve_weight_prior is advisory only**: Phase 1 provides regime and sleeve priors to the quant. These are suggestions, not commands. The regime engine's protective adjustments always take precedence. If Phase 1 says "trend 50%" but the regime engine calls crisis (trend → 30%), the regime engine wins. Phase 1 cannot override risk management. This is enforced in the quant pipeline: `sleeve_weight_prior` is clipped to within ±10pp of the regime engine's baseline before being applied.
+
+---
+
+## Alpha Generation — What the AI PM Is Actually Optimizing For
+
+This section defines the core signal quality requirements. Everything else in this spec is governance. Alpha and Sharpe come from here.
+
+### Primary Objective: Sharpe Ratio, Not Return
+
+Every Phase 1 and Phase 2 prompt includes this in the temporal context header:
+
+```
+OBJECTIVE: Sharpe ratio, not raw return.
+For every position you propose, you must state:
+  - Expected 3-month return (with basis)
+  - Expected volatility (high/medium/low with reason)
+  - What would make you wrong (specific falsifiable condition)
+
+A high-conviction 15% position in a volatile name may hurt Sharpe more
+than a moderate-conviction 8% position in a stable name. When in doubt,
+choose the lower-volatility expression of the same thesis.
+```
+
+The model optimizes for what it is asked to optimize for. Asking for Sharpe explicitly produces different (better) behavior than asking for "best portfolio."
+
+### Sector Thesis Before Stock Selection
+
+Phase 1 must produce a `sector_thesis` before any individual stock picks. This is a required field in the Phase 1 schema — if absent, Phase 2 receives no Phase 1 input and falls back to quant only.
+
+```json
+"sector_thesis": [
+  {
+    "sector": "industrials",
+    "view": "overweight",
+    "conviction": "high",
+    "reason": "Infrastructure bill spending accelerating into 2026 cycle, domestic construction backlog at records",
+    "avoid_subsectors": ["China-exposed industrials", "defense primes on margin pressure"],
+    "prefer_subsectors": ["domestic construction", "grid infrastructure", "water"],
+    "source": "earnings-commentary-2026-Q1-aggregate",
+    "data_date": "2026-04-30"
+  },
+  {
+    "sector": "healthcare",
+    "view": "underweight",
+    "conviction": "medium",
+    "reason": "Drug pricing headwinds from IRA implementation, binary FDA risk on pipeline names",
+    "avoid_subsectors": ["large-cap pharma", "medical devices near FDA decisions"],
+    "prefer_subsectors": ["managed care if crowding=CLEAN"],
+    "source": "regulatory-filings-2026-Q1",
+    "data_date": "2026-04-15"
+  }
+]
+```
+
+**Why this directly improves Sharpe:** Top-down sector allocation forces diversification across uncorrelated thesis types. Without it, the AI PM could pick 15 stocks that all look good individually but are highly correlated — the portfolio generates return but Sharpe suffers because the positions all move together.
+
+Stock selection in Phase 1 must then be constrained to favored sectors. The AI PM cannot amplify a name in an underweight sector at Level 1 or 2.
+
+### Outcome Scoring Horizons
+
+Override decisions are scored at **5d, 10d, 21d, 63d, and 126d**.
+
+The 10d window is used for promotion gates at Levels 1–2. The **63d window** is primary for Levels 3–5 promotion. This matters because:
+- A 10d scoring window teaches the AI PM to make momentum calls (what the quant already does)
+- A 63d window teaches it to form and hold theses — which is where its orthogonal edge lives
+
+If a call looks bad at 10d but good at 63d, it is classified as **"early"** not "miss." Early calls count neutral in the promotion gate. Fade calls (good at 10d, bad at 63d) count as losses. This asymmetry rewards thesis quality over short-term prediction.
+
+### The AI PM's Information Edge
+
+The quant sees: price, volume, factor returns, sector labels.  
+The AI PM must use what the quant cannot see:
+
+| Signal | Source | What it detects |
+|---|---|---|
+| Earnings call tone | `earnings_transcripts` | Confidence vs. defensiveness in management commentary |
+| 10-K narrative shift | `sec_filings` + `narrative_alpha` | Risk factor language changes, business model pivots |
+| Job posting trends | (future) | Hiring acceleration/deceleration as leading indicator |
+| Congressional trades | `capitol_trades` | Informed positioning before regulatory events |
+| Options flow | `options_scanner` | Institutional directional bets |
+| Sector competitor calls | `earnings_transcripts` | Peer-level sector signal (not just your holdings) |
+
+Phase 1 is required to cite at least one non-price source per conviction symbol. A purely price-based Phase 1 thesis is rejected — the quant already has that signal.
+
+### Architecture Transition at Level 4+
+
+At Levels 1–3, the AI PM overrides the quant's portfolio.  
+At **Level 4 (Director, 50%)**: the relationship flips. AI PM proposes an independent portfolio from scratch. Quant validates risk (factor exposures, liquidity, sector caps) and clips individual positions but does not change selection. AI PM is the alpha source; quant is the risk guardrail.  
+At **Level 5 (CEO, 75%)**: Track D becomes the executed portfolio. Quant runs as pure risk overlay — it can reduce any position by up to 30% for risk reasons but cannot add positions the AI PM didn't propose.
+
+This is the endgame of the AI-native thesis. Not "AI helps quant" — "AI runs the fund, quant keeps it safe."
 
 ---
 
