@@ -34,20 +34,29 @@ The AI PM has been in Phase 0 (0% capital authority) since April 1. The earliest
 
 ### Promotion Criteria (per level transition)
 
-| Transition | Rolling Window | Sortino Edge vs Quant | Hit Rate (days beating quant) |
-|---|---|---|---|
-| 1 → 2 | 21 trading days | > 0.20 | ≥ 52% |
-| 2 → 3 | 21 trading days | > 0.30 | ≥ 55% |
-| 3 → 4 | 21 trading days | > 0.40 | ≥ 58% |
-| 4 → 5 | 42 trading days | > 0.50 | ≥ 60% |
+All four gates must clear simultaneously:
 
-**Sortino ratio** is used instead of Sharpe — penalises downside volatility only, which directly rewards a smooth upward equity curve.
+| Transition | Window | Sortino Edge vs Quant | Hit Rate | Profit Factor | Min Evaluated Decisions |
+|---|---|---|---|---|---|
+| 1 → 2 | 21 trading days | > 0.20 | ≥ 52% | > 1.2 | ≥ 5 |
+| 2 → 3 | 21 trading days | > 0.30 | ≥ 55% | > 1.3 | ≥ 8 |
+| 3 → 4 | 21 trading days | > 0.40 | ≥ 58% | > 1.4 | ≥ 10 |
+| 4 → 5 | 42 trading days | > 0.50 | ≥ 60% | > 1.5 | ≥ 15 |
+
+**Sortino ratio** rewards smooth upward equity curves — penalises downside volatility only.
+
+**Profit factor** = gross winning alpha / gross losing alpha. Must exceed threshold to ensure the AI PM isn't winning frequently but losing big. A profit factor below 1.0 means it loses money in expectation regardless of hit rate.
+
+**Minimum evaluated decisions** prevents statistical luck — the AI PM cannot be promoted until enough override decisions have been scored against actual outcomes. An "evaluated decision" is one where a 10d outcome has been computed.
+
+**Regime diversity gate** (Level 2→3 and above): before advancing to Manager or higher, the AI PM must show positive cumulative alpha in at least one regime other than `calm_bull`. This prevents a strategy that only works in one environment.
 
 ### Demotion Criteria
 
-- **Soft demotion**: AI PM max drawdown exceeds quant's by 3pp over the rolling window → drop 1 level
+- **Soft demotion**: AI PM max drawdown exceeds quant's by 3pp over the rolling window → drop 1 level. Requires ≥ 10 days of data before this check fires (avoids false demotion on tiny samples).
 - **Hard demotion**: Single day AI PM return is 5pp worse than quant → immediate 1-level drop
 - **Catastrophic**: Single day AI PM return is 10pp worse than quant → revert to Shadow (Level 0)
+- **Cool-down after demotion**: 5 trading day lock-out before promotion evaluation resumes. Prevents thrashing and forces the AI PM to absorb feedback before trying again.
 
 Demotion resets the evaluation buffer. The AI PM must re-earn each level.
 
@@ -57,15 +66,19 @@ Demotion resets the evaluation buffer. The AI PM must re-earn each level.
 
 Controls what the AI PM is *allowed to do* when blending with quant. Violations are **logged but blocked** — the AI PM can propose anything; the guardrail layer enforces limits before blending.
 
-| Level | Max Weight Change vs Quant | New Symbols | Override Types | Max Overrides/Rebalance |
-|---|---|---|---|---|
-| 1 | ±2pp | 0 | AMPLIFY only | 2 |
-| 2 | ±4pp | 1 | AMPLIFY + HOLD | 3 |
-| 3 | ±6pp | 2 | AMPLIFY + HOLD + REDUCE | 4 |
-| 4 | ±8pp | 3 | All (conviction gate applies) | 5 |
-| 5 | ±10pp | 5 | All | Unlimited |
+| Level | Max Weight Change vs Quant | New Symbols | Override Types | Max Overrides/Rebalance | Max Tracking Error Added |
+|---|---|---|---|---|---|
+| 1 | ±2pp | 0 | AMPLIFY only | 2 | 0.3% daily |
+| 2 | ±4pp | 1 | AMPLIFY + HOLD | 3 | 0.5% daily |
+| 3 | ±6pp | 2 | AMPLIFY + HOLD + REDUCE | 4 | 0.8% daily |
+| 4 | ±8pp | 3 | All (conviction gate applies) | 5 | 1.2% daily |
+| 5 | ±10pp | 5 | All | Unlimited | Uncapped |
 
 **Level 1 cannot REDUCE any position.** It can only concentrate more weight on high-conviction names. The quant handles all defensive calls at this level. This ensures the AI PM proves it can find good longs before it earns the right to make risk calls.
+
+**Level 1 amplification quality constraint**: the AI PM may only amplify names that the quant ranks in the **top 50% of alpha scores** on that rebalance day. Amplifying a name the quant considers mediocre is not allowed at this level — the AI PM must agree with the quant's direction before concentrating.
+
+**Tracking error cap**: after the authority blend, compute the expected daily tracking error of the blended portfolio vs the pure quant portfolio using a diagonal covariance proxy. If the blend would exceed the level's cap, proportionally scale back all AI PM weight changes until it fits. This algorithmically enforces equity curve smoothness — the AI PM cannot make the ride bumpier.
 
 ---
 
@@ -133,9 +146,34 @@ Every day after `_log_holdings()`, a Python process computes `data_cache/ai_pm_p
 }
 ```
 
-**Outcome window**: 10 trading days. Each override decision is scored against the actual price return 10 days later.
+**Outcome windows**: each override decision is scored at **5d, 10d, and 21d**. The feedback file reports all three. The promotion gate uses the 10d window as primary, but the AI PM sees the full picture — a call that looks good at 5d but reverses by 21d is flagged as a "fade".
 
-On rebalance days, this file is **injected into the Phase 2 synthesis prompt** before the model reasons. The AI PM reads its own report card before deciding. This is how it gets better over time with zero extra API cost.
+```json
+"last_5_decisions": [
+  {
+    "date": "2026-05-27",
+    "symbol": "STRL",
+    "type": "amplify",
+    "ai_w": 0.09,
+    "quant_w": 0.07,
+    "outcome_5d": +0.018,
+    "outcome_10d": +0.031,
+    "outcome_21d": +0.044,
+    "verdict": "win",
+    "fade": false
+  }
+],
+"n_decisions_evaluated": 3,
+"n_decisions_pending": 2
+```
+
+`n_decisions_evaluated` is gated before promotion — must meet minimum threshold per level.
+
+On rebalance days, this file is **injected into the Phase 2 synthesis prompt** before the model reasons. The prompt includes a **mandatory feedback reference requirement**:
+
+> "Before proposing any portfolio changes, you MUST explicitly state: (1) what your best recent call was and why it worked, (2) what your worst recent call was and what you would do differently today, (3) whether your current override type win rates justify the action you're about to take. If your `reduce_avg_alpha` is negative, you are banned from REDUCE overrides this rebalance regardless of conviction."
+
+This is not optional guidance — it is a structural prompt constraint that forces the AI PM to confront its own track record before acting. This is how it gets better over time at zero extra cost.
 
 ---
 
@@ -255,6 +293,12 @@ On implementation day:
 
 1. **Counterfactual Track A must use frozen quant weights** — never retroactively updated after the rebalance snapshot
 2. **Guardrail violations logged before blocking** — AI PM's true proposals are preserved even when overridden
-3. **Perf feedback outcome window is forward-only** — a decision made on date T is scored using prices on T+10, never look-ahead
+3. **Perf feedback outcome windows are forward-only** — a decision made on date T is scored using prices on T+5, T+10, T+21, never look-ahead
 4. **Model selection enforced in code** — Level 1–2 physically cannot use Opus for Phase 2
 5. **Authority blend still respects existing `conviction_gate`** — guardrail layer is additive, not a replacement
+6. **All four promotion gates must clear simultaneously** — Sortino edge alone is not sufficient; profit factor, hit rate, and minimum decisions must all pass
+7. **Level 1 amplification quality** — amplifying a name ranked in the bottom 50% of quant alpha scores is blocked and logged
+8. **Tracking error cap is a hard block** — if the blend would exceed the level's daily tracking error cap, AI PM weight changes are scaled back proportionally. The cap cannot be overridden
+9. **Cool-down is a hard lock** — no promotion evaluation runs during the 5-day cool-down after demotion, regardless of performance
+10. **Regime diversity gate is evaluated at promotion time** — the system checks `counterfactual_daily.jsonl` for positive alpha in at least one non-calm_bull regime before allowing Level 2→3 transition
+11. **Feedback citation is required, not optional** — if the Phase 2 response does not reference the feedback report, the response is considered incomplete and falls back to pure quant weights for that rebalance
