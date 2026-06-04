@@ -57,10 +57,12 @@ All four gates must clear simultaneously:
 
 ### Demotion Criteria
 
-- **Soft demotion**: AI PM max drawdown exceeds quant's by 3pp over the rolling window → drop 1 level. Requires ≥ 10 days of data before this check fires (avoids false demotion on tiny samples).
-- **Hard demotion**: Single day AI PM return is 5pp worse than quant → immediate 1-level drop
-- **Catastrophic**: Single day AI PM return is 10pp worse than quant → revert to Shadow (Level 0)
-- **Cool-down after demotion**: 5 trading day lock-out before promotion evaluation resumes. Prevents thrashing and forces the AI PM to absorb feedback before trying again.
+All comparisons use **Track D vs Track A★** (pure AI PM signal vs pure quant, no Phase 1 contamination). At Levels 1–2, Track B vs Track A is too diluted to trigger meaningful demotion — the AI PM's actual portfolio weight is too small to be detectable in noise.
+
+- **Soft demotion**: Track D max drawdown exceeds Track A★ by 3pp over the rolling window → drop 1 level. Requires ≥ 10 days of data before this check fires.
+- **Hard demotion**: Single day Track D return is 5pp worse than Track A★ → immediate 1-level drop
+- **Catastrophic**: Single day Track D return is 10pp worse than Track A★ → revert to Shadow (Level 0)
+- **Cool-down after demotion**: 5 trading day lock-out before promotion evaluation resumes.
 
 Demotion resets the evaluation buffer. The AI PM must re-earn each level.
 
@@ -87,6 +89,8 @@ Controls what the AI PM is *allowed to do* when blending with quant. Violations 
 **Tracking error cap**: after the authority blend, compute the expected daily tracking error of the blended portfolio vs the pure quant portfolio using a diagonal covariance proxy. If the blend would exceed the level's cap, proportionally scale back all AI PM weight changes until it fits. This algorithmically enforces equity curve smoothness — the AI PM cannot make the ride bumpier.
 
 **Post-blend portfolio constraint validation**: after all AI PM adjustments and tracking error scaling, the blended portfolio is run through the existing portfolio validator. If any constraint is violated (max_weight > 10%, sector cap exceeded, total weight ≠ 1.0 ± 0.001), the AI PM's changes are rolled back to pure quant for that rebalance and the violation is logged. Portfolio integrity is non-negotiable.
+
+**sleeve_weight_prior is advisory only**: Phase 1 provides regime and sleeve priors to the quant. These are suggestions, not commands. The regime engine's protective adjustments always take precedence. If Phase 1 says "trend 50%" but the regime engine calls crisis (trend → 30%), the regime engine wins. Phase 1 cannot override risk management. This is enforced in the quant pipeline: `sleeve_weight_prior` is clipped to within ±10pp of the regime engine's baseline before being applied.
 
 ---
 
@@ -198,6 +202,7 @@ The AI PM runs once per day as part of `run_all_agents.py`.
 
 ### Smart Opus Trigger (~5 rebalances/year)
 Phase 2 automatically upgrades from Sonnet → Opus when **any** of the following are true:
+- **Regime = crisis** (always — this is the highest-stakes call, Sonnet never decides alone)
 - Regime change detected since last rebalance
 - Track D divergence from quant > 2% (AI PM signal strongly disagrees with quant)
 - Phase 1 proposed 4+ potential overrides (high-complexity decision)
@@ -274,6 +279,23 @@ Every day after `_log_holdings()`, a Python process computes `data_cache/ai_pm_p
 ```
 
 Every metric includes its **sample size** (`_n` field) and a **confidence label** (`low` < 5, `medium` 5–15, `high` > 15). The AI PM cannot claim a metric is meaningful when n < 5 — the prompt explicitly instructs it to treat low-confidence metrics as "insufficient data, do not act on."
+
+**Phase 1 accuracy tracking**: the feedback file also scores Phase 1's upstream inputs:
+```json
+"phase1_accuracy": {
+  "regime_assessments": [
+    {"date": "2026-06-10", "called": "stressed", "actual_10d": "calm_bull", "correct": false}
+  ],
+  "regime_accuracy_n": 2,
+  "regime_accuracy_rate": 0.50,
+  "sleeve_prior_value": +0.0012,
+  "sleeve_prior_n": 2,
+  "sleeve_prior_confidence": "low"
+}
+```
+A Phase 1 regime call is "correct" if the regime engine agrees within 10 trading days. Sleeve prior value = Track A vs Track A★ cumulative return (how much did Phase 1's priors help the quant?). If `sleeve_prior_value` is consistently negative, Phase 1 is hurting the quant — the spec allows the AI PM's Phase 1 sleeve priors to be disabled via a flag in `earned_authority.json`.
+
+**Override scoring excludes debate modifications**: if the debate layer modifies a position that the AI PM overrode, the AI PM's override is scored against the **pre-debate-adjusted** position, not the final executed weight. Debate is a separate layer with its own accountability. An AI PM decision cannot be held responsible for what debate did to it. Debate modifications are logged in the decision log under `debate_modification`.
 
 **Outcome windows**: each override decision is scored at **5d, 10d, and 21d**. The feedback file reports all three. The promotion gate uses the 10d window as primary, but the AI PM sees the full picture — a call that looks good at 5d but reverses by 21d is flagged as a "fade".
 
@@ -352,14 +374,21 @@ This is how it gets better over time at zero extra cost.
 
 ### Tracks
 
-| Track | Source | What It Measures |
-|---|---|---|
-| A — Quant Only | Snapshot before `authority_blend()` on rebalance day; held constant until next rebalance | What would have happened with no AI PM |
-| B — Actual | Alpaca `last_equity` (real account) | What actually happened |
-| C — SPY | `prices_live.parquet` | Market benchmark |
-| D — Pure AI PM | `ai_pm_proposed` weights from decision log at 100% weight; held constant until next rebalance | AI PM signal quality, independent of dilution |
+| Track | Source | What It Measures | Primary use |
+|---|---|---|---|
+| A — Quant + Phase 1 | Quant weights after Phase 1 sleeve priors applied, before Phase 2 blend | What quant does with Phase 1 context but no Phase 2 override | Phase 2 override value |
+| A★ — Pure Quant | Quant weights using default regime weights only, zero AI PM input | True no-AI-PM baseline | Total AI PM value (Phase 1 + Phase 2) |
+| B — Actual | Alpaca `last_equity` | What actually happened | Execution reality |
+| C — SPY | `prices_live.parquet` | Market benchmark | Absolute performance |
+| D — Pure AI PM | `ai_pm_proposed` weights at 100%, normalized | AI PM signal quality independent of dilution | Signal quality at any level |
 
-**Track D is critical** — at Level 1 (5% AI weight), Track B and Track A are 95% identical. The difference is too small to evaluate in noise. Track D shows what the AI PM would do with full authority, allowing you to assess whether it has genuine skill before the blending dilutes the signal. Track D never affects actual execution — it is purely diagnostic.
+**Critical: Track A already contains AI PM influence.** Phase 1 Sonnet feeds `sleeve_weight_prior` into the quant before it runs. So Track A is not a clean "no AI PM" baseline — it measures only the incremental value of Phase 2 overrides. Track A★ is the true no-AI-PM baseline, computed by running the quant's alpha stack with default regime weights, ignoring any Phase 1 priors.
+
+**Primary metric by level:**
+- **Levels 1–2**: use Track D vs Track A★ — at 5–15% AI weight, Track B vs Track A is pure noise (0.05pp signal in 0.5pp daily vol). Track D isolates signal quality regardless of dilution.
+- **Levels 3–5**: Track B vs Track A becomes meaningful (30–75% weight). Both Track D and Track B vs Track A are relevant.
+
+**Track A★ implementation**: on each rebalance day, log what the quant's `merged_weights` would be using only default regime weights (no Phase 1 `sleeve_weight_prior`). This requires storing the pre-Phase-1 quant output. One snapshot, no extra API cost.
 
 ### Data Flow
 
@@ -473,3 +502,10 @@ On implementation day:
 28. **Conviction inflation cap** — >40% of proposals marked "high conviction" triggers automatic downgrade of excess; enforced post-Phase 2
 29. **Phase 1 → Phase 2 handoff strips freeform prose** — only structured, sourced fields pass through; prevents Phase 2 from amplifying Phase 1 narrative hallucinations
 30. **Temporal context header is injected, not requested** — date/regime/worst-call context is prepended by code, not left to the model to recall correctly
+31. **Demotion uses Track D vs Track A★** — not Track B vs Track A; diluted blended portfolio is too noisy at low authority levels to trigger meaningful demotion signals
+32. **Track A★ snapshot required on every rebalance** — store quant weights with default regime alpha weights (no Phase 1 priors) at each rebalance; idempotent write
+33. **Phase 1 accuracy tracked separately** — sleeve_prior_value and regime accuracy scored in feedback file; consistently negative sleeve_prior_value enables a `disable_sleeve_priors` flag
+34. **sleeve_weight_prior clipped to ±10pp of regime baseline** — Phase 1 cannot override risk management; regime engine protective adjustments always take precedence
+35. **Override scoring excludes debate modifications** — AI PM override scored against pre-debate weight, not final executed weight; debate modifications logged under `debate_modification` in decision log
+36. **Crisis regime always triggers Opus** — regardless of budget allocation; a crisis rebalance is never decided by Sonnet alone
+37. **Track D vs Track A★ is primary metric at Levels 1–2** — Track B vs Track A is noise below Level 3 (30% weight); dashboard and promotion evaluation use Track D for signal quality at low authority
