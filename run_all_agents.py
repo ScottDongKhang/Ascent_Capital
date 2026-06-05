@@ -28,10 +28,80 @@ from ascent.risk.pm_risk_validator import validate as validate_pm_proposal
 from memory.regime_memory import log_episode, update_outcomes
 from ascent.strategy.earned_authority import blend as authority_blend, update_authority, get_state as get_authority_state
 from ascent.strategy.thesis_formatter import format_thesis
+from ascent.monitoring.ai_pm_counterfactual import (
+    snapshot_quant_star, snapshot_quant, snapshot_ai_pm,
+    score_daily as cf_score_daily, load_snapshots as cf_load_snapshots,
+    print_cumulative_report as cf_print_report,
+)
+from ascent.strategy.ai_pm_perf_feedback import compute_feedback as compute_ai_feedback
 
 
 SECTOR_OVERRIDE_LOG  = Path("logs/sector_override.jsonl")
-HALT_STATE_PATH     = Path("execution/halt_state.json")
+HALT_STATE_PATH      = Path("execution/halt_state.json")
+AI_PM_DECISION_LOG   = Path("logs/ai_pm_decision_log.jsonl")
+AI_PM_DAILY_VIEWS    = Path("logs/ai_pm_daily_views.jsonl")
+
+
+def _run_daily_haiku_view(today, positions: list, feedback: dict) -> None:
+    """Lightweight Haiku daily conviction update on non-rebalance days. ~$0.005/day."""
+    try:
+        from ascent.llm.client import HAIKU_MODEL
+        import anthropic
+        client = anthropic.Anthropic()
+        held = ", ".join(f"{p['symbol']}({p.get('weight', 0):.1%})" for p in positions[:10])
+        level = feedback.get("level", 0)
+        worst = feedback.get("worst_call_10d") or {}
+        worst_str = f"{worst.get('symbol', 'none')} ({worst.get('alpha', 0):+.1%} over 10d)" if worst.get("symbol") else "none"
+        prompt = (
+            f"SYSTEM CONTEXT: Today {today.isoformat()}. AI PM Level {level}. "
+            f"Worst recent call: {worst_str}.\n\n"
+            f"Held positions: {held or 'none'}\n\n"
+            "In 2-3 sentences: which held name changed most today and why? "
+            "State directional conviction (bullish/bearish/neutral) for each held name. "
+            "Cite only today's price moves — no outside knowledge."
+        )
+        resp = client.messages.create(
+            model=HAIKU_MODEL, max_tokens=400,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        view_text = resp.content[0].text if resp.content else ""
+        AI_PM_DAILY_VIEWS.parent.mkdir(parents=True, exist_ok=True)
+        with open(AI_PM_DAILY_VIEWS, "a") as f:
+            f.write(json.dumps({
+                "date": today.isoformat(), "level": level, "view": view_text,
+            }) + "\n")
+        print(f"[Runner] AI PM daily view logged (Haiku, {len(view_text)} chars)")
+    except Exception as e:
+        print(f"[Runner] AI PM daily view skipped: {e}")
+
+
+def _write_decision_log(today, ai_pm_result, quant_weights: dict,
+                        blended_weights: dict, authority_state: dict,
+                        phase2_model: str = "claude-sonnet-4-6") -> None:
+    """Write one entry to ai_pm_decision_log.jsonl per rebalance day."""
+    try:
+        AI_PM_DECISION_LOG.parent.mkdir(parents=True, exist_ok=True)
+        overrides = []
+        if ai_pm_result and ai_pm_result.thesis:
+            overrides = ai_pm_result.thesis.get("quant_overrides", [])
+        entry = {
+            "date":                  today.isoformat(),
+            "level":                 authority_state.get("level", 0),
+            "title":                 authority_state.get("title", "Shadow"),
+            "ai_weight":             authority_state.get("ai_weight", 0.0),
+            "phase2_model":          phase2_model,
+            "perf_feedback_injected": Path("data_cache/ai_pm_perf_feedback.json").exists(),
+            "quant_proposed":        {k: round(v, 6) for k, v in quant_weights.items()},
+            "ai_pm_proposed":        {k: round(v, 6) for k, v in (ai_pm_result.portfolio if ai_pm_result and not ai_pm_result.fallback else {}).items()},
+            "overrides_applied":     overrides,
+            "final_blended":         {k: round(v, 6) for k, v in blended_weights.items()},
+            "thesis_summary":        str((ai_pm_result.thesis or {}).get("market_view", ""))[:200] if ai_pm_result and ai_pm_result.thesis else "",
+        }
+        with open(AI_PM_DECISION_LOG, "a") as f:
+            f.write(json.dumps(entry) + "\n")
+        print(f"[Runner] AI PM decision logged (Level {entry['level']}, {len(overrides)} overrides)")
+    except Exception as e:
+        print(f"[Runner] Decision log skipped: {e}")
 HALT_OVERRIDE_PATH  = Path("execution/halt_override.json")
 REGIME_SIGNAL_PATH  = Path("dashboard/regime_signal.json")
 REGIME_STALE_DAYS   = 5
@@ -959,12 +1029,63 @@ def main():
         except Exception as _pt_e:
             print(f"[Runner] Pre-thesis failed ({_pt_e}) — continuing in standard mode")
 
-    # ── AI PM Agent (rebalance days only — authority/calibration are rebalance-gated) ──
-    _quant_weights_snapshot = dict(merged_weights)  # capture pure quant before any AI PM blend
-    _snap_ai_weights = None  # set below on successful AI PM run (used for authority snapshot)
+    # ── AI PM Agent integration ────────────────────────────────────────────────
+    # Track A★: snapshot BEFORE Phase 1 sleeve priors — true no-AI-PM baseline
+    _quant_star_weights = dict(merged_weights)
+    if is_rebalance:
+        try:
+            snapshot_quant_star(today, _quant_star_weights)
+        except Exception as _cs_e:
+            print(f"[Runner] Track A★ snapshot skipped: {_cs_e}")
+
+    _quant_weights_snapshot = dict(merged_weights)  # updated after Phase 1 (Track A)
+    _snap_ai_weights = None
+    _phase2_model_used = "claude-sonnet-4-6"
+
     if not is_rebalance:
-        print("[Runner] AI PM skipped — non-rebalance day.")
+        # Non-rebalance: lightweight Haiku daily view
+        try:
+            _fb_data = json.loads(Path("data_cache/ai_pm_perf_feedback.json").read_text()) \
+                if Path("data_cache/ai_pm_perf_feedback.json").exists() else {}
+            _cur_pos = []
+            try:
+                from ascent.execution.alpaca_broker import get_positions as _gp
+                _pos_df = _gp()
+                if not _pos_df.empty:
+                    _cur_pos = _pos_df[["symbol", "weight"]].to_dict("records")
+            except Exception:
+                pass
+            _run_daily_haiku_view(today, _cur_pos, _fb_data)
+        except Exception as _dv_e:
+            print(f"[Runner] Daily view skipped: {_dv_e}")
     else:
+        # Track A: snapshot AFTER Phase 1 sleeve priors applied, BEFORE Phase 2 blend
+        _quant_weights_snapshot = dict(merged_weights)
+        try:
+            snapshot_quant(today, _quant_weights_snapshot)
+        except Exception as _ca_e:
+            print(f"[Runner] Track A snapshot skipped: {_ca_e}")
+
+        # Smart Opus trigger: upgrade Phase 2 on high-stakes rebalances
+        try:
+            _current_regime = json.loads(Path("dashboard/regime_signal.json").read_text()).get("label", "") \
+                if Path("dashboard/regime_signal.json").exists() else ""
+            _last_regime = get_authority_state().get("last_regime", "")
+            _use_opus = any([
+                str(_current_regime).lower() in ("crisis",),          # always Opus in crisis
+                _current_regime != _last_regime and _last_regime,      # regime change
+                len(getattr(_ai_prethesis, "high_conviction_names", [])) >= 4,  # complex decision
+                get_authority_state().get("in_cooldown") is False and
+                get_authority_state().get("days_at_level", 99) == 0,   # first day post-promotion
+            ])
+            from ascent.llm.client import DEFAULT_MODEL, SONNET_MODEL
+            _phase2_model_used = DEFAULT_MODEL if _use_opus else SONNET_MODEL
+            if _use_opus:
+                print(f"[Runner] Opus trigger: regime={_current_regime}, using {_phase2_model_used}")
+        except Exception:
+            from ascent.llm.client import SONNET_MODEL
+            _phase2_model_used = SONNET_MODEL
+
         # Load causal track record for Phase 2 synthesis context
         _causal_track_record = None
         try:
@@ -995,6 +1116,21 @@ def main():
                 else:
                     print(f"[Runner] AI PM proposal rejected: {violations} — using quant 100%")
                 _snap_ai_weights = dict(ai_pm_result.portfolio)  # capture for authority snapshot
+
+                # Track D: snapshot pure AI PM portfolio (diagnostic)
+                try:
+                    snapshot_ai_pm(today, dict(ai_pm_result.portfolio))
+                except Exception as _td_e:
+                    print(f"[Runner] Track D snapshot skipped: {_td_e}")
+
+                # Decision log: record what AI PM proposed, what was applied
+                try:
+                    _write_decision_log(
+                        today, ai_pm_result, _quant_weights_snapshot,
+                        merged_weights, get_authority_state(), _phase2_model_used,
+                    )
+                except Exception as _dl_e:
+                    print(f"[Runner] Decision log skipped: {_dl_e}")
 
                 format_thesis({**ai_pm_result.thesis, "ai_pm_portfolio": ai_pm_result.portfolio})
 
@@ -1221,6 +1357,8 @@ def main():
 
                 if len(_px) >= 2:
                     _period_rets = (_px.iloc[-1] / _px.iloc[0] - 1).fillna(0)
+                    # Clip per-symbol returns to ±50% to guard against bad price data
+                    _period_rets = _period_rets.clip(-0.50, 0.50)
 
                     def _port_ret(weights):
                         tw = sum(weights.values()) or 1.0
@@ -1490,17 +1628,20 @@ def _log_holdings(today):
                     "weight":        round(float(row["weight"]), 4),
                 })
 
-        # Compute day_ret and spy_ret from attribution (position × market return),
-        # not from Alpaca equity/last_equity which diverges due to cash and paper-trading mechanics.
-        day_ret = 0.0
+        # Day return: use Alpaca's own equity vs last session close — ground truth.
+        # Attribution-derived returns are intraday estimates and miss after-hours moves.
+        last_equity = float(acct.get("last_equity", 0))
+        day_ret = (equity - last_equity) / last_equity if last_equity > 0 else 0.0
+
+        # SPY return and position breakdown: still run attribution with actual positions.
         spy_ret = 0.0
         if positions:
             try:
                 from ascent.monitoring.attribution import run_attribution
                 attr = run_attribution(positions, today)
                 if attr:
-                    day_ret = attr.get("portfolio_return", 0.0)
                     spy_ret = attr.get("spy_return", 0.0)
+                    # attribution_log gets position-level breakdown; headline return comes from Alpaca above
             except Exception as e:
                 print(f"[Runner] Attribution failed ({e})")
 
@@ -1521,6 +1662,57 @@ def _log_holdings(today):
         sign = "+" if day_ret >= spy_ret else "-"
         print(f"[Runner] Holdings logged — equity ${equity:,.2f} | "
               f"portfolio {day_ret:+.2%} vs SPY {spy_ret:+.2%} ({sign})")
+
+        # ── Counterfactual daily scoring ─────────────────────────────────────
+        try:
+            _as_w, _a_w, _d_w = cf_load_snapshots()
+            _cf_prices: dict = {}
+            if _as_w:
+                _cf_syms = list(set(_as_w) | set(_a_w or {}) | set(_d_w or {}))
+                try:
+                    import yfinance as _yf
+                    _raw = _yf.download(_cf_syms, period="5d", auto_adjust=True, progress=False)
+                    if not _raw.empty and len(_raw) >= 2:
+                        _cls = _raw["Close"] if isinstance(_raw.columns, pd.MultiIndex) else _raw
+                        for _sym in _cf_syms:
+                            if _sym in _cls.columns:
+                                _cf_prices[_sym] = {
+                                    "prev": float(_cls[_sym].iloc[-2]),
+                                    "curr": float(_cls[_sym].iloc[-1]),
+                                }
+                except Exception as _pfe:
+                    pass  # price fetch failure — tracks computed without individual prices
+            _cf_record = cf_score_daily(
+                run_date=today,
+                quant_star_weights=_as_w or None,
+                quant_weights=_a_w or None,
+                ai_pm_weights=_d_w or None,
+                track_b_return=day_ret,
+                spy_return=spy_ret,
+                prices=_cf_prices,
+            )
+            cf_print_report()
+        except Exception as _cfe:
+            print(f"[Runner] Counterfactual scoring skipped: {_cfe}")
+
+        # ── Daily learning brief ─────────────────────────────────────────────
+        try:
+            _fb = compute_ai_feedback()
+            _auth_state = get_authority_state()
+            # Update authority with today's Track D vs Track A★ returns
+            _d_ret_today  = _cf_record.get("track_d_return", 0.0) if "_cf_record" in dir() else 0.0
+            _as_ret_today = _cf_record.get("track_astar_return", 0.0) if "_cf_record" in dir() else 0.0
+            update_authority(
+                track_d_return=_d_ret_today,
+                track_astar_return=_as_ret_today,
+                n_decisions_evaluated=_fb.get("n_decisions_evaluated", 0),
+                hit_rate=_fb.get("hit_rate_21d"),
+                profit_factor=_fb.get("profit_factor"),
+                fade_rate=_fb.get("fade_rate"),
+            )
+        except Exception as _fbe:
+            print(f"[Runner] Feedback/authority update skipped: {_fbe}")
+
     except Exception as e:
         print(f"[Runner] Holdings log skipped ({e})")
 
