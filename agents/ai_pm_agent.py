@@ -643,6 +643,18 @@ def _build_temporal_context(feedback: dict | None = None) -> str:
         wc = feedback.get("worst_call_10d") or {}
         if wc.get("symbol"):
             worst_str = f"\nYour worst recent call: {wc['symbol']} ({wc.get('alpha', 0):+.1%} over 10d) — address this before proposing anything."
+
+    # Inject accumulated pattern memory (grows after every post-mortem)
+    pattern_str = ""
+    try:
+        _pp = Path(__file__).resolve().parent.parent / "data_cache" / "ai_pm_pattern_context.txt"
+        if _pp.exists():
+            _content = _pp.read_text().strip()
+            if _content:
+                pattern_str = f"\n\n{_content}"
+    except Exception:
+        pass
+
     return (
         f"\n══ AUTHORITATIVE SYSTEM CONTEXT (do not contradict) ══\n"
         f"Today: {today.isoformat()}\n"
@@ -654,7 +666,8 @@ def _build_temporal_context(feedback: dict | None = None) -> str:
         f"    - Expected volatility (high/medium/low with reason)\n"
         f"    - What would make you wrong (one falsifiable condition)\n"
         f"  A 15% position in a volatile name hurts Sharpe more than 8% in a stable name.\n"
-        f"  When in doubt, choose the lower-volatility expression of the same thesis.{worst_str}\n"
+        f"  When in doubt, choose the lower-volatility expression of the same thesis.{worst_str}"
+        f"{pattern_str}\n"
         f"══════════════════════════════════════════════════════\n"
     )
 

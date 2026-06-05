@@ -1056,6 +1056,16 @@ def main():
     # This makes the fund genuinely AI-native: AI generates the thesis, quant validates it.
     _ai_prethesis: AIPreThesis | None = None
     if is_rebalance:
+        # Inject pattern memory into environment so Phase 1 temporal context picks it up
+        try:
+            from ascent.strategy.ai_pm_learning import get_pattern_summary
+            _pattern_summary = get_pattern_summary()
+            if _pattern_summary:
+                Path("data_cache/ai_pm_pattern_context.txt").write_text(_pattern_summary)
+                print(f"[Runner] Pattern memory injected into Phase 1 context")
+        except Exception:
+            pass
+
         try:
             print("[Runner] AI PM Phase 1 — forming original thesis before quant runs...")
             _ai_prethesis = run_ai_pm_prethesis()
@@ -1108,7 +1118,24 @@ def main():
                     _cur_pos = _pos_df[["symbol", "weight"]].to_dict("records")
             except Exception:
                 pass
+            # Fetch actual price returns for the intelligence brief
+            _pos_returns = _fetch_position_returns([p["symbol"] for p in _cur_pos if p.get("symbol")])
+
+            # Haiku view (lightweight, non-rebalance)
             _run_daily_haiku_view(today, _cur_pos, _fb_data)
+
+            # Sonnet daily intelligence brief (richer analysis, thesis health, pattern memory)
+            try:
+                from ascent.strategy.ai_pm_learning import daily_intelligence_brief
+                _brief = daily_intelligence_brief(
+                    today=today,
+                    positions=_cur_pos,
+                    price_returns=_pos_returns,
+                    feedback=_fb_data,
+                )
+                print(f"[Runner] AI PM intelligence brief written ({len(_brief)} chars, Sonnet)")
+            except Exception as _ib_e:
+                print(f"[Runner] Intelligence brief skipped: {_ib_e}")
         except Exception as _dv_e:
             print(f"[Runner] Daily view skipped: {_dv_e}")
     else:
@@ -1657,6 +1684,19 @@ def _log_run(today, merged_weights, agent_outputs, dry_run):
             print(f"[Letter] Monthly investor letter saved → {letter_path}")
     except Exception as _le:
         print(f"[Letter] Investor letter skipped: {_le}")
+
+    # ── Post-rebalance post-mortem (fires ~21 days after each rebalance) ──────
+    try:
+        from ascent.strategy.ai_pm_learning import run_post_mortem, update_pattern_memory
+        _fb_for_pm = json.loads(Path("data_cache/ai_pm_perf_feedback.json").read_text()) \
+            if Path("data_cache/ai_pm_perf_feedback.json").exists() else {}
+        _mortem = run_post_mortem(today, _fb_for_pm)
+        if _mortem:
+            print(f"[Runner] AI PM post-mortem written for past rebalance")
+            update_pattern_memory(_mortem, today)
+            print(f"[Runner] AI PM pattern memory updated")
+    except Exception as _pm_e:
+        print(f"[Runner] Post-mortem skipped: {_pm_e}")
 
     print(f"[Runner] Done.\n")
 
