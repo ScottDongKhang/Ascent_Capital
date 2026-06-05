@@ -299,6 +299,45 @@ def load_earned_authority() -> dict:
         return {}
 
 
+def load_counterfactual() -> list:
+    """Load Track A★/A/B/C/D daily returns from counterfactual_daily.jsonl."""
+    path = Path("logs/counterfactual_daily.jsonl")
+    if not path.exists():
+        return []
+    rows = []
+    for line in path.read_text().splitlines():
+        try:
+            rows.append(json.loads(line))
+        except Exception:
+            pass
+    return rows
+
+
+def load_perf_feedback() -> dict:
+    """Load daily learning brief from ai_pm_perf_feedback.json."""
+    path = Path("data_cache/ai_pm_perf_feedback.json")
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text())
+    except Exception:
+        return {}
+
+
+def load_ai_pm_decisions() -> list:
+    """Load per-rebalance override records from ai_pm_decision_log.jsonl."""
+    path = Path("logs/ai_pm_decision_log.jsonl")
+    if not path.exists():
+        return []
+    rows = []
+    for line in path.read_text().splitlines():
+        try:
+            rows.append(json.loads(line))
+        except Exception:
+            pass
+    return sorted(rows, key=lambda x: x.get("date", ""))
+
+
 def load_latest_allocation() -> dict:
     """Returns {agent_id: pct} from the most recent rebalance verdict file."""
     files = sorted(glob.glob("outputs/debate_log/verdict_*.json"))
@@ -421,52 +460,178 @@ def _esc(s: str) -> str:
 
 # ── Section builders ──────────────────────────────────────────────────────────
 
-def _earned_authority_html(auth: dict) -> str:
+def _earned_authority_html(auth: dict, feedback: dict = None) -> str:
     if not auth:
         return '<p class="empty">data_cache/earned_authority.json not found</p>'
-    phase      = auth.get("phase", 0)
-    ai_rets    = auth.get("ai_returns_21d", [])
-    qt_rets    = auth.get("quant_returns_21d", [])
-    n_obs      = len(ai_rets)
-    needed     = 21
-    start_date = auth.get("phase_start_date", "")
-    reverts    = auth.get("auto_revert_count", 0)
-    phase_names = ["Shadow (0%)", "Phase 1 (25%)", "Phase 2 (50%)", "Phase 3 (75%)"]
+    feedback  = feedback or {}
+    level     = auth.get("level", auth.get("phase", 0))
+    title     = auth.get("title", ["Shadow","Analyst","Associate","Manager","Director","CEO"][min(level,5)])
+    ai_weight = auth.get("ai_weight", 0.0)
+    days      = auth.get("days_at_level", 0)
+    cooldown  = auth.get("in_cooldown", False)
+    reverts   = auth.get("auto_revert_count", 0)
+    stuck     = feedback.get("stuck_alert", False)
+    edge      = feedback.get("sortino_edge", 0.0)
 
-    def cumret(rets):
-        v = 1.0
-        for r in rets: v *= (1 + r)
-        return round((v - 1) * 100, 2)
+    titles  = ["Shadow","Analyst","Associate","Manager","Director","CEO"]
+    weights = ["0%","5%","15%","30%","50%","75%"]
+    windows = ["-","21d","21d","42d","63d","-"]
 
-    ai_cum = cumret(ai_rets) if ai_rets else 0.0
-    qt_cum = cumret(qt_rets) if qt_rets else 0.0
-    edge   = round(ai_cum - qt_cum, 2)
+    steps_html = ""
+    for i, (t, w) in enumerate(zip(titles, weights)):
+        cls = "ph-active" if i == level else ("ph-done" if i < level else "ph-future")
+        steps_html += f'<div class="ph-step {cls}"><div class="ph-dot"></div><div class="ph-name">{t}<br><small>{w}</small></div></div>'
+        if i < 5:
+            steps_html += f'<div class="ph-line {"ph-done" if i < level else ""}"></div>'
+
+    window   = windows[min(level, 5)]
+    eval_win = 42 if level >= 3 else 21
+    pct_done = min(100, round(days / max(eval_win, 1) * 100))
+
+    alert_html = ""
+    if stuck:
+        alert_html += '<div style="background:#d29922;color:#0d1117;padding:6px 12px;border-radius:6px;margin-bottom:8px;font-size:12px">⚠ AI PM stuck at this level 63+ days — review promotion gates</div>'
+    if cooldown:
+        cd_rem = feedback.get("cooldown_days_remaining", 0)
+        alert_html += f'<div style="background:#58a6ff33;color:#58a6ff;padding:6px 12px;border-radius:6px;margin-bottom:8px;font-size:12px">❄ Cooldown active — {cd_rem} trading days remaining</div>'
+
     edge_color = "#3fb950" if edge >= 0 else "#f85149"
-    edge_sign  = "+" if edge >= 0 else ""
-
-    pct_done = round(n_obs / needed * 100)
-
-    phase_steps = ""
-    for i, name in enumerate(phase_names):
-        active = "active" if i == phase else ("done" if i < phase else "")
-        phase_steps += f'<div class="ph-step {active}"><div class="ph-dot"></div><div class="ph-name">{name}</div></div>'
-        if i < 3:
-            phase_steps += f'<div class="ph-line {"done" if i < phase else ""}"></div>'
+    hit  = feedback.get("hit_rate_21d", 0)
+    pf   = feedback.get("profit_factor", 0)
+    n_ev = feedback.get("n_decisions_evaluated", 0)
 
     return f"""
-<div class="phase-steps">{phase_steps}</div>
+{alert_html}
+<div class="level-badge" style="font-size:14px;font-weight:600;margin-bottom:10px">{title} — {weights[min(level,5)]} authority — Day {days} of {window}</div>
+<div class="phase-steps">{steps_html}</div>
 <div class="phase-progress-bar"><div class="phase-fill" style="width:{pct_done}%"></div></div>
-<div class="phase-detail">
-  <span>{n_obs}/{needed} trading days evaluated</span>
-  <span>Since {start_date}</span>
-</div>
 <div class="auth-stats">
-  <div class="auth-stat"><div class="as-val" style="color:{_pct_color(ai_cum)}">{'+' if ai_cum>=0 else ''}{ai_cum:.2f}%</div><div class="as-lbl">AI PM (shadow)</div></div>
-  <div class="auth-stat"><div class="as-val" style="color:{_pct_color(qt_cum)}">{'+' if qt_cum>=0 else ''}{qt_cum:.2f}%</div><div class="as-lbl">Quant baseline</div></div>
-  <div class="auth-stat"><div class="as-val" style="color:{edge_color}">{edge_sign}{edge:.2f}%</div><div class="as-lbl">Edge</div></div>
-  <div class="auth-stat"><div class="as-val">{reverts}</div><div class="as-lbl">Auto-reverts</div></div>
+  <div class="auth-stat"><div class="as-val" style="color:{edge_color}">{'+'if edge>=0 else ''}{edge:.3f}</div><div class="as-lbl">Sortino edge</div></div>
+  <div class="auth-stat"><div class="as-val">{hit:.0%}</div><div class="as-lbl">Hit rate</div></div>
+  <div class="auth-stat"><div class="as-val">{pf:.2f}x</div><div class="as-lbl">Profit factor</div></div>
+  <div class="auth-stat"><div class="as-val">{n_ev}</div><div class="as-lbl">Decisions scored</div></div>
+  <div class="auth-stat"><div class="as-val">{reverts}</div><div class="as-lbl">Demotions</div></div>
 </div>
-<p class="auth-note">AI PM earns 25% authority after 21 days with Sharpe edge ≥ 0.05. Auto-reverts to Phase 0 if AI drawdown exceeds quant by 5pp.</p>"""
+<p class="auth-note">Promotion: all 7 gates must clear simultaneously (Sortino edge, hit rate, profit factor, min decisions, fade rate, regime diversity, cooldown clear).</p>"""
+
+
+def _promotion_gates_html(feedback: dict) -> str:
+    if not feedback or "promotion_gates" not in feedback:
+        return '<p class="empty">No promotion gate data yet — starts after first rebalance.</p>'
+    gates = feedback["promotion_gates"]
+    labels = {
+        "sortino_edge": "Sortino edge", "hit_rate": "Hit rate",
+        "profit_factor": "Profit factor", "min_decisions": "Min decisions",
+        "fade_rate": "Fade rate", "regime_gate": "Regime diversity", "cooldown": "Cooldown clear",
+    }
+    rows = ""
+    for key, label in labels.items():
+        g = gates.get(key, {})
+        passed = g.get("pass", False)
+        val    = g.get("value", "—")
+        thr    = g.get("threshold", "")
+        icon   = "✓" if passed else "✗"
+        color  = "#3fb950" if passed else "#f85149"
+        thr_str = f" / need {thr}" if thr else ""
+        rows += (f'<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #21262d">'
+                 f'<span style="color:{color}">{icon} {label}</span>'
+                 f'<span style="color:#8b949e;font-size:12px">{val}{thr_str}</span></div>')
+    return f'<div style="font-size:13px">{rows}</div>'
+
+
+def _counterfactual_chart_html(cfdata: list) -> str:
+    if not cfdata:
+        return '<p class="empty">No AI PM data yet — starts after next rebalance.</p>'
+
+    def cumulative(key):
+        v, vals = 1.0, []
+        for r in cfdata:
+            v *= (1 + r.get(key, 0.0))
+            vals.append(round((v - 1) * 100, 3))
+        return vals
+
+    dates  = [r["date"] for r in cfdata]
+    astar  = cumulative("track_astar_return")
+    actual = cumulative("track_b_return")
+    spy    = cumulative("track_c_return")
+    ai_pm  = cumulative("track_d_return")
+
+    d_val  = ai_pm[-1]  if ai_pm  else 0
+    as_val = astar[-1]  if astar  else 0
+    b_val  = actual[-1] if actual else 0
+    sq     = round(d_val - as_val, 2)
+    impact = round(b_val - as_val, 2)
+    sq_color  = "#3fb950" if sq >= 0 else "#f85149"
+    imp_color = "#3fb950" if impact >= 0 else "#f85149"
+
+    return f"""
+<div style="font-size:12px;color:#8b949e;margin-bottom:8px">
+  AI signal quality (D−A★): <span style="color:{sq_color}">{'+'if sq>=0 else ''}{sq:.2f}pp</span> since live &nbsp;|&nbsp;
+  Actual portfolio impact: <span style="color:{imp_color}">{'+'if impact>=0 else ''}{impact:.2f}pp</span> at current weight
+</div>
+<canvas id="cfChart" height="110"></canvas>
+<script>
+(function(){{
+  var ctx = document.getElementById('cfChart');
+  if (!ctx) return;
+  new Chart(ctx, {{
+    type: 'line',
+    data: {{
+      labels: {json.dumps(dates)},
+      datasets: [
+        {{label:'Pure Quant (A★)', data:{json.dumps(astar)},  borderColor:'#8b949e', borderDash:[4,2], pointRadius:0, borderWidth:1.5, fill:false}},
+        {{label:'Actual (B)',       data:{json.dumps(actual)}, borderColor:'#3fb950', pointRadius:0,    borderWidth:2,   fill:false}},
+        {{label:'SPY (C)',          data:{json.dumps(spy)},    borderColor:'#58a6ff', borderDash:[4,2], pointRadius:0, borderWidth:1.5, fill:false}},
+        {{label:'Pure AI PM (D)',   data:{json.dumps(ai_pm)},  borderColor:'#d29922', pointRadius:0,    borderWidth:2,   fill:false}},
+      ]
+    }},
+    options:{{responsive:true,plugins:{{legend:{{position:'bottom',labels:{{boxWidth:10,font:{{size:10}}}}}}}},
+      scales:{{y:{{ticks:{{callback:function(v){{return v.toFixed(1)+'%'}}}}}}}}}}
+  }});
+}})();
+</script>"""
+
+
+def _override_scorecard_html(decisions: list, feedback: dict) -> str:
+    last5 = (feedback.get("last_5_decisions") or [])[-5:]
+    if not last5:
+        return '<p class="empty">No scored overrides yet — outcomes available after 10 trading days.</p>'
+
+    rows = ""
+    for dec in last5:
+        sym   = dec.get("symbol", "?")
+        ov_t  = dec.get("type", "?")
+        ai_w  = dec.get("ai_w", 0)
+        qt_w  = dec.get("quant_w", 0)
+        r5    = dec.get("outcome_5d")
+        r10   = dec.get("outcome_10d")
+        r21   = dec.get("outcome_21d")
+        verd  = dec.get("verdict", "pending")
+        vc    = {"win":"#3fb950","miss":"#f85149","fade":"#d29922","early":"#58a6ff"}.get(verd,"#8b949e")
+        fmt   = lambda v: f"{v:+.2%}" if v is not None else "—"
+        rows += (f'<tr><td>{dec.get("date","")[:10]}</td><td><b>{sym}</b></td>'
+                 f'<td>{ov_t}</td><td>{ai_w:.1%}</td><td>{qt_w:.1%}</td>'
+                 f'<td>{fmt(r5)}</td><td>{fmt(r10)}</td><td>{fmt(r21)}</td>'
+                 f'<td style="color:{vc}">{verd.upper()}</td></tr>')
+
+    win_rate = feedback.get("hit_rate_21d", 0)
+    avg_alpha = feedback.get("amplify_avg_alpha_10d", 0)
+    fade_rate = feedback.get("fade_rate", 0)
+
+    return f"""
+<div style="font-size:11px;color:#8b949e;margin-bottom:6px">
+  Win rate: <b style="color:#e6edf3">{win_rate:.0%}</b> &nbsp;·&nbsp;
+  Avg incremental α (10d): <b style="color:#e6edf3">{avg_alpha:+.3%}</b> &nbsp;·&nbsp;
+  Fade rate: <b style="color:#e6edf3">{fade_rate:.0%}</b>
+</div>
+<div style="overflow-x:auto">
+<table style="width:100%;font-size:11px;border-collapse:collapse">
+  <thead><tr style="color:#8b949e">
+    <th>Date</th><th>Symbol</th><th>Type</th><th>AI%</th><th>Quant%</th>
+    <th>+5d</th><th>+10d</th><th>+21d</th><th>Result</th>
+  </tr></thead>
+  <tbody style="color:#e6edf3">{rows}</tbody>
+</table></div>"""
 
 
 def _thesis_html(thesis: dict) -> str:
@@ -702,9 +867,16 @@ def build_html(
 
     pos_html      = _positions_html(positions)
     tl_html       = _timeline_html(verdicts)
-    auth_html     = _earned_authority_html(authority)
-    thesis_html   = _thesis_html(thesis)
-    debate_html   = _debate_html(verdicts)
+    # Load new AI PM data
+    _feedback      = load_perf_feedback()
+    _cfdata        = load_counterfactual()
+    _decisions     = load_ai_pm_decisions()
+    auth_html      = _earned_authority_html(authority, feedback=_feedback)
+    gates_html     = _promotion_gates_html(_feedback)
+    cf_chart_html  = _counterfactual_chart_html(_cfdata)
+    scorecard_html = _override_scorecard_html(_decisions, _feedback)
+    thesis_html    = _thesis_html(thesis)
+    debate_html    = _debate_html(verdicts)
 
     sharpe_se_str = f"±{sharpe_se:.1f}" if sharpe_se else "±?"
 
@@ -918,6 +1090,11 @@ footer{{text-align:center;color:#30363d;font-size:12px;margin-top:40px;padding-t
     <div class="ai-card"><h3>Capital Allocation</h3><div class="alloc-chart-wrap"><canvas id="allocChart"></canvas></div><p class="alloc-note">Calm bull · AI PM 0% authority</p></div>
     <div class="ai-card"><h3>Latest AI PM Decision</h3>{thesis_html}</div>
   </div>
+  <div class="grid3" style="margin-top:16px">
+    <div class="ai-card"><h3>Promotion Gates</h3>{gates_html}</div>
+    <div class="ai-card" style="grid-column:span 2"><h3>Four-Track Counterfactual (A★ / Actual / SPY / Pure AI PM)</h3>{cf_chart_html}</div>
+  </div>
+  <div class="ai-card" style="margin-top:16px"><h3>Override Scorecard</h3>{scorecard_html}</div>
   <div style="background:#0d1117;border:1px solid #21262d;border-radius:10px;padding:18px 20px">
     <h3 style="font-size:13px;font-weight:600;color:#a78bfa;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Rebalance Debate History</h3>
     <p class="debate-intro">Before every rebalance, four AI agents debate the proposed portfolio — bull, bear, devil's advocate, and a judge. Arguments are adversarial by design. Click any row to read the full debate.</p>
