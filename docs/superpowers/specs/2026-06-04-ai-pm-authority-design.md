@@ -175,6 +175,104 @@ The AI PM must use what the quant cannot see:
 
 Phase 1 is required to cite at least one non-price source per conviction symbol. A purely price-based Phase 1 thesis is rejected — the quant already has that signal.
 
+---
+
+### Short-Selling Framework
+
+**Dependency:** AI PM shorts require `LONG_SHORT_ENABLED=True` in the execution layer. The 130/30 infrastructure exists in `ascent/portfolio/long_short.py` and `run_all_agents.py` but is currently kill-switched pending paper validation. AI PM short proposals are gated behind the same flag — when long-short quant is enabled, AI PM shorts unlock automatically.
+
+#### Why Most Short Strategies Fail
+
+Shorting on valuation (P/E, P/B) does not work reliably. Shleifer and Vishny (1997) "The Limits of Arbitrage" showed that expensive stocks can remain expensive for years and short-squeeze rational arbitrageurs before the thesis plays out. The AI PM must never propose a short based on valuation opinion. This is explicitly banned in the Phase 1 schema.
+
+#### The Five Research-Backed Short Signals
+
+The AI PM may only propose a short when grounded in at least one of the following. These are not opinions — each has peer-reviewed replication across multiple markets and time periods.
+
+**1. Earnings Quality Deterioration (Accruals)**
+*Sloan (1996), "Do Stock Prices Fully Reflect Information in Accruals and Cash Flows?" — Accounting Review. Replicated by Richardson et al. (2005), Dechow et al. (2011).*
+
+High accruals signal earnings inflation through accounting estimates rather than cash. The market underreacts: the stock rises with the inflated earnings, then falls when accruals reverse. Signal: accruals/total assets > 8% AND trending upward over 3 quarters. Detectable from 10-K/10-Q filings. Holding period: 6–12 months. Average annual return to short side: −8% to −15% in academic studies.
+
+**2. Post-Earnings Announcement Drift — Miss + Guide Down**
+*Bernard and Thomas (1989). Extended by Livnat and Mendenhall (2006), Chan et al. (1996).*
+
+Companies that miss consensus EPS AND cut forward guidance show persistent negative drift for 40–60 trading days. The market underreacts because institutional traders are slow to reprice. Signal: EPS surprise < −3% AND full-year guidance revised down. Detectable from earnings transcripts and SEC 8-K filings. This is the **strongest short signal for the AI PM** because the text signal (management tone on the call) is detectable before the price fully adjusts.
+
+**3. Quality Minus Junk — Short the Junk Leg**
+*Asness, Frazzini, Pedersen (2019), "Quality Minus Junk" — Review of Accounting Studies. Live AQR strategy >$10B AUM.*
+
+Low profitability + high leverage + high accruals + deteriorating growth = "junk." The junk leg has reliably negative expected returns because junk companies attract speculative capital in good times that eventually exits. Signal: ROE < industry 20th percentile AND leverage (D/E) in top quartile AND accruals elevated. Detectable from SEC filings.
+
+**4. Short Interest + Negative Momentum (Informed Bears)**
+*Stambaugh, Yu, Yuan (2012), "The Short of It: Investor Sentiment and Anomalies." Also: Asquith, Pathak, Ritter (2005).*
+
+When institutional short interest exceeds 15% of float AND price momentum is already negative (stock already declining), expected 6-month returns are significantly negative. The interpretation: informed bears are already positioned, and the market is slowly discovering what they know. This is NOT a contrarian short (fighting short interest as a squeeze signal) — it is following informed bears. Signal: SI% of float > 15% AND mom_63d < −10%.
+
+**5. Narrative Breakdown Across Multiple Quarters**
+*No single academic paper; practitioner research basis: Muddy Waters, Hindenburg, Citron methodology. Academic support: Tetlock (2007) "Giving Content to Investor Sentiment."*
+
+Management that systematically over-promises and under-delivers eventually loses market credibility. Pattern: 3+ consecutive quarters of guidance cuts, defensive or evasive language shift in earnings calls, increasing hedge words ("challenging," "visibility is limited," "we're working through headwinds"). Detectable from transcript analysis. The AI PM has a genuine edge here because this signal requires reading text consistently over multiple periods — something the quant cannot do.
+
+#### The Five-Gate Short Checklist
+
+The AI PM must check ALL five gates before proposing any short. A single failed gate blocks the short — no exceptions.
+
+```
+Gate 1 — Fundamental case:     At least one of the 5 research signals above is present, cited with source
+Gate 2 — Price confirmation:   mom_21d < 0 OR mom_63d < -5% (don't fight ongoing momentum)
+Gate 3 — Borrow available:     SI% of float < 25% (if SI > 25%, borrow is expensive/hard to locate)
+Gate 4 — No squeeze risk:      crowding_signal ≠ OVERCROWDED (don't short the most crowded shorts)
+Gate 5 — Sector alignment:     sector_thesis view for this company's sector is "underweight" or "neutral"
+```
+
+Gate 3 uses the existing `get_crowding_signal` tool. Gate 4 uses SI% from `short_interest.py` data. Gate 5 is validated against the required `sector_thesis` output from Phase 1.
+
+#### Short Position Sizing
+
+Shorts are inherently riskier than longs (unlimited theoretical loss, borrow costs, squeeze risk). Size accordingly:
+
+| Level | Max single short | Max total short exposure | Requires |
+|---|---|---|---|
+| 1–2 | 0% | 0% | — (shorts not permitted) |
+| 3 | 3% per name | 10% gross | All 5 gates + Manager level |
+| 4 | 5% per name | 20% gross | All 5 gates |
+| 5 | 7% per name | 30% gross | All 5 gates |
+
+**Level 1–2 cannot propose shorts.** The AI PM must first prove it can find good longs before earning the right to make short calls. Short calling is harder, more dangerous, and requires a stronger track record.
+
+#### What the AI PM Uniquely Adds to Short Selection
+
+The quant's short signal (`long_short.py`) is based on price momentum and factor ranks — purely quantitative. The AI PM adds:
+
+- **Accrual detection from SEC filings**: reads the actual 10-Q cash flow statement vs income statement, flags inflated accruals before they show up in factor scores
+- **Guidance cut pattern from transcripts**: identifies management systematically guiding down, detects language shift from confident to defensive
+- **Narrative coherence check**: detects when a company's stated growth drivers no longer appear in recent filings — a sign the story is breaking down
+- **Sector competitor signal**: if two competitors both cite deteriorating demand in earnings calls, all three companies in that sector become short candidates — the quant doesn't read competitor calls
+
+These are the same qualitative signals that Muddy Waters and Hindenburg use — they work because text signals lead price signals by weeks or months.
+
+#### What the AI PM Must Never Short
+
+Explicitly banned regardless of conviction:
+- **Any name purely on valuation** (P/E, EV/EBITDA, P/B too high) — valuation compression takes years and short-squeezes you first
+- **Names with SI% of float > 25%** — borrow is unavailable or prohibitively expensive
+- **Names in ongoing momentum** (mom_21d > +5%) — fights the trend
+- **Names the quant currently holds long** — AI PM cannot short a name the quant is simultaneously long on (creates internal contradiction; flag for human review)
+
+#### Interaction with Long-Short Quant
+
+When `LONG_SHORT_ENABLED=True`:
+- Quant produces 130/30 portfolio: positive weights for longs, negative weights for shorts
+- AI PM receives the full signed weight dict in Phase 2
+- AI PM can AMPLIFY a quant short (make it more negative = stronger conviction) if all 5 gates pass
+- AI PM can CLOSE a quant short (bring negative weight toward 0) if its thesis says the short thesis has broken
+- AI PM can propose NEW shorts (negative weights on names not in quant's portfolio) if all 5 gates pass, Level ≥ 3
+
+Until `LONG_SHORT_ENABLED=True`, the AI PM operates long-only and all short proposals are logged but not executed.
+
+---
+
 ### Architecture Transition at Level 4+
 
 At Levels 1–3, the AI PM overrides the quant's portfolio.  
@@ -705,3 +803,10 @@ On implementation day:
 35. **Override scoring excludes debate modifications** — AI PM override scored against pre-debate weight, not final executed weight; debate modifications logged under `debate_modification` in decision log
 36. **Crisis regime always triggers Opus** — regardless of budget allocation; a crisis rebalance is never decided by Sonnet alone
 37. **Track D vs Track A★ is primary metric at Levels 1–2** — Track B vs Track A is noise below Level 3 (30% weight); dashboard and promotion evaluation use Track D for signal quality at low authority
+38. **Shorts gated behind LONG_SHORT_ENABLED** — AI PM short proposals are logged but not executed until the execution layer's `LONG_SHORT_ENABLED=True`; this is a hard code gate, not a prompt instruction
+39. **Shorts banned at Levels 1–2** — the AI PM must demonstrate long-only skill before earning the right to propose shorts; Level 1–2 guardrails block any negative weight proposal regardless of conviction
+40. **All 5 short gates must pass simultaneously** — fundamental signal + price confirmation + borrow availability + no squeeze risk + sector alignment; a single failed gate blocks the short and logs the reason
+41. **Valuation-based shorts explicitly banned** — any short proposal citing P/E, EV/EBITDA, P/B, or price-to-any-multiple as the primary reason is rejected; the Phase 1 parser checks for this pattern and strips it
+42. **AI PM cannot short a name the quant holds long** — contradictory internal positions (long quant + short AI PM on same name) are blocked; flagged for human review; never executed silently
+43. **Short sizing caps enforced algorithmically** — max 3%/10% gross at Level 3, 5%/20% at Level 4, 7%/30% at Level 5; enforced by guardrails post-blend regardless of what AI PM proposes
+44. **Incremental alpha for shorts** — measured as `(ai_weight − quant_weight) × |return|` with sign: making a short more negative when stock falls = positive alpha; covering a winning short early = negative alpha
