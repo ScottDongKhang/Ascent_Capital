@@ -623,6 +623,61 @@ Then call propose_portfolio. thesis must include:
 """
 
 
+# ── Shared context injected into every Phase 1 and Phase 2 prompt ─────────────
+
+def _build_temporal_context(feedback: dict | None = None) -> str:
+    """Authoritative system context prepended to every AI PM prompt. Injected by code, not recalled."""
+    from datetime import date as _date, timedelta as _td
+    import json as _json
+    today = _date.today()
+    cutoff = (today - _td(days=45)).isoformat()
+    regime = "unknown"
+    try:
+        _rp = Path(__file__).resolve().parent.parent / "dashboard" / "regime_signal.json"
+        if _rp.exists():
+            regime = _json.loads(_rp.read_text()).get("label", "unknown")
+    except Exception:
+        pass
+    worst_str = ""
+    if feedback:
+        wc = feedback.get("worst_call_10d") or {}
+        if wc.get("symbol"):
+            worst_str = f"\nYour worst recent call: {wc['symbol']} ({wc.get('alpha', 0):+.1%} over 10d) — address this before proposing anything."
+    return (
+        f"\n══ AUTHORITATIVE SYSTEM CONTEXT (do not contradict) ══\n"
+        f"Today: {today.isoformat()}\n"
+        f"Current regime: {regime}\n"
+        f"Data freshness cutoff: {cutoff} — do not cite data older than this as 'current'\n"
+        f"OBJECTIVE: Sharpe ratio, not raw return.\n"
+        f"  For every position you propose, state:\n"
+        f"    - Expected 3-month return (with cited basis)\n"
+        f"    - Expected volatility (high/medium/low with reason)\n"
+        f"    - What would make you wrong (one falsifiable condition)\n"
+        f"  A 15% position in a volatile name hurts Sharpe more than 8% in a stable name.\n"
+        f"  When in doubt, choose the lower-volatility expression of the same thesis.{worst_str}\n"
+        f"══════════════════════════════════════════════════════\n"
+    )
+
+
+def _strip_prethesis_for_phase2(prethesis) -> dict:
+    """Pass only structured, sourced fields to Phase 2. No freeform prose.
+    Prevents Phase 2 from amplifying Phase 1 narrative hallucinations."""
+    if prethesis is None:
+        return {}
+    # Filter conviction_reasons to sourced-only claims
+    raw_reasons = getattr(prethesis, "conviction_reasons", []) or []
+    sourced_reasons = [r for r in raw_reasons if r.get("source") and r.get("data_date")]
+    return {
+        "high_conviction_names": getattr(prethesis, "high_conviction_names", []),
+        "sector_thesis":         getattr(prethesis, "sector_thesis", []),
+        "conviction_reasons":    sourced_reasons,   # sourced-only; prose stripped
+        "regime_assessment":     getattr(prethesis, "regime_assessment", {}),
+        "causal_mechanisms":     getattr(prethesis, "causal_mechanisms", []),
+        # market_character prose, sleeve_weight_prior, and other freeform fields
+        # are intentionally NOT passed to Phase 2 to prevent hallucination chains.
+    }
+
+
 # ── Phase 1: Pre-thesis prompt ────────────────────────────────────────────────
 
 _PRE_THESIS_PROMPT = """You are the portfolio manager of Ascent Capital.
@@ -666,6 +721,17 @@ Each name needs:
   • What evidence would make you change your mind
 
 Also include in propose_prethesis:
+  • sector_thesis: REQUIRED — sector-level over/underweight calls BEFORE individual stocks.
+    For each sector: view (overweight/underweight/neutral), conviction (high/medium/low),
+    reason (specific, with source and data_date), avoid_subsectors, prefer_subsectors.
+    Stock picks in Phase 2 must be constrained to your favoured sectors.
+    If sector_thesis is missing, Phase 2 falls back to pure quant.
+  • conviction_reasons: each reason MUST include source and data_date.
+    Format: {"symbol": "X", "claim": "...", "source": "earnings-2026-04-22", "data_date": "2026-04-22"}
+    Claims without source/data_date are stripped before Phase 2 sees them.
+    Cite at least ONE non-price source per conviction symbol — earnings transcript, SEC filing,
+    congressional trade, options flow. The quant already has the price signal. If your entire
+    thesis is based on price momentum, Phase 2 will not receive it.
   • regime_assessment: your own regime call (label, confidence 0-1, one sentence reasoning)
   • market_character: which of the 7 characters best describes this period
   • sleeve_weight_prior: IC delta adjustments for sleeves you have a view on
@@ -1556,9 +1622,19 @@ def run_ai_pm_prethesis() -> Optional[AIPreThesis]:
             + "\n".join(_causal_lines)
         )
 
+    # Load feedback for temporal context injection
+    _p1_feedback: dict = {}
+    try:
+        import json as _j1
+        _p1_fp = Path(__file__).resolve().parent.parent / "data_cache" / "ai_pm_perf_feedback.json"
+        if _p1_fp.exists():
+            _p1_feedback = _j1.loads(_p1_fp.read_text())
+    except Exception:
+        pass
+
     try:
         tool_completion(
-            system_prompt=_PRE_THESIS_PROMPT,
+            system_prompt=_build_temporal_context(feedback=_p1_feedback) + _PRE_THESIS_PROMPT,
             user_prompt=(
                 f"Today is {date.today()}. Read the available data and form your original "
                 "investment thesis for the next rebalance. Call propose_prethesis when ready."
@@ -1638,6 +1714,7 @@ def run_ai_pm(
     merged_weights: Optional[Dict[str, float]] = None,
     prethesis: Optional[AIPreThesis] = None,
     causal_track_record: Optional[dict] = None,
+    model_override: Optional[str] = None,
 ) -> AIPMResult:
     """
     Run the AI PM agent. Returns AIPMResult(portfolio, thesis).
@@ -1667,11 +1744,34 @@ def run_ai_pm(
     if precomputed:
         log.info("[AIPMAgent] Preloaded %d agent outputs — skipping redundant pipeline runs", len(precomputed))
 
+    # Load daily feedback for temporal context + worst-call injection
+    _feedback: dict = {}
+    try:
+        import json as _json
+        _fp = Path(__file__).resolve().parent.parent / "data_cache" / "ai_pm_perf_feedback.json"
+        if _fp.exists():
+            _feedback = _json.loads(_fp.read_text())
+    except Exception:
+        pass
+
     # Build system prompt — synthesis mode when prethesis is available
     _ic = _get_calibration_ic_safe(n_rebalances=10)
+    _temporal_ctx = _build_temporal_context(feedback=_feedback)
+
     if prethesis is not None:
+        # Apply Phase 1→2 context strip: only structured, sourced fields pass through
+        _stripped = _strip_prethesis_for_phase2(prethesis)
         prethesis_text = _format_prethesis_for_prompt(prethesis)
-        _system = _SYNTHESIS_PROMPT_TEMPLATE.format(prethesis_text=prethesis_text)
+        _system = _temporal_ctx + _SYNTHESIS_PROMPT_TEMPLATE.format(prethesis_text=prethesis_text)
+
+        # Append stripped structured fields note for Phase 2
+        if _stripped.get("sector_thesis"):
+            _system += f"\n\n══ PHASE 1 SECTOR THESIS (sourced, validated) ══\n{_stripped['sector_thesis']}"
+        if _stripped.get("conviction_reasons"):
+            _system += f"\n\n══ PHASE 1 SOURCED CLAIMS ({len(_stripped['conviction_reasons'])} validated) ══\n" + \
+                       "\n".join(f"  {r.get('symbol','?')}: {r.get('claim','')} [{r.get('source','')}]"
+                                 for r in _stripped["conviction_reasons"][:10])
+
         # Prepend calibration warning if IC is poor
         if _ic is not None and _ic < 0.05:
             _system = (
@@ -1703,9 +1803,12 @@ def run_ai_pm(
         log.info("[AIPMAgent] Using two-phase synthesis mode (%d pre-thesis names)",
                  len(prethesis.high_conviction_names))
     else:
-        _system = _build_system_prompt(ic=_ic)
+        _system = _temporal_ctx + _build_system_prompt(ic=_ic)
         user_prompt = f"Today is {date.today()}. Please conduct your research and submit your portfolio."
         log.info("[AIPMAgent] No pre-thesis — using standard single-phase mode")
+
+    # Determine model: use override if provided (smart Opus trigger from run_all_agents)
+    _phase2_model = model_override or DEFAULT_MODEL
 
     try:
         tool_completion(
@@ -1713,7 +1816,7 @@ def run_ai_pm(
             user_prompt=user_prompt,
             tools=AI_PM_TOOLS,
             tool_executor=_make_executor(result_store, precomputed),
-            model=DEFAULT_MODEL,
+            model=_phase2_model,
             max_tokens=4000,
             max_tool_calls=14,
             use_cache=True,
