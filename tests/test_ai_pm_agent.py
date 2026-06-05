@@ -178,20 +178,26 @@ def test_blend_renormalizes_to_1():
 
 
 def test_authority_advances_after_edge():
-    """After 21 days with AI Sharpe > quant+0.05, phase advances 0→1."""
-    ai_returns = [0.002, 0.0015, 0.0025] * 7  # Variance present, AI > QT
+    """Shadow (Level 0) does not auto-advance — promotion from 0→1 is manual bootstrap.
+    Level 1→2 advances when all gates pass (Sortino edge, hit_rate, profit_factor, min_decisions).
+    This test verifies Level 1 stays at 1 without enough evaluated decisions."""
+    ai_returns = [0.002, 0.0015, 0.0025] * 7
     qt_returns  = [0.001, 0.0005, 0.0015] * 7
     with tempfile.TemporaryDirectory() as tmp:
         state_path = Path(tmp) / "earned_authority.json"
-        state = _make_state(phase=0, ai_weight=0.0, ai_returns=ai_returns[:20], qt_returns=qt_returns[:20])
+        # Start at Level 1 (already manually bootstrapped)
+        state = _make_state(phase=1, ai_weight=0.05, ai_returns=ai_returns[:20], qt_returns=qt_returns[:20])
+        state["level"] = 1
+        state["title"] = "Analyst"
         state_path.write_text(json.dumps(state))
         shadow_path = Path(tmp) / "shadow.jsonl"
         with patch("ascent.strategy.earned_authority.STATE_PATH", state_path):
             with patch("ascent.strategy.earned_authority.SHADOW_RETURNS_PATH", shadow_path):
                 import ascent.strategy.earned_authority as ea
+                # Without n_decisions_evaluated >= 5, gates won't pass → stays at Level 1
                 result = ea.update_authority(ai_returns[-1], qt_returns[-1])
-    assert result["phase"] == 1
-    assert result["ai_weight"] == 0.25
+    assert result["level"] == 1  # stays at Level 1 (insufficient n_decisions)
+    assert result["ai_weight"] == 0.05
 
 
 def test_authority_stays_if_no_edge():
@@ -212,21 +218,24 @@ def test_authority_stays_if_no_edge():
 
 
 def test_auto_revert_on_drawdown():
-    """AI drawdown > quant+5% at phase>0 reverts to phase 0."""
-    # 9 bad returns in buffer, trigger on the 10th (matches ADVANCE_WINDOW=10)
+    """AI drawdown > quant+3% at level>0 soft-demotes 1 level (level 2→1).
+    New system drops 1 level (not all the way to 0) to allow recovery."""
     ai_returns = [-0.03] * 9
     qt_returns  = [0.001] * 9
     with tempfile.TemporaryDirectory() as tmp:
         state_path = Path(tmp) / "earned_authority.json"
         state = _make_state(phase=2, ai_weight=0.5, ai_returns=ai_returns, qt_returns=qt_returns)
+        state["level"] = 2
+        state["title"] = "Associate"
         state_path.write_text(json.dumps(state))
         shadow_path = Path(tmp) / "shadow.jsonl"
         with patch("ascent.strategy.earned_authority.STATE_PATH", state_path):
             with patch("ascent.strategy.earned_authority.SHADOW_RETURNS_PATH", shadow_path):
                 import ascent.strategy.earned_authority as ea
                 result = ea.update_authority(-0.03, 0.001)
-    assert result["phase"] == 0
-    assert result["ai_weight"] == 0.0
+    # Soft demotion: drops 1 level (2→1), not all the way to 0
+    assert result["level"] == 1
+    assert result["ai_weight"] == 0.05
     assert result["auto_revert_count"] == 1
 
 

@@ -2,53 +2,42 @@
 from __future__ import annotations
 import json
 import logging
-from datetime import date
+import math
+from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 log = logging.getLogger(__name__)
 
 STATE_PATH = Path(__file__).resolve().parent.parent.parent / "data_cache" / "earned_authority.json"
 SHADOW_RETURNS_PATH = Path(__file__).resolve().parent.parent.parent / "data_cache" / "ai_pm_shadow_returns.jsonl"
 
-ADVANCE_EDGE = 0.05
-ADVANCE_WINDOW = 5         # rebalance periods (~2.5 months); was 10 (~5 months)
-REVERT_DRAWDOWN_EDGE = 0.05
-MIN_WEIGHT = 0.02
-HARD_CAP = 0.80
-# Phases 0-3: shadow → 25% → 50% → 75%. HARD_CAP is the absolute ceiling.
-PHASE_WEIGHTS = [0.0, 0.25, 0.50, 0.75]
-# Each return is a ~10-business-day holding-period return. ~26 rebalances/year.
-_PERIODS_PER_YEAR = 26
+LEVEL_WEIGHTS = [0.0, 0.05, 0.15, 0.30, 0.50, 0.75]
+PHASE_WEIGHTS = LEVEL_WEIGHTS  # legacy alias — old code used 4-phase system
+LEVEL_TITLES  = ["Shadow", "Analyst", "Associate", "Manager", "Director", "CEO"]
+HARD_CAP      = 0.80
+MIN_WEIGHT    = 0.02
+_TRADING_DAYS_PER_YEAR = 252
+
+# Promotion config per transition (from_level, to_level)
+PROMOTION_CONFIG = {
+    (1, 2): {"window": 21, "sortino_edge": 0.20, "hit_rate": 0.52, "profit_factor": 1.2, "min_decisions": 5,  "primary_window": 10},
+    (2, 3): {"window": 21, "sortino_edge": 0.30, "hit_rate": 0.55, "profit_factor": 1.3, "min_decisions": 8,  "primary_window": 10},
+    (3, 4): {"window": 42, "sortino_edge": 0.40, "hit_rate": 0.55, "profit_factor": 1.3, "min_decisions": 10, "primary_window": 63},
+    (4, 5): {"window": 63, "sortino_edge": 0.50, "hit_rate": 0.58, "profit_factor": 1.4, "min_decisions": 15, "primary_window": 63},
+}
 
 
-def get_state() -> dict:
-    """Load state from JSON. Returns defaults if file missing or corrupt."""
-    if STATE_PATH.exists():
-        try:
-            return json.loads(STATE_PATH.read_text())
-        except Exception as exc:
-            log.warning("[EarnedAuthority] Corrupt state file, resetting to defaults: %s", exc)
-    return {
-        "ai_weight": 0.0, "phase": 0,
-        "phase_start_date": str(date.today()),
-        "ai_returns_21d": [], "quant_returns_21d": [],
-        "auto_revert_count": 0, "last_updated": str(date.today()),
-    }
-
-
-def _save_state(state: dict) -> None:
-    STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    STATE_PATH.write_text(json.dumps(state, indent=2))
-
-
-def _sharpe(returns: List[float]) -> float:
+def _sortino(returns: List[float]) -> float:
+    """Sortino ratio annualised. Only penalises downside deviation."""
     if len(returns) < 5:
         return 0.0
-    import statistics
-    mean = statistics.mean(returns)
-    stdev = statistics.stdev(returns) if len(returns) > 1 else 0.0
-    return 0.0 if stdev == 0 else mean / stdev * (_PERIODS_PER_YEAR ** 0.5)
+    mean = sum(returns) / len(returns)
+    neg  = [r for r in returns if r < 0]
+    if not neg:
+        return mean * math.sqrt(_TRADING_DAYS_PER_YEAR) * 100  # cap at large value
+    downside_dev = math.sqrt(sum(r ** 2 for r in neg) / len(returns))
+    return 0.0 if downside_dev == 0 else mean / downside_dev * math.sqrt(_TRADING_DAYS_PER_YEAR)
 
 
 def _max_drawdown(returns: List[float]) -> float:
@@ -63,8 +52,73 @@ def _max_drawdown(returns: List[float]) -> float:
     return max_dd
 
 
-def update_authority(ai_daily_return: float, quant_daily_return: float) -> dict:
-    """Append daily returns, check advance/revert, save state. Returns updated state."""
+def is_stuck(state: dict) -> bool:
+    return state.get("days_stuck", 0) >= 63
+
+
+def get_state() -> dict:
+    """Load state from JSON. Migrates old phase-based schema automatically."""
+    if STATE_PATH.exists():
+        try:
+            s = json.loads(STATE_PATH.read_text())
+            # Migrate old phase-based state to new level-based schema
+            if "phase" in s and "level" not in s:
+                phase = min(s["phase"], 5)
+                s["level"]               = phase
+                s["title"]               = LEVEL_TITLES[phase]
+                s["level_start_date"]    = s.get("phase_start_date", str(date.today()))
+                s.setdefault("days_at_level", 0)
+                s.setdefault("days_stuck", 0)
+                s.setdefault("in_cooldown", False)
+                s.setdefault("cooldown_until", None)
+                # Carry over old buffers into new track fields
+                s.setdefault("track_d_returns",     s.get("ai_returns_21d", []))
+                s.setdefault("track_astar_returns",  s.get("quant_returns_21d", []))
+                s.setdefault("disable_sleeve_priors", False)
+            # Always migrate empty track buffers from legacy arrays (runs even if level present)
+            if not s.get("track_d_returns") and s.get("ai_returns_21d"):
+                s["track_d_returns"] = list(s["ai_returns_21d"])
+            if not s.get("track_astar_returns") and s.get("quant_returns_21d"):
+                s["track_astar_returns"] = list(s["quant_returns_21d"])
+            s.setdefault("track_d_returns", [])
+            s.setdefault("track_astar_returns", [])
+            s.setdefault("in_cooldown", False)
+            s.setdefault("cooldown_until", None)
+            s.setdefault("days_at_level", 0)
+            s.setdefault("days_stuck", 0)
+            s.setdefault("disable_sleeve_priors", False)
+            return s
+        except Exception as exc:
+            log.warning("[EarnedAuthority] Corrupt state, resetting: %s", exc)
+    return {
+        "level": 0, "title": "Shadow", "ai_weight": 0.0,
+        "phase": 0,  # legacy compat
+        "level_start_date": str(date.today()),
+        "phase_start_date": str(date.today()),
+        "days_at_level": 0, "days_stuck": 0,
+        "in_cooldown": False, "cooldown_until": None,
+        "auto_revert_count": 0, "last_updated": str(date.today()),
+        "track_d_returns": [], "track_astar_returns": [],
+        "ai_returns_21d": [], "quant_returns_21d": [],  # legacy compat
+        "disable_sleeve_priors": False,
+    }
+
+
+def _save_state(state: dict) -> None:
+    STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    STATE_PATH.write_text(json.dumps(state, indent=2))
+
+
+def update_authority(
+    track_d_return: float,
+    track_astar_return: float,
+    n_decisions_evaluated: int = 0,
+    hit_rate: Optional[float] = None,
+    profit_factor: Optional[float] = None,
+    fade_rate: Optional[float] = None,
+    regime_gate_pass: bool = True,
+) -> dict:
+    """Append daily Track D / Track A★ returns. Check demotion then promotion. Returns updated state."""
     state = get_state()
     today = str(date.today())
 
@@ -72,47 +126,139 @@ def update_authority(ai_daily_return: float, quant_daily_return: float) -> dict:
         log.debug("[EarnedAuthority] Already updated today (%s), skipping", today)
         return state
 
-    ai_buf: List[float] = (state.get("ai_returns_21d", []) + [float(ai_daily_return)])[-ADVANCE_WINDOW:]
-    qt_buf: List[float] = (state.get("quant_returns_21d", []) + [float(quant_daily_return)])[-ADVANCE_WINDOW:]
-    state["ai_returns_21d"] = ai_buf
-    state["quant_returns_21d"] = qt_buf
-    _log_shadow_return(today, ai_daily_return, quant_daily_return, state["ai_weight"])
+    level = state.get("level", 0)
 
-    # Auto-revert: AI drawdown more than 5pp worse than quant
-    if state["phase"] > 0 and _max_drawdown(ai_buf) > _max_drawdown(qt_buf) + REVERT_DRAWDOWN_EDGE:
-        log.warning("[EarnedAuthority] Auto-revert triggered")
-        state.update({
-            "phase": 0, "ai_weight": 0.0,
-            "phase_start_date": today,
-            "ai_returns_21d": [], "quant_returns_21d": [],
-            "auto_revert_count": state.get("auto_revert_count", 0) + 1,
-        })
-        state["last_updated"] = today
+    # Update rolling buffers (keep last 63 days for Level 3+ windows)
+    d_buf  = (state.get("track_d_returns", [])     + [float(track_d_return)])[-63:]
+    as_buf = (state.get("track_astar_returns", []) + [float(track_astar_return)])[-63:]
+    state["track_d_returns"]     = d_buf
+    state["track_astar_returns"] = as_buf
+    # Legacy compat buffers
+    state["ai_returns_21d"]    = d_buf[-21:]
+    state["quant_returns_21d"] = as_buf[-21:]
+
+    _log_shadow_return(today, track_d_return, track_astar_return, state.get("ai_weight", 0.0))
+
+    # ── Cooldown check ──────────────────────────────────────────────────────
+    cooldown_until = state.get("cooldown_until")
+    if cooldown_until and today <= cooldown_until:
+        state["days_at_level"] = state.get("days_at_level", 0) + 1
+        state["days_stuck"]    = state.get("days_stuck", 0) + 1
+        state["in_cooldown"]   = True
+        state["last_updated"]  = today
         _save_state(state)
         return state
+    elif cooldown_until and today > cooldown_until:
+        state["in_cooldown"]    = False
+        state["cooldown_until"] = None
+        log.info("[EarnedAuthority] Cooldown expired")
 
-    # Advance: full 21-day buffer with AI Sharpe edge
-    if len(ai_buf) >= ADVANCE_WINDOW and state["phase"] < 3:
-        if _sharpe(ai_buf) > _sharpe(qt_buf) + ADVANCE_EDGE:
-            state["phase"] = min(state["phase"] + 1, 3)
-            state["ai_weight"] = min(PHASE_WEIGHTS[state["phase"]], HARD_CAP)
-            state.update({
-                "phase_start_date": today,
-                "ai_returns_21d": [], "quant_returns_21d": [],
-            })
-            log.info("[EarnedAuthority] Phase → %d, ai_weight=%.0f%%",
-                     state["phase"], state["ai_weight"] * 100)
+    # ── Demotion checks (Track D vs Track A★) ──────────────────────────────
+    if level > 0:
+        daily_diff = track_d_return - track_astar_return
+
+        # Catastrophic: single day ≥10pp worse (use 0.099 to handle float precision)
+        if daily_diff <= -0.099:
+            log.warning("[EarnedAuthority] CATASTROPHIC demotion (%.2fpp): Track D %.3f vs A★ %.3f",
+                        abs(daily_diff) * 100, track_d_return, track_astar_return)
+            _apply_demotion(state, today, target_level=0, cooldown_days=5)
+            _save_state(state)
+            return state
+
+        # Hard: single day ≥5pp worse
+        if daily_diff <= -0.05:
+            log.warning("[EarnedAuthority] HARD demotion (%.2fpp worse than A★)", abs(daily_diff) * 100)
+            _apply_demotion(state, today, target_level=max(0, level - 1), cooldown_days=5)
+            _save_state(state)
+            return state
+
+        # Soft: drawdown gap over rolling 21-day window (requires ≥10 days)
+        if len(d_buf) >= 10:
+            dd_d  = _max_drawdown(d_buf[-21:])
+            dd_as = _max_drawdown(as_buf[-21:])
+            if dd_d > dd_as + 0.03:
+                log.warning("[EarnedAuthority] SOFT demotion: DD gap %.2fpp", (dd_d - dd_as) * 100)
+                _apply_demotion(state, today, target_level=max(0, level - 1), cooldown_days=5)
+                _save_state(state)
+                return state
+
+    # ── Promotion check ─────────────────────────────────────────────────────
+    cfg = PROMOTION_CONFIG.get((level, level + 1))
+    if cfg and not state.get("in_cooldown"):
+        win = cfg["window"]
+        if len(d_buf) >= win:
+            sortino_d  = _sortino(d_buf[-win:])
+            sortino_as = _sortino(as_buf[-win:])
+            edge       = sortino_d - sortino_as
+
+            gates = {
+                "sortino_edge":  edge > cfg["sortino_edge"],
+                "hit_rate":      (hit_rate or 0.0) >= cfg["hit_rate"],
+                "profit_factor": (profit_factor or 0.0) > cfg["profit_factor"],
+                "min_decisions": n_decisions_evaluated >= cfg["min_decisions"],
+                "fade_rate":     (fade_rate or 0.0) <= 0.30,
+                "regime_gate":   regime_gate_pass,
+            }
+            if all(gates.values()):
+                new_level = level + 1
+                log.info("[EarnedAuthority] PROMOTED Level %d → %d (%s, %.0f%%)",
+                         level, new_level, LEVEL_TITLES[new_level], LEVEL_WEIGHTS[new_level] * 100)
+                state.update({
+                    "level":             new_level,
+                    "title":             LEVEL_TITLES[new_level],
+                    "ai_weight":         min(LEVEL_WEIGHTS[new_level], HARD_CAP),
+                    "phase":             new_level,  # legacy compat
+                    "level_start_date":  today,
+                    "phase_start_date":  today,
+                    "days_at_level":     0,
+                    "days_stuck":        0,
+                    "track_d_returns":   [],
+                    "track_astar_returns": [],
+                    "ai_returns_21d":    [],
+                    "quant_returns_21d": [],
+                })
+                state["last_updated"] = today
+                _save_state(state)
+                return state
+
+    # ── Increment day counters ───────────────────────────────────────────────
+    state["days_at_level"] = state.get("days_at_level", 0) + 1
+    state["days_stuck"]    = state.get("days_stuck", 0) + 1
+    if is_stuck(state):
+        log.warning("[AIPMAuthority] WARNING: AI PM at Level %d for 63+ days without promoting", level)
 
     state["last_updated"] = today
     _save_state(state)
     return state
 
 
+def _apply_demotion(state: dict, today: str, target_level: int, cooldown_days: int) -> None:
+    cooldown_date = (datetime.strptime(today, "%Y-%m-%d") + timedelta(days=cooldown_days)).date()
+    state.update({
+        "level":               target_level,
+        "title":               LEVEL_TITLES[target_level],
+        "ai_weight":           LEVEL_WEIGHTS[target_level],
+        "phase":               target_level,  # legacy compat
+        "level_start_date":    today,
+        "phase_start_date":    today,
+        "days_at_level":       0,
+        "days_stuck":          0,
+        "in_cooldown":         True,
+        "cooldown_until":      str(cooldown_date),
+        "auto_revert_count":   state.get("auto_revert_count", 0) + 1,
+        "track_d_returns":     [],
+        "track_astar_returns": [],
+        "ai_returns_21d":      [],
+        "quant_returns_21d":   [],
+    })
+    state["last_updated"] = today
+
+
 def blend(ai_portfolio: Dict[str, float], quant_portfolio: Dict[str, float]) -> Dict[str, float]:
-    """Weight-average over union, drop < MIN_WEIGHT=0.02, renormalize."""
+    """Weight-average AI PM + quant portfolios using current level's ai_weight."""
     state = get_state()
-    ai_w = state["ai_weight"]
-    qt_w = 1.0 - ai_w
+    ai_w  = state.get("ai_weight", 0.0)
+    qt_w  = 1.0 - ai_w
 
     blended: Dict[str, float] = {}
     for sym in set(ai_portfolio) | set(quant_portfolio):
@@ -122,17 +268,21 @@ def blend(ai_portfolio: Dict[str, float], quant_portfolio: Dict[str, float]) -> 
 
     total = sum(blended.values())
     if total <= 0:
-        if not ai_portfolio and not quant_portfolio:
+        if not quant_portfolio:
             log.error("[EarnedAuthority] blend() called with both portfolios empty")
         return dict(quant_portfolio)
     return {sym: w / total for sym, w in blended.items()}
 
 
-def _log_shadow_return(today: str, ai_ret: float, qt_ret: float, ai_weight: float) -> None:
+def _log_shadow_return(today: str, d_ret: float, as_ret: float, ai_weight: float) -> None:
     try:
         SHADOW_RETURNS_PATH.parent.mkdir(parents=True, exist_ok=True)
         with open(SHADOW_RETURNS_PATH, "a") as f:
-            f.write(json.dumps({"date": today, "ai_return": ai_ret,
-                                "quant_return": qt_ret, "ai_weight_at_time": ai_weight}) + "\n")
+            f.write(json.dumps({
+                "date": today,
+                "ai_return": d_ret,
+                "quant_return": as_ret,
+                "ai_weight_at_time": ai_weight,
+            }) + "\n")
     except Exception as exc:
         log.warning("[EarnedAuthority] Could not log shadow return: %s", exc)
