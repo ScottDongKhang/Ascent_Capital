@@ -23,6 +23,119 @@ log = logging.getLogger(__name__)
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]  # agents/ → repo root
 
+# ── Recency thresholds for data freshness gate ────────────────────────────────
+_RECENCY_THRESHOLDS_DAYS = {
+    "earnings": 45, "filing": 45, "sec": 45, "transcript": 45,
+    "analyst":  30, "consensus": 30, "estimate": 30,
+    "price":     5, "flow": 5, "options": 5, "insider": 14,
+    "default":  45,
+}
+
+
+def _build_data_grounding(symbols: list[str]) -> str:
+    """
+    Attack #1 — root cause of hallucination.
+
+    Load actual verified numbers from the data cache for every symbol the AI PM
+    might reference. Inject into the prompt so the model reads real data instead
+    of reaching into training memory.
+
+    Returns a compact table string. Empty string if data unavailable.
+    """
+    if not symbols:
+        return ""
+    try:
+        import pandas as pd
+        rows = []
+        # Load prices and compute key momentum signals
+        prices_path = _REPO_ROOT / "data_cache" / "prices_live.parquet"
+        if not prices_path.exists():
+            return ""
+        raw = pd.read_parquet(prices_path)
+        # Handle long format
+        if "symbol" in raw.columns and "close" in raw.columns:
+            prices = raw.pivot_table(index="date", columns="symbol", values="close")
+            prices.index = pd.to_datetime(prices.index)
+            prices = prices.sort_index()
+        else:
+            prices = raw
+
+        # Load alpha scores if available (last quant run)
+        alpha_scores: dict = {}
+        alpha_path = _REPO_ROOT / "data_cache" / "last_alpha_scores.json"
+        if alpha_path.exists():
+            try:
+                alpha_scores = json.loads(alpha_path.read_text())
+            except Exception:
+                pass
+
+        for sym in symbols[:25]:  # cap at 25 to keep prompt size bounded
+            if sym not in prices.columns:
+                continue
+            col = prices[sym].dropna()
+            if len(col) < 21:
+                continue
+            r21   = float(col.iloc[-1] / col.iloc[-21] - 1) if len(col) >= 21  else None
+            r63   = float(col.iloc[-1] / col.iloc[-63] - 1) if len(col) >= 63  else None
+            r252  = float(col.iloc[-1] / col.iloc[-252] - 1) if len(col) >= 252 else None
+            alpha = alpha_scores.get(sym)
+
+            parts = [f"{sym}:"]
+            if r21  is not None: parts.append(f"21d={r21:+.1%}")
+            if r63  is not None: parts.append(f"63d={r63:+.1%}")
+            if r252 is not None: parts.append(f"252d={r252:+.1%}")
+            if alpha is not None: parts.append(f"alpha_score={alpha:.3f}")
+            rows.append("  " + " | ".join(parts))
+
+        if not rows:
+            return ""
+        return (
+            "\n\n══ VERIFIED DATA FROM DATA CACHE (use only these numbers — do not cite others) ══\n"
+            + "\n".join(rows)
+            + "\n  Any financial metric NOT shown above: say 'data not available' — do not estimate.\n"
+            + "══════════════════════════════════════════════════════════════════════════════════\n"
+        )
+    except Exception as exc:
+        log.debug("[AIPMAgent] Data grounding failed: %s", exc)
+        return ""
+
+
+def _apply_recency_gate_python(conviction_reasons: list) -> tuple[list, list]:
+    """
+    Attack #2 — enforced in Python, not the prompt.
+
+    Strip any conviction_reason whose data_date is older than the threshold.
+    Returns (valid_reasons, stripped_reasons).
+    Claims without data_date are also stripped.
+    """
+    from datetime import datetime as _dt
+    today = date.today()
+    valid, stripped = [], []
+    for claim in conviction_reasons:
+        raw_date = claim.get("data_date")
+        if not raw_date:
+            stripped.append({**claim, "_strip_reason": "missing data_date"})
+            continue
+        try:
+            claim_date = date.fromisoformat(str(raw_date)[:10])
+        except ValueError:
+            stripped.append({**claim, "_strip_reason": "invalid data_date"})
+            continue
+        source = claim.get("source", "").lower()
+        threshold = next(
+            (days for key, days in _RECENCY_THRESHOLDS_DAYS.items() if key in source),
+            _RECENCY_THRESHOLDS_DAYS["default"]
+        )
+        age = (today - claim_date).days
+        if age > threshold:
+            stripped.append({**claim, "_strip_reason": f"stale: {age}d > {threshold}d"})
+        else:
+            valid.append(claim)
+    if stripped:
+        log.info("[AIPMAgent] Recency gate stripped %d stale claims: %s",
+                 len(stripped), [s.get("symbol","?") for s in stripped])
+    return valid, stripped
+
 
 def _get_current_regime() -> str:
     """Read the current regime label from dashboard/regime_signal.json. Returns 'unknown' on any failure."""
@@ -673,21 +786,27 @@ def _build_temporal_context(feedback: dict | None = None) -> str:
 
 
 def _strip_prethesis_for_phase2(prethesis) -> dict:
-    """Pass only structured, sourced fields to Phase 2. No freeform prose.
-    Prevents Phase 2 from amplifying Phase 1 narrative hallucinations."""
+    """
+    Pass only structured, sourced fields to Phase 2. No freeform prose.
+    Applies Python recency gate to conviction_reasons before handoff.
+    Prevents Phase 2 from amplifying Phase 1 narrative hallucinations.
+    """
     if prethesis is None:
         return {}
-    # Filter conviction_reasons to sourced-only claims
     raw_reasons = getattr(prethesis, "conviction_reasons", []) or []
-    sourced_reasons = [r for r in raw_reasons if r.get("source") and r.get("data_date")]
+    # Step 1: source filter
+    sourced = [r for r in raw_reasons if r.get("source") and r.get("data_date")]
+    # Step 2: recency gate in Python (Attack #2)
+    valid_reasons, stripped = _apply_recency_gate_python(sourced)
+    if stripped:
+        log.warning("[AIPMAgent] Phase1→2 strip removed %d stale/unsourced claims", len(stripped))
     return {
         "high_conviction_names": getattr(prethesis, "high_conviction_names", []),
         "sector_thesis":         getattr(prethesis, "sector_thesis", []),
-        "conviction_reasons":    sourced_reasons,   # sourced-only; prose stripped
+        "conviction_reasons":    valid_reasons,   # sourced + fresh only
         "regime_assessment":     getattr(prethesis, "regime_assessment", {}),
         "causal_mechanisms":     getattr(prethesis, "causal_mechanisms", []),
-        # market_character prose, sleeve_weight_prior, and other freeform fields
-        # are intentionally NOT passed to Phase 2 to prevent hallucination chains.
+        # Freeform prose intentionally excluded — prevents Phase 2 amplifying hallucinations
     }
 
 
@@ -916,11 +1035,36 @@ def _tool_run_quant_agent(inputs: dict) -> str:
         weight_str = ", ".join(f"{s}={w:.1%}" for s, w in top)
         skill = result.skill_score
         skill_str = f"{skill:.3f}" if isinstance(skill, (int, float)) else str(skill)
+
+        # ── Two-way quant → AI PM: per-sleeve signal quality ──────────────────
+        sq = result.metadata.get("signal_quality", {}) if result.metadata else {}
+        quality_lines = []
+        for sym, _ in top[:8]:
+            q = sq.get(sym)
+            if not q:
+                continue
+            conv = q.get("convergence", "?")
+            pslv = q.get("primary_sleeve", "?")
+            scores = q.get("sleeve_scores", {})
+            top_sleeves = sorted(scores.items(), key=lambda x: -abs(x[1]))[:3]
+            slv_str = ", ".join(f"{sl}={v:+.2f}" for sl, v in top_sleeves)
+            quality_lines.append(
+                f"  {sym}: convergence={conv:.0%}  primary={pslv}  [{slv_str}]"
+            )
+        quality_block = ""
+        if quality_lines:
+            quality_block = "\nSignal quality (convergence = fraction of sleeves agreeing):\n" + "\n".join(quality_lines)
+            quality_block += (
+                "\nInterpretation: convergence>70% = high quant confidence (amplify with conviction);"
+                " convergence<40% = single-sleeve call (verify with text signals before overriding)."
+            )
+
         return (
             f"Quant agent: {agent_id}\n"
             f"Regime: {result.regime_signal}\n"
             f"Skill score (63d Sharpe): {skill_str}\n"
             f"Top weights: {weight_str}"
+            f"{quality_block}"
         )
     except Exception as exc:
         return f"Agent {agent_id} failed: {exc}"
@@ -1277,16 +1421,46 @@ def _tool_get_weekend_research(_: dict) -> str:
 
 def _tool_propose_portfolio(inputs: dict, result_store: list) -> str:
     weights = inputs.get("weights", {})
-    thesis = inputs.get("thesis", {})
+    thesis  = inputs.get("thesis", {})
+
+    # Attack #3 — feedback citation enforcement in code, not the prompt.
+    # If a feedback file exists and the model didn't acknowledge it, reject.
+    _fb_path = _REPO_ROOT / "data_cache" / "ai_pm_perf_feedback.json"
+    if _fb_path.exists():
+        acknowledged = thesis.get("feedback_acknowledged", False)
+        if not acknowledged:
+            log.warning("[AIPMAgent] Phase 2 rejected — feedback_acknowledged missing or false. "
+                        "Falling back to pure quant for this rebalance.")
+            result_store.append(AIPMResult(portfolio={}, thesis={}, fallback=True))
+            return ("REJECTED: You must set feedback_acknowledged=true and include worst_call_response "
+                    "before submitting. Read the feedback file and acknowledge your worst recent call.")
+
+    # Attack #4 — conviction inflation cap enforced in code.
+    # If >40% of thesis positions are 'high conviction', downgrade excess to 'medium'.
+    from ascent.strategy.ai_pm_guardrails import check_conviction_inflation
+    conviction_map = {
+        sym: info.get("conviction", "medium")
+        for sym, info in thesis.get("position_rationale", {}).items()
+        if isinstance(info, dict)
+    }
+    if conviction_map:
+        adjusted = check_conviction_inflation(conviction_map)
+        inflated = [s for s in conviction_map if conviction_map[s] != adjusted.get(s)]
+        if inflated:
+            log.info("[AIPMAgent] Conviction inflation: downgraded %d names from high→medium: %s",
+                     len(inflated), inflated)
+            for sym in inflated:
+                if isinstance(thesis.get("position_rationale", {}).get(sym), dict):
+                    thesis["position_rationale"][sym]["conviction"] = "medium"
+
     result_store.append(AIPMResult(portfolio=weights, thesis=thesis))
 
     # Log for calibration tracking
     try:
         from ascent.strategy.calibration_tracker import log_prediction
-        from datetime import date as _date
-        log_prediction(str(_date.today()), weights, thesis)
+        log_prediction(str(date.today()), weights, thesis)
     except Exception:
-        pass  # never block
+        pass
 
     return "Portfolio submitted. Research loop complete."
 
@@ -1645,9 +1819,15 @@ def run_ai_pm_prethesis() -> Optional[AIPreThesis]:
     except Exception:
         pass
 
+    # Attack #1 — data grounding for Phase 1.
+    # Pre-load verified numbers from cache so model reads real data, not training memory.
+    _p1_grounding = _build_data_grounding(
+        [n.get("symbol", "") for n in _prethesis_universe[:30]] if _prethesis_universe else []
+    ) if "_prethesis_universe" in dir() else _build_data_grounding([])
+
     try:
         tool_completion(
-            system_prompt=_build_temporal_context(feedback=_p1_feedback) + _PRE_THESIS_PROMPT,
+            system_prompt=_build_temporal_context(feedback=_p1_feedback) + _p1_grounding + _PRE_THESIS_PROMPT,
             user_prompt=(
                 f"Today is {date.today()}. Read the available data and form your original "
                 "investment thesis for the next rebalance. Call propose_prethesis when ready."
@@ -1745,11 +1925,30 @@ def run_ai_pm(
                 weight_str = ", ".join(f"{s}={w:.1%}" for s, w in all_pos)
                 skill = ao.skill_score
                 skill_str = f"{skill:.3f}" if isinstance(skill, (int, float)) else str(skill)
+
+                # Two-way: include per-sleeve signal quality in precomputed cache
+                sq = (ao.metadata or {}).get("signal_quality", {})
+                quality_lines = []
+                for sym, _ in all_pos[:8]:
+                    q = sq.get(sym)
+                    if not q:
+                        continue
+                    conv  = q.get("convergence", 0.5)
+                    pslv  = q.get("primary_sleeve", "trend")
+                    scores = q.get("sleeve_scores", {})
+                    top_s  = sorted(scores.items(), key=lambda x: -abs(x[1]))[:3]
+                    slv_str = ", ".join(f"{sl}={v:+.2f}" for sl, v in top_s)
+                    quality_lines.append(f"  {sym}: convergence={conv:.0%} primary={pslv} [{slv_str}]")
+                quality_block = ""
+                if quality_lines:
+                    quality_block = "\nSignal quality:\n" + "\n".join(quality_lines)
+
                 precomputed[ao.agent_id] = (
                     f"Quant agent: {ao.agent_id}\n"
                     f"Regime: {ao.regime_signal}\n"
                     f"Skill score (63d Sharpe): {skill_str}\n"
                     f"All positions ({len(all_pos)}): {weight_str}"
+                    f"{quality_block}"
                 )
             except Exception as exc:
                 log.warning("[AIPMAgent] Could not cache output for agent: %s", exc)
@@ -1822,6 +2021,15 @@ def run_ai_pm(
 
     # Determine model: use override if provided (smart Opus trigger from run_all_agents)
     _phase2_model = model_override or DEFAULT_MODEL
+
+    # Attack #1 — data grounding for Phase 2.
+    # Grounding covers all symbols from quant output + prethesis conviction names.
+    _p2_symbols = list(set(
+        list(merged_weights or {})[:20] +
+        [n.get("symbol","") for n in (getattr(prethesis,"high_conviction_names",[]) or [])]
+    ))
+    _p2_grounding = _build_data_grounding(_p2_symbols)
+    _system = _p2_grounding + _system  # prepend grounding before all other context
 
     try:
         tool_completion(
