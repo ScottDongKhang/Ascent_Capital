@@ -42,35 +42,88 @@ AI_PM_DECISION_LOG   = Path("logs/ai_pm_decision_log.jsonl")
 AI_PM_DAILY_VIEWS    = Path("logs/ai_pm_daily_views.jsonl")
 
 
+def _fetch_position_returns(symbols: list) -> dict:
+    """Fetch today's price changes for held symbols. Returns {sym: pct_change}."""
+    if not symbols:
+        return {}
+    try:
+        import yfinance as yf
+        df = yf.download(symbols, period="2d", auto_adjust=True,
+                         progress=False, threads=True)
+        if df.empty or len(df) < 2:
+            return {}
+        closes = df["Close"] if hasattr(df.columns, "levels") else df
+        if closes.ndim == 1:
+            closes = closes.to_frame(name=symbols[0])
+        rets = closes.pct_change().iloc[-1].dropna()
+        return {str(sym): round(float(r), 4) for sym, r in rets.items()}
+    except Exception:
+        return {}
+
+
 def _run_daily_haiku_view(today, positions: list, feedback: dict) -> None:
     """Lightweight Haiku daily conviction update on non-rebalance days. ~$0.005/day."""
     try:
         from ascent.llm.client import HAIKU_MODEL
         import anthropic
         client = anthropic.Anthropic()
-        held = ", ".join(f"{p['symbol']}({p.get('weight', 0):.1%})" for p in positions[:10])
+
         level = feedback.get("level", 0)
         worst = feedback.get("worst_call_10d") or {}
-        worst_str = f"{worst.get('symbol', 'none')} ({worst.get('alpha', 0):+.1%} over 10d)" if worst.get("symbol") else "none"
-        prompt = (
-            f"SYSTEM CONTEXT: Today {today.isoformat()}. AI PM Level {level}. "
-            f"Worst recent call: {worst_str}.\n\n"
-            f"Held positions: {held or 'none'}\n\n"
-            "In 2-3 sentences: which held name changed most today and why? "
-            "State directional conviction (bullish/bearish/neutral) for each held name. "
-            "Cite only today's price moves — no outside knowledge."
-        )
+        worst_str = (f"{worst.get('symbol')} ({worst.get('alpha', 0):+.1%} over 10d)"
+                     if worst.get("symbol") else "none")
+
+        # Fetch actual today's returns for held positions
+        syms = [p["symbol"] for p in positions if p.get("symbol")]
+        price_returns = _fetch_position_returns(syms)
+
+        # Build position table with real price moves
+        pos_lines = []
+        for p in sorted(positions, key=lambda x: -x.get("weight", 0)):
+            sym = p.get("symbol", "")
+            w   = p.get("weight", 0)
+            ret = price_returns.get(sym)
+            ret_str = f"{ret:+.2%}" if ret is not None else "N/A"
+            pos_lines.append(f"  {sym:6s} {w:.1%}  today: {ret_str}")
+
+        pos_table = "\n".join(pos_lines) or "none"
+
+        # Macro context
+        spy_ret = price_returns.get("SPY")
+        if not spy_ret:
+            spy_prices = _fetch_position_returns(["SPY"])
+            spy_ret = spy_prices.get("SPY")
+        spy_str = f"{spy_ret:+.2%}" if spy_ret is not None else "N/A"
+
+        prompt = f"""Today: {today.isoformat()} | AI PM Level {level} | SPY: {spy_str}
+Worst recent call: {worst_str}
+
+HELD POSITIONS (symbol | weight | today's return):
+{pos_table}
+
+You have the actual price data above. Give a concise daily update:
+1. Biggest mover today and the most likely reason (sector news, macro, earnings follow-through)
+2. Any position that changed your conviction — bullish, bearish, or watch-closely
+3. One risk to monitor before the next rebalance
+
+Be specific. Cite the return numbers from the table. No vague statements."""
+
         resp = client.messages.create(
-            model=HAIKU_MODEL, max_tokens=400,
+            model=HAIKU_MODEL, max_tokens=500,
             messages=[{"role": "user", "content": prompt}],
         )
         view_text = resp.content[0].text if resp.content else ""
+
         AI_PM_DAILY_VIEWS.parent.mkdir(parents=True, exist_ok=True)
         with open(AI_PM_DAILY_VIEWS, "a") as f:
             f.write(json.dumps({
-                "date": today.isoformat(), "level": level, "view": view_text,
+                "date":          today.isoformat(),
+                "level":         level,
+                "price_returns": price_returns,
+                "view":          view_text,
             }) + "\n")
         print(f"[Runner] AI PM daily view logged (Haiku, {len(view_text)} chars)")
+        print(f"[Runner] AI PM view: {view_text[:200].strip()}...")
     except Exception as e:
         print(f"[Runner] AI PM daily view skipped: {e}")
 
