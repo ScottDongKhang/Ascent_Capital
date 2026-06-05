@@ -88,14 +88,14 @@ Total cost: approximately $1.50 in API calls.
 <!-- LIVE_STATS_START -->
 | Metric | Value |
 |--------|-------|
-| Current NAV | $112,903 |
-| Total Return | +11.99% |
-| Alpha vs SPY | -3.93% |
-| Sharpe (Ann.) | 3.405 |
+| Current NAV | $113,682 |
+| Total Return | +12.76% |
+| Alpha vs SPY | -2.35% |
+| Sharpe (Ann.) | 3.562 |
 | Max Drawdown | -4.32% |
-| Days Live | 43 |
+| Days Live | 44 |
 | Open Positions | 17 |
-| Last Updated | 2026-06-03 |
+| Last Updated | 2026-06-04 |
 <!-- LIVE_STATS_END -->
 
 *Sharpe standard error over ~40 days is ~2.8 — not statistically significant yet. This is tracked honestly, which is why authority is earned over 21 rebalances, not calendar time.*
