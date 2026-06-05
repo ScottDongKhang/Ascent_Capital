@@ -102,12 +102,12 @@ demo_app.py           Streamlit interactive demo
 
 | Sleeve | Weight | Notes |
 |--------|--------|-------|
-| Trend | 38% | Cross-sectional momentum; skip-last-month `mom_252d − mom_21d` at 0.20 sub-weight |
+| Trend | 43% | Cross-sectional momentum; skip-last-month `mom_252d − mom_21d` at 0.20 sub-weight |
 | Stat-arb | 15% | Sector residuals; needs profiles.parquet |
 | ML (XGBoost) | 10% | CPCV C(6,2)=15 folds, purge=5 bdays, embargo=5 bdays; 6 features by IC/IR; p5 guard > −0.05 |
 | Mean reversion | 5% | Short-term reversal |
 | Volatility | 5% | `−(vol_trend_10d / vol_of_vol_21d)`; long names with declining + stable vol |
-| Fundamental | 5% | Gross profitability, accruals, asset growth; 45-day filing lag; momentum-neutral |
+| Fundamental | 0% | **Disabled** — IC-t=−4.75 across 31 live days (anti-signal). Re-enable only if IC-t turns positive. |
 | Earnings (PEAD) | 5% | Cross-sectional z-score of EPS surprise; OLS momentum-beta residual; 1-bday lag |
 | Analyst | 5% | Analyst revision signal; sparse — zero-filled if cache absent |
 | LLM Fundamental | 3% | Chicago Booth 6-step CoT via Haiku; cached by (symbol, quarter_end); 45-day filing lag |
@@ -419,11 +419,50 @@ Python 3.12.13 Homebrew, venv at `.venv/`. Use `.venv/bin/python`. API keys via 
 - 716 → 728 tests (+12 in `tests/test_regime_hardening.py`). Zero regressions.
 - Files: `ascent/regime/engine.py`, `ascent/regime/decision.py`, `ascent/regime/types.py`, `tests/test_regime_hardening.py` (new), `docs/superpowers/specs/2026-06-02-regime-hardening-design.md` (new), `docs/superpowers/plans/2026-06-02-regime-hardening.md` (new).
 
-### 2026-06-03 (WF OOS framework + Ascent strategy adapter — in progress)
+### 2026-06-03 (WF OOS framework + attribution + signal fixes ✅)
 - **Built**: production Walk-Forward OOS framework at `ascent/research/wf_framework/` — `WindowGenerator` (purge/embargo), `BaseStrategy` ABC + `MACrossStrategy`, `ExecutionModel` (ATR slippage/commission/borrow), `ParameterOptimizer` (grid search IS-only), `PerformanceAnalyzer` (Sharpe/Sortino/MDD/WFE), `WalkForwardEngine` orchestrator. 35 tests, all passing.
-- **Decision**: integrate Ascent quant alpha stack as a `PortfolioStrategy` — Option D smart (all params: `top_n`, `max_weight`, `trend_weight`, `statarb_weight`, `mom_window` — 243 combos × 22 folds ≈ 30 min with caching). Max accuracy, no time constraint.
-- **Next**: design + implement `AscentPortfolioStrategy` adapter extending framework with portfolio-weight output (DataFrame weights instead of {-1,0,1} signals).
-- Open: brainstorming/design in progress for portfolio strategy extension.
+- **Live attribution (Apr 1–May 29)**: Portfolio +11.0% vs SPY +15.4% (-4.5pp). Biggest drag: Apr 1-14 initial defensive portfolio during bull rally (-6pp). AI layers (debate, AI PM) had ~0pp measurable impact. 100% of performance is quant alpha stack.
+- **KMLM over-weighting root cause fixed**: `managed_futures` bucket added to `FACTOR_BUCKETS` (KMLM, DBMF, CTA, WTMF). Included in `EM_COMMODITY_BUCKETS` for the 20% aggregate cap. Final position cap added at end of `run_orchestrator` — correlation guard and thesis coherence were pushing names past 10% without re-capping. KMLM: 11.2% → ~3% on May 5 data.
+- **Fundamental sleeve disabled**: IC-t = -4.75 across 31 live trading days — reliably anti-signal. Zeroed in `DEFAULT_ALPHA_WEIGHTS` (0.05→0.00) and all `DEFAULT_ALPHA_WEIGHTS_BY_REGIME` entries. Trend absorbs freed weight (0.38→0.43 base, 0.35→0.40 stressed, 0.30→0.35 crisis). Fundamental removed from `MIN_SLEEVE_WEIGHTS` floor in `self_improve.py`.
+- **IC gate tightened**: -0.010 → -0.005 to catch fundamental's recent IC of -0.008 which had evaded the old threshold.
+- **AI PM shadow corruption fixed**: Removed -145% entry (2026-05-17, bad price data). Added `clip(-0.50, 0.50)` per-symbol guard to authority update to prevent recurrence. AI PM stays at Phase 0 — 9 clean shadow days, need 21 before earned authority advances.
+- 728 → 752 tests (+24 stale assertion updates across test_earnings_alpha, test_fundamental_alpha, test_self_evolving_alpha).
+- Files: `orchestrator/central_intelligence.py`, `ascent/alpha/stack.py`, `ascent/research/self_improve.py`, `run_all_agents.py`, `data_cache/ai_pm_shadow_returns.jsonl`, `tests/test_earnings_alpha.py`, `tests/test_fundamental_alpha.py`, `tests/test_self_evolving_alpha.py`.
+
+### 2026-06-03 (holdings day_return bug fix ✅)
+- **Bug**: `_log_holdings` computed `day_return` from `run_attribution()` (yfinance intraday prices at 1:45 PM), not from Alpaca. Today this reported +0.71% while the actual account dropped -2.83% — HUM crashed after pipeline ran (earnings after close, -27.63%).
+- **Root cause**: attribution uses `yfinance.download(period="5d").pct_change().iloc[-1]` which is the 1:45 PM intraday price vs previous close. Any after-hours or late-session move is invisible to it.
+- **Fix**: `day_ret` in `_log_holdings` now comes from `(equity - last_equity) / last_equity` using Alpaca's own `last_equity` field (previous session close). `run_attribution()` still runs for position-level breakdown but its `portfolio_return` is no longer used as the headline number. Comment added to `attribution_log` field noting it is an intraday estimate.
+- **Actual Jun 3 numbers** (from Alpaca): account -2.83%, SPY +0.14%, alpha -2.97%. HUM cost -$3,007 on earnings crash.
+- **Real total return Apr 1 → Jun 3**: +8.8% (portfolio) vs +15.9% (SPY). Early April defensive positioning is the main drag.
+- Files: `run_all_agents.py`, `ascent/monitoring/attribution.py`.
+
+### 2026-06-03 (daily run — monitoring only)
+- Ran `run_all_agents.py` — clean exit (code 0), non-rebalance day.
+- Regime: calm_bull. HMM refit triggered (stale signal) → K=3, calm_bull confirmed.
+- Entropy overconfidence penalty fired on 10 recent dates (entropy 8e-9 to 5e-7) — regime hardening working as designed.
+- Forward PnL: US equities +0.28%, alternatives +0.21%, macro −0.40%, international −0.65%.
+- Attribution: portfolio +0.71% vs SPY −0.70% → **+1.41% alpha today**. NAV $109,818.
+- Top contributor: STRL +9.3% (+0.75%). Top drag: WMG −4.5% (−0.31%).
+- Final portfolio: 19 positions — EWY 10%, APP/BRKR/BWA/CLF/ORA/PANW/STRL/VICR/WDC 7.07% each, PDBC 5.86%, EM/macro ETFs tail. KMLM halved to 0.54% (corr guard vs PDBC, expected).
+- Alerts: ⚠ WDC event in 2 days — binary risk on 7% held position.
+- Non-fatal warnings: FactorModel 0-row overlap → diagonal covariance proxy; fundamental IC gate zeroed (IC=-0.0078); LLM fundamental missing columns; ETF 404s on fundamentals (all expected).
+- Cost: $0.082 (51 Haiku calls). Dashboard pushed to GitHub Pages.
+- No code changes this session.
+
+### 2026-06-04 (AI PM Progressive Authority System ✅)
+- **Spec**: `docs/superpowers/specs/2026-06-04-ai-pm-authority-design.md` — 44 integrity constraints, 5-level career ladder (Shadow→Analyst→Associate→Manager→Director→CEO), research-backed short-selling framework (5 signals: accruals/Sloan 1996, PEAD/Bernard 1989, QMJ/AQR, short interest/Stambaugh 2012, narrative breakdown). Valuation shorts explicitly banned.
+- **`ascent/strategy/earned_authority.py`** (rewrite): 5-level state machine, Sortino-based promotion/demotion (not Sharpe), catastrophic/hard/soft demotion tiers, 5-day cooldown, 63-day stuck alert, legacy `phase`→`level` migration. PHASE_WEIGHTS alias preserved.
+- **`ascent/strategy/ai_pm_guardrails.py`** (new): per-level weight/type/correlation/TE guardrails. Shorts banned at L1-2, LONG_SHORT_ENABLED gate, no contradictory long+short on same name, valuation short detection (`is_valuation_short()`), conviction inflation cap (>40% high → downgrade).
+- **`ascent/monitoring/ai_pm_counterfactual.py`** (new): idempotent Track A★/A/D rebalance snapshots, daily Track A★/A/B/C/D scoring, cumulative report. Signed weight support for long-short mode.
+- **`ascent/strategy/ai_pm_perf_feedback.py`** (new): daily Python learning brief (zero LLM cost). Sortino, hit rate, profit factor, fade detection, all 7 promotion gates with confidence labels, short-position incremental alpha, stuck alert. Scored at 5d/10d/21d/63d.
+- **`run_all_agents.py`**: Track A★ snapshot before Phase 1, Track A after Phase 1, Track D after Phase 2, decision log per rebalance, smart Opus trigger (crisis always + 4 conditions), Haiku daily view on non-rebalance days, counterfactual scoring + feedback in `_log_holdings()`, `update_authority()` now passes Track D/A★ returns.
+- **`agents/ai_pm_agent.py`**: `_build_temporal_context()` injected into every Phase 1+2 prompt, `_strip_prethesis_for_phase2()` strips freeform prose, sector thesis required field + non-price source requirement, `model_override` param on `run_ai_pm()`.
+- **`scripts/generate_performance_page.py`**: 3 new loaders, rewrote `_earned_authority_html()` for 5-level ladder, added `_promotion_gates_html()`, `_counterfactual_chart_html()` (A★/B/C/D Chart.js), `_override_scorecard_html()`.
+- **Bootstrap**: `data_cache/earned_authority.json` → level=1, ai_weight=5%. Day 1 evaluation begins 2026-06-04. Promotion to Level 2 after 21 days if all 7 gates clear.
+- **Tests**: 752 → 777 passing (+25 new). Test failure in `test_fundamental_alpha::test_stressed_keeps_fundamental` pre-exists from other terminal's uncommitted changes (passes in isolation).
+- Files: `ascent/strategy/earned_authority.py`, `ascent/strategy/ai_pm_guardrails.py` (new), `ascent/monitoring/ai_pm_counterfactual.py` (new), `ascent/strategy/ai_pm_perf_feedback.py` (new), `run_all_agents.py`, `agents/ai_pm_agent.py`, `scripts/generate_performance_page.py`, `tests/test_ai_pm_authority.py` (new), `tests/test_ai_pm_counterfactual.py` (new), `tests/test_ai_pm_perf_feedback.py` (new), `tests/test_ai_pm_agent.py` (updated).
+- Open: Phase 1 accuracy tracking (regime call scoring vs actual 10d) needs 10 trading days of data. Level 4+ architecture flip (AI PM proposes, quant validates) deferred until Level 4 reached. `disable_sleeve_priors` flag enforcement in quant pipeline. AI PM shorts active only after `LONG_SHORT_ENABLED=True`.
 
 ### 2026-06-01 (monthly investor letter auto-generation ✅)
 - **`ascent/reporting/investor_letter.py`** (new): auto-generates the Ascent Capital investor letter on the first trading day of each month after `run_all_agents.py` completes.
