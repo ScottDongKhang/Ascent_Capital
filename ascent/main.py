@@ -567,10 +567,11 @@ def run_pipeline(
     if "fwd_ret_21d" in targets:
         features["targets"] = targets["fwd_ret_21d"]
 
-    alpha = build_alpha_stack(
+    alpha, _alpha_breakdown = build_alpha_stack(
         features,
         regime_signal=regime_signal,
         ai_prior=_ai_sleeve_prior or None,
+        return_breakdown=True,
     )
     print(f"[Alpha] Composite alpha computed: {alpha.shape}")
 
@@ -594,6 +595,41 @@ def run_pipeline(
         _prof      = _lp("profiles")
         sector_map = dict(zip(_prof["symbol"], _prof["sector"]))
         print("[Portfolio] Sector constraint: max 1 per sector")
+
+    # ── AI PM two-way: apply pre-thesis alpha floor + names-to-avoid ────────────
+    # These come from Phase 1 (run before quant), stored in the prethesis object
+    # passed via run_all_agents.py. Injected here so portfolio construction sees them.
+    _ai_conviction_syms: list = []
+    _ai_avoid_syms: set = set()
+    try:
+        _pt_path = Path("data_cache/ai_prethesis_latest.json")
+        if _pt_path.exists():
+            import json as _json
+            _pt = _json.loads(_pt_path.read_text())
+            _ai_conviction_syms = [n["symbol"] for n in _pt.get("high_conviction_names", []) if "symbol" in n]
+            _ai_avoid_syms      = {n["symbol"] for n in _pt.get("names_to_avoid", []) if "symbol" in n}
+    except Exception:
+        pass
+
+    if not alpha.empty:
+        # Floor: conviction stocks below the 20th percentile get bumped up to it.
+        # Ensures AI PM thesis names can't be silently excluded by sector cap.
+        if _ai_conviction_syms:
+            last_row = alpha.iloc[-1]
+            floor_val = float(last_row.quantile(0.20))
+            for sym in _ai_conviction_syms:
+                if sym in last_row.index and last_row[sym] < floor_val:
+                    alpha.iloc[-1, alpha.columns.get_loc(sym)] = floor_val
+            n_floored = sum(1 for s in _ai_conviction_syms if s in last_row.index and last_row[s] < floor_val)
+            if n_floored:
+                print(f"[Portfolio] AI PM alpha floor: bumped {n_floored} conviction stocks to 20th pct")
+
+        # Avoid: zero out alpha for names AI PM flagged — they can't enter the portfolio
+        if _ai_avoid_syms:
+            avoid_present = [s for s in _ai_avoid_syms if s in alpha.columns]
+            if avoid_present:
+                alpha[avoid_present] = 0.0
+                print(f"[Portfolio] AI PM avoid signal: zeroed alpha for {avoid_present}")
 
     # ── MVO on the latest rebalance date; rank-weight for historical dates ──────
     opt_method = "rank_weight_fallback"
@@ -748,7 +784,7 @@ def run_pipeline(
     else:
         print("[Regime] No regime engine - Intel export skipped")
 
-    return result, regime_engine, spy_wide, univ_wide, vix_series, target_weights, price_df, macro_df, price_cache_name
+    return result, regime_engine, spy_wide, univ_wide, vix_series, target_weights, price_df, macro_df, price_cache_name, _alpha_breakdown
 
 
 def main():

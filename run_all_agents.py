@@ -1087,6 +1087,23 @@ def main():
                               f"sleeves={list((_ai_prethesis.sleeve_weight_prior or {}).keys())}")
                     except Exception as _ae:
                         print(f"[Runner] AI regime assessment write failed: {_ae}")
+
+                # Write full pre-thesis for main.py portfolio construction hooks
+                # (alpha floor for conviction names, avoid-list zeroing)
+                try:
+                    import dataclasses as _dc
+                    _pt_path = Path("data_cache/ai_prethesis_latest.json")
+                    _pt_payload = {
+                        "high_conviction_names": _ai_prethesis.high_conviction_names or [],
+                        "names_to_avoid":        _ai_prethesis.names_to_avoid or [],
+                        "as_of_date":            today.isoformat(),
+                    }
+                    _pt_path.write_text(json.dumps(_pt_payload))
+                    print(f"[Runner] Pre-thesis cache written: "
+                          f"{len(_pt_payload['high_conviction_names'])} conviction, "
+                          f"{len(_pt_payload['names_to_avoid'])} avoid")
+                except Exception as _pte:
+                    print(f"[Runner] Pre-thesis cache write failed: {_pte}")
             else:
                 print("[Runner] Pre-thesis returned None — synthesis will use standard mode")
         except Exception as _pt_e:

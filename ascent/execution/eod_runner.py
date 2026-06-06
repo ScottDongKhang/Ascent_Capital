@@ -113,7 +113,6 @@ def run_eod(dry_run: bool = False, as_of_date: str = None):
 
         cfg = get_config()  # Bug 13 fix: use shared get_config() not direct Config()
 
-        # Bug 3 fix: run_pipeline() returns 9 values — was only unpacking 6.
         (
             result,
             regime_engine,
@@ -124,6 +123,7 @@ def run_eod(dry_run: bool = False, as_of_date: str = None):
             price_df,
             macro_df,
             price_cache_name,
+            _alpha_breakdown,  # per-sleeve breakdown (unused in execution path)
         ) = run_pipeline(
             live=True,
         )

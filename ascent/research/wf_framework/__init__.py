@@ -35,6 +35,16 @@ try:
 except ImportError:
     pass
 
+try:
+    from .multi_asset_strategy import MultiAssetPortfolioStrategy
+except ImportError:
+    pass
+
+try:
+    from .orchestration_strategy import FullOrchestrationStrategy
+except ImportError:
+    pass
+
 __all__ = [
     "WindowGenerator", "SplitWindow",
     "BaseStrategy",
@@ -44,4 +54,6 @@ __all__ = [
     "PerformanceAnalyzer",
     "WalkForwardEngine",
     "AscentPortfolioStrategy",
+    "MultiAssetPortfolioStrategy",
+    "FullOrchestrationStrategy",
 ]

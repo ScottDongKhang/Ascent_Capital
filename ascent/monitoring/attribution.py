@@ -124,7 +124,7 @@ def run_attribution(positions: List[Dict], run_date: date) -> Dict:
     report = {
         "date":             run_date.isoformat(),
         "timestamp":        datetime.now().isoformat(),
-        "portfolio_return": round(port_ret, 6),
+        "portfolio_return": round(port_ret, 6),  # intraday estimate as of pipeline run; use holdings_log.day_return for actual EOD
         "spy_return":       round(spy_ret, 6),
         "alpha_vs_spy":     round(alpha, 6),
         "factor_pnl":       factor_split.get("factor_pnl"),

@@ -44,6 +44,7 @@ def run_us_equities_agent(
             price_df,
             macro_df,
             price_cache_name,
+            _alpha_breakdown,
         ) = run_pipeline(live=True)
 
         # Extract latest non-zero target weights
@@ -74,6 +75,25 @@ def run_us_equities_agent(
         except Exception:
             pass
 
+        # Build signal quality summary for top holdings — feeds AI PM two-way loop
+        _signal_quality: dict = {}
+        try:
+            _conv  = _alpha_breakdown.get("convergence", {})
+            _pslv  = _alpha_breakdown.get("primary_sleeve", {})
+            _per_s = _alpha_breakdown.get("per_sleeve", {})
+            for sym in list(target_weights.keys())[:20]:
+                _signal_quality[sym] = {
+                    "convergence":     round(_conv.get(sym, 0.5), 3),
+                    "primary_sleeve":  _pslv.get(sym, "trend"),
+                    "sleeve_scores":   {
+                        sl: round(float(scores.get(sym, 0.0)), 3)
+                        for sl, scores in _per_s.items()
+                        if sym in scores
+                    },
+                }
+        except Exception:
+            pass
+
         output = AgentOutput(
             agent_id=AGENT_ID,
             as_of_date=as_of_date,
@@ -81,8 +101,9 @@ def run_us_equities_agent(
             regime_signal=regime_signal,
             skill_score=None,  # skill tracker fills this
             metadata={
-                "n_positions":   len(target_weights),
-                "pipeline_mode": "live",
+                "n_positions":    len(target_weights),
+                "pipeline_mode":  "live",
+                "signal_quality": _signal_quality,   # per-stock sleeve breakdown for AI PM
             },
         )
 

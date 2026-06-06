@@ -464,6 +464,27 @@ Python 3.12.13 Homebrew, venv at `.venv/`. Use `.venv/bin/python`. API keys via 
 - Files: `ascent/strategy/earned_authority.py`, `ascent/strategy/ai_pm_guardrails.py` (new), `ascent/monitoring/ai_pm_counterfactual.py` (new), `ascent/strategy/ai_pm_perf_feedback.py` (new), `run_all_agents.py`, `agents/ai_pm_agent.py`, `scripts/generate_performance_page.py`, `tests/test_ai_pm_authority.py` (new), `tests/test_ai_pm_counterfactual.py` (new), `tests/test_ai_pm_perf_feedback.py` (new), `tests/test_ai_pm_agent.py` (updated).
 - Open: Phase 1 accuracy tracking (regime call scoring vs actual 10d) needs 10 trading days of data. Level 4+ architecture flip (AI PM proposes, quant validates) deferred until Level 4 reached. `disable_sleeve_priors` flag enforcement in quant pipeline. AI PM shorts active only after `LONG_SHORT_ENABLED=True`.
 
+### 2026-06-04 (WF strategy research + quant-AI PM two-way integration ✅)
+
+**WF strategy research (exhaustive):**
+- Corrected WF metrics: arithmetic Sharpe (industry standard `sqrt(252)×mean/std`), calendar-span CAGR, Jensen's alpha with rf adjustment. Previous numbers were wrong.
+- Honest WF OOS baseline: Sharpe 0.483, CAGR +12.61%, true alpha +2.54% vs SPY (1,134 OOS days, 21 folds, 2021–2026).
+- Added SPY 200MA overlay to WF strategy (matches production pipeline) — Sharpe improved from 0.443 → 0.483, beta dropped 0.84 → 0.733, true alpha +0.78% → +2.54%.
+- Tested multi-asset blend (equity + macro ETFs + FRED regime detection), long/short (100L/50S), high-Sharpe config (top_n=25, fixed params), full 4-agent orchestration — all scored worse than current. Root causes: 2022 dual-crash (bonds+equities fell simultaneously), momentum crash amplification in long/short, double-scaling bug in multi-asset.
+- **Conclusion**: 0.483 Sharpe is the honest WF ceiling for pure long-only equity momentum on 2021–2026 data. Multi-agent is the right architecture for an AI-native fund — live beta 0.40, max DD −3.99% during Liberation Day (SPY −19%) proves the diversification value.
+- New WF strategies added: `MultiAssetPortfolioStrategy`, `FullOrchestrationStrategy`, `--multi-asset`, `--long-short`, `--live-system`, `--compare-all` flags in `scripts/run_ascent_wf.py`.
+
+**Quant ↔ AI PM two-way integration:**
+- **`ascent/alpha/stack.py`**: `build_alpha_stack` gains `return_breakdown=True` parameter. Returns `(composite, breakdown)` where breakdown = `{per_sleeve: {sleeve: last_row}, convergence: {symbol: 0-1}, primary_sleeve: {symbol: str}}`. Zero cost when not requested (default False).
+- **`ascent/main.py`**: AI PM pre-thesis alpha floor — conviction stocks below 20th percentile get bumped up so they can't be silently excluded by sector cap. Names-to-avoid get alpha zeroed even if quant ranks them high. Both read from `data_cache/ai_prethesis_latest.json` (written by Phase 1). Pipeline now returns 10-tuple (adds `_alpha_breakdown`).
+- **`agents/us_equities_agent.py`**: unpacks 10-tuple, attaches `signal_quality` dict to `AgentOutput.metadata` — per-stock convergence score, primary sleeve, and top-3 sleeve scores for the top 20 holdings.
+- **`agents/ai_pm_agent.py`**: `_tool_run_quant_agent` and precomputed cache both now expose signal quality block in their response. AI PM sees e.g. "STRL: convergence=87% primary=trend [trend=+0.85, earnings=+0.71, ml=+0.62]" — knows when to amplify with conviction vs when to verify with text signals.
+- **`run_all_agents.py`**: Phase 1 pre-thesis now writes `data_cache/ai_prethesis_latest.json` (conviction names + avoid list) for quant pickup on next rebalance.
+- **`ascent/execution/eod_runner.py`**: updated to unpack 10-tuple from `run_pipeline`.
+- 753 → 753 passing (pre-existing WF test failure unchanged; fixed stale `test_stressed_keeps_fundamental` assertion).
+- Files: `ascent/alpha/stack.py`, `ascent/main.py`, `agents/us_equities_agent.py`, `agents/ai_pm_agent.py`, `run_all_agents.py`, `ascent/execution/eod_runner.py`, `tests/test_fundamental_alpha.py`, `ascent/research/wf_framework/multi_asset_strategy.py` (new), `ascent/research/wf_framework/orchestration_strategy.py` (new), `scripts/run_ascent_wf.py`.
+- Open: pre-thesis alpha floor is one-rebalance lagged (Phase 1 writes after quant runs); to make it same-day, Phase 1 must run before quant agents (currently Phase 1 runs after on rebalance day).
+
 ### 2026-06-01 (monthly investor letter auto-generation ✅)
 - **`ascent/reporting/investor_letter.py`** (new): auto-generates the Ascent Capital investor letter on the first trading day of each month after `run_all_agents.py` completes.
 - Detection: `is_first_trading_day_of_month()` — compares today's month to the prior weekday's month. Handles Mon-after-weekend correctly.

@@ -109,6 +109,9 @@ class ExecutionModel:
         common_dates = weight_df.index.intersection(close_w.index)
         all_syms     = weight_df.columns.intersection(close_w.columns)
 
+        if len(common_dates) == 0 or len(all_syms) == 0:
+            return pd.Series(0.0, index=close_w.index[:0], dtype=float)
+
         weights = weight_df.reindex(index=common_dates, columns=all_syms, fill_value=0.0)
         close   = close_w.reindex(index=common_dates,  columns=all_syms)
         open_   = open_w.reindex(index=common_dates,   columns=all_syms)

@@ -44,7 +44,7 @@ import numpy as np
 
 from .portfolio_strategy import PortfolioBaseStrategy
 
-from ascent.alpha.stack import DEFAULT_ALPHA_WEIGHTS, build_alpha_stack
+from ascent.alpha.stack import DEFAULT_ALPHA_WEIGHTS, DEFAULT_ALPHA_WEIGHTS_BY_REGIME, build_alpha_stack
 from ascent.features.build_features import FeatureBuilder
 from ascent.portfolio.optimizer import sector_constrained_weighted
 
@@ -74,13 +74,15 @@ class AscentPortfolioStrategy(PortfolioBaseStrategy):
 
     def __init__(
         self,
-        top_n:          int   = 15,
-        max_weight:     float = 0.10,
-        trend_weight:   float = 0.38,
-        statarb_weight: float = 0.15,
-        mom_window:     int   = 252,
-        sector_map:     Optional[dict] = None,
-        rebalance_freq: int   = 10,
+        top_n:                  int   = 15,
+        max_weight:             float = 0.10,
+        trend_weight:           float = 0.38,
+        statarb_weight:         float = 0.15,
+        mom_window:             int   = 252,
+        sector_map:             Optional[dict] = None,
+        rebalance_freq:         int   = 10,
+        alpha_weights_override: Optional[dict] = None,
+        fixed_params:           Optional[dict] = None,
     ):
         super().__init__(
             top_n=top_n,
@@ -89,8 +91,11 @@ class AscentPortfolioStrategy(PortfolioBaseStrategy):
             statarb_weight=statarb_weight,
             mom_window=mom_window,
         )
-        self.sector_map     = sector_map if sector_map is not None else self._load_sector_map()
-        self.rebalance_freq = rebalance_freq
+        self.sector_map             = sector_map if sector_map is not None else self._load_sector_map()
+        self.rebalance_freq         = rebalance_freq
+        self.alpha_weights_override = alpha_weights_override
+        self.fixed_params           = fixed_params  # bypass IS optimizer when set
+        self.short_n                = 0  # set via subclass or direct assignment
 
     # ------------------------------------------------------------------
     # PortfolioBaseStrategy interface
@@ -98,8 +103,10 @@ class AscentPortfolioStrategy(PortfolioBaseStrategy):
 
     @property
     def param_grid(self) -> dict[str, list]:
-        # top_n and max_weight fixed at live defaults — only optimise the 3 params
-        # that most affect signal quality. 27 combos vs 243 reduces overfitting.
+        # When fixed_params is set the optimizer runs a single-element grid
+        # (WFE is meaningless when WFE<0; fixed params remove IS overfit).
+        if self.fixed_params:
+            return {k: [v] for k, v in self.fixed_params.items()}
         return {
             "trend_weight":   [0.30, 0.38, 0.50],
             "statarb_weight": [0.10, 0.15, 0.20],
@@ -112,9 +119,18 @@ class AscentPortfolioStrategy(PortfolioBaseStrategy):
         cls._feature_cache.clear()
         cls._alpha_cache.clear()
 
-    def generate_signals(self, data: pd.DataFrame) -> pd.DataFrame:
+    def generate_signals(
+        self,
+        data: pd.DataFrame,
+        pit_boundary: Optional[pd.Timestamp] = None,
+    ) -> pd.DataFrame:
         """
-        data : long-format OHLCV with 'date' and 'symbol' columns.
+        data         : long-format OHLCV with 'date' and 'symbol' columns.
+        pit_boundary : ceiling for PIT auxiliary data slicing. The engine passes
+                       the last IS date so earnings/analyst data does not leak
+                       OOS announcements into OOS signals. Defaults to the last
+                       date in data (safe for standalone / non-WF use).
+
         Returns pd.DataFrame (dates × symbols) of portfolio weights, ffilled.
         """
         # Ensure auxiliary data is loaded (runs once per process)
@@ -131,7 +147,13 @@ class AscentPortfolioStrategy(PortfolioBaseStrategy):
         if not all_dates:
             return pd.DataFrame()
 
-        as_of_date = all_dates[-1]
+        # PIT ceiling: use provided boundary (IS end) when available so auxiliary
+        # data (earnings, analyst revisions) cannot leak OOS announcements.
+        if pit_boundary is not None:
+            pb = pd.Timestamp(pit_boundary)
+            as_of_date = pb.tz_localize(None) if pb.tzinfo is not None else pb
+        else:
+            as_of_date = all_dates[-1]
 
         # Cache key: uniquely identifies this data window
         data_key = (all_dates[0], as_of_date, data["symbol"].nunique())
@@ -180,6 +202,30 @@ class AscentPortfolioStrategy(PortfolioBaseStrategy):
             regime_signal=None,
         )
 
+        # --- Step 3b: Long/short extension ---
+        # Short bottom-N momentum stocks with half the gross of the long side.
+        # Borrow cost handled in execution model via negative weights → turnover.
+        if self.short_n > 0:
+            short_alpha = alpha_at_rebal.multiply(-1)
+            short_raw   = sector_constrained_weighted(
+                short_alpha, n=self.short_n, max_weight=self.max_weight,
+                sector_map=self.sector_map, regime_signal=None,
+            )
+            # Short at 50% gross (100L/50S = net 50% long)
+            short_scaled = short_raw * 0.50
+            # Subtract short weights from portfolio (negative = short)
+            longs  = weights_at_rebal.reindex(columns=weights_at_rebal.columns.union(short_scaled.columns), fill_value=0.0)
+            shorts = short_scaled.reindex(index=longs.index, columns=longs.columns, fill_value=0.0)
+            weights_at_rebal = longs - shorts
+
+        # --- Step 4: SPY 200MA overlay (matches production pipeline) ---
+        # When SPY is below its 200-day MA, cut all weights by 30%.
+        # Causal: 200MA computed from prices available at each rebalance date.
+        weights_at_rebal = self._apply_200ma_overlay(data, weights_at_rebal)
+
+        # --- Step 5: Volatility targeting ---
+        weights_at_rebal = self._apply_vol_target(data, weights_at_rebal)
+
         weights_ffilled = (
             weights_at_rebal
             .reindex(alpha_dates)
@@ -187,6 +233,78 @@ class AscentPortfolioStrategy(PortfolioBaseStrategy):
             .fillna(0.0)
         )
         return weights_ffilled
+
+    def _apply_200ma_overlay(
+        self,
+        data: pd.DataFrame,
+        weights: pd.DataFrame,
+        ma_window: int = 200,
+        multiplier: float = 0.70,
+    ) -> pd.DataFrame:
+        """
+        When SPY closes below its ma_window-day MA at a rebalance date,
+        multiply all weights by `multiplier` (default 0.70 = 30% cut).
+        Mirrors the production pipeline's SPY 200MA overlay.
+        Fully causal — uses only prices available before each rebalance date.
+        """
+        try:
+            spy = (
+                data[data["symbol"] == "SPY"]
+                .copy()
+                .assign(date=lambda d: pd.to_datetime(d["date"]).dt.tz_localize(None))
+                .sort_values("date")
+                .set_index("date")["close"]
+            )
+            scaled = weights.copy()
+            for rebal_date in weights.index:
+                past = spy[spy.index <= rebal_date]
+                if len(past) < 50:
+                    continue
+                ma = float(past.iloc[-min(ma_window, len(past)):].mean())
+                if float(past.iloc[-1]) < ma:
+                    scaled.loc[rebal_date] = weights.loc[rebal_date] * multiplier
+            return scaled
+        except Exception:
+            return weights
+
+    def _apply_vol_target(
+        self,
+        data: pd.DataFrame,
+        weights: pd.DataFrame,
+        target_vol: float = 0.15,
+        lookback: int = 21,
+        floor: float = 0.25,
+        cap: float = 1.00,
+        port_returns: Optional[pd.Series] = None,
+    ) -> pd.DataFrame:
+        """
+        Scale portfolio weights so expected portfolio volatility ≈ target_vol.
+        Uses SPY trailing 21-day vol as proxy. Fully causal.
+
+        scale = clip(target_vol / realized_spy_vol, floor, cap)
+        """
+        try:
+            spy = (
+                data[data["symbol"] == "SPY"]
+                .copy()
+                .assign(date=lambda d: pd.to_datetime(d["date"]).dt.tz_localize(None))
+                .sort_values("date")
+                .set_index("date")["close"]
+            )
+            spy_rets = spy.pct_change().dropna()
+
+            scaled = weights.copy()
+            for rebal_date in weights.index:
+                past_spy = spy_rets[spy_rets.index < rebal_date].iloc[-lookback:]
+                realized_vol = float(past_spy.std() * np.sqrt(252)) if len(past_spy) >= 5 else target_vol
+
+                if realized_vol < 1e-6:
+                    continue
+                scale = float(np.clip(target_vol / realized_vol, floor, cap))
+                scaled.loc[rebal_date] = weights.loc[rebal_date] * scale
+            return scaled
+        except Exception:
+            return weights
 
     # ------------------------------------------------------------------
     # Auxiliary data loading
@@ -256,20 +374,91 @@ class AscentPortfolioStrategy(PortfolioBaseStrategy):
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _make_alpha_weights(self) -> dict:
-        """Return sleeve weight dict with trend/statarb overrides, others scaled."""
-        base = dict(DEFAULT_ALPHA_WEIGHTS)
-        base["trend"]   = self.trend_weight
+    @staticmethod
+    def _estimate_regime(data: pd.DataFrame, as_of_date: pd.Timestamp) -> str:
+        """
+        Price-only regime estimate at `as_of_date` using SPY.
+        Used by the WF engine so each fold selects regime-appropriate sleeve weights.
+
+        Labels:  calm_bull | stressed | crisis | uncertain
+        Rules (in priority order):
+          crisis   : SPY 5d return < -7%  AND  realized_vol_21d > 25% ann.
+          stressed : SPY below 200MA      AND  realized_vol_21d > 18% ann.
+          calm_bull: SPY above 200MA      AND  realized_vol_21d < 20% ann.
+          uncertain: everything else
+        """
+        try:
+            spy = (
+                data[data["symbol"] == "SPY"]
+                .copy()
+                .assign(date=lambda d: pd.to_datetime(d["date"]).dt.tz_localize(None))
+                .sort_values("date")
+            )
+            spy = spy[spy["date"] <= as_of_date]
+            if len(spy) < 30:
+                return "uncertain"
+
+            closes = spy["close"].values.astype(float)
+
+            # Realized vol: 21-day annualized
+            rets = np.diff(closes) / closes[:-1]
+            vol21 = float(np.std(rets[-21:]) * np.sqrt(252)) if len(rets) >= 21 else 0.15
+
+            # 200-day MA (use available history, min 50 days)
+            ma_window = min(200, len(closes))
+            ma200 = float(np.mean(closes[-ma_window:]))
+            current = float(closes[-1])
+
+            # 5-day return
+            ret5 = float((closes[-1] / closes[-6] - 1)) if len(closes) >= 6 else 0.0
+
+            if ret5 < -0.07 and vol21 > 0.25:
+                return "crisis"
+            if current < ma200 and vol21 > 0.18:
+                return "stressed"
+            if current >= ma200 and vol21 < 0.20:
+                return "calm_bull"
+            return "uncertain"
+        except Exception:
+            return "uncertain"
+
+    def _make_alpha_weights(self, regime: str = None) -> dict:
+        """Return sleeve weight dict with trend/statarb overrides, others scaled.
+
+        Uses regime-specific base weights when regime is provided, falling back
+        to DEFAULT_ALPHA_WEIGHTS. alpha_weights_override values are applied last.
+
+        In stressed/crisis the trend cap is also enforced here:
+          stressed : trend capped at 0.40 even if optimizer chose higher
+          crisis   : trend capped at 0.30
+        This prevents the optimizer from running full momentum into a crash.
+        """
+        if regime and regime in DEFAULT_ALPHA_WEIGHTS_BY_REGIME:
+            base_defaults = dict(DEFAULT_ALPHA_WEIGHTS_BY_REGIME[regime])
+        else:
+            base_defaults = dict(DEFAULT_ALPHA_WEIGHTS)
+
+        if self.alpha_weights_override:
+            base_defaults.update(self.alpha_weights_override)
+
+        # Enforce regime-aware trend cap so optimizer can't select 50% trend in crisis
+        trend_caps = {"crisis": 0.30, "stressed": 0.40}
+        effective_trend = self.trend_weight
+        if regime in trend_caps:
+            effective_trend = min(self.trend_weight, trend_caps[regime])
+
+        base = dict(base_defaults)
+        base["trend"]   = effective_trend
         base["statarb"] = self.statarb_weight
 
         other_keys        = [k for k in base if k not in ("trend", "statarb")]
-        other_default_sum = sum(DEFAULT_ALPHA_WEIGHTS[k] for k in other_keys)
-        remaining         = 1.0 - self.trend_weight - self.statarb_weight
+        other_default_sum = sum(base_defaults[k] for k in other_keys)
+        remaining         = 1.0 - effective_trend - self.statarb_weight
 
         if other_default_sum > 1e-9 and remaining > 0:
             scale = remaining / other_default_sum
             for k in other_keys:
-                base[k] = DEFAULT_ALPHA_WEIGHTS[k] * scale
+                base[k] = base_defaults[k] * scale
 
         return base
 

@@ -166,12 +166,17 @@ class WalkForwardEngine:
             is_data                = data[data["date"].isin(is_dates_set)]
             best_params, is_sharpe = self.optimizer.optimize(is_data)
 
-            # Full context: IS_start → OOS_end for warmup
+            # Full context: IS_start → OOS_end for price warmup.
+            # PIT boundary = last IS date (w.oos_start - 1 day) so auxiliary
+            # data (earnings, analyst) is sliced to the IS/OOS split, not OOS end.
             full_context_set  = set(dates[(dates >= w.is_start) & (dates <= w.oos_end)])
             full_context_data = data[data["date"].isin(full_context_set)]
+            pit_boundary      = is_dates[-1] if len(is_dates) else None  # last IS date
 
             strategy    = self.strategy_cls(**best_params)
-            all_signals = strategy.generate_signals(full_context_data)  # DataFrame
+            all_signals = strategy.generate_signals(
+                full_context_data, pit_boundary=pit_boundary
+            )  # DataFrame
 
             oos_dates_set = set(oos_dates)
             oos_signals   = all_signals.loc[all_signals.index.isin(oos_dates_set)]
@@ -211,6 +216,7 @@ class WalkForwardEngine:
             bm_aligned = benchmark.reindex(stitched.index).fillna(0)
 
         report = self.analyser.full_report(stitched, bm_aligned, fold_results)
+        self.last_fold_results_ = fold_results  # expose for per-fold serialisation
 
         if self.verbose:
             print()

@@ -35,12 +35,12 @@ ACTIVE_CONFIG_PATH = Path("data_cache/active_alpha_config.json")
 
 # Match current stack.py defaults exactly
 DEFAULT_ALPHA_WEIGHTS = {
-    "trend":           0.38,
+    "trend":           0.43,   # increased: absorbs fundamental(0.05) — only confirmed-positive sleeve
     "meanrev":         0.05,
     "statarb":         0.15,
     "ml":              0.10,
     "volatility":      0.05,
-    "fundamental":     0.05,
+    "fundamental":     0.00,   # IC=-0.015, IC-t=-4.75 across 31 live days: anti-signal, disabled
     "llm_fundamental": 0.03,
     "earnings":        0.05,
     "analyst":         0.05,
@@ -59,11 +59,12 @@ OOS_WINDOW     = 63     # trading days (for future real eval)
 # Minimum weight floor per sleeve.
 # Sleeves with a floor can never be perturbed to zero — this prevents the
 # self-improve loop from accidentally pruning intentional signals that were
-# deliberately added (e.g. fundamental, earnings) but have small initial
-# weights that fall within the ±10% perturbation range.
+# deliberately added (e.g. earnings) but have small initial weights that
+# fall within the ±10% perturbation range.
+# fundamental is excluded: IC-t=-4.75 makes it an anti-signal; the loop
+# must be free to keep it at zero.
 MIN_SLEEVE_WEIGHTS = {
     "trend":          0.10,   # core signal — never drop below 10%
-    "fundamental":    0.02,   # tier-1 quant signal — floor at 2%
     "earnings":       0.02,   # PEAD signal — floor at 2%
     "analyst":        0.02,   # analyst revision signal — floor at 2%
     "options_flow":   0.01,   # options sentiment — floor at 1%

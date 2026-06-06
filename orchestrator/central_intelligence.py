@@ -45,6 +45,7 @@ FACTOR_BUCKETS = {
     "dollar_long":     {"UUP"},
     "commodities":     {"PDBC", "USO", "DBA", "DBB"},
     "gold":            {"GLD", "IAU"},
+    "managed_futures": {"KMLM", "DBMF", "CTA", "WTMF"},
     "vol_long":        {"VIXY", "VXX", "UVXY"},
     "vol_short":       {"SVXY", "SVOL"},
     "em_equity":       {"EEM", "VWO", "EWT", "EWZ", "AAXJ"},
@@ -63,9 +64,11 @@ FACTOR_CONTRADICTIONS = [
     ("us_tech",      "rates_long",   "tech valuation sensitive to rising rates — directional conflict"),
 ]
 
-# EM+commodity hard cap
+# EM+commodity+managed-futures hard cap
+# managed_futures (KMLM etc.) included: they absorb EM/commodity redistribution
+# weight and should be subject to the same aggregate cap.
 EM_COMMODITY_CAP = 0.20
-EM_COMMODITY_BUCKETS = {"em_equity", "commodities", "gold"}
+EM_COMMODITY_BUCKETS = {"em_equity", "commodities", "gold", "managed_futures"}
 
 
 MAX_POSITION_WEIGHT = 0.10  # hard cap per symbol after all blending
@@ -732,6 +735,13 @@ def run_orchestrator(agent_outputs: List[AgentOutput]) -> Dict[str, float]:
         None,
     )
     merged = _apply_crisis_veto(merged, agent_outputs, us_regime)
+
+    # Final position cap — correlation guard and thesis coherence can push names
+    # above MAX_POSITION_WEIGHT through renormalization; re-cap before returning.
+    overcapped_final = {s: w for s, w in merged.items() if w > MAX_POSITION_WEIGHT}
+    if overcapped_final:
+        print(f"[Orchestrator] Final position cap: {', '.join(f'{s} {w:.1%}→{MAX_POSITION_WEIGHT:.0%}' for s, w in overcapped_final.items())}")
+        merged = _cap_positions(merged)
 
     # Print summary
     print(f"\n[Orchestrator] Final portfolio — {len(merged)} positions:")

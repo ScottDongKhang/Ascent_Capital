@@ -163,9 +163,9 @@ def test_fundamental_alpha_works_without_fundamentals():
 def test_default_alpha_weights_include_fundamental():
     from ascent.alpha.stack import DEFAULT_ALPHA_WEIGHTS
     assert "fundamental" in DEFAULT_ALPHA_WEIGHTS
-    # fundamental reduced from 0.10 to 0.05 to make room for earnings sleeve
-    assert abs(DEFAULT_ALPHA_WEIGHTS["fundamental"] - 0.05) < 0.001
-    assert abs(DEFAULT_ALPHA_WEIGHTS["trend"] - 0.38) < 0.001
+    # fundamental disabled: IC-t=-4.75 across 31 live days makes it an anti-signal
+    assert DEFAULT_ALPHA_WEIGHTS["fundamental"] == 0.00
+    assert abs(DEFAULT_ALPHA_WEIGHTS["trend"] - 0.43) < 0.001
     assert abs(sum(DEFAULT_ALPHA_WEIGHTS.values()) - 1.0) < 0.01
 
 
@@ -199,9 +199,10 @@ def test_calm_bull_zeroes_fundamental():
 
 
 def test_stressed_keeps_fundamental():
+    # fundamental restored in stressed/crisis regimes: quality premium works in risk-off
     from ascent.alpha.stack import _load_active_alpha_weights
     weights = _load_active_alpha_weights(regime="stressed")
-    assert weights["fundamental"] > 0.0
+    assert weights["fundamental"] > 0.0  # intentionally re-enabled for risk-off regimes
 
 
 def test_ic_gate_zeroes_negative_sleeve(tmp_path):

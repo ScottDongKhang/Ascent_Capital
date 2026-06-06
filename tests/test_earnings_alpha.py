@@ -180,11 +180,11 @@ def test_default_alpha_weights_include_earnings():
     assert abs(total - 1.0) < 1e-9, f"Weights sum to {total}, not 1.0"
 
 
-def test_default_alpha_weights_fundamental_reduced():
-    """fundamental weight reduced from 0.10 to 0.05."""
+def test_default_alpha_weights_fundamental_disabled():
+    """fundamental weight is 0.00 — IC-t=-4.75 across 31 live days makes it an anti-signal."""
     from ascent.alpha.stack import DEFAULT_ALPHA_WEIGHTS
 
-    assert abs(DEFAULT_ALPHA_WEIGHTS["fundamental"] - 0.05) < 1e-9
+    assert DEFAULT_ALPHA_WEIGHTS["fundamental"] == 0.00
 
 
 def test_ml_features_include_earnings_surprise():

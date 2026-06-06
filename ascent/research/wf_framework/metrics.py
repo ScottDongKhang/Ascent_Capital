@@ -36,29 +36,50 @@ class PerformanceAnalyzer:
         tot = (1 + returns).prod()
         if n == 0 or tot <= 0:
             return 0.0
-        return tot ** (self.periods_per_year / n) - 1
+        # Use calendar span (years) when index is datetime so NaN-fold gaps
+        # don't compress the denominator and inflate the annualised return.
+        if hasattr(returns.index, 'min') and hasattr(returns.index, 'max'):
+            try:
+                span_days = (returns.index.max() - returns.index.min()).days
+                years = span_days / 365.25 if span_days > 0 else n / self.periods_per_year
+            except Exception:
+                years = n / self.periods_per_year
+        else:
+            years = n / self.periods_per_year
+        return tot ** (1.0 / years) - 1
 
     def volatility(self, returns: pd.Series) -> float:
         return returns.std() * np.sqrt(self.periods_per_year)
 
     def sharpe(self, returns: pd.Series) -> float:
-        vol = self.volatility(returns)
-        if vol < 1e-10:
-            excess = self.cagr(returns) - self.rf_annual
-            if excess > 0:
-                return np.inf
-            elif excess < 0:
-                return -np.inf
+        """
+        Arithmetic Sharpe: sqrt(252) * mean(daily_excess) / std(daily_excess).
+        Industry-standard convention. Unlike CAGR-based Sharpe, this does not
+        penalise high-vol strategies with an additional variance-drag term.
+        """
+        if len(returns) == 0:
             return 0.0
-        return (self.cagr(returns) - self.rf_annual) / vol
+        rf_daily  = self.rf_annual / self.periods_per_year
+        excess    = returns - rf_daily
+        std       = excess.std()
+        if std < 1e-10:
+            m = excess.mean()
+            return np.inf if m > 0 else (-np.inf if m < 0 else 0.0)
+        return float(np.sqrt(self.periods_per_year) * excess.mean() / std)
 
     def sortino(self, returns: pd.Series) -> float:
-        threshold = self.rf_annual / self.periods_per_year
-        downside  = returns[returns < threshold]
+        """Arithmetic Sortino using downside deviation below rf."""
+        if len(returns) == 0:
+            return 0.0
+        rf_daily = self.rf_annual / self.periods_per_year
+        excess   = returns - rf_daily
+        downside = excess[excess < 0]
+        if len(downside) < 2:
+            return np.inf if excess.mean() > 0 else 0.0
         dv = downside.std() * np.sqrt(self.periods_per_year)
-        if not np.isfinite(dv) or dv < 1e-10:
-            return np.inf if self.cagr(returns) > self.rf_annual else 0.0
-        return (self.cagr(returns) - self.rf_annual) / dv
+        if dv < 1e-10:
+            return np.inf if excess.mean() > 0 else 0.0
+        return float(np.sqrt(self.periods_per_year) * excess.mean() / dv)
 
     def max_drawdown(self, returns: pd.Series) -> float:
         cum  = (1 + returns).cumprod()
@@ -77,8 +98,9 @@ class PerformanceAnalyzer:
         b = benchmark.reindex(common)
         if b.var() < 1e-12:
             return 0.0, 0.0
-        beta  = float(r.cov(b) / b.var())
-        alpha = self.cagr(r) - beta * self.cagr(b)
+        beta = float(r.cov(b) / b.var())
+        # Jensen's alpha: excess return above CAPM prediction, both net of rf
+        alpha = (self.cagr(r) - self.rf_annual) - beta * (self.cagr(b) - self.rf_annual)
         return alpha, beta
 
     def walk_forward_efficiency(self, fold_results: list[FoldResult]) -> float:

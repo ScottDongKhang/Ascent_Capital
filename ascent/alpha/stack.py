@@ -14,12 +14,12 @@ from ascent.alpha.ml_sleeve import build_ml_alpha, build_ml_alpha_cpcv
 log = logging.getLogger(__name__)
 
 DEFAULT_ALPHA_WEIGHTS = {
-    "trend":           0.38,
+    "trend":           0.43,   # increased: absorbs fundamental(0.05) — only confirmed-positive sleeve
     "meanrev":         0.05,
     "volatility":      0.05,
     "statarb":         0.15,
     "ml":              0.10,
-    "fundamental":     0.05,
+    "fundamental":     0.00,   # IC=-0.015, IC-t=-4.75 across 31 live days: anti-signal, disabled
     "llm_fundamental": 0.03,
     "earnings":        0.05,
     "analyst":         0.05,
@@ -30,33 +30,31 @@ DEFAULT_ALPHA_WEIGHTS = {
     "narrative":       0.03,   # activate narrative alpha
 }
 
-IC_GATE_THRESHOLD = -0.010  # auto-zero any sleeve with 5-day rolling mean IC below this
+IC_GATE_THRESHOLD = -0.005  # tightened from -0.010: fundamental IC=-0.008 recently evaded the gate
 
 DEFAULT_ALPHA_WEIGHTS_BY_REGIME = {
     "calm_bull": {
         **DEFAULT_ALPHA_WEIGHTS,
-        "fundamental": 0.00,
         "statarb":     0.00,
-        "trend":       0.58,   # absorbs fundamental(0.05) + statarb(0.15)
+        "trend":       0.58,   # absorbs statarb(0.15)
     },
     "stressed": {
         **DEFAULT_ALPHA_WEIGHTS,
-        "fundamental": 0.08,
-        "trend":       0.35,
+        "fundamental": 0.08,   # restored: quality premium works in risk-off regimes
+        "trend":       0.35,   # live IC only covers calm_bull; no stressed evidence to zero it
         # statarb kept at 0.15 — sector-residual mean reversion works in high-dispersion regimes
     },
     "crisis": {
         **DEFAULT_ALPHA_WEIGHTS,
-        "fundamental": 0.08,
+        "fundamental": 0.08,   # restored: flight-to-quality in crisis
         "trend":       0.30,
         "volatility":  0.10,
         # statarb kept at 0.15 — sector dispersion is highest in crisis
     },
     "euphoric": {
         **DEFAULT_ALPHA_WEIGHTS,
-        "fundamental": 0.00,
         "statarb":     0.00,
-        "trend":       0.58,   # same logic as calm_bull — momentum dominates
+        "trend":       0.58,   # same logic as calm_bull
     },
     "uncertain": {
         **DEFAULT_ALPHA_WEIGHTS,
@@ -193,17 +191,22 @@ def _cs_normalize(df):
     std = df.std(axis=1).replace(0, np.nan)
     return df.sub(mean, axis=0).div(std, axis=0).clip(-3, 3).fillna(0)
 
-def build_alpha_stack(features, alpha_weights=None, regime_signal=None, agent_id: str = "us_equities", ai_prior: dict = None):
+def build_alpha_stack(features, alpha_weights=None, regime_signal=None, agent_id: str = "us_equities", ai_prior: dict = None, return_breakdown: bool = False):
     """
     Build composite alpha from all enabled sleeves.
 
     Args:
-        features:       Dict of feature DataFrames
-        alpha_weights:  Optional override for sleeve mixing weights
-        regime_signal:  Optional regime signal for regime-aware weight adjustment
-        agent_id:       Agent identifier passed to ML sleeve for model cache key.
-                        Each specialist agent maintains its own trained XGBoost model.
-                        Defaults to "us_equities" for the current single-agent setup.
+        features:          Dict of feature DataFrames
+        alpha_weights:     Optional override for sleeve mixing weights
+        regime_signal:     Optional regime signal for regime-aware weight adjustment
+        agent_id:          Agent identifier passed to ML sleeve for model cache key.
+        ai_prior:          AI PM sleeve weight adjustments (global IC deltas).
+        return_breakdown:  If True, return (composite, breakdown_dict) where
+                           breakdown_dict = {
+                               "per_sleeve": {sleeve: last_row_series},
+                               "convergence": {symbol: float},   # 0-1, fraction of sleeves agreeing
+                               "primary_sleeve": {symbol: str},  # sleeve with highest contribution
+                           }
     """
     if alpha_weights is None:
         regime_label = None
@@ -432,7 +435,50 @@ def build_alpha_stack(features, alpha_weights=None, regime_signal=None, agent_id
             names = list(distressed.columns[distressed.iloc[-1]])
             log.warning("distressed filter: zeroed %d names on latest date: %s", n_filtered, names)
 
-    return composite
+    if not return_breakdown:
+        return composite
+
+    # ── Build per-sleeve breakdown for AI PM two-way feedback ──
+    # Only computed when explicitly requested (zero cost on normal runs).
+    breakdown: dict = {"per_sleeve": {}, "convergence": {}, "primary_sleeve": {}}
+    if composite is not None and len(composite) > 0 and alphas:
+        last_composite = composite.iloc[-1]
+        normed_sleeves: dict = {}
+        for name, alpha_df in alphas.items():
+            try:
+                normed = _cs_normalize(alpha_df)
+                normed_sleeves[name] = normed.iloc[-1] if len(normed) > 0 else pd.Series(dtype=float)
+            except Exception:
+                pass
+
+        # Per-sleeve last-row scores
+        breakdown["per_sleeve"] = {
+            name: row.to_dict() for name, row in normed_sleeves.items()
+        }
+
+        # Convergence: fraction of sleeves that agree with the composite sign per symbol
+        all_syms = list(last_composite.index)
+        for sym in all_syms:
+            composite_sign = np.sign(last_composite.get(sym, 0.0))
+            if composite_sign == 0:
+                breakdown["convergence"][sym] = 0.5
+                continue
+            agreeing = sum(
+                1 for row in normed_sleeves.values()
+                if np.sign(row.get(sym, 0.0)) == composite_sign
+            )
+            breakdown["convergence"][sym] = round(agreeing / max(len(normed_sleeves), 1), 3)
+
+        # Primary sleeve: highest absolute contribution per symbol
+        for sym in all_syms:
+            best_sleeve, best_val = "trend", 0.0
+            for name, row in normed_sleeves.items():
+                val = abs(row.get(sym, 0.0)) * alpha_weights.get(name, 0.0)
+                if val > best_val:
+                    best_val, best_sleeve = val, name
+            breakdown["primary_sleeve"][sym] = best_sleeve
+
+    return composite, breakdown
 
 def alpha_to_ranks(alpha):
     return alpha.rank(axis=1, pct=True)
