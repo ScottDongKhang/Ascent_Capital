@@ -450,6 +450,22 @@ Python 3.12.13 Homebrew, venv at `.venv/`. Use `.venv/bin/python`. API keys via 
 - Cost: $0.082 (51 Haiku calls). Dashboard pushed to GitHub Pages.
 - No code changes this session.
 
+### 2026-06-05 (AI PM learning system + hallucination prevention ✅)
+- **`ascent/strategy/ai_pm_learning.py`** (new): three-component continuous learning system
+  - `daily_intelligence_brief()` — Sonnet daily brief with real price data, thesis health per position (intact/strengthening/weakening/broken), biggest risk, what to watch. ~$0.03/day. Logged to `logs/ai_pm_daily_briefs.jsonl`
+  - `run_post_mortem()` — Sonnet post-mortem fires ~21 days after each rebalance: win/loss autopsy, was right for right reason, one new rule extracted. ~$0.04/rebalance
+  - `update_pattern_memory()` — Haiku extracts concrete rule from post-mortem ("When X, do Y because Z"), appends to `data_cache/ai_pm_pattern_memory.json`. Injected into every future Phase 1+2 prompt. Permanent, compounding memory.
+- **Hallucination prevention — all 4 enforced in code, not prompts**:
+  - `_build_data_grounding()`: pre-loads actual 21d/63d/252d momentum + alpha scores from data cache into Phase 1 and Phase 2 prompts. Root cause fix — model reads real numbers instead of training memory
+  - `_apply_recency_gate_python()`: strips conviction_reasons where data_date > threshold (45d filings, 30d analyst, 5d price). Called inside `_strip_prethesis_for_phase2()` — claims never reach Phase 2
+  - Feedback citation gate: `_tool_propose_portfolio()` rejects Phase 2 output if `feedback_acknowledged` missing/false — proposal rejected, fallback to pure quant. Hard code gate
+  - Conviction inflation: `check_conviction_inflation()` now called in `_tool_propose_portfolio()`. >40% high conviction → excess downgraded to medium silently
+- **Daily view bug fixed**: `_fetch_position_returns()` fetches actual yfinance 2d data for all held positions before calling Haiku. Was returning "insufficient data" — now gives real price moves with specific analysis
+- **AI PM bootstrapped to Level 1** (Analyst, 5% authority) — Day 1: June 4. Next rebalance June 10
+- **Total system cost: ~$67/year** (daily Haiku $18 + rebalance days $41 + Sonnet briefs $7 + post-mortems $1)
+- **270 structured learning sessions/year vs 26 previously**
+- Files: `ascent/strategy/ai_pm_learning.py` (new), `agents/ai_pm_agent.py`, `run_all_agents.py`
+
 ### 2026-06-04 (AI PM Progressive Authority System ✅)
 - **Spec**: `docs/superpowers/specs/2026-06-04-ai-pm-authority-design.md` — 44 integrity constraints, 5-level career ladder (Shadow→Analyst→Associate→Manager→Director→CEO), research-backed short-selling framework (5 signals: accruals/Sloan 1996, PEAD/Bernard 1989, QMJ/AQR, short interest/Stambaugh 2012, narrative breakdown). Valuation shorts explicitly banned.
 - **`ascent/strategy/earned_authority.py`** (rewrite): 5-level state machine, Sortino-based promotion/demotion (not Sharpe), catastrophic/hard/soft demotion tiers, 5-day cooldown, 63-day stuck alert, legacy `phase`→`level` migration. PHASE_WEIGHTS alias preserved.
