@@ -57,7 +57,13 @@ def record_decision(
 # ── Score ──────────────────────────────────────────────────────────────────────
 
 def _fetch_return(symbol: str, from_date: str, horizon: int) -> Optional[float]:
-    """Fetch stock return from from_date + horizon trading days. Returns None on failure."""
+    """Fetch stock return at from_date + horizon trading days. Returns None on failure."""
+    try:
+        from ascent.integrations.openbb_client import fetch_return as _obb_fetch
+        return _obb_fetch(symbol, from_date, horizon)
+    except Exception:
+        pass
+    # Direct yfinance fallback
     try:
         import yfinance as yf
         start = date.fromisoformat(from_date)

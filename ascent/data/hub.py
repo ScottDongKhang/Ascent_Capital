@@ -79,9 +79,18 @@ def hub_is_fresh(max_age_hours: float = 2.0) -> bool:
 
 def _fetch_symbol(sym: str, start: str, end: str) -> Optional[pd.DataFrame]:
     """
-    Fetch one symbol via yfinance Ticker.history(). Returns None on failure.
-    Called concurrently by _fetch_all_prices.
+    Fetch one symbol. Tries OpenBB adapter (tiingo→yfinance fallback).
+    Falls back to direct yfinance if adapter unavailable.
     """
+    try:
+        from ascent.integrations.openbb_client import fetch_symbol as _obb_fetch
+        result = _obb_fetch(sym, start, end)
+        if result is not None and not result.empty:
+            return result
+    except Exception as exc:
+        log.debug("[Hub] openbb_client unavailable for %s: %s", sym, exc)
+
+    # Direct yfinance fallback (existing behavior)
     try:
         ticker = yf.Ticker(sym)
         df = ticker.history(start=start, end=end, auto_adjust=False)
