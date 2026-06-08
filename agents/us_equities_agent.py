@@ -23,6 +23,7 @@ AGENT_ID = "us_equities"
 def run_us_equities_agent(
     dry_run: bool = False,
     as_of_date: date = None,
+    extra_symbols: list[str] | None = None,
 ) -> AgentOutput:
     """
     Run the full US equities pipeline and wrap output as AgentOutput.
@@ -45,7 +46,7 @@ def run_us_equities_agent(
             macro_df,
             price_cache_name,
             _alpha_breakdown,
-        ) = run_pipeline(live=True)
+        ) = run_pipeline(live=True, extra_symbols=extra_symbols)
 
         # Extract latest non-zero target weights
         if target_weights_all is not None and not target_weights_all.empty:

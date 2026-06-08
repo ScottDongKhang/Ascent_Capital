@@ -276,8 +276,13 @@ def run_pipeline(
     end_date: str | None = None,
     top_n: int | None = None,
     rebalance_days: int | None = None,
+    extra_symbols: list[str] | None = None,
 ) -> tuple:
     cfg = get_config()
+    if extra_symbols:
+        cfg.universe.symbols = list(cfg.universe.symbols) + [
+            s for s in extra_symbols if s not in cfg.universe.symbols
+        ]
     if not cfg.backtest.end_date:
         from datetime import date
         _today = pd.Timestamp.today().normalize()
