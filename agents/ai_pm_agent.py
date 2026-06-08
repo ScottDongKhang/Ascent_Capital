@@ -2054,7 +2054,7 @@ def run_ai_pm(
     _ticker_ctx = ""
     try:
         from memory.ticker_memory import get_ticker_context, get_cross_ticker_lessons
-        ticker_blocks = [get_ticker_context(s) for s in _p2_symbols if get_ticker_context(s)]
+        ticker_blocks = [ctx for s in _p2_symbols if (ctx := get_ticker_context(s))]
         cross_lessons = get_cross_ticker_lessons(n=3)
         if ticker_blocks or cross_lessons:
             _ticker_ctx = "\n\n══ AI PM TICKER TRACK RECORD ══\n"

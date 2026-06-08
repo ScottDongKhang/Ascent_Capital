@@ -103,4 +103,4 @@ def test_format_sentiment_block_skips_stale():
                 "ratio": 1.0, "band": "strongly_bullish", "stale": True},
     }
     block = format_sentiment_block(data)
-    assert "CAT" not in block or "stale" in block.lower()
+    assert block == ""

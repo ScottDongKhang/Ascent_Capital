@@ -1075,32 +1075,32 @@ def main():
     # AI reads broadly and forms original investment thesis BEFORE seeing quant rankings.
     # This makes the fund genuinely AI-native: AI generates the thesis, quant validates it.
     _ai_prethesis: AIPreThesis | None = None
-
-    # Fetch StockTwits crowd sentiment for the current universe (pre-fetch before pre-thesis)
     _sentiment_block = ""
-    try:
-        from ascent.integrations.stocktwits import get_sentiment, format_sentiment_block
-        _universe_syms = list((merged_weights or {}).keys())[:20]
-        _st_data = get_sentiment(_universe_syms)
-        _sentiment_block = format_sentiment_block(_st_data)
-        if _sentiment_block:
-            _n_live = len([v for v in _st_data.values() if not v["stale"]])
-            print(f"[Runner] StockTwits: {_n_live} non-stale signals fetched")
-        _st_ic_path = Path("logs/stocktwits_ic.jsonl")
-        _st_ic_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(_st_ic_path, "a") as _icf:
-            for _sym, _sd in _st_data.items():
-                if not _sd["stale"]:
-                    _icf.write(json.dumps({
-                        "date": today.isoformat(),
-                        "symbol": _sym,
-                        "sentiment_ratio": _sd["ratio"],
-                        "band": _sd["band"],
-                    }) + "\n")
-    except Exception as _ste:
-        print(f"[Runner] StockTwits fetch skipped: {_ste}")
 
     if is_rebalance:
+        # Fetch StockTwits crowd sentiment for the current universe (pre-fetch before pre-thesis)
+        try:
+            from ascent.integrations.stocktwits import get_sentiment, format_sentiment_block
+            _universe_syms = list((merged_weights or {}).keys())[:20]
+            _st_data = get_sentiment(_universe_syms)
+            _sentiment_block = format_sentiment_block(_st_data)
+            if _sentiment_block:
+                _n_live = len([v for v in _st_data.values() if not v["stale"]])
+                print(f"[Runner] StockTwits: {_n_live} non-stale signals fetched")
+            _st_ic_path = Path("logs/stocktwits_ic.jsonl")
+            _st_ic_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(_st_ic_path, "a") as _icf:
+                for _sym, _sd in _st_data.items():
+                    if not _sd["stale"]:
+                        _icf.write(json.dumps({
+                            "date": today.isoformat(),
+                            "symbol": _sym,
+                            "sentiment_ratio": _sd["ratio"],
+                            "band": _sd["band"],
+                        }) + "\n")
+        except Exception as _ste:
+            print(f"[Runner] StockTwits fetch skipped: {_ste}")
+
         # Inject pattern memory into environment so Phase 1 temporal context picks it up
         try:
             from ascent.strategy.ai_pm_learning import get_pattern_summary
