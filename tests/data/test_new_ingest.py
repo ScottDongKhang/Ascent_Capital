@@ -227,3 +227,47 @@ def test_update_ff_cache_writes_parquet(tmp_path):
     df = pd.read_parquet(cache_path)
     assert "mkt_rf" in df.columns
     assert len(df) == 2
+
+
+# ── Factor loadings feature tests ──────────────────────────────────────────────
+
+def test_factor_loadings_returns_per_symbol_betas():
+    from ascent.features.feature_defs import factor_loadings
+    import numpy as np
+
+    dates = pd.date_range("2026-01-02", periods=80, freq="B")
+    np.random.seed(42)
+    factor_df = pd.DataFrame({
+        "mkt_rf": np.random.normal(0.0005, 0.01, 80),
+        "smb":    np.random.normal(0.0001, 0.005, 80),
+        "mom":    np.random.normal(0.0002, 0.007, 80),
+    }, index=dates)
+
+    returns_df = pd.DataFrame({
+        "CAT": factor_df["mkt_rf"] * 1.2 + np.random.normal(0, 0.003, 80),
+        "MRK": factor_df["mkt_rf"] * 0.8 + np.random.normal(0, 0.003, 80),
+    }, index=dates)
+
+    result = factor_loadings(returns_df, factor_df, window=63)
+
+    assert isinstance(result, dict)
+    assert "mkt_rf" in result
+    beta_df = result["mkt_rf"]
+    assert "CAT" in beta_df.columns
+    assert "MRK" in beta_df.columns
+    cat_beta = beta_df["CAT"].dropna().iloc[-1]
+    mrk_beta = beta_df["MRK"].dropna().iloc[-1]
+    assert cat_beta > mrk_beta
+
+
+def test_factor_loadings_returns_empty_when_no_data():
+    from ascent.features.feature_defs import factor_loadings
+
+    returns_df = pd.DataFrame({"CAT": [0.01, -0.02]},
+                               index=pd.date_range("2026-01-02", periods=2, freq="B"))
+    factor_df = pd.DataFrame({"mkt_rf": [0.005, -0.003]},
+                              index=pd.date_range("2025-01-02", periods=2, freq="B"))
+
+    result = factor_loadings(returns_df, factor_df, window=63)
+    for df in result.values():
+        assert df.dropna().empty

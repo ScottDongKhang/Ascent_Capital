@@ -641,3 +641,51 @@ def build_all_features(
             _log.getLogger(__name__).warning("short interest panel failed: %s", _e)
 
     return features
+
+
+# ── Fama-French Factor Loadings ────────────────────────────────────────────────
+
+def factor_loadings(
+    returns: pd.DataFrame,
+    factor_df: pd.DataFrame,
+    window: int = 63,
+) -> dict:
+    """
+    Compute rolling factor betas for each symbol in returns.
+
+    Beta_k(t) = rolling_cov(symbol_returns, factor_k, window) / rolling_var(factor_k, window)
+
+    Args:
+        returns:   dates x symbols daily return DataFrame
+        factor_df: dates x factors daily factor return DataFrame
+        window:    rolling window in trading days (default 63)
+
+    Returns:
+        {factor_name: DataFrame(dates x symbols)} with rolling betas.
+        Returns {} if factor_df is empty or None.
+        Returns DataFrames of all NaN if dates don't overlap.
+    """
+    if factor_df is None or factor_df.empty:
+        return {}
+
+    common = returns.index.intersection(factor_df.index)
+    if len(common) < window // 2:
+        return {col: pd.DataFrame(index=returns.index, columns=returns.columns, dtype=float)
+                for col in factor_df.columns}
+
+    ret_aligned    = returns.loc[common]
+    factor_aligned = factor_df.loc[common]
+
+    result = {}
+    for factor_name in factor_aligned.columns:
+        factor_series = factor_aligned[factor_name]
+        factor_var = factor_series.rolling(window, min_periods=window // 2).var()
+
+        betas = {}
+        for sym in ret_aligned.columns:
+            cov = ret_aligned[sym].rolling(window, min_periods=window // 2).cov(factor_series)
+            betas[sym] = (cov / factor_var.replace(0, float("nan"))).reindex(returns.index)
+
+        result[factor_name] = pd.DataFrame(betas, index=returns.index)
+
+    return result
