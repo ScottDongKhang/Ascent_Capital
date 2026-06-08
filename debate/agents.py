@@ -496,7 +496,7 @@ def run_bull_agent(portfolio_state: dict) -> str:
             "Cut your argument the moment the thesis changes — don't defend stale positions. "
             "Keep under 200 words."
             f"{track_record}"
-            f"{_EVIDENCE_RULE}"
+            f"{_EVIDENCE_RULE}"  # EVIDENCE RULE — see module-level _EVIDENCE_RULE constant
         ),
         user_prompt=user_prompt,
         model=DEBATE_MODEL,
@@ -535,7 +535,7 @@ def run_bear_agent(portfolio_state: dict) -> str:
                 "concentration and VaR BEFORE making quantitative claims. "
                 "Calibrate from your historical accuracy in this regime. Keep under 200 words."
                 f"{track_record}"
-                f"{_EVIDENCE_RULE}"
+                f"{_EVIDENCE_RULE}"  # EVIDENCE RULE — see module-level _EVIDENCE_RULE constant
             ),
             user_prompt=user_prompt,
             tools=DEBATE_TOOLS,
@@ -551,7 +551,7 @@ def run_bear_agent(portfolio_state: dict) -> str:
             system_prompt=(
                 "You are the Burry-inspired Bear Analyst at Ascent Capital. "
                 "Lead with downside — weakest position, hardest number. Terse. Under 200 words."
-                f"{_EVIDENCE_RULE}"
+                f"{_EVIDENCE_RULE}"  # EVIDENCE RULE — see module-level _EVIDENCE_RULE constant
             ),
             user_prompt=user_prompt,
             model=DEBATE_MODEL,
@@ -673,7 +673,7 @@ def run_devils_advocate(portfolio_state: dict) -> str:
         "via negativa, fat tail, Lindy effect. Cite the Monte Carlo numbers. "
         "Be specific. Keep under 150 words."
         f"{track_record}"
-        f"{_EVIDENCE_RULE}"
+        f"{_EVIDENCE_RULE}"  # EVIDENCE RULE — see module-level _EVIDENCE_RULE constant
         f"{_causal_context}"
         f"{_mirofish_context}"
     )

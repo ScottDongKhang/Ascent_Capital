@@ -1062,6 +1062,25 @@ def main():
         except Exception as _ce:
             print(f"[Causal] Gate 4 early exit check failed: {_ce}")
 
+        # Ticker discovery — surface a new candidate from today's Exa news
+        # (runs after Exa fetch block below, wired via _news_context)
+        try:
+            from ascent.strategy.ticker_discovery import run_discovery as _run_discovery
+            _current_universe = list((merged_weights or {}).keys())
+            if _news_context and _current_universe:
+                _discovery = _run_discovery(_news_context, _current_universe)
+                if _discovery:
+                    print(f"[Discovery] Candidate: {_discovery.symbol} "
+                          f"(conviction={_discovery.conviction_score:.2f})")
+                    if not _check_mini_rebalance_cooldown():
+                        _trigger_mini_rebalance(_discovery, merged_weights, today, dry_run)
+                    else:
+                        print(f"[Discovery] Cooldown active — {_discovery.symbol} queued for next window")
+                else:
+                    print("[Discovery] No high-conviction candidate found today")
+        except Exception as _disc_e:
+            print(f"[Discovery] Skipped: {_disc_e}")
+
     # ── Generate rebalance brief BEFORE AI PM so get_rebalance_brief tool reads current intel ──
     if is_rebalance:
         try:
@@ -1070,6 +1089,18 @@ def main():
             print("[RebalanceBrief] Brief generated for AI PM.")
         except Exception as _rb_e:
             print(f"[RebalanceBrief] Generation failed: {_rb_e}")
+
+    # ── Fetch live Exa news (runs daily — feeds pre-thesis + ticker discovery) ──
+    _news_context: dict = {}
+    try:
+        from ascent.integrations.exa_news import fetch_news as _fetch_exa_news
+        _universe_syms_for_news = list((merged_weights or {}).keys())[:20]
+        if _universe_syms_for_news:
+            _news_context = _fetch_exa_news(_universe_syms_for_news)
+            _n_news = sum(len(v) for v in _news_context.values())
+            print(f"[Runner] Exa news: {_n_news} headlines fetched for {len(_news_context)} symbols")
+    except Exception as _ne:
+        print(f"[Runner] Exa news fetch skipped: {_ne}")
 
     # ── AI PM Phase 1: Pre-thesis (before quant agents on rebalance days) ────────
     # AI reads broadly and forms original investment thesis BEFORE seeing quant rankings.
@@ -1113,7 +1144,10 @@ def main():
 
         try:
             print("[Runner] AI PM Phase 1 — forming original thesis before quant runs...")
-            _ai_prethesis = run_ai_pm_prethesis(sentiment_block=_sentiment_block)
+            _ai_prethesis = run_ai_pm_prethesis(
+                sentiment_block=_sentiment_block,
+                news_context_arg=_news_context,
+            )
             if _ai_prethesis:
                 syms = ", ".join(_ai_prethesis.conviction_symbols[:6])
                 print(f"[Runner] Pre-thesis sealed: {len(_ai_prethesis.high_conviction_names)} "
@@ -1244,6 +1278,7 @@ def main():
                 prethesis=_ai_prethesis,
                 causal_track_record=_causal_track_record,
                 sentiment_block=_sentiment_block,
+                news_context_arg=_news_context,
             )
 
             ok = False
@@ -1587,6 +1622,11 @@ def main():
                 (vars(m) if hasattr(m, "__dict__") else m)
                 for m in (_ai_prethesis.causal_mechanisms if _ai_prethesis else [])
             ],
+            "mirofish_sentiment": (
+                ai_pm_result.thesis.get("mirofish_sentiment")
+                if ai_pm_result and hasattr(ai_pm_result, "thesis") and ai_pm_result.thesis
+                else None
+            ),
         }
         _regime_dict = {"entropy": _regime_entropy, "label": _saved_regime}
         if not should_run_debate(portfolio_state, _regime_dict):
@@ -1893,6 +1933,114 @@ def _log_holdings(today):
             print(f"[Dashboard] Generator exited {result.returncode}: {result.stderr[-200:]}")
     except Exception as e:
         print(f"[Dashboard] Skipped ({e})")
+
+
+def _check_mini_rebalance_cooldown() -> bool:
+    """Returns True if a mini-rebalance ran < 5 trading days ago (cooldown active)."""
+    import json as _j
+    from pathlib import Path as _P
+    import pandas as _pd
+
+    cooldown_path = _P("data_cache/last_mini_rebalance.json")
+    if not cooldown_path.exists():
+        return False
+    try:
+        rec = _j.loads(cooldown_path.read_text())
+        last = _pd.Timestamp(rec["date"])
+        trading_days_elapsed = len(_pd.bdate_range(last, _pd.Timestamp.today())) - 1
+        return trading_days_elapsed < 5
+    except Exception:
+        return False
+
+
+def _write_mini_rebalance_log(symbol: str, conviction: float) -> None:
+    """Write cooldown state after a mini-rebalance completes."""
+    import json as _j
+    from pathlib import Path as _P
+    from datetime import date as _date
+
+    path = _P("data_cache/last_mini_rebalance.json")
+    path.write_text(_j.dumps({
+        "date":       _date.today().isoformat(),
+        "symbol":     symbol,
+        "conviction": conviction,
+    }))
+
+
+def _trigger_mini_rebalance(
+    result,
+    current_weights: dict,
+    today,
+    dry_run: bool = False,
+) -> None:
+    """
+    Run full us_equities_agent pipeline with the discovered ticker added,
+    pass through debate gate, and execute. Writes cooldown log on completion.
+    """
+    import json as _j
+    from pathlib import Path as _P
+
+    print(f"\n[Discovery] Mini-rebalance triggered: {result.symbol} "
+          f"(conviction={result.conviction_score:.2f})")
+    print(f"[Discovery] Catalyst: {result.catalyst_snippet}")
+
+    try:
+        from agents.us_equities_agent import run_us_equities_agent
+        new_output = run_us_equities_agent(extra_symbols=[result.symbol])
+        new_weights = new_output.target_weights or {}
+
+        if not new_weights:
+            print("[Discovery] Mini-rebalance: agent returned empty weights — aborting")
+            return
+
+        verdict = {}
+        try:
+            from debate.debate_runner import run_debate
+            from ascent.execution.debate_gate import should_run_debate
+            portfolio_state = {
+                "date":        today.isoformat(),
+                "us_regime":   str(new_output.regime_signal or "unknown"),
+                "n_positions": len(new_weights),
+                "weights":     new_weights,
+                "trigger":     "discovery",
+            }
+            regime_dict = {"entropy": 0.0, "label": portfolio_state["us_regime"]}
+            if should_run_debate(portfolio_state, regime_dict):
+                verdict = run_debate(portfolio_state, run_date=today) or {}
+        except Exception as _de:
+            print(f"[Discovery] Debate skipped: {_de}")
+
+        if verdict.get("recommendation") == "halt_and_review":
+            print("[Discovery] Debate: halt_and_review — mini-rebalance aborted")
+            return
+
+        if dry_run:
+            print(f"[Discovery] DRY RUN — would submit {len(new_weights)} positions "
+                  f"including {result.symbol}")
+        else:
+            from ascent.execution.eod_runner import run_eod_with_weights
+            run_eod_with_weights(
+                new_weights,
+                run_date=today,
+                dry_run=False,
+                precomputed_verdict=verdict,
+            )
+
+        _write_mini_rebalance_log(result.symbol, result.conviction_score)
+
+        _P("logs/eod_log.jsonl").open("a").write(
+            _j.dumps({
+                "date":       today.isoformat(),
+                "trigger":    "discovery",
+                "symbol":     result.symbol,
+                "conviction": result.conviction_score,
+                "catalyst":   result.catalyst_snippet,
+            }) + "\n"
+        )
+        print(f"[Discovery] Mini-rebalance complete — {result.symbol} added to pipeline")
+
+    except Exception as exc:
+        print(f"[Discovery] Mini-rebalance failed: {exc}")
 
 
 if __name__ == "__main__":

@@ -1983,7 +1983,10 @@ def _build_velocity_context(
 
 # ── Entry point ────────────────────────────────────────────────────────────────
 
-def run_ai_pm_prethesis(sentiment_block: str = "") -> Optional[AIPreThesis]:
+def run_ai_pm_prethesis(
+    sentiment_block: str = "",
+    news_context_arg: dict | None = None,
+) -> Optional[AIPreThesis]:
     """
     Phase 1: AI PM reads broad data and forms original thesis BEFORE quant runs.
     Returns AIPreThesis or None on failure. Should be called before run_quant_agents().
@@ -2025,8 +2028,9 @@ def run_ai_pm_prethesis(sentiment_block: str = "") -> Optional[AIPreThesis]:
     # Attack #1 — data grounding for Phase 1.
     # Pre-load verified numbers from cache so model reads real data, not training memory.
     _p1_grounding = _build_data_grounding(
-        [n.get("symbol", "") for n in _prethesis_universe[:30]] if _prethesis_universe else []
-    ) if "_prethesis_universe" in dir() else _build_data_grounding([])
+        [n.get("symbol", "") for n in _prethesis_universe[:30]] if _prethesis_universe else [],
+        news_context=news_context_arg,
+    ) if "_prethesis_universe" in dir() else _build_data_grounding([], news_context=news_context_arg)
 
     try:
         tool_completion(
@@ -2112,6 +2116,7 @@ def run_ai_pm(
     causal_track_record: Optional[dict] = None,
     model_override: Optional[str] = None,
     sentiment_block: str = "",
+    news_context_arg: dict | None = None,
 ) -> AIPMResult:
     """
     Run the AI PM agent. Returns AIPMResult(portfolio, thesis).
@@ -2232,7 +2237,7 @@ def run_ai_pm(
         list(merged_weights or {})[:20] +
         [n.get("symbol","") for n in (getattr(prethesis,"high_conviction_names",[]) or [])]
     ))
-    _p2_grounding = _build_data_grounding(_p2_symbols)
+    _p2_grounding = _build_data_grounding(_p2_symbols, news_context=news_context_arg)
     if sentiment_block:
         _p2_grounding = sentiment_block + _p2_grounding
 

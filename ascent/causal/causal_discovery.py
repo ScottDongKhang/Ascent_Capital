@@ -20,7 +20,7 @@ log = logging.getLogger(__name__)
 
 MACRO_DAG_PATH = Path("data_cache/macro_causal_dag.json")
 
-MACRO_SERIES = ["fed_rate", "hy_spread", "vix", "unemployment"]
+MACRO_SERIES = ["fed_funds_rate", "hy_spread", "vix", "unemployment"]
 SECTOR_ETFS  = ["XLF", "XLK", "XLV", "XLE", "XLP"]
 
 
@@ -128,17 +128,27 @@ def discover_macro_dag(
 
     macro_weekly = _load_macro_data(macro_df)
 
-    # sector_df may already be returns (small values) or prices (large values)
-    # detect by checking if values look like returns (abs mean < 0.1)
-    sample = sector_df.select_dtypes(include=[np.number])
-    if sample.abs().mean().mean() < 0.1:
-        # already returns
-        sector_returns = sample.resample("W-FRI").last().dropna(how="all")
-    else:
-        sector_returns = _load_sector_data(sector_df)
+    # Normalize timezone on macro (FRED is tz-naive but guard against future changes)
+    if macro_weekly.index.tz is not None:
+        macro_weekly.index = macro_weekly.index.tz_localize(None)
 
-    # Align on common dates, keep last 2 years (~104 weekly observations)
-    combined = macro_weekly.join(sector_returns, how="inner").dropna()
+    if sector_df.empty:
+        combined = macro_weekly.iloc[-104:].dropna()
+    else:
+        # sector_df may already be returns (small values) or prices (large values)
+        sample = sector_df.select_dtypes(include=[np.number])
+        if sample.empty or sample.abs().mean().mean() < 0.1:
+            sector_returns = sample.resample("W-FRI").last().dropna(how="all")
+        else:
+            sector_returns = _load_sector_data(sector_df)
+
+        # Normalize timezone: strip tz-awareness before joining (Yahoo prices are tz-aware)
+        if sector_returns.index.tz is not None:
+            sector_returns.index = sector_returns.index.tz_localize(None)
+
+        # Align on common dates, keep last 2 years (~104 weekly observations)
+        combined = macro_weekly.join(sector_returns, how="inner").dropna()
+
     combined = combined.iloc[-104:]
 
     if len(combined) < 30:
@@ -183,21 +193,27 @@ def run_discovery(regime: str = "calm_bull") -> dict:
     )
     macro_pivot.index = pd.to_datetime(macro_pivot.index)
 
-    # Load sector ETF prices
+    # Load sector ETF prices — check prices_live first, then fetch from yfinance
+    sector_prices = pd.DataFrame()
     if prices_path.exists():
         prices = pd.read_parquet(prices_path)
         if "symbol" in prices.columns:
-            sector_prices = (
-                prices[prices["symbol"].isin(SECTOR_ETFS)]
-                .pivot_table(index="date", columns="symbol", values="close", aggfunc="last")
-            )
+            subset = prices[prices["symbol"].isin(SECTOR_ETFS)]
+            if not subset.empty:
+                sector_prices = subset.pivot_table(
+                    index="date", columns="symbol", values="close", aggfunc="last"
+                )
+                sector_prices.index = pd.to_datetime(sector_prices.index)
+
+    if sector_prices.empty:
+        try:
+            import yfinance as yf
+            raw = yf.download(SECTOR_ETFS, period="3y", progress=False, auto_adjust=True)
+            sector_prices = raw["Close"] if "Close" in raw.columns else raw
             sector_prices.index = pd.to_datetime(sector_prices.index)
-        else:
-            sector_prices = prices[[c for c in SECTOR_ETFS if c in prices.columns]]
-    else:
-        log.warning("[CausalDiscovery] prices_live.parquet not found — using macro only")
-        sector_prices = macro_pivot.copy().rename(
-            columns={c: f"ETF_{c}" for c in macro_pivot.columns}
-        )
+            log.info("[CausalDiscovery] Sector ETF prices fetched from yfinance")
+        except Exception as exc:
+            log.warning("[CausalDiscovery] Could not load sector ETFs (%s) — macro-only mode", exc)
+            sector_prices = macro_pivot.copy().iloc[:, :0]  # empty, triggers macro-only path
 
     return discover_macro_dag(macro_pivot, sector_prices, regime=regime)

@@ -11,7 +11,7 @@ Every change is logged by adversarial_authority.py and scored 10 days later.
 """
 
 import json
-from ascent.llm.client import generate_structured, extended_thinking_completion, SONNET_MODEL as DEFAULT_MODEL
+from ascent.llm.client import generate_structured, extended_thinking_completion, DEFAULT_MODEL
 from debate.outcome_tracker import load_credibility_context, load_recent_verdict_outcomes
 
 
