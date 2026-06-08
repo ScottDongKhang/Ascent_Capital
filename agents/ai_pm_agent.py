@@ -32,7 +32,10 @@ _RECENCY_THRESHOLDS_DAYS = {
 }
 
 
-def _build_data_grounding(symbols: list[str]) -> str:
+def _build_data_grounding(
+    symbols: list[str],
+    news_context: dict[str, list[str]] | None = None,
+) -> str:
     """
     Attack #1 — root cause of hallucination.
 
@@ -50,68 +53,110 @@ def _build_data_grounding(symbols: list[str]) -> str:
         # Load prices and compute key momentum signals
         prices_path = _REPO_ROOT / "data_cache" / "prices_live.parquet"
         if not prices_path.exists():
-            return ""
-        raw = pd.read_parquet(prices_path)
-        # Handle long format
-        if "symbol" in raw.columns and "close" in raw.columns:
-            prices = raw.pivot_table(index="date", columns="symbol", values="close")
-            prices.index = pd.to_datetime(prices.index)
-            prices = prices.sort_index()
+            grounding = ""
         else:
-            prices = raw
+            raw = pd.read_parquet(prices_path)
+            # Handle long format
+            if "symbol" in raw.columns and "close" in raw.columns:
+                prices = raw.pivot_table(index="date", columns="symbol", values="close")
+                prices.index = pd.to_datetime(prices.index)
+                prices = prices.sort_index()
+            else:
+                prices = raw
 
-        # Load alpha scores if available (last quant run)
-        alpha_scores: dict = {}
-        alpha_path = _REPO_ROOT / "data_cache" / "last_alpha_scores.json"
-        if alpha_path.exists():
+            # Load alpha scores if available (last quant run)
+            alpha_scores: dict = {}
+            alpha_path = _REPO_ROOT / "data_cache" / "last_alpha_scores.json"
+            if alpha_path.exists():
+                try:
+                    alpha_scores = json.loads(alpha_path.read_text())
+                except Exception:
+                    pass
+
+            # Load sector/industry identity from profiles.parquet
+            _identity: dict = {}
             try:
-                alpha_scores = json.loads(alpha_path.read_text())
+                _prof_path = _REPO_ROOT / "data_cache" / "profiles.parquet"
+                if _prof_path.exists():
+                    _prof = pd.read_parquet(_prof_path)
+                    if {"symbol", "sector", "industry"}.issubset(_prof.columns):
+                        for _, row in _prof.iterrows():
+                            s = str(row["symbol"])
+                            sec = str(row.get("sector", "")) or ""
+                            ind = str(row.get("industry", "")) or ""
+                            if sec and sec != "Unknown":
+                                _identity[s] = f"{sec} | {ind}" if ind and ind != "Unknown" else sec
             except Exception:
                 pass
 
-        # Load sector/industry identity from profiles.parquet
-        _identity: dict = {}
+            for sym in symbols[:25]:  # cap at 25 to keep prompt size bounded
+                if sym not in prices.columns:
+                    continue
+                col = prices[sym].dropna()
+                if len(col) < 21:
+                    continue
+                r21   = float(col.iloc[-1] / col.iloc[-21] - 1) if len(col) >= 21  else None
+                r63   = float(col.iloc[-1] / col.iloc[-63] - 1) if len(col) >= 63  else None
+                r252  = float(col.iloc[-1] / col.iloc[-252] - 1) if len(col) >= 252 else None
+                alpha = alpha_scores.get(sym)
+
+                identity_tag = _identity.get(sym, "")
+                parts = [f"{sym}:" + (f" [{identity_tag}]" if identity_tag else "")]
+                if r21  is not None: parts.append(f"21d={r21:+.1%}")
+                if r63  is not None: parts.append(f"63d={r63:+.1%}")
+                if r252 is not None: parts.append(f"252d={r252:+.1%}")
+                if alpha is not None: parts.append(f"alpha_score={alpha:.3f}")
+                rows.append("  " + " | ".join(parts))
+
+            if not rows:
+                grounding = ""
+            else:
+                grounding = (
+                    "\n\n══ VERIFIED DATA FROM DATA CACHE (use only these numbers — do not cite others) ══\n"
+                    + "\n".join(rows)
+                    + "\n  Any financial metric NOT shown above: say 'data not available' — do not estimate.\n"
+                    + "══════════════════════════════════════════════════════════════════════════════════\n"
+                )
+
+        # Append fundamentals block (yfinance quarterly, 24h cache)
         try:
-            _prof_path = _REPO_ROOT / "data_cache" / "profiles.parquet"
-            if _prof_path.exists():
-                _prof = pd.read_parquet(_prof_path)
-                if {"symbol", "sector", "industry"}.issubset(_prof.columns):
-                    for _, row in _prof.iterrows():
-                        s = str(row["symbol"])
-                        sec = str(row.get("sector", "")) or ""
-                        ind = str(row.get("industry", "")) or ""
-                        if sec and sec != "Unknown":
-                            _identity[s] = f"{sec} | {ind}" if ind and ind != "Unknown" else sec
-        except Exception:
-            pass
+            fin = _fetch_financials(symbols[:25])
+            fin_rows = []
+            for sym in symbols[:25]:
+                m = fin.get(sym, {})
+                if not m:
+                    continue
+                parts = [sym + ":"]
+                if "current_ratio"      in m: parts.append(f"curr_ratio={m['current_ratio']}")
+                if "debt_to_equity"     in m: parts.append(f"D/E={m['debt_to_equity']}")
+                if "revenue_growth_yoy" in m: parts.append(f"rev_growth={m['revenue_growth_yoy']:+.0%}")
+                if "gross_margin"       in m: parts.append(f"margin={m['gross_margin']:.0%}")
+                if len(parts) > 1:
+                    fin_rows.append("  " + " | ".join(parts))
+            if fin_rows:
+                grounding += (
+                    "\n══ FUNDAMENTALS (yfinance quarterly, cached 24h) ════════════════\n"
+                    + "\n".join(fin_rows)
+                    + "\n════════════════════════════════════════════════════════════════\n"
+                )
+        except Exception as _fe:
+            log.debug("[AIPMAgent] Financials block skipped: %s", _fe)
 
-        for sym in symbols[:25]:  # cap at 25 to keep prompt size bounded
-            if sym not in prices.columns:
-                continue
-            col = prices[sym].dropna()
-            if len(col) < 21:
-                continue
-            r21   = float(col.iloc[-1] / col.iloc[-21] - 1) if len(col) >= 21  else None
-            r63   = float(col.iloc[-1] / col.iloc[-63] - 1) if len(col) >= 63  else None
-            r252  = float(col.iloc[-1] / col.iloc[-252] - 1) if len(col) >= 252 else None
-            alpha = alpha_scores.get(sym)
+        # Append live news block (pre-fetched from run_all_agents.py)
+        if news_context:
+            news_rows = []
+            for sym in symbols[:25]:
+                headlines = news_context.get(sym, [])
+                for i, h in enumerate(headlines, 1):
+                    news_rows.append(f"  {sym}: [{i}] {h}")
+            if news_rows:
+                grounding += (
+                    "\n══ LIVE NEWS (Exa, fetched today) ══════════════════════════════\n"
+                    + "\n".join(news_rows)
+                    + "\n════════════════════════════════════════════════════════════════\n"
+                )
 
-            identity_tag = _identity.get(sym, "")
-            parts = [f"{sym}:" + (f" [{identity_tag}]" if identity_tag else "")]
-            if r21  is not None: parts.append(f"21d={r21:+.1%}")
-            if r63  is not None: parts.append(f"63d={r63:+.1%}")
-            if r252 is not None: parts.append(f"252d={r252:+.1%}")
-            if alpha is not None: parts.append(f"alpha_score={alpha:.3f}")
-            rows.append("  " + " | ".join(parts))
-
-        if not rows:
-            return ""
-        return (
-            "\n\n══ VERIFIED DATA FROM DATA CACHE (use only these numbers — do not cite others) ══\n"
-            + "\n".join(rows)
-            + "\n  Any financial metric NOT shown above: say 'data not available' — do not estimate.\n"
-            + "══════════════════════════════════════════════════════════════════════════════════\n"
-        )
+        return grounding
     except Exception as exc:
         log.debug("[AIPMAgent] Data grounding failed: %s", exc)
         return ""
