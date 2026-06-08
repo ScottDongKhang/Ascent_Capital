@@ -615,6 +615,32 @@ def main():
         print(f"[Hub] WARNING: hub failed ({hub_manifest.get('error', 'unknown')}) "
               "— agents will fetch data individually")
 
+    # ── OpenBB ingest: CBOE options, CFTC COT, Fama-French factors ─────────
+    _today_str = today.isoformat()
+    try:
+        from ascent.data.ingest.cboe_options import update_options_cache
+        _n_opts = update_options_cache(us_symbols, _today_str)
+        if _n_opts:
+            print(f"[Runner] CBOE options: {_n_opts} new rows added")
+    except Exception as _opts_e:
+        print(f"[Runner] CBOE options ingest skipped: {_opts_e}")
+
+    try:
+        from ascent.data.ingest.cftc_positioning import update_cot_cache
+        _cot_added = update_cot_cache()
+        if _cot_added:
+            print("[Runner] CFTC COT: updated")
+    except Exception as _cot_e:
+        print(f"[Runner] CFTC COT ingest skipped: {_cot_e}")
+
+    try:
+        from ascent.data.ingest.famafrench_factors import update_ff_cache
+        _ff_ok = update_ff_cache()
+        if _ff_ok:
+            print("[Runner] Fama-French factors: updated")
+    except Exception as _ff_e:
+        print(f"[Runner] Fama-French factors ingest skipped: {_ff_e}")
+
     # ── Alt data collection (runs before agents; each source fails silently) ──
     _collect_altdata(
         portfolio_symbols=_get_portfolio_symbols(),
