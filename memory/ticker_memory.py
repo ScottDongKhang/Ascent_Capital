@@ -77,6 +77,8 @@ def _fetch_return(symbol: str, from_date: str, horizon: int) -> Optional[float]:
 def _classify_verdict(r10: Optional[float], r21: Optional[float]) -> Optional[str]:
     if r10 is None:
         return None
+    if r10 == 0.0:
+        return None  # no incremental alpha — no opinion
     if r10 > 0 and r21 is not None and r21 < 0:
         return "fade"
     if r10 < 0 and r21 is not None and r21 > 0:
@@ -127,6 +129,9 @@ def score_outcomes(today: date) -> int:
             if raw21 is not None:
                 r21 = round((ai_w - qw) * raw21, 6)
 
+        if r10 is None:
+            continue  # yfinance failed — retry next run, do not mark scored
+
         entry["outcome_10d"] = r10
         entry["outcome_21d"] = r21
         entry["verdict"]     = _classify_verdict(r10, r21)
@@ -136,9 +141,9 @@ def score_outcomes(today: date) -> int:
                  sym, entry["date"], r10, r21, entry["verdict"])
 
     if scored_count:
-        TICKER_MEMORY_PATH.write_text(
-            "\n".join(json.dumps(e) for e in entries) + "\n"
-        )
+        tmp = TICKER_MEMORY_PATH.with_suffix(".tmp")
+        tmp.write_text("\n".join(json.dumps(e) for e in entries) + "\n")
+        tmp.rename(TICKER_MEMORY_PATH)
 
     return scored_count
 

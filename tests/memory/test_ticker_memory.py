@@ -107,6 +107,36 @@ def test_get_ticker_context_only_returns_that_symbol(tmp_path):
     assert "MRK" not in cat_ctx
 
 
+def test_score_outcomes_does_not_mark_scored_on_fetch_failure(tmp_path):
+    """If yfinance fails (returns None), entry stays unscored for retry next run."""
+    tm = _make_ticker_memory(tmp_path)
+    old_date = (date.today() - timedelta(days=15)).isoformat()
+    tm.record_decision("CAT", old_date, 0.10, 0.07, "amplify", "old entry")
+
+    with patch("memory.ticker_memory._fetch_return", return_value=None):
+        scored = tm.score_outcomes(date.today())
+
+    assert scored == 0
+    entry = json.loads((tmp_path / "ticker_memory.jsonl").read_text().splitlines()[0])
+    assert entry["scored"] is False
+
+
+def test_score_outcomes_21d_path(tmp_path):
+    """Entries 25 days old should have both 10d and 21d outcomes scored."""
+    tm = _make_ticker_memory(tmp_path)
+    old_date = (date.today() - timedelta(days=25)).isoformat()
+    tm.record_decision("CAT", old_date, 0.10, 0.07, "amplify", "25d old entry")
+
+    with patch("memory.ticker_memory._fetch_return", side_effect=[0.05, 0.08]):
+        scored = tm.score_outcomes(date.today())
+
+    assert scored == 1
+    entry = json.loads((tmp_path / "ticker_memory.jsonl").read_text().splitlines()[0])
+    assert entry["scored"] is True
+    assert entry["outcome_10d"] == pytest.approx((0.10 - 0.07) * 0.05, abs=1e-6)
+    assert entry["outcome_21d"] == pytest.approx((0.10 - 0.07) * 0.08, abs=1e-6)
+
+
 def test_get_cross_ticker_lessons_returns_recent(tmp_path):
     tm = _make_ticker_memory(tmp_path)
     old_date = (date.today() - timedelta(days=15)).isoformat()
