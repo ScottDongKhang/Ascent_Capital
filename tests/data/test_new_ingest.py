@@ -169,3 +169,61 @@ def test_get_latest_cot_reads_cache(tmp_path):
     assert result is not None
     assert result["as_of_date"] == "2026-06-06"
     assert result["net_noncommercial_long"] == 125240
+
+
+# ── Fama-French factor tests ───────────────────────────────────────────────────
+
+def test_fetch_ff_factors_returns_dataframe():
+    from ascent.data.ingest.famafrench_factors import fetch_ff_factors
+    import numpy as np
+
+    mock_df_5f = pd.DataFrame({
+        "date": pd.to_datetime(["2026-06-04", "2026-06-05", "2026-06-06"]),
+        "mkt_rf": [0.0082, -0.0031, 0.0055],
+        "smb":    [0.0021, 0.0010, -0.0008],
+        "hml":    [-0.0015, 0.0020, 0.0011],
+        "rmw":    [0.0005, -0.0003, 0.0007],
+        "cma":    [0.0003, 0.0001, -0.0002],
+        "rf":     [0.0002, 0.0002, 0.0002],
+    })
+    mock_df_mom = pd.DataFrame({
+        "date": pd.to_datetime(["2026-06-04", "2026-06-05", "2026-06-06"]),
+        "mom": [0.0032, -0.0041, 0.0018],
+    })
+
+    def mock_ff_call(*args, **kwargs):
+        factor = kwargs.get("factor", args[0] if args else "5_factors")
+        result = MagicMock()
+        result.to_dataframe.return_value = (mock_df_5f if factor == "5_factors" else mock_df_mom).copy()
+        return result
+
+    with patch("ascent.data.ingest.famafrench_factors._get_obb") as mock_obb_fn:
+        mock_obb = MagicMock()
+        mock_obb.famafrench.factors.side_effect = mock_ff_call
+        mock_obb_fn.return_value = mock_obb
+        df = fetch_ff_factors(start="2026-06-01")
+
+    assert df is not None
+    assert not df.empty
+    for col in ("mkt_rf", "smb", "hml", "rmw", "cma", "mom"):
+        assert col in df.columns
+
+
+def test_update_ff_cache_writes_parquet(tmp_path):
+    from ascent.data.ingest.famafrench_factors import update_ff_cache
+    mock_df = pd.DataFrame({
+        "mkt_rf": [0.008, -0.003],
+        "smb":    [0.002, 0.001],
+        "hml":    [-0.001, 0.002],
+        "rmw":    [0.001, -0.001],
+        "cma":    [0.000,  0.000],
+        "mom":    [0.003, -0.004],
+    }, index=pd.date_range("2026-06-04", periods=2, freq="B"))
+    mock_df.index.name = "date"
+    cache_path = tmp_path / "famafrench_factors.parquet"
+    with patch("ascent.data.ingest.famafrench_factors.fetch_ff_factors", return_value=mock_df):
+        update_ff_cache(cache_path=cache_path)
+    assert cache_path.exists()
+    df = pd.read_parquet(cache_path)
+    assert "mkt_rf" in df.columns
+    assert len(df) == 2
