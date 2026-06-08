@@ -1797,7 +1797,7 @@ def _build_velocity_context(
 
 # ── Entry point ────────────────────────────────────────────────────────────────
 
-def run_ai_pm_prethesis() -> Optional[AIPreThesis]:
+def run_ai_pm_prethesis(sentiment_block: str = "") -> Optional[AIPreThesis]:
     """
     Phase 1: AI PM reads broad data and forms original thesis BEFORE quant runs.
     Returns AIPreThesis or None on failure. Should be called before run_quant_agents().
@@ -1844,7 +1844,7 @@ def run_ai_pm_prethesis() -> Optional[AIPreThesis]:
 
     try:
         tool_completion(
-            system_prompt=_build_temporal_context(feedback=_p1_feedback) + _p1_grounding + _PRE_THESIS_PROMPT,
+            system_prompt=_build_temporal_context(feedback=_p1_feedback) + _p1_grounding + sentiment_block + _PRE_THESIS_PROMPT,
             user_prompt=(
                 f"Today is {date.today()}. Read the available data and form your original "
                 "investment thesis for the next rebalance. Call propose_prethesis when ready."
@@ -1925,6 +1925,7 @@ def run_ai_pm(
     prethesis: Optional[AIPreThesis] = None,
     causal_track_record: Optional[dict] = None,
     model_override: Optional[str] = None,
+    sentiment_block: str = "",
 ) -> AIPMResult:
     """
     Run the AI PM agent. Returns AIPMResult(portfolio, thesis).
@@ -2046,6 +2047,8 @@ def run_ai_pm(
         [n.get("symbol","") for n in (getattr(prethesis,"high_conviction_names",[]) or [])]
     ))
     _p2_grounding = _build_data_grounding(_p2_symbols)
+    if sentiment_block:
+        _p2_grounding = sentiment_block + _p2_grounding
 
     # Per-ticker AI PM history: inject what worked / failed last time for each symbol
     _ticker_ctx = ""

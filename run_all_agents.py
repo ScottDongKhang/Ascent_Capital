@@ -1075,6 +1075,31 @@ def main():
     # AI reads broadly and forms original investment thesis BEFORE seeing quant rankings.
     # This makes the fund genuinely AI-native: AI generates the thesis, quant validates it.
     _ai_prethesis: AIPreThesis | None = None
+
+    # Fetch StockTwits crowd sentiment for the current universe (pre-fetch before pre-thesis)
+    _sentiment_block = ""
+    try:
+        from ascent.integrations.stocktwits import get_sentiment, format_sentiment_block
+        _universe_syms = list((merged_weights or {}).keys())[:20]
+        _st_data = get_sentiment(_universe_syms)
+        _sentiment_block = format_sentiment_block(_st_data)
+        if _sentiment_block:
+            _n_live = len([v for v in _st_data.values() if not v["stale"]])
+            print(f"[Runner] StockTwits: {_n_live} non-stale signals fetched")
+        _st_ic_path = Path("logs/stocktwits_ic.jsonl")
+        _st_ic_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(_st_ic_path, "a") as _icf:
+            for _sym, _sd in _st_data.items():
+                if not _sd["stale"]:
+                    _icf.write(json.dumps({
+                        "date": today.isoformat(),
+                        "symbol": _sym,
+                        "sentiment_ratio": _sd["ratio"],
+                        "band": _sd["band"],
+                    }) + "\n")
+    except Exception as _ste:
+        print(f"[Runner] StockTwits fetch skipped: {_ste}")
+
     if is_rebalance:
         # Inject pattern memory into environment so Phase 1 temporal context picks it up
         try:
@@ -1088,7 +1113,7 @@ def main():
 
         try:
             print("[Runner] AI PM Phase 1 — forming original thesis before quant runs...")
-            _ai_prethesis = run_ai_pm_prethesis()
+            _ai_prethesis = run_ai_pm_prethesis(sentiment_block=_sentiment_block)
             if _ai_prethesis:
                 syms = ", ".join(_ai_prethesis.conviction_symbols[:6])
                 print(f"[Runner] Pre-thesis sealed: {len(_ai_prethesis.high_conviction_names)} "
@@ -1218,6 +1243,7 @@ def main():
                 merged_weights=merged_weights,
                 prethesis=_ai_prethesis,
                 causal_track_record=_causal_track_record,
+                sentiment_block=_sentiment_block,
             )
 
             ok = False
