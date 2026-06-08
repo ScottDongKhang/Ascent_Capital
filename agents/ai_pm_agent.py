@@ -117,6 +117,88 @@ def _build_data_grounding(symbols: list[str]) -> str:
         return ""
 
 
+def _fetch_financials(symbols: list[str]) -> dict[str, dict]:
+    """
+    Fetch 4 key financial ratios from yfinance quarterly data (24h cache).
+    Returns {symbol: {current_ratio, debt_to_equity, revenue_growth_yoy, gross_margin}}.
+    Returns {} for any symbol on failure — never raises.
+    """
+    import json
+    import time as _time
+
+    cache_path = _REPO_ROOT / "data_cache" / "financials_cache.json"
+    _CACHE_TTL = 24 * 3600
+
+    cache: dict = {}
+    if cache_path.exists():
+        try:
+            raw = json.loads(cache_path.read_text())
+            if (_time.time() - raw.get("_timestamp", 0)) < _CACHE_TTL:
+                cache = raw.get("data", {})
+        except Exception:
+            pass
+
+    results: dict = {}
+    cache_dirty = False
+
+    for sym in symbols:
+        if sym in cache:
+            results[sym] = cache[sym]
+            continue
+        try:
+            import yfinance as yf
+            ticker = yf.Ticker(sym)
+            bs  = ticker.quarterly_balance_sheet
+            inc = ticker.quarterly_income_stmt
+            m: dict = {}
+            try:
+                ca = float(bs.loc["Current Assets"].iloc[0])
+                cl = float(bs.loc["Current Liabilities"].iloc[0])
+                if cl != 0:
+                    m["current_ratio"] = round(ca / cl, 2)
+            except Exception:
+                pass
+            try:
+                td = float(bs.loc["Total Debt"].iloc[0])
+                eq = float(bs.loc["Stockholders Equity"].iloc[0])
+                if eq != 0:
+                    m["debt_to_equity"] = round(td / eq, 2)
+            except Exception:
+                pass
+            try:
+                rev = inc.loc["Total Revenue"]
+                if len(rev) >= 5:
+                    latest   = float(rev.iloc[0])
+                    year_ago = float(rev.iloc[4])
+                    if year_ago != 0:
+                        m["revenue_growth_yoy"] = round((latest - year_ago) / abs(year_ago), 3)
+            except Exception:
+                pass
+            try:
+                gp = float(inc.loc["Gross Profit"].iloc[0])
+                tr = float(inc.loc["Total Revenue"].iloc[0])
+                if tr != 0:
+                    m["gross_margin"] = round(gp / tr, 3)
+            except Exception:
+                pass
+            results[sym]  = m
+            cache[sym]    = m
+            cache_dirty   = True
+        except Exception as exc:
+            log.debug("[AIPMAgent] _fetch_financials %s: %s", sym, exc)
+            results[sym] = {}
+
+    if cache_dirty:
+        try:
+            tmp = cache_path.with_suffix(".tmp")
+            tmp.write_text(json.dumps({"_timestamp": _time.time(), "data": cache}))
+            tmp.rename(cache_path)
+        except Exception:
+            pass
+
+    return results
+
+
 def _apply_recency_gate_python(conviction_reasons: list) -> tuple[list, list]:
     """
     Attack #2 — enforced in Python, not the prompt.
