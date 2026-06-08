@@ -1027,6 +1027,18 @@ def main():
     except Exception as _fe:
         print(f"[FactorExposure] Export skipped: {_fe}")
 
+    # ── Fetch live Exa news (runs daily — feeds pre-thesis + ticker discovery) ──
+    _news_context: dict = {}
+    try:
+        from ascent.integrations.exa_news import fetch_news as _fetch_exa_news
+        _universe_syms_for_news = list((merged_weights or {}).keys())[:20]
+        if _universe_syms_for_news:
+            _news_context = _fetch_exa_news(_universe_syms_for_news)
+            _n_news = sum(len(v) for v in _news_context.values())
+            print(f"[Runner] Exa news: {_n_news} headlines fetched for {len(_news_context)} symbols")
+    except Exception as _ne:
+        print(f"[Runner] Exa news fetch skipped: {_ne}")
+
     # ── Daily intelligence (non-rebalance days — feeds rebalance brief) ──────
     if not is_rebalance:
         try:
@@ -1063,7 +1075,6 @@ def main():
             print(f"[Causal] Gate 4 early exit check failed: {_ce}")
 
         # Ticker discovery — surface a new candidate from today's Exa news
-        # (runs after Exa fetch block below, wired via _news_context)
         try:
             from ascent.strategy.ticker_discovery import run_discovery as _run_discovery
             _current_universe = list((merged_weights or {}).keys())
@@ -1089,18 +1100,6 @@ def main():
             print("[RebalanceBrief] Brief generated for AI PM.")
         except Exception as _rb_e:
             print(f"[RebalanceBrief] Generation failed: {_rb_e}")
-
-    # ── Fetch live Exa news (runs daily — feeds pre-thesis + ticker discovery) ──
-    _news_context: dict = {}
-    try:
-        from ascent.integrations.exa_news import fetch_news as _fetch_exa_news
-        _universe_syms_for_news = list((merged_weights or {}).keys())[:20]
-        if _universe_syms_for_news:
-            _news_context = _fetch_exa_news(_universe_syms_for_news)
-            _n_news = sum(len(v) for v in _news_context.values())
-            print(f"[Runner] Exa news: {_n_news} headlines fetched for {len(_news_context)} symbols")
-    except Exception as _ne:
-        print(f"[Runner] Exa news fetch skipped: {_ne}")
 
     # ── AI PM Phase 1: Pre-thesis (before quant agents on rebalance days) ────────
     # AI reads broadly and forms original investment thesis BEFORE seeing quant rankings.
