@@ -663,6 +663,31 @@ AI_PM_TOOLS = [
         },
     },
     {
+        "name": "get_live_options_flow",
+        "description": (
+            "Fetch current options market signals for specific symbols: "
+            "put/call ratio (PCR), IV skew direction, and IV rank vs 52-week history. "
+            "Use on your top AMPLIFY candidates to check if the options market "
+            "confirms or contradicts the thesis. "
+            "High PCR (>1.2) = heavy put buying = crowd hedging against your thesis. "
+            "Positive IV skew = call-bid = upside being priced in = thesis confirmation. "
+            "Negative IV skew = put-bid = crowd protecting against decline = caution. "
+            "IV rank > 80th pct = options expensive = expect-the-unexpected event risk priced in. "
+            "Call for 1-4 symbols max. Phase 2 only — never pre-thesis."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "symbols": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Symbols to check (1-4 max)",
+                },
+            },
+            "required": ["symbols"],
+        },
+    },
+    {
         "name": "propose_portfolio",
         "description": "REQUIRED: Submit your final portfolio and investment thesis. Call this to end the research loop.",
         "input_schema": {
@@ -1797,6 +1822,44 @@ def _tool_get_mirofish_sentiment(inputs: dict) -> str:
         return f"MiroFish tool failed: {exc}. Log 'mirofish_unavailable' and proceed."
 
 
+def _tool_get_live_options_flow(inputs: dict) -> str:
+    """Fetch CBOE options flow signals for AMPLIFY candidates."""
+    symbols = [str(s).upper().strip() for s in inputs.get("symbols", []) if s]
+    if not symbols:
+        return "Error: symbols list is required."
+    try:
+        from ascent.integrations.openbb_client import get_options_snapshot
+        snapshot = get_options_snapshot(symbols)
+        lines = ["OPTIONS FLOW SIGNALS", "=" * 44]
+        for sym in symbols:
+            entry = snapshot.get(sym, {})
+            if entry.get("unavailable"):
+                lines.append(f"{sym}: unavailable (CBOE fetch failed)")
+                continue
+            pcr   = entry.get("put_call_ratio")
+            skew  = entry.get("iv_skew")
+            iv    = entry.get("atm_iv")
+            rank  = entry.get("iv_rank_52w")
+            pcr_str  = f"PCR={pcr:.2f}" if pcr is not None else "PCR=n/a"
+            skew_str = (f"IV_skew={skew:+.3f} ({'call-bid' if skew and skew > 0 else 'put-bid'})"
+                        if skew is not None else "IV_skew=n/a")
+            rank_str = f"IV_rank={rank}th pct" if rank is not None else "IV_rank=n/a (need 21d history)"
+            if pcr is not None and pcr > 1.2:
+                interp = "CAUTION: heavy put buying — options market hedging against position"
+            elif skew is not None and skew > 0.02:
+                interp = "CONFIRMS: call-bid skew — options market pricing in upside"
+            elif rank is not None and rank > 80:
+                interp = "NOTE: IV elevated — event risk is priced in"
+            else:
+                interp = "NEUTRAL: no strong options signal"
+            lines.append(f"\n{sym}: {pcr_str} | {skew_str} | {rank_str}")
+            lines.append(f"  → {interp}")
+        return "\n".join(lines)
+    except Exception as exc:
+        log.warning("[AIPMAgent] get_live_options_flow failed: %s", exc)
+        return f"Options flow unavailable: {exc}. Proceed without options signal."
+
+
 def _tool_propose_prethesis(inputs: dict, result_store: list) -> str:
     """Seal the pre-thesis. Stores it so run_ai_pm_prethesis() can return it."""
     result_store.append(inputs)
@@ -1881,6 +1944,7 @@ def _make_executor(result_store: list, precomputed: dict | None = None):
         "get_weekend_research":         _tool_get_weekend_research,
         "get_crowding_signal":          _tool_get_crowding_signal,
         "get_mirofish_sentiment":       _tool_get_mirofish_sentiment,
+        "get_live_options_flow":        _tool_get_live_options_flow,
         "propose_portfolio":            lambda i: _tool_propose_portfolio(i, result_store),
     }
 
