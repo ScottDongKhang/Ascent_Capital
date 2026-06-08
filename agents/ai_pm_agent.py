@@ -69,6 +69,22 @@ def _build_data_grounding(symbols: list[str]) -> str:
             except Exception:
                 pass
 
+        # Load sector/industry identity from profiles.parquet
+        _identity: dict = {}
+        try:
+            _prof_path = _REPO_ROOT / "data_cache" / "profiles.parquet"
+            if _prof_path.exists():
+                _prof = pd.read_parquet(_prof_path)
+                if {"symbol", "sector", "industry"}.issubset(_prof.columns):
+                    for _, row in _prof.iterrows():
+                        s = str(row["symbol"])
+                        sec = str(row.get("sector", "")) or ""
+                        ind = str(row.get("industry", "")) or ""
+                        if sec and sec != "Unknown":
+                            _identity[s] = f"{sec} | {ind}" if ind and ind != "Unknown" else sec
+        except Exception:
+            pass
+
         for sym in symbols[:25]:  # cap at 25 to keep prompt size bounded
             if sym not in prices.columns:
                 continue
@@ -80,7 +96,8 @@ def _build_data_grounding(symbols: list[str]) -> str:
             r252  = float(col.iloc[-1] / col.iloc[-252] - 1) if len(col) >= 252 else None
             alpha = alpha_scores.get(sym)
 
-            parts = [f"{sym}:"]
+            identity_tag = _identity.get(sym, "")
+            parts = [f"{sym}:" + (f" [{identity_tag}]" if identity_tag else "")]
             if r21  is not None: parts.append(f"21d={r21:+.1%}")
             if r63  is not None: parts.append(f"63d={r63:+.1%}")
             if r252 is not None: parts.append(f"252d={r252:+.1%}")
@@ -2029,7 +2046,24 @@ def run_ai_pm(
         [n.get("symbol","") for n in (getattr(prethesis,"high_conviction_names",[]) or [])]
     ))
     _p2_grounding = _build_data_grounding(_p2_symbols)
-    _system = _p2_grounding + _system  # prepend grounding before all other context
+
+    # Per-ticker AI PM history: inject what worked / failed last time for each symbol
+    _ticker_ctx = ""
+    try:
+        from memory.ticker_memory import get_ticker_context, get_cross_ticker_lessons
+        ticker_blocks = [get_ticker_context(s) for s in _p2_symbols if get_ticker_context(s)]
+        cross_lessons = get_cross_ticker_lessons(n=3)
+        if ticker_blocks or cross_lessons:
+            _ticker_ctx = "\n\n══ AI PM TICKER TRACK RECORD ══\n"
+            if ticker_blocks:
+                _ticker_ctx += "\n\n".join(ticker_blocks)
+            if cross_lessons:
+                _ticker_ctx += "\n\n" + cross_lessons
+            _ticker_ctx += "\n══════════════════════════════\n"
+    except Exception as _tc_exc:
+        log.debug("[AIPMAgent] Ticker context failed: %s", _tc_exc)
+
+    _system = _p2_grounding + _ticker_ctx + _system  # prepend grounding + history
 
     try:
         tool_completion(
