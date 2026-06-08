@@ -232,3 +232,71 @@ def test_tool_alignment_score_structure(mock_mirofish_api, monkeypatch, tmp_path
     score = _compute_alignment_score(analogue_sentiment, crowd_sentiment, crowd_confidence)
     assert 0.0 <= score <= 1.0
     assert score >= 0.50
+
+# ---------- Task 7 tests ----------
+
+def test_devils_advocate_receives_mirofish_low_alignment(monkeypatch):
+    from debate import agents as da
+
+    portfolio_state = {
+        "date": "2026-06-10",
+        "us_regime": "calm_bull",
+        "weights": {"CAT": 0.10, "STRL": 0.08},
+        "mirofish_sentiment": {
+            "alignment_score": 0.32,
+            "overall_sentiment": "bearish",
+            "warning_flags": ["Crowd focused on tariff risk — not in AI PM thesis"],
+        },
+        "causal_mechanisms": [],
+        "metadata": {},
+    }
+
+    captured_prompt = {}
+
+    def mock_generate(system_prompt, user_prompt, **kwargs):
+        captured_prompt["system"] = system_prompt
+        return "mocked devil's advocate response"
+
+    monkeypatch.setattr(da, "generate_structured", mock_generate)
+    try:
+        monkeypatch.setattr(da, "tool_completion", lambda **kw: mock_generate(kw.get("system_prompt", ""), kw.get("user_prompt", "")))
+    except Exception:
+        pass
+
+    da.run_devils_advocate(portfolio_state)
+
+    system_text = captured_prompt.get("system", "")
+    assert "mirofish" in system_text.lower() or "crowd" in system_text.lower()
+    assert "tariff" in system_text.lower()
+
+def test_devils_advocate_no_mirofish_context_when_alignment_high(monkeypatch):
+    from debate import agents as da
+
+    portfolio_state = {
+        "date": "2026-06-10",
+        "us_regime": "calm_bull",
+        "weights": {"CAT": 0.10},
+        "mirofish_sentiment": {
+            "alignment_score": 0.82,
+            "overall_sentiment": "bullish",
+            "warning_flags": [],
+        },
+        "causal_mechanisms": [],
+        "metadata": {},
+    }
+
+    captured_prompt = {}
+
+    def mock_generate(system_prompt, user_prompt, **kwargs):
+        captured_prompt["system"] = system_prompt
+        return "mocked"
+
+    monkeypatch.setattr(da, "generate_structured", mock_generate)
+    try:
+        monkeypatch.setattr(da, "tool_completion", lambda **kw: mock_generate(kw.get("system_prompt", ""), kw.get("user_prompt", "")))
+    except Exception:
+        pass
+
+    da.run_devils_advocate(portfolio_state)
+    system_text = captured_prompt.get("system", "")
+    assert "mirofish crowd intelligence" not in system_text.lower()

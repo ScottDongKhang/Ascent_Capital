@@ -630,6 +630,27 @@ def run_devils_advocate(portfolio_state: dict) -> str:
                 lines.append(f"    Falsification: {falsif}")
         _causal_context = "\n" + "\n".join(lines)
 
+    # MiroFish crowd timing context
+    _mirofish_context = ""
+    mirofish_sent = portfolio_state.get("mirofish_sentiment")
+    if isinstance(mirofish_sent, dict):
+        alignment = mirofish_sent.get("alignment_score", 1.0)
+        if alignment < 0.50:
+            flags = mirofish_sent.get("warning_flags", [])
+            crowd = mirofish_sent.get("overall_sentiment", "unknown")
+            flags_str = "\n".join(f"  - {f}" for f in flags[:4]) if flags else "  (no specific flags)"
+            _mirofish_context = (
+                f"\n\n══ MIROFISH CROWD INTELLIGENCE (alignment={alignment:.2f} — USE THIS) ══\n"
+                f"The crowd simulation returned '{crowd.upper()}' sentiment, "
+                f"but the AI PM is proposing AMPLIFY at full weight.\n"
+                f"Alignment score {alignment:.2f} < 0.50 means the crowd's reading diverges from the thesis.\n"
+                f"CROWD WARNING FLAGS:\n{flags_str}\n"
+                f"REQUIRED: Attack the AI PM's AMPLIFY picks on crowd timing grounds. "
+                f"Why might the crowd be seeing something the AI PM missed? "
+                f"Use these flags as specific evidence. This is a FALSIFIABLE argument — "
+                f"if the crowd is wrong, say why. If they're right, say so explicitly."
+            )
+
     _da_system_prompt = (
         "You are the Taleb-inspired Devil's Advocate at Ascent Capital. "
         "Reason like Nassim Taleb — your job is FRAGILITY DETECTION and TAIL RISK, "
@@ -654,6 +675,7 @@ def run_devils_advocate(portfolio_state: dict) -> str:
         f"{track_record}"
         f"{_EVIDENCE_RULE}"
         f"{_causal_context}"
+        f"{_mirofish_context}"
     )
     try:
         from debate.agent_tools import DEBATE_TOOLS, execute_tool
