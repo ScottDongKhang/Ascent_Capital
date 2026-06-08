@@ -104,6 +104,15 @@ One step at a time. Verify existing logic before proposing fixes. `ast.parse` af
 
 > Full history archived to `docs/session_log_archive.md`.
 
+### 2026-06-08 (TradingAgents integration — per-ticker memory + instrument identity + StockTwits)
+- `memory/ticker_memory.py` (new): per-ticker AI PM decision log, outcome scoring (incremental alpha at 10d/21d), win/miss/fade/early classification. Storage: `memory/ticker_memory.jsonl`.
+- `ascent/integrations/stocktwits.py` (new): StockTwits public API crowd sentiment, band classification, stale guard. Logs IC to `logs/stocktwits_ic.jsonl`.
+- `agents/ai_pm_agent.py`: `_build_data_grounding()` now includes sector/industry identity from profiles.parquet. Phase 2 prompt injects per-ticker track record + cross-ticker lessons. Both phases receive StockTwits sentiment block.
+- `run_all_agents.py`: `_write_decision_log()` records per-ticker AI PM decisions; daily path scores outcomes; StockTwits fetch gated inside `if is_rebalance:`.
+- `tests/memory/test_ticker_memory.py` (new): 10 tests. `tests/integrations/test_stocktwits.py` (new): 8 tests. All 18 passing.
+- Fixes: `scored=True` on None fetch (now `continue`), atomic write via `.tmp`+rename, zero-alpha → `None` verdict, walrus operator for ticker context, weak test assertion strengthened.
+- Nothing left open.
+
 ### 2026-06-07 (debate persona upgrade — Druckenmiller / Burry / Taleb)
 
 The debate layer had a structural flaw: all three LLM agents (bull, bear, devil's advocate) shared the same underlying epistemology — risk/return framing, Gaussian assumptions, generic "concentration risk" arguments. They disagreed on conclusions but asked the same questions. That's not a real risk committee; it's one brain arguing with itself.
