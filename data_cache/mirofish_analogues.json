@@ -1,0 +1,252 @@
+[
+  {
+    "event_id": "covid_crash_2020",
+    "date": "2020-03-16",
+    "description": "COVID-19 pandemic triggers global market crash, lockdowns, economic shutdown",
+    "keywords": ["pandemic", "lockdown", "crash", "recession", "unemployment", "shutdown", "stimulus"],
+    "affected_sectors": ["Energy", "Financials", "Consumer Discretionary", "Industrials"],
+    "affected_symbols": ["XLE", "XLF", "XLI"],
+    "realized_21d_returns": {"XLE": -0.42, "XLF": -0.28, "XLI": -0.25, "SPY": -0.18},
+    "sentiment_label": "bearish"
+  },
+  {
+    "event_id": "fed_qe_infinity_2020",
+    "date": "2020-03-23",
+    "description": "Federal Reserve announces unlimited QE, backstops credit markets, averts financial crisis",
+    "keywords": ["QE", "quantitative easing", "fed", "stimulus", "credit", "liquidity", "backstop"],
+    "affected_sectors": ["Financials", "Real Estate", "Utilities"],
+    "affected_symbols": ["LQD", "TLT", "GLD"],
+    "realized_21d_returns": {"LQD": 0.18, "TLT": 0.04, "GLD": 0.10, "SPY": 0.25},
+    "sentiment_label": "bullish"
+  },
+  {
+    "event_id": "iija_infrastructure_2021",
+    "date": "2021-11-15",
+    "description": "Infrastructure Investment and Jobs Act signed into law, $1.2T for roads, bridges, broadband, water",
+    "keywords": ["infrastructure", "IIJA", "federal contracts", "construction", "broadband", "water", "bridges", "roads"],
+    "affected_sectors": ["Industrials", "Materials", "Utilities", "Information Technology"],
+    "affected_symbols": ["CAT", "VMC", "MLM", "STRL", "IFRA"],
+    "realized_21d_returns": {"CAT": 0.04, "VMC": 0.05, "MLM": 0.06, "STRL": 0.08, "IFRA": 0.03, "SPY": 0.03},
+    "sentiment_label": "bullish"
+  },
+  {
+    "event_id": "omicron_variant_2021",
+    "date": "2021-11-26",
+    "description": "WHO designates Omicron as variant of concern, fears of renewed lockdowns and economic disruption",
+    "keywords": ["omicron", "variant", "lockdown", "travel ban", "hospitality", "pandemic resurgence"],
+    "affected_sectors": ["Consumer Discretionary", "Industrials", "Energy"],
+    "affected_symbols": ["DAL", "UAL", "H", "XLE"],
+    "realized_21d_returns": {"DAL": -0.09, "UAL": -0.11, "XLE": -0.06, "SPY": -0.01},
+    "sentiment_label": "bearish"
+  },
+  {
+    "event_id": "fed_pivot_hike_start_2022",
+    "date": "2022-03-16",
+    "description": "Federal Reserve begins rate hike cycle with 25bp, signals aggressive tightening to fight 40-year high inflation",
+    "keywords": ["fed hike", "interest rates", "tightening", "inflation", "monetary policy", "yield curve", "rate cycle start"],
+    "affected_sectors": ["Information Technology", "Consumer Discretionary", "Real Estate"],
+    "affected_symbols": ["QQQ", "XLK", "VNQ", "ARKK"],
+    "realized_21d_returns": {"QQQ": -0.06, "XLK": -0.05, "VNQ": -0.07, "SPY": -0.03},
+    "sentiment_label": "bearish"
+  },
+  {
+    "event_id": "russia_ukraine_invasion_2022",
+    "date": "2022-02-24",
+    "description": "Russia invades Ukraine, triggers commodity price spikes, energy supply crisis, defense spending surge",
+    "keywords": ["ukraine", "russia", "invasion", "war", "energy crisis", "defense", "commodities", "sanctions"],
+    "affected_sectors": ["Energy", "Defense", "Materials"],
+    "affected_symbols": ["XLE", "LMT", "RTX", "GLD", "PDBC"],
+    "realized_21d_returns": {"XLE": 0.12, "LMT": 0.08, "RTX": 0.07, "GLD": 0.06, "SPY": -0.05},
+    "sentiment_label": "mixed"
+  },
+  {
+    "event_id": "svb_collapse_2023",
+    "date": "2023-03-10",
+    "description": "Silicon Valley Bank collapses in second-largest US bank failure, sparks regional bank contagion fears",
+    "keywords": ["SVB", "bank failure", "bank run", "regional bank", "contagion", "FDIC", "deposit insurance", "liquidity crisis"],
+    "affected_sectors": ["Financials"],
+    "affected_symbols": ["SIVB", "SBNY", "FRC", "KRE"],
+    "realized_21d_returns": {"KRE": -0.24, "SPY": -0.02},
+    "sentiment_label": "bearish"
+  },
+  {
+    "event_id": "chips_act_2022",
+    "date": "2022-08-09",
+    "description": "CHIPS and Science Act signed into law, $52B for domestic semiconductor manufacturing and research",
+    "keywords": ["CHIPS act", "semiconductor", "domestic manufacturing", "fab", "chip shortage", "supply chain", "reshoring"],
+    "affected_sectors": ["Information Technology", "Semiconductors"],
+    "affected_symbols": ["INTC", "TXN", "QCOM", "AMAT", "SOXX"],
+    "realized_21d_returns": {"INTC": 0.05, "AMAT": 0.08, "SOXX": 0.06, "SPY": 0.02},
+    "sentiment_label": "bullish"
+  },
+  {
+    "event_id": "ira_inflation_reduction_act_2022",
+    "date": "2022-08-16",
+    "description": "Inflation Reduction Act signed, $369B for climate and clean energy — EV credits, solar, wind, clean manufacturing",
+    "keywords": ["IRA", "clean energy", "EV", "electric vehicle", "solar", "wind", "climate", "tax credit", "green energy"],
+    "affected_sectors": ["Utilities", "Energy", "Consumer Discretionary"],
+    "affected_symbols": ["NEE", "ENPH", "FSLR", "TSLA", "XLU"],
+    "realized_21d_returns": {"NEE": 0.06, "ENPH": 0.15, "FSLR": 0.12, "SPY": 0.02},
+    "sentiment_label": "bullish"
+  },
+  {
+    "event_id": "cpi_shock_2022",
+    "date": "2022-06-10",
+    "description": "CPI prints 8.6% YoY, highest in 40 years, far above expectations, markets reprice terminal rate higher",
+    "keywords": ["CPI", "inflation", "consumer prices", "hot inflation", "rate repricing", "terminal rate"],
+    "affected_sectors": ["Consumer Discretionary", "Information Technology", "Real Estate"],
+    "affected_symbols": ["QQQ", "XLY", "VNQ"],
+    "realized_21d_returns": {"QQQ": -0.10, "XLY": -0.09, "VNQ": -0.11, "SPY": -0.08},
+    "sentiment_label": "bearish"
+  },
+  {
+    "event_id": "fed_75bp_hike_2022",
+    "date": "2022-06-15",
+    "description": "Fed hikes 75bp, largest single increase since 1994, signals aggressive path to fight inflation",
+    "keywords": ["75bp", "rate hike", "aggressive Fed", "tightening", "inflation fight", "monetary shock"],
+    "affected_sectors": ["Information Technology", "Real Estate", "Consumer Discretionary", "Financials"],
+    "affected_symbols": ["QQQ", "VNQ", "XLF", "SPY"],
+    "realized_21d_returns": {"QQQ": 0.08, "VNQ": 0.05, "SPY": 0.06},
+    "sentiment_label": "mixed"
+  },
+  {
+    "event_id": "ftx_collapse_2022",
+    "date": "2022-11-11",
+    "description": "FTX cryptocurrency exchange collapses in fraud, $8B missing, crypto contagion hits fintech and digital assets",
+    "keywords": ["FTX", "crypto", "fraud", "contagion", "digital assets", "bankrupt", "crypto winter", "fintech"],
+    "affected_sectors": ["Financials", "Information Technology"],
+    "affected_symbols": ["COIN", "MSTR", "SQ"],
+    "realized_21d_returns": {"COIN": -0.35, "MSTR": -0.30, "SQ": -0.12, "SPY": 0.01},
+    "sentiment_label": "bearish"
+  },
+  {
+    "event_id": "china_reopening_2022",
+    "date": "2022-12-07",
+    "description": "China abruptly ends zero-COVID policy, full reopening expected to boost global demand and commodities",
+    "keywords": ["china reopening", "zero covid end", "EM demand", "commodities", "luxury", "copper", "oil demand"],
+    "affected_sectors": ["Materials", "Energy", "Consumer Discretionary"],
+    "affected_symbols": ["PDBC", "EEM", "KWEB", "FCX"],
+    "realized_21d_returns": {"PDBC": 0.07, "EEM": 0.09, "FCX": 0.14, "SPY": 0.01},
+    "sentiment_label": "bullish"
+  },
+  {
+    "event_id": "debt_ceiling_crisis_2023",
+    "date": "2023-05-01",
+    "description": "US debt ceiling standoff raises default risk, Treasury approaching X-date, bipartisan standoff",
+    "keywords": ["debt ceiling", "default risk", "treasury", "X-date", "fiscal cliff", "political standoff", "US debt"],
+    "affected_sectors": ["Financials", "Utilities", "Consumer Staples"],
+    "affected_symbols": ["TLT", "BIL", "XLU", "SPY"],
+    "realized_21d_returns": {"TLT": -0.04, "BIL": 0.01, "SPY": 0.00},
+    "sentiment_label": "bearish"
+  },
+  {
+    "event_id": "ai_rally_nvidia_2023",
+    "date": "2023-05-25",
+    "description": "NVIDIA reports blowout earnings, raises guidance dramatically on AI demand, triggers massive AI sector rally",
+    "keywords": ["NVIDIA", "AI", "artificial intelligence", "data center", "GPU", "generative AI", "earnings beat", "AI rally"],
+    "affected_sectors": ["Information Technology", "Semiconductors"],
+    "affected_symbols": ["NVDA", "SMCI", "AMD", "MSFT", "QQQ"],
+    "realized_21d_returns": {"NVDA": 0.30, "AMD": 0.15, "QQQ": 0.05, "SPY": 0.03},
+    "sentiment_label": "bullish"
+  },
+  {
+    "event_id": "jackson_hole_pivot_signal_2023",
+    "date": "2023-08-25",
+    "description": "Powell at Jackson Hole signals rates near peak, data dependency, markets interpret as near-pivot",
+    "keywords": ["jackson hole", "Fed pivot", "peak rates", "data dependent", "rate cut expectations", "terminal rate"],
+    "affected_sectors": ["Real Estate", "Utilities", "Information Technology"],
+    "affected_symbols": ["VNQ", "XLU", "QQQ", "TLT"],
+    "realized_21d_returns": {"VNQ": 0.04, "QQQ": 0.03, "TLT": 0.02, "SPY": 0.02},
+    "sentiment_label": "bullish"
+  },
+  {
+    "event_id": "10y_treasury_5pct_2023",
+    "date": "2023-10-19",
+    "description": "US 10-year Treasury yield hits 5% for first time since 2007, rate shock hits rate-sensitive sectors",
+    "keywords": ["10-year treasury", "5 percent yield", "rate shock", "bond selloff", "risk-free rate", "valuation reset"],
+    "affected_sectors": ["Real Estate", "Utilities", "Information Technology"],
+    "affected_symbols": ["VNQ", "XLU", "QQQ", "TLT"],
+    "realized_21d_returns": {"VNQ": -0.06, "XLU": -0.05, "QQQ": -0.04, "TLT": -0.06, "SPY": -0.03},
+    "sentiment_label": "bearish"
+  },
+  {
+    "event_id": "soft_landing_signal_2023",
+    "date": "2023-07-12",
+    "description": "CPI falls to 3%, unemployment stays low, Fed signals near-end of hikes — soft landing narrative dominant",
+    "keywords": ["soft landing", "disinflation", "CPI fall", "strong jobs", "goldilocks", "rate pause", "risk on"],
+    "affected_sectors": ["Consumer Discretionary", "Financials", "Information Technology"],
+    "affected_symbols": ["XLY", "XLF", "QQQ", "SPY"],
+    "realized_21d_returns": {"XLY": 0.06, "QQQ": 0.07, "SPY": 0.04},
+    "sentiment_label": "bullish"
+  },
+  {
+    "event_id": "opec_surprise_cut_2023",
+    "date": "2023-04-02",
+    "description": "Saudi Arabia and OPEC+ announce surprise 1MB/day production cut, oil spikes on supply restriction",
+    "keywords": ["OPEC", "oil cut", "production cut", "oil spike", "energy supply", "saudi arabia", "crude oil"],
+    "affected_sectors": ["Energy"],
+    "affected_symbols": ["XLE", "CVX", "XOM", "MPC", "USO"],
+    "realized_21d_returns": {"XLE": 0.07, "CVX": 0.05, "MPC": 0.06, "SPY": 0.01},
+    "sentiment_label": "bullish"
+  },
+  {
+    "event_id": "regional_bank_contagion_2023",
+    "date": "2023-05-01",
+    "description": "First Republic Bank fails, third major bank failure in 6 weeks, regulatory pressure on regional banks",
+    "keywords": ["first republic", "bank failure", "regional bank", "FDIC", "deposit outflow", "bank crisis", "contagion"],
+    "affected_sectors": ["Financials"],
+    "affected_symbols": ["KRE", "PNC", "USB", "CFG"],
+    "realized_21d_returns": {"KRE": -0.08, "USB": -0.07, "SPY": 0.00},
+    "sentiment_label": "bearish"
+  },
+  {
+    "event_id": "liberation_day_tariffs_2026",
+    "date": "2026-04-02",
+    "description": "Trump announces sweeping reciprocal tariffs on all imports — 10% baseline plus higher rates on China/EU, triggers global trade war fears",
+    "keywords": ["tariffs", "trade war", "reciprocal tariff", "import tax", "supply chain disruption", "China tariff", "protectionism", "global trade"],
+    "affected_sectors": ["Industrials", "Consumer Discretionary", "Materials", "Information Technology"],
+    "affected_symbols": ["CAT", "DE", "XLI", "XLY", "AAPL"],
+    "realized_21d_returns": {"CAT": -0.12, "DE": -0.10, "XLI": -0.09, "AAPL": -0.11, "SPY": -0.07},
+    "sentiment_label": "bearish"
+  },
+  {
+    "event_id": "dollar_strength_spike_2022",
+    "date": "2022-09-28",
+    "description": "DXY dollar index surges to 20-year high, crushing EM assets, multinational earnings at risk",
+    "keywords": ["dollar strength", "DXY", "strong dollar", "EM selloff", "currency", "forex", "multinational earnings"],
+    "affected_sectors": ["Materials", "Energy", "Financials"],
+    "affected_symbols": ["EEM", "VWO", "GLD", "UUP"],
+    "realized_21d_returns": {"EEM": -0.07, "GLD": -0.04, "SPY": -0.03},
+    "sentiment_label": "bearish"
+  },
+  {
+    "event_id": "energy_crisis_europe_2022",
+    "date": "2022-08-26",
+    "description": "European energy crisis deepens, Germany faces gas rationing, energy prices hit record highs",
+    "keywords": ["energy crisis", "gas shortage", "europe energy", "rationing", "electricity prices", "natural gas spike"],
+    "affected_sectors": ["Energy", "Utilities", "Industrials"],
+    "affected_symbols": ["XLE", "LNG", "FANG"],
+    "realized_21d_returns": {"XLE": 0.05, "LNG": 0.08, "SPY": -0.02},
+    "sentiment_label": "mixed"
+  },
+  {
+    "event_id": "fed_rate_cut_start_2024",
+    "date": "2024-09-18",
+    "description": "Federal Reserve cuts rates 50bp in first rate cut since 2020, signals easing cycle beginning",
+    "keywords": ["rate cut", "fed easing", "monetary easing", "lower rates", "easing cycle", "50bp cut", "accommodative"],
+    "affected_sectors": ["Real Estate", "Utilities", "Consumer Discretionary", "Small Cap"],
+    "affected_symbols": ["VNQ", "XLU", "IWM", "TLT"],
+    "realized_21d_returns": {"VNQ": 0.04, "XLU": 0.03, "IWM": 0.05, "TLT": 0.03, "SPY": 0.03},
+    "sentiment_label": "bullish"
+  },
+  {
+    "event_id": "trump_election_2024",
+    "date": "2024-11-06",
+    "description": "Trump wins presidential election, Republican sweep, markets price in tax cuts, deregulation, tariffs",
+    "keywords": ["trump election", "republican sweep", "tax cuts", "deregulation", "tariffs", "fiscal expansion", "financials deregulation"],
+    "affected_sectors": ["Financials", "Energy", "Defense", "Industrials"],
+    "affected_symbols": ["XLF", "XLE", "LMT", "GEO", "SPY"],
+    "realized_21d_returns": {"XLF": 0.10, "XLE": 0.05, "LMT": 0.04, "SPY": 0.05},
+    "sentiment_label": "bullish"
+  }
+]
