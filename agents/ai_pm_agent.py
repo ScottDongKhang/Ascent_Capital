@@ -688,6 +688,21 @@ AI_PM_TOOLS = [
         },
     },
     {
+        "name": "get_cot_positioning",
+        "description": (
+            "Fetch the latest CFTC Commitments of Traders report for S&P 500 e-mini futures. "
+            "Returns speculator (non-commercial) net long positioning and 3-year percentile rank. "
+            "Use once per Phase 2 to check if the broad equity market is macro-crowded. "
+            "Extreme speculator long (>85th pct) = institutional macro crowding even if individual names are clean. "
+            "This is a portfolio-level tail risk signal, not a name-selection signal. "
+            "Does not take inputs. Phase 2 only."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+        },
+    },
+    {
         "name": "propose_portfolio",
         "description": "REQUIRED: Submit your final portfolio and investment thesis. Call this to end the research loop.",
         "input_schema": {
@@ -1860,6 +1875,63 @@ def _tool_get_live_options_flow(inputs: dict) -> str:
         return f"Options flow unavailable: {exc}. Proceed without options signal."
 
 
+def _tool_get_cot_positioning(_: dict) -> str:
+    """Fetch latest CFTC COT positioning from cache or live."""
+    try:
+        from ascent.data.ingest.cftc_positioning import get_latest_cot
+        from ascent.integrations.openbb_client import get_cot_snapshot
+        from pathlib import Path
+
+        cot = get_latest_cot()
+
+        if cot is None:
+            cot = get_cot_snapshot()
+
+        if cot is None:
+            return "COT data unavailable — CFTC fetch failed. Proceed without macro positioning context."
+
+        net_long = cot.get("net_noncommercial_long", 0)
+        pct_long = cot.get("pct_long_noncommercial")
+        as_of    = cot.get("as_of_date", "unknown")
+        oi       = cot.get("open_interest")
+
+        rank_str = "n/a (need more history)"
+        try:
+            import pandas as pd
+            cache = Path(__file__).resolve().parents[1] / "data_cache" / "cftc_positioning.parquet"
+            if cache.exists():
+                df = pd.read_parquet(cache)
+                if len(df) >= 13:
+                    history = df["net_noncommercial_long"].dropna().tail(156)
+                    rank = int((history < net_long).mean() * 100)
+                    if rank > 85:
+                        rank_label = "EXTENDED LONG — macro crowding risk"
+                    elif rank < 20:
+                        rank_label = "LIGHT — institutions underweight equities"
+                    else:
+                        rank_label = "neutral"
+                    rank_str = f"{rank}th pct (vs {len(history)}w history) → {rank_label}"
+        except Exception:
+            pass
+
+        pct_str = f"{pct_long:.1f}% of open interest" if pct_long else "n/a"
+        oi_str  = f"{oi:,}" if oi else "n/a"
+
+        return (
+            f"CFTC S&P 500 E-MINI POSITIONING (as of {as_of})\n"
+            f"{'=' * 48}\n"
+            f"Speculator net long:  {net_long:+,} contracts\n"
+            f"Pct long (spec):      {pct_str}\n"
+            f"Open interest:        {oi_str}\n"
+            f"3-year rank:          {rank_str}\n"
+            f"\n→ Use this as a portfolio-level tail risk check, not a name filter.\n"
+            f"  >85th pct = apply macro caution to full portfolio sizing."
+        )
+    except Exception as exc:
+        log.warning("[AIPMAgent] get_cot_positioning failed: %s", exc)
+        return f"COT positioning unavailable: {exc}. Proceed without macro positioning context."
+
+
 def _tool_propose_prethesis(inputs: dict, result_store: list) -> str:
     """Seal the pre-thesis. Stores it so run_ai_pm_prethesis() can return it."""
     result_store.append(inputs)
@@ -1945,6 +2017,7 @@ def _make_executor(result_store: list, precomputed: dict | None = None):
         "get_crowding_signal":          _tool_get_crowding_signal,
         "get_mirofish_sentiment":       _tool_get_mirofish_sentiment,
         "get_live_options_flow":        _tool_get_live_options_flow,
+        "get_cot_positioning":          _tool_get_cot_positioning,
         "propose_portfolio":            lambda i: _tool_propose_portfolio(i, result_store),
     }
 
