@@ -3,11 +3,11 @@ debate/agents.py
 Debate agent definitions for Ascent Capital.
 
 Agents:
-  - Bull analyst
-  - Bear analyst
-  - Devil's advocate
-  - Regime specialist (LLM, Haiku)
-  - Quant sanity checker (pure Python, no LLM)
+  - Bull analyst       — Druckenmiller persona: asymmetric risk-reward, momentum, aggressive when conviction high
+  - Bear analyst       — Burry persona: downside first, FCF fragility, terse/data-driven, contrarian
+  - Devil's advocate   — Taleb persona: convexity/concavity, fat tails, turkey problem, via negativa
+  - Regime specialist  — LLM, Haiku
+  - Quant sanity checker — pure Python, no LLM
 
 Uses claude-sonnet-4-6 (DEBATE_MODEL) for bull/bear/devil.
 Uses claude-haiku-4-5-20251001 (HAIKU_MODEL) for regime specialist.
@@ -387,6 +387,50 @@ def _section_coherence(ps: dict) -> str:
     return "\n".join(lines)
 
 
+def _section_tail_asymmetry(ps: dict) -> str:
+    """
+    Taleb-specific: compute tail asymmetry from Monte Carlo percentiles.
+    Tail ratio < 1.0 means the portfolio has more downside than upside — concave payoff.
+    """
+    meta = ps.get("metadata", {})
+    mc = meta.get("monte_carlo", {})
+    p5  = mc.get("p5")
+    p50 = mc.get("p50")
+    p95 = mc.get("p95")
+
+    if p5 is None or p50 is None or p95 is None:
+        return "(Monte Carlo tail data not available — cannot compute tail asymmetry)"
+
+    upside   = p95 - p50
+    downside = p50 - p5
+
+    if downside == 0:
+        return f"Monte Carlo: p5={p5:+.2%} p50={p50:+.2%} p95={p95:+.2%} — tail asymmetry incalculable (zero downside deviation)"
+
+    tail_ratio = upside / abs(downside)
+    if tail_ratio > 1.2:
+        shape = "CONVEX — upside exceeds downside"
+    elif tail_ratio > 0.8:
+        shape = "SYMMETRIC — balanced tail exposure"
+    else:
+        shape = "CONCAVE — downside exceeds upside (fragile)"
+
+    regime_entropy = meta.get("regime_entropy")
+    entropy_str = f"  Regime entropy: {regime_entropy:.3f}" if regime_entropy is not None else ""
+    turkey_warning = ""
+    if regime_entropy is not None and regime_entropy < 0.5:
+        turkey_warning = "\n  TURKEY PROBLEM: regime entropy extremely low — complacency risk is high"
+
+    return (
+        f"Tail asymmetry (Monte Carlo):\n"
+        f"  Upside (p50→p95): +{upside:.2%}\n"
+        f"  Downside (p5→p50): -{downside:.2%} (loss potential from median)\n"
+        f"  Tail ratio: {tail_ratio:.2f} — {shape}"
+        + (f"\n{entropy_str}" if entropy_str else "")
+        + turkey_warning
+    )
+
+
 # ── Agent context assembler ────────────────────────────────────────────────────
 
 _AGENT_SECTIONS = {
@@ -395,7 +439,7 @@ _AGENT_SECTIONS = {
     "bear": [_section_weights, _section_adversarial_flags, _section_concentration,
              _section_regime, _section_allocation],
     "devils_advocate": [_section_weights, _section_coherence, _section_regime,
-                        _section_tail, _section_factor_exposures, _section_allocation],
+                        _section_tail, _section_tail_asymmetry, _section_factor_exposures, _section_allocation],
     "regime_specialist": [_section_regime, _section_macro],
 }
 
@@ -441,13 +485,18 @@ def run_bull_agent(portfolio_state: dict) -> str:
     user_prompt += "\n\nMake the bull case for these trades."
     return generate_structured(
         system_prompt=(
-            "You are the Bull Analyst at Ascent Capital. Your job is to make "
-            "the strongest case FOR executing the proposed trades as-is. Reference specific "
-            "positions, the current regime, and momentum signals. Be specific and data-driven. "
-            "You have been given historical accuracy data for each debater — use it to "
-            f"understand where the bear and devil tend to over-warn. Keep your argument under 200 words."
+            "You are the Druckenmiller-inspired Bull Analyst at Ascent Capital. "
+            "Reason like Stanley Druckenmiller: hunt for ASYMMETRIC setups where upside "
+            "significantly outweighs downside. Lead with momentum — which positions are "
+            "accelerating and have regime tailwinds? Compute the implicit risk-reward: "
+            "if the Monte Carlo p95 gain is 3x the p5 loss, say so explicitly. "
+            "Be aggressive when conviction is high. Identify which positions the "
+            "adversarial engine rated hard-to-short — these are your structural longs. "
+            "Call out if the bear or devil tends to over-warn in this regime. "
+            "Cut your argument the moment the thesis changes — don't defend stale positions. "
+            "Keep under 200 words."
             f"{track_record}"
-            f"{_EVIDENCE_RULE}"  # EVIDENCE RULE — see module constant
+            f"{_EVIDENCE_RULE}"
         ),
         user_prompt=user_prompt,
         model=DEBATE_MODEL,
@@ -473,15 +522,20 @@ def run_bear_agent(portfolio_state: dict) -> str:
         from debate.agent_tools import DEBATE_TOOLS, execute_tool
         return tool_completion(
             system_prompt=(
-                "You are the Bear Analyst at Ascent Capital. Your job is to argue "
-                "for REDUCING risk or WAITING. Identify the weakest positions, concentration risks, "
-                "regime fragility, or macro headwinds. Use the provided tools to compute "
-                "sector concentration, VaR, and momentum BEFORE making claims -- do not guess "
-                "at numbers you can look up. Be specific. "
-                "You have been given historical accuracy data -- use it to calibrate how often "
-                "your past warnings were correct in this regime. Keep under 200 words."
+                "You are the Burry-inspired Bear Analyst at Ascent Capital. "
+                "Reason like Michael Burry: DOWNSIDE FIRST. Lead with the weakest "
+                "link — which position has the worst quantitative support (highest "
+                "adversarial score, weakest momentum, binary event risk)? "
+                "What is the market missing about the downside? "
+                "Cite hard numbers: adversarial scores, VaR, concentration stats, "
+                "event risk within 7 days. Be terse and data-driven — no fluff. "
+                "Contrarian edge: if the adversarial engine found no compelling bear "
+                "case, say so rather than manufacturing one. Capital preservation "
+                "comes before any trade. Use the provided tools to compute sector "
+                "concentration and VaR BEFORE making quantitative claims. "
+                "Calibrate from your historical accuracy in this regime. Keep under 200 words."
                 f"{track_record}"
-                f"{_EVIDENCE_RULE}"  # EVIDENCE RULE — see module constant
+                f"{_EVIDENCE_RULE}"
             ),
             user_prompt=user_prompt,
             tools=DEBATE_TOOLS,
@@ -495,9 +549,9 @@ def run_bear_agent(portfolio_state: dict) -> str:
         log.warning("[Bear] Tool completion failed (%s), falling back to generate_structured", e)
         return generate_structured(
             system_prompt=(
-                "You are the Bear Analyst at Ascent Capital. Argue for reducing risk. "
-                "Be specific. Keep under 200 words."
-                f"{_EVIDENCE_RULE}"  # EVIDENCE RULE — see module constant
+                "You are the Burry-inspired Bear Analyst at Ascent Capital. "
+                "Lead with downside — weakest position, hardest number. Terse. Under 200 words."
+                f"{_EVIDENCE_RULE}"
             ),
             user_prompt=user_prompt,
             model=DEBATE_MODEL,
@@ -577,23 +631,28 @@ def run_devils_advocate(portfolio_state: dict) -> str:
         _causal_context = "\n" + "\n".join(lines)
 
     _da_system_prompt = (
-        "You are the Devil's Advocate at Ascent Capital. Your job is to "
-        "find the SINGLE most dangerous assumption in the current portfolio construction. "
-        "What could go catastrophically wrong that the quant signals would NOT catch? "
-        "You have been given Monte Carlo scenario analysis showing worst-case portfolio "
-        "impacts. Use these numbers to make a specific, quantified argument. "
-        "You also have historical accuracy data — use it to understand when your "
-        "past warnings were prescient vs. over-cautious. "
-        "Use the available tools to look up sector concentration, VaR, and momentum data "
-        "to make quantitative arguments. "
-        "CAUSAL MECHANISM ATTACK: If the AI PM's causal mechanisms are listed, "
-        "look for evidence that a mechanism has already failed — supply additions that "
-        "break a supply-shortage thesis, earnings misses that break a margin-recovery thesis, "
-        "or regime shifts that invalidate the mechanism type. "
-        "Think about: earnings surprises, geopolitical events, liquidity gaps, "
-        f"correlation breakdowns. Be specific. Keep under 150 words."
+        "You are the Taleb-inspired Devil's Advocate at Ascent Capital. "
+        "Reason like Nassim Taleb — your job is FRAGILITY DETECTION and TAIL RISK, "
+        "not generic pessimism. Follow this checklist:\n"
+        "1. CONVEXITY CHECK: Is this portfolio CONVEX (limited downside, large upside) "
+        "or CONCAVE (large downside, limited upside)? Use the tail asymmetry ratio in "
+        "your context — if tail_ratio < 1.0, the portfolio is concave and you must name it.\n"
+        "2. TURKEY PROBLEM: Is regime entropy dangerously low? Low entropy = complacency. "
+        "The turkey feels safe until Thanksgiving. If regime confidence is high AND vol is "
+        "low, flag the 'calm before the storm' explicitly.\n"
+        "3. VIA NEGATIVA: What single event — NOT priced in by the quant model — would "
+        "most harm this portfolio? Fat tails come from the events the model doesn't see.\n"
+        "4. CAUSAL MECHANISM ATTACK: If AI PM causal mechanisms are listed, find the one "
+        "most vulnerable to a fat-tail shock. Which mechanism assumes Gaussian conditions? "
+        "Supply shocks, liquidity gaps, and correlation spikes happen in the tails, not "
+        "the middle of the distribution.\n"
+        "5. COHERENCE FRAGILITY: Do the portfolio clusters all break together under the "
+        "same tail event? If so, the 15 positions are really one bet.\n"
+        "Use Taleb's vocabulary: antifragile, convexity, barbell, turkey problem, "
+        "via negativa, fat tail, Lindy effect. Cite the Monte Carlo numbers. "
+        "Be specific. Keep under 150 words."
         f"{track_record}"
-        f"{_EVIDENCE_RULE}"  # EVIDENCE RULE — see module constant
+        f"{_EVIDENCE_RULE}"
         f"{_causal_context}"
     )
     try:
@@ -614,7 +673,7 @@ def run_devils_advocate(portfolio_state: dict) -> str:
             system_prompt=_da_system_prompt,
             user_prompt=user_prompt,
             model=DEBATE_MODEL,
-            temperature=0.7,
+            temperature=0.65,
             use_cache=True,
         )
 
@@ -913,10 +972,12 @@ def run_bull_rebuttal(portfolio_state: dict, round1_args: dict) -> str:
     try:
         return generate_structured(
             system_prompt=(
-                "You are the Bull Analyst at Ascent Capital in Round 2 of debate. "
+                "You are the Druckenmiller-inspired Bull Analyst at Ascent Capital in Round 2. "
                 "You have read all Round 1 arguments. Rebut the bear's and devil's "
-                "strongest concerns concisely. Do not repeat your Round 1 argument — "
-                "engage directly with their specific claims. Under 75 words."
+                "strongest concerns. Is the bear manufacturing risk or citing real fragility? "
+                "Is the devil's tail-risk argument already reflected in the Monte Carlo p5? "
+                "Engage with their specific claims. Do not repeat your Round 1 argument. "
+                "Under 75 words."
             ),
             user_prompt=user_prompt,
             model=DEBATE_MODEL,
@@ -939,10 +1000,12 @@ def run_bear_rebuttal(portfolio_state: dict, round1_args: dict) -> str:
     try:
         return generate_structured(
             system_prompt=(
-                "You are the Bear Analyst at Ascent Capital in Round 2 of debate. "
-                "You have read all Round 1 arguments. Rebut the bull's and regime "
-                "specialist's strongest points. Identify the risk they are still not "
-                "taking seriously. Under 75 words."
+                "You are the Burry-inspired Bear Analyst at Ascent Capital in Round 2. "
+                "You have read all Round 1 arguments. What downside risk is the bull "
+                "still glossing over? What number did they not address? "
+                "If the regime specialist gave the portfolio a pass, did they account "
+                "for the weakest position's fragility? Be terse. Cite a specific number. "
+                "Under 75 words."
             ),
             user_prompt=user_prompt,
             model=DEBATE_MODEL,
@@ -965,10 +1028,12 @@ def run_devils_advocate_rebuttal(portfolio_state: dict, round1_args: dict) -> st
     try:
         return generate_structured(
             system_prompt=(
-                "You are the Devil's Advocate at Ascent Capital in Round 2 of debate. "
-                "You have read all Round 1 arguments. Find the shared blind spot — "
-                "the assumption that even the bear is making. Make it concrete and "
-                "quantified if possible. Under 75 words."
+                "You are the Taleb-inspired Devil's Advocate at Ascent Capital in Round 2. "
+                "You have read all Round 1 arguments. Find the shared FRAGILITY — "
+                "the assumption that EVEN THE BEAR is making about normal conditions. "
+                "What tail event would invalidate both the bull AND the bear's framing? "
+                "Is the debate itself concave — arguing about the middle while ignoring the tails? "
+                "Make it concrete. Use Taleb vocabulary. Under 75 words."
             ),
             user_prompt=user_prompt,
             model=DEBATE_MODEL,
