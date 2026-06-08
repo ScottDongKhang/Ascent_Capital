@@ -77,3 +77,95 @@ def test_update_options_cache_does_not_duplicate(tmp_path):
 
     df = pd.read_parquet(cache_path)
     assert len(df[df["symbol"] == "CAT"]) == 1
+
+
+# ── CFTC positioning tests ─────────────────────────────────────────────────────
+
+def test_fetch_cot_returns_dataframe_row():
+    from ascent.data.ingest.cftc_positioning import fetch_cot_row
+    mock_snapshot = {
+        "net_noncommercial_long": 125240,
+        "noncomm_long": 187420,
+        "noncomm_short": 62180,
+        "pct_long_noncommercial": 63.2,
+        "open_interest": 3200000,
+        "as_of_date": "2026-06-06",
+    }
+    with patch("ascent.data.ingest.cftc_positioning.get_cot_snapshot", return_value=mock_snapshot):
+        result = fetch_cot_row()
+    assert result is not None
+    assert "net_noncommercial_long" in result
+    assert "as_of_date" in result
+    assert result["net_noncommercial_long"] == 125240
+
+
+def test_fetch_cot_returns_none_on_failure():
+    from ascent.data.ingest.cftc_positioning import fetch_cot_row
+    with patch("ascent.data.ingest.cftc_positioning.get_cot_snapshot", return_value=None):
+        result = fetch_cot_row()
+    assert result is None
+
+
+def test_update_cot_cache_appends_row(tmp_path):
+    from ascent.data.ingest.cftc_positioning import update_cot_cache
+    mock_row = {
+        "net_noncommercial_long": 125240,
+        "noncomm_long": 187420,
+        "noncomm_short": 62180,
+        "pct_long_noncommercial": 63.2,
+        "open_interest": 3200000,
+        "as_of_date": "2026-06-06",
+    }
+    cache_path = tmp_path / "cftc_positioning.parquet"
+    with patch("ascent.data.ingest.cftc_positioning.fetch_cot_row", return_value=mock_row):
+        update_cot_cache(cache_path=cache_path)
+    assert cache_path.exists()
+    df = pd.read_parquet(cache_path)
+    assert len(df) == 1
+    assert df.iloc[0]["net_noncommercial_long"] == 125240
+
+
+def test_update_cot_cache_deduplicates(tmp_path):
+    from ascent.data.ingest.cftc_positioning import update_cot_cache
+    existing = pd.DataFrame([{
+        "as_of_date": "2026-06-06",
+        "net_noncommercial_long": 120000,
+        "noncomm_long": 180000,
+        "noncomm_short": 60000,
+        "pct_long_noncommercial": 60.0,
+        "open_interest": 3000000,
+    }])
+    cache_path = tmp_path / "cftc_positioning.parquet"
+    existing.to_parquet(cache_path, index=False)
+
+    mock_row = {
+        "net_noncommercial_long": 125240,
+        "noncomm_long": 187420,
+        "noncomm_short": 62180,
+        "pct_long_noncommercial": 63.2,
+        "open_interest": 3200000,
+        "as_of_date": "2026-06-06",
+    }
+    with patch("ascent.data.ingest.cftc_positioning.fetch_cot_row", return_value=mock_row):
+        update_cot_cache(cache_path=cache_path)
+
+    df = pd.read_parquet(cache_path)
+    assert len(df) == 1
+
+
+def test_get_latest_cot_reads_cache(tmp_path):
+    from ascent.data.ingest.cftc_positioning import get_latest_cot
+    df = pd.DataFrame([
+        {"as_of_date": "2026-05-30", "net_noncommercial_long": 110000,
+         "noncomm_long": 170000, "noncomm_short": 60000,
+         "pct_long_noncommercial": 56.7, "open_interest": 3000000},
+        {"as_of_date": "2026-06-06", "net_noncommercial_long": 125240,
+         "noncomm_long": 187420, "noncomm_short": 62180,
+         "pct_long_noncommercial": 63.2, "open_interest": 3200000},
+    ])
+    cache_path = tmp_path / "cftc_positioning.parquet"
+    df.to_parquet(cache_path, index=False)
+    result = get_latest_cot(cache_path=cache_path)
+    assert result is not None
+    assert result["as_of_date"] == "2026-06-06"
+    assert result["net_noncommercial_long"] == 125240
