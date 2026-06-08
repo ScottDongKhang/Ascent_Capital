@@ -104,6 +104,20 @@ One step at a time. Verify existing logic before proposing fixes. `ast.parse` af
 
 > Full history archived to `docs/session_log_archive.md`.
 
+### 2026-06-08 (OpenBB integration — hub reliability + CBOE/CFTC/FF alpha data + AI PM live tools)
+- `ascent/integrations/openbb_client.py` (new): central adapter — `fetch_symbol` (tiingo→yfinance fallback), `fetch_return`, `get_live_macro`, `get_options_snapshot` (IV skew/PCR/ATM IV), `get_cot_snapshot`. All OpenBB calls go here.
+- `ascent/data/hub.py`: `_fetch_symbol` now tries openbb_client first; yfinance fallback preserved.
+- `memory/ticker_memory.py`: `_fetch_return` now tries openbb_client first; yfinance fallback preserved.
+- `ascent/data/ingest/cboe_options.py` (new): historical CBOE options rows — IV skew, PCR, ATM IV, iv_rank_52w. Writes to `options_flow.parquet`.
+- `ascent/data/ingest/cftc_positioning.py` (new): CFTC COT S&P 500 e-mini speculator positioning. Writes to `cftc_positioning.parquet`.
+- `ascent/data/ingest/famafrench_factors.py` (new): Fama-French 5-factor + momentum daily returns. Writes to `famafrench_factors.parquet`.
+- `ascent/features/feature_defs.py`: `factor_loadings(returns, factor_df, window)` appended — rolling beta per factor for ML sleeve.
+- `agents/ai_pm_agent.py`: `get_live_options_flow` + `get_cot_positioning` tools added to Phase 2 (`AI_PM_TOOLS`). Both Phase 2 only — not in `PRE_THESIS_TOOLS`.
+- `run_all_agents.py`: CBOE/CFTC/FF ingest wired after hub run using `us_symbols`, each in independent try/except.
+- Tests: 11 openbb_client + 13 new_ingest = 24 new tests pass. 777 existing tests unchanged. No regressions.
+- New env vars (optional): `TIINGO_TOKEN` (price reliability), `CFTC_APP_TOKEN` (COT rate limiting).
+- Nothing left open.
+
 ### 2026-06-08 (TradingAgents integration — per-ticker memory + instrument identity + StockTwits)
 - `memory/ticker_memory.py` (new): per-ticker AI PM decision log, outcome scoring (incremental alpha at 10d/21d), win/miss/fade/early classification. Storage: `memory/ticker_memory.jsonl`.
 - `ascent/integrations/stocktwits.py` (new): StockTwits public API crowd sentiment, band classification, stale guard. Logs IC to `logs/stocktwits_ic.jsonl`.
