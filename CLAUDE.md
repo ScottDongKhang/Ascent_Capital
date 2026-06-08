@@ -113,6 +113,21 @@ One step at a time. Verify existing logic before proposing fixes. `ast.parse` af
 - Fixes: `scored=True` on None fetch (now `continue`), atomic write via `.tmp`+rename, zero-alpha → `None` verdict, walrus operator for ticker context, weak test assertion strengthened.
 - Nothing left open.
 
+### 2026-06-07 (MiroFish sentiment validation layer + judge → Opus)
+- `ascent/integrations/mirofish_client.py` (new): MiroFish REST client — 8-step API flow, 8-min deadline timer, graceful None on any failure.
+- `ascent/integrations/analogue_matcher.py` (new): TF-IDF cosine similarity against 25-event `data_cache/mirofish_analogues.json` library; keyword fallback if sklearn unavailable.
+- `ascent/integrations/mirofish_calibration.py` (new): `bootstrap_calibration()` + `get_base_rate()` + `record_entry()`. Idempotent bootstrap from analogues library.
+- `ascent/integrations/get_mirofish_sentiment.py` (new): full tool executor — alignment score formula, decision rules (amplify >0.70, trim 25% <0.40 + negative base rate), timeout fallback.
+- `agents/ai_pm_agent.py`: `get_mirofish_sentiment` wired into `AI_PM_TOOLS` (Phase 2 only, not PRE_THESIS_TOOLS).
+- `debate/agents.py`: devil's advocate attacks AI PM thesis when mirofish alignment < 0.50.
+- `debate/judge.py`: judge upgraded from `SONNET_MODEL` → `DEFAULT_MODEL` (Opus) per user direction.
+- `run_all_agents.py`: forwards `mirofish_sentiment` from AI PM result into `portfolio_state` for debate.
+- `data_cache/mirofish_analogues.json` (new): 25 landmark market events (force-added, gitignored dir).
+- `data_cache/mirofish_calibration.json` (new): empty initial state, bootstrapped at runtime.
+- 19/19 MiroFish tests + 77/77 debate+AI PM tests passing.
+- Files: above new + `ascent/integrations/__init__.py`, `agents/ai_pm_agent.py`, `debate/agents.py`, `debate/judge.py`, `run_all_agents.py`.
+- Nothing left open.
+
 ### 2026-06-07 (debate persona upgrade — Druckenmiller / Burry / Taleb)
 
 The debate layer had a structural flaw: all three LLM agents (bull, bear, devil's advocate) shared the same underlying epistemology — risk/return framing, Gaussian assumptions, generic "concentration risk" arguments. They disagreed on conclusions but asked the same questions. That's not a real risk committee; it's one brain arguing with itself.
