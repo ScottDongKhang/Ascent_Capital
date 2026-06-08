@@ -153,6 +153,26 @@ def _write_decision_log(today, ai_pm_result, quant_weights: dict,
         with open(AI_PM_DECISION_LOG, "a") as f:
             f.write(json.dumps(entry) + "\n")
         print(f"[Runner] AI PM decision logged (Level {entry['level']}, {len(overrides)} overrides)")
+
+        # Record per-ticker decisions for ticker memory
+        try:
+            from memory.ticker_memory import record_decision as _record_ticker
+            ai_portfolio = (ai_pm_result.portfolio
+                            if ai_pm_result and not ai_pm_result.fallback else {})
+            for ov in overrides:
+                sym = ov.get("symbol", "")
+                if not sym:
+                    continue
+                _record_ticker(
+                    symbol=sym,
+                    date_str=today.isoformat(),
+                    ai_w=ai_portfolio.get(sym, quant_weights.get(sym, 0.0)),
+                    quant_w=quant_weights.get(sym, 0.0),
+                    decision_type=ov.get("ai_action", ov.get("override_type", "unknown")),
+                    rationale_snippet=ov.get("reason", "")[:200],
+                )
+        except Exception as _tm_e:
+            print(f"[Runner] Ticker memory record skipped: {_tm_e}")
     except Exception as e:
         print(f"[Runner] Decision log skipped: {e}")
 HALT_OVERRIDE_PATH  = Path("execution/halt_override.json")
@@ -1822,6 +1842,15 @@ def _log_holdings(today):
             )
         except Exception as _fbe:
             print(f"[Runner] Feedback/authority update skipped: {_fbe}")
+
+        # Score any ticker memory entries now old enough (10d+)
+        try:
+            from memory.ticker_memory import score_outcomes as _score_ticker
+            _n_scored = _score_ticker(today)
+            if _n_scored:
+                print(f"[Runner] Ticker memory: scored {_n_scored} outcome(s)")
+        except Exception as _ste:
+            print(f"[Runner] Ticker memory scoring skipped: {_ste}")
 
     except Exception as e:
         print(f"[Runner] Holdings log skipped ({e})")
