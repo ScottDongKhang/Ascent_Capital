@@ -128,6 +128,17 @@ One step at a time. Verify existing logic before proposing fixes. `ast.parse` af
 - Files: above new + `ascent/integrations/__init__.py`, `agents/ai_pm_agent.py`, `debate/agents.py`, `debate/judge.py`, `run_all_agents.py`.
 - Nothing left open.
 
+### 2026-06-08 (AutoHedge integration — Exa news, yfinance fundamentals, ticker discovery)
+- `ascent/integrations/exa_news.py` (new): `fetch_news()` calls Exa API (free tier, 1k/month), returns {sym: [headline...]} for portfolio universe daily. Delays 0.2s between requests.
+- `agents/ai_pm_agent.py`: `_fetch_financials()` (new) — yfinance quarterly ratios (current_ratio, D/E, rev_growth_yoy, gross_margin), 24h cache at `data_cache/financials_cache.json`, atomic write. `_build_data_grounding()` extended: appends FUNDAMENTALS + LIVE NEWS blocks; accepts `news_context` param.
+- `run_ai_pm_prethesis()` and `run_ai_pm()` both accept `news_context_arg` — wired from `run_all_agents.py`.
+- `ascent/main.py` + `agents/us_equities_agent.py`: `extra_symbols: list[str] | None` passthrough — lets mini-rebalance inject a discovered ticker in-memory without mutating config.
+- `ascent/strategy/ticker_discovery.py` (new): `run_discovery()` uses HAIKU_MODEL to identify ONE new ticker from Exa news grounded in actual headlines. Returns `DiscoveryResult` or None if conviction < 0.75.
+- `run_all_agents.py`: `_check_mini_rebalance_cooldown()` (5 trading day gate), `_write_mini_rebalance_log()`, `_trigger_mini_rebalance()` (runs full agent + debate gate before submitting). Exa fetch runs daily before non-rebalance path. Discovery wired into non-rebalance block.
+- Tests: 6 (exa_news) + 7 (financials) + 7 (ticker_discovery) = 20 new tests, all passing.
+- Files: `ascent/integrations/exa_news.py`, `ascent/strategy/ticker_discovery.py`, `agents/ai_pm_agent.py`, `ascent/main.py`, `agents/us_equities_agent.py`, `run_all_agents.py`, `tests/integrations/test_exa_news.py`, `tests/agents/test_ai_pm_financials.py`, `tests/strategy/test_ticker_discovery.py`.
+- Open: set `EXA_API_KEY` env var before first production run. Key gotcha: `loguru` not installed — use `import logging` pattern, not loguru.
+
 ### 2026-06-07 (debate persona upgrade — Druckenmiller / Burry / Taleb)
 
 The debate layer had a structural flaw: all three LLM agents (bull, bear, devil's advocate) shared the same underlying epistemology — risk/return framing, Gaussian assumptions, generic "concentration risk" arguments. They disagreed on conclusions but asked the same questions. That's not a real risk committee; it's one brain arguing with itself.
