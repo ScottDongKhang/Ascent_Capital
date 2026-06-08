@@ -505,6 +505,37 @@ AI_PM_TOOLS = [
         },
     },
     {
+        "name": "get_mirofish_sentiment",
+        "description": (
+            "Run a MiroFish crowd-intelligence simulation for your AMPLIFY picks. "
+            "Simulates hundreds of diverse market participant personas reacting to the event thesis. "
+            "Returns: alignment_score (0-1, does crowd agree with AI PM thesis?), "
+            "historical_base_rate (what happened in similar past events), "
+            "top_themes (what the crowd focused on), warning_flags (contradictions to flag). "
+            "ONLY call for your 1-2 AMPLIFY candidates, BEFORE propose_portfolio. "
+            "If status=timeout, log 'mirofish_unavailable' and proceed — never block on this tool."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "event_description": {
+                    "type": "string",
+                    "description": (
+                        "The specific thesis catalyst as a market event sentence. "
+                        "E.g. 'Infrastructure spending acceleration — federal contracts accelerating for CAT and STRL'. "
+                        "Be specific to the thesis, not generic."
+                    ),
+                },
+                "symbols": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Your AMPLIFY symbols (1-4 max)",
+                },
+            },
+            "required": ["event_description", "symbols"],
+        },
+    },
+    {
         "name": "propose_portfolio",
         "description": "REQUIRED: Submit your final portfolio and investment thesis. Call this to end the research loop.",
         "input_schema": {
@@ -720,6 +751,21 @@ Step 3 — CONVICTION GATE (for each proposed reduce):
   If blocked → drop the reduce. Accept quant weight.
 
 Max 6 signal tools total in Phase 3. Prioritize AMPLIFY scan over reduce research.
+
+══ MIROFISH CROWD VALIDATION (AMPLIFY picks only) ══
+For your 1-2 AMPLIFY picks, call get_mirofish_sentiment with:
+  - event_description: the specific thesis catalyst as one sentence (not the symbol, the REASON it moves)
+    Good: 'Infrastructure spending acceleration driving federal contract awards for heavy equipment'
+    Bad:  'CAT is an AMPLIFY pick'
+  - symbols: your AMPLIFY symbols (max 4)
+
+Use the result:
+  alignment_score > 0.70  → CONVICTION AMPLIFIER: go to 10% weight without all 3 AMPLIFY conditions
+  alignment_score < 0.40 AND historical_base_rate negative → SOFT REDUCE: 25% size cut, log warning_flags
+  status = timeout         → log 'mirofish_unavailable' in thesis, proceed at standard sizing
+
+Call AFTER identifying AMPLIFY candidates (Phase 3 Step 1), BEFORE propose_portfolio.
+Do NOT call for non-AMPLIFY positions. Do NOT block on this — if it times out, continue.
 
 ══ PHASE 4 — DELIBERATE + SUBMIT ══
 Before propose_portfolio, WRITE:
@@ -1612,6 +1658,18 @@ def _tool_get_causal_graph(inputs: dict) -> str:
         return f"get_causal_graph failed: {exc}"
 
 
+def _tool_get_mirofish_sentiment(inputs: dict) -> str:
+    """Delegate to the get_mirofish_sentiment tool executor."""
+    try:
+        from ascent.integrations.get_mirofish_sentiment import get_mirofish_sentiment
+        return get_mirofish_sentiment(inputs)
+    except ImportError:
+        return "MiroFish integration not available — ascent/integrations/get_mirofish_sentiment.py not found."
+    except Exception as exc:
+        log.warning("[AIPMAgent] get_mirofish_sentiment failed: %s", exc)
+        return f"MiroFish tool failed: {exc}. Log 'mirofish_unavailable' and proceed."
+
+
 def _tool_propose_prethesis(inputs: dict, result_store: list) -> str:
     """Seal the pre-thesis. Stores it so run_ai_pm_prethesis() can return it."""
     result_store.append(inputs)
@@ -1695,6 +1753,7 @@ def _make_executor(result_store: list, precomputed: dict | None = None):
         "get_scenario_plan":            _tool_get_scenario_plan,
         "get_weekend_research":         _tool_get_weekend_research,
         "get_crowding_signal":          _tool_get_crowding_signal,
+        "get_mirofish_sentiment":       _tool_get_mirofish_sentiment,
         "propose_portfolio":            lambda i: _tool_propose_portfolio(i, result_store),
     }
 
