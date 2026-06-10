@@ -42,7 +42,7 @@ _MAX_CHANGE_PCTS = {
     "suspended": 0.0,
 }
 
-_ALL_TYPES = ["adversarial_thesis", "regime_sizing", "coherence_risk", "event_risk"]
+_ALL_TYPES = ["adversarial_thesis", "regime_sizing", "coherence_risk", "event_risk", "conviction_press"]
 
 
 # ── State I/O ─────────────────────────────────────────────────────────────────

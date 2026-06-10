@@ -30,7 +30,7 @@ def run_judge(
     """
     Synthesize all debate arguments into a verdict + ONE adversarial position change.
 
-    Defaults to 'reduce_size' + no position_changes on parsing failure.
+    Defaults to 'proceed' (degraded=True) + no position_changes on parsing failure.
     Defaults to empty position_changes if no flag clears the authority threshold.
     """
     round2_args       = round2_args or {}
@@ -100,7 +100,12 @@ def run_judge(
         "   - SUSPENDED types may NOT be used\n"
         "   - Weight change must be ≥1% to be worth the intervention cost\n"
         "   - If no flag clears the bar, set position_changes to []\n"
-        "   - Cannot increase any position (only reduce)\n"
+        "   - ONE change only, in EITHER direction (reduce OR conviction_press increase)\n"
+        "   - For a conviction_press (increase): ONLY valid when ALL THREE are true:\n"
+        "     (a) position is in quant top-quartile alpha rank\n"
+        "     (b) bull argument explicitly cited clean crowding signal or positive tail asymmetry\n"
+        "     (c) bear/devil's-advocate did NOT name this position as a specific concern\n"
+        "   - For a reduction: cite the specific adversarial flag or risk\n"
         "   - Cannot drop below 1% (use 1% as floor)\n\n"
         f"Current positions for reference:\n"
         + "\n".join(f"  {s}: {w:.1%}" for s, w in
@@ -117,7 +122,7 @@ def run_judge(
         '            "symbol": "TICKER",\n'
         '            "current_weight": 0.00,\n'
         '            "new_weight": 0.00,\n'
-        '            "intervention_type": "adversarial_thesis|regime_sizing|coherence_risk|event_risk",\n'
+        '            "intervention_type": "adversarial_thesis|regime_sizing|coherence_risk|event_risk|conviction_press",\n'
         '            "reason": "specific reason referencing the data",\n'
         '            "prediction": "X underperforms/outperforms Y over next 10 trading days"\n'
         "        }\n"
@@ -167,6 +172,9 @@ def run_judge(
             curr_w  = float(change.get("current_weight", weights.get(sym, 0)))
             itype   = change.get("intervention_type", "adversarial_thesis")
 
+            if sym not in weights:
+                continue
+
             # Authority check
             try:
                 from debate.adversarial_authority import get_authority
@@ -175,18 +183,27 @@ def run_judge(
                     print(f"[Judge] Skipping {itype} intervention on {sym} — type suspended")
                     continue
                 max_change = auth["allowed_change_pct"]
-                # Clamp new_weight to not exceed max_change reduction
-                min_allowed = max(0.01, curr_w - max_change)
-                new_w = max(new_w, min_allowed)
+                # Clamp: new_w must stay within max_change of current in either direction
+                new_w = max(curr_w - max_change, min(curr_w + max_change, new_w))
             except Exception:
-                pass
+                max_change = 0.02  # fallback: 2% max change
 
-            if sym not in weights:
+            # Drop trivially small changes (< 0.5pp)
+            if abs(weights[sym] - new_w) < 0.005:
                 continue
-            if new_w >= weights[sym]:  # must be a reduction
-                continue
-            if abs(weights[sym] - new_w) < 0.005:  # <0.5pp change = not worth it
-                continue
+
+            # For conviction_press: enforce 10% max-weight hard cap
+            MAX_WEIGHT = 0.10
+            if itype == "conviction_press" and new_w > MAX_WEIGHT:
+                new_w = MAX_WEIGHT
+            if itype == "conviction_press" and new_w <= weights[sym]:
+                continue  # a conviction_press must actually increase
+
+            # For reductions: enforce 1% floor
+            if itype != "conviction_press" and new_w < 0.01:
+                new_w = 0.01
+            if itype != "conviction_press" and new_w >= weights[sym]:
+                continue  # a reduction must actually reduce
 
             change["current_weight"] = round(weights.get(sym, curr_w), 6)
             change["new_weight"]     = round(new_w, 6)
@@ -197,11 +214,12 @@ def run_judge(
         return verdict
 
     except (json.JSONDecodeError, AssertionError, Exception) as e:
-        print(f"[Judge] Failed to parse verdict ({e}) — defaulting to reduce_size (safe failure)")
+        print(f"[Judge] Failed to parse verdict ({e}) — defaulting to proceed (degraded)")
         return {
-            "confidence":      0.3,
-            "recommendation":  "reduce_size",
-            "key_risks":       [f"Judge parsing failed ({str(e)[:80]}) — safe default"],
-            "reasoning":       "LLM output could not be parsed. Defaulting to reduce_size.",
-            "position_changes": [],
+            "confidence":        0.0,
+            "recommendation":    "proceed",
+            "key_risks":         [f"judge_parse_failure: {str(e)[:80]}"],
+            "reasoning":         "LLM output could not be parsed. Advisory layer degraded — proceeding without judge intervention.",
+            "position_changes":  [],
+            "degraded":          True,
         }

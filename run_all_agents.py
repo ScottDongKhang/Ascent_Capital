@@ -1681,15 +1681,28 @@ def main():
             old_w    = float(merged_weights.get(sym, 0))
             itype    = change.get("intervention_type", "adversarial_thesis")
 
-            if sym in merged_weights and new_w < old_w and new_w >= 0.01:
-                # Redistribute the freed weight proportionally to the other positions
-                freed = old_w - new_w
-                others = {s: w for s, w in merged_weights.items() if s != sym}
-                other_total = sum(others.values())
-                if other_total > 0:
-                    for s in others:
-                        merged_weights[s] += freed * (others[s] / other_total)
-                merged_weights[sym] = new_w
+            if sym in merged_weights and new_w >= 0.01:
+                MAX_WEIGHT = 0.10
+                is_increase = new_w > old_w
+
+                if is_increase:
+                    # Fund the increase by taking proportionally from all other positions
+                    needed = new_w - old_w
+                    others = {s: w for s, w in merged_weights.items() if s != sym}
+                    other_total = sum(others.values())
+                    if other_total > 0:
+                        for s in others:
+                            merged_weights[s] = max(0.0, merged_weights[s] - needed * (others[s] / other_total))
+                    merged_weights[sym] = min(new_w, MAX_WEIGHT)
+                else:
+                    # Original redistribution: freed weight goes proportionally to others
+                    freed = old_w - new_w
+                    others = {s: w for s, w in merged_weights.items() if s != sym}
+                    other_total = sum(others.values())
+                    if other_total > 0:
+                        for s in others:
+                            merged_weights[s] += freed * (others[s] / other_total)
+                    merged_weights[sym] = new_w
 
                 # Renormalize
                 total = sum(w for w in merged_weights.values() if w > 0)
@@ -1697,8 +1710,9 @@ def main():
                     merged_weights = {s: max(0.0, w / total)
                                       for s, w in merged_weights.items()}
 
+                direction = "↑" if is_increase else "↓"
                 print(f"\n[AdvInt] ADVERSARIAL INTERVENTION APPLIED:")
-                print(f"  {sym}: {old_w:.1%} → {new_w:.1%} [{itype}]")
+                print(f"  {sym}: {old_w:.1%} {direction} {new_w:.1%} [{itype}]")
                 print(f"  Reason: {change.get('reason', '')[:100]}")
                 print(f"  10d Prediction: {change.get('prediction', '')[:100]}")
 
@@ -1731,7 +1745,7 @@ def main():
                 print(f"[AdvInt] merged_weights.json updated with adversarial adjustment")
             else:
                 print(f"[AdvInt] Position change for {sym} skipped "
-                      f"(not in weights, not a reduction, or below 1% floor)")
+                      f"(not in weights or below 1% floor)")
 
     except Exception as e:
         print(f"[Runner] Debate failed ({e}) — proceeding to execution anyway")
