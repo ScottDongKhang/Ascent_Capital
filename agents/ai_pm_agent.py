@@ -46,6 +46,18 @@ def _build_data_grounding(
     Returns a compact table string. Empty string if data unavailable.
     """
     if not symbols:
+        # Still return news context even when no price data is available
+        if news_context:
+            news_rows = []
+            for sym_key, headlines in news_context.items():
+                for i, h in enumerate(headlines, 1):
+                    news_rows.append(f"  {sym_key}: [{i}] {h}")
+            if news_rows:
+                return (
+                    "\n══ LIVE NEWS (Exa, fetched today) ══════════════════════════════\n"
+                    + "\n".join(news_rows)
+                    + "\n════════════════════════════════════════════════════════════════\n"
+                )
         return ""
     try:
         import pandas as pd
@@ -319,6 +331,9 @@ class AIPreThesis:
     market_character: str = ""                               # e.g. "momentum_continuation"
     raw: Dict = field(default_factory=dict)
     causal_mechanisms: List = field(default_factory=list)    # List[CausalMechanism] — Phase B
+    conviction_reasons: List[Dict] = field(default_factory=list)  # [{symbol, claim, source, data_date}]
+    sector_thesis: List[Dict] = field(default_factory=list)       # [{sector, view, conviction, reason, source, data_date}]
+    directional_stance: Dict = field(default_factory=dict)        # {direction, thesis, upside_case_pct, downside_case_pct, falsifier, horizon_days}
 
     @property
     def conviction_symbols(self) -> List[str]:
@@ -810,8 +825,50 @@ _PROPOSE_PRETHESIS_TOOL = {
                 "enum": ["momentum_continuation", "sector_rotation", "risk_off", "risk_on",
                          "mean_reversion", "flight_to_quality", "uncertain"],
             },
+            "conviction_reasons": {
+                "type": "array",
+                "description": "Sourced, dated claims supporting your high-conviction names. Each claim must cite a real data source.",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "symbol":    {"type": "string"},
+                        "claim":     {"type": "string", "description": "Specific, falsifiable claim about this name"},
+                        "source":    {"type": "string", "description": "Where this data comes from (e.g. 'SEC 10-K 2024-03', 'earnings call 2024-02-15', 'FRED data')"},
+                        "data_date": {"type": "string", "description": "When this data was dated (ISO format YYYY-MM-DD)"},
+                    },
+                    "required": ["symbol", "claim", "source", "data_date"],
+                },
+            },
+            "sector_thesis": {
+                "type": "array",
+                "description": "Sector-level views with sourced reasoning.",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "sector":      {"type": "string"},
+                        "view":        {"type": "string", "description": "overweight|underweight|neutral"},
+                        "conviction":  {"type": "string", "description": "high|medium|low"},
+                        "reason":      {"type": "string"},
+                        "source":      {"type": "string"},
+                        "data_date":   {"type": "string"},
+                    },
+                },
+            },
+            "directional_stance": {
+                "type": "object",
+                "description": "Your directional macro stance for the next rebalance period. All fields required — this cannot be a hedge.",
+                "properties": {
+                    "direction":         {"type": "string", "enum": ["risk_on", "risk_off", "neutral"], "description": "Your net directional view"},
+                    "thesis":            {"type": "string", "description": "One sentence: why this direction, citing a specific observable condition"},
+                    "upside_case_pct":   {"type": "number", "description": "Expected portfolio upside if your thesis plays out (percent)"},
+                    "downside_case_pct": {"type": "number", "description": "Expected portfolio downside if your thesis is wrong (percent, positive number)"},
+                    "falsifier":         {"type": "string", "description": "ONE specific, market-observable condition that would prove you wrong. E.g. 'SPY closes below 480' or 'HY spread exceeds 450bp'"},
+                    "horizon_days":      {"type": "integer", "description": "Trading days over which this view applies"},
+                },
+                "required": ["direction", "thesis", "upside_case_pct", "downside_case_pct", "falsifier", "horizon_days"],
+            },
         },
-        "required": ["macro_view", "high_conviction_names"],
+        "required": ["macro_view", "high_conviction_names", "directional_stance"],
     },
 }
 
@@ -1116,6 +1173,12 @@ Now you have quant validation data. Your job: build the final portfolio.
 
 ══ YOUR SEALED PRE-THESIS (formed before seeing quant output) ══
 {prethesis_text}
+
+══ DIRECTIONAL ACCOUNTABILITY ══
+Your sealed directional stance is shown above. Your thesis must include `prethesis_disposition`:
+  FOLLOWED — your directional stance remained intact; state why you are still confident.
+  OVERRIDDEN — new information arrived AFTER sealing; name the specific data/event that changed.
+"Markets are uncertain" is not valid for OVERRIDDEN. You need a named post-seal catalyst.
 
 ══ HOW TO USE THE QUANT OUTPUT ══
 The quant model covers 900+ symbols with 6 years of OOS signal evidence. It is your
@@ -1664,6 +1727,19 @@ def _tool_propose_portfolio(inputs: dict, result_store: list) -> str:
             return ("REJECTED: You must set feedback_acknowledged=true and include worst_call_response "
                     "before submitting. Read the feedback file and acknowledge your worst recent call.")
 
+    # Enforce prethesis_disposition when a pre-thesis has been sealed.
+    _pt_path = _REPO_ROOT / "data_cache" / "ai_prethesis_latest.json"
+    if _pt_path.exists():
+        disposition = thesis.get("prethesis_disposition", "")
+        if not disposition or disposition not in ("FOLLOWED", "OVERRIDDEN"):
+            log.warning("[AIPMAgent] Phase 2 rejected — prethesis_disposition missing or invalid.")
+            return (
+                "REJECTED: Your thesis must include prethesis_disposition: either 'FOLLOWED' "
+                "(stance intact) or 'OVERRIDDEN' (name the specific post-seal information that "
+                "changed your view). Do not use 'OVERRIDDEN' for general uncertainty — only for "
+                "named post-seal events."
+            )
+
     # Attack #4 — conviction inflation cap enforced in code.
     # If >40% of thesis positions are 'high conviction', downgrade excess to 'medium'.
     from ascent.strategy.ai_pm_guardrails import check_conviction_inflation
@@ -2169,12 +2245,25 @@ def run_ai_pm_prethesis(
     except Exception:
         pass
 
+    # Build prethesis universe: current holdings + top alpha names
+    _prethesis_universe: list = list(_portfolio_symbols)
+    try:
+        _alpha_path = _REPO_ROOT / "data_cache" / "last_alpha_scores.json"
+        if _alpha_path.exists():
+            _alpha_data = json.loads(_alpha_path.read_text())
+            _top_alpha = sorted(_alpha_data.items(), key=lambda x: -float(x[1]))[:25]
+            for _sym, _ in _top_alpha:
+                if _sym not in _prethesis_universe:
+                    _prethesis_universe.append(_sym)
+    except Exception:
+        pass
+
     # Attack #1 — data grounding for Phase 1.
     # Pre-load verified numbers from cache so model reads real data, not training memory.
     _p1_grounding = _build_data_grounding(
-        [n.get("symbol", "") for n in _prethesis_universe[:30]] if _prethesis_universe else [],
+        _prethesis_universe[:30],
         news_context=news_context_arg,
-    ) if "_prethesis_universe" in dir() else _build_data_grounding([], news_context=news_context_arg)
+    )
 
     try:
         tool_completion(
@@ -2210,6 +2299,9 @@ def run_ai_pm_prethesis(
         sleeve_weight_prior=dict(raw.get("sleeve_weight_prior") or {}),
         market_character=str(raw.get("market_character") or ""),
         raw=raw,
+        conviction_reasons=list(raw.get("conviction_reasons") or []),
+        sector_thesis=list(raw.get("sector_thesis") or []),
+        directional_stance=dict(raw.get("directional_stance") or {}),
     )
 
     # Populate causal_mechanisms with Gate 1 + Gate 2 filtered mechanisms
@@ -2232,7 +2324,17 @@ def run_ai_pm_prethesis(
 
 def _format_prethesis_for_prompt(prethesis: AIPreThesis) -> str:
     """Render the sealed pre-thesis as readable text for the synthesis prompt."""
-    lines = [f"Macro view: {prethesis.macro_view}"]
+    lines = []
+    stance = prethesis.directional_stance or (prethesis.raw or {}).get("directional_stance", {})
+    if stance:
+        lines.append(
+            f"DIRECTIONAL STANCE: {stance.get('direction', '?').upper()} | "
+            f"Thesis: {stance.get('thesis', '')} | "
+            f"Up: +{stance.get('upside_case_pct', 0):.1f}% / Down: -{stance.get('downside_case_pct', 0):.1f}% | "
+            f"Falsifier: '{stance.get('falsifier', '')}' | "
+            f"Horizon: {stance.get('horizon_days', 21)} trading days"
+        )
+    lines.append(f"Macro view: {prethesis.macro_view}")
     if prethesis.regime_interpretation:
         lines.append(f"Regime interpretation: {prethesis.regime_interpretation}")
     if prethesis.sector_tilts:
