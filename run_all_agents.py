@@ -143,6 +143,7 @@ def _write_decision_log(today, ai_pm_result, quant_weights: dict,
             "title":                 authority_state.get("title", "Shadow"),
             "ai_weight":             authority_state.get("ai_weight", 0.0),
             "phase2_model":          phase2_model,
+            "fallback":              ai_pm_result.fallback if ai_pm_result else True,
             "perf_feedback_injected": Path("data_cache/ai_pm_perf_feedback.json").exists(),
             "quant_proposed":        {k: round(v, 6) for k, v in quant_weights.items()},
             "ai_pm_proposed":        {k: round(v, 6) for k, v in (ai_pm_result.portfolio if ai_pm_result and not ai_pm_result.fallback else {}).items()},
@@ -1326,15 +1327,16 @@ def main():
                 except Exception as _td_e:
                     print(f"[Runner] Track D snapshot skipped: {_td_e}")
 
-                # Decision log: record what AI PM proposed, what was applied
-                try:
-                    _write_decision_log(
-                        today, ai_pm_result, _quant_weights_snapshot,
-                        merged_weights, get_authority_state(), _phase2_model_used,
-                    )
-                except Exception as _dl_e:
-                    print(f"[Runner] Decision log skipped: {_dl_e}")
+            # Decision log: record on every rebalance — fallback and non-fallback
+            try:
+                _write_decision_log(
+                    today, ai_pm_result, _quant_weights_snapshot,
+                    merged_weights, get_authority_state(), _phase2_model_used,
+                )
+            except Exception as _dl_e:
+                print(f"[Runner] Decision log skipped: {_dl_e}")
 
+            if not ai_pm_result.fallback:
                 format_thesis({**ai_pm_result.thesis, "ai_pm_portfolio": ai_pm_result.portfolio})
 
                 # Log AI market character prediction for calibration tracking

@@ -1660,8 +1660,7 @@ def _tool_propose_portfolio(inputs: dict, result_store: list) -> str:
         acknowledged = thesis.get("feedback_acknowledged", False)
         if not acknowledged:
             log.warning("[AIPMAgent] Phase 2 rejected — feedback_acknowledged missing or false. "
-                        "Falling back to pure quant for this rebalance.")
-            result_store.append(AIPMResult(portfolio={}, thesis={}, fallback=True))
+                        "Returning rejection string so tool loop can retry.")
             return ("REJECTED: You must set feedback_acknowledged=true and include worst_call_response "
                     "before submitting. Read the feedback file and acknowledge your worst recent call.")
 
@@ -2438,7 +2437,8 @@ def run_ai_pm(
             f"A red team adversarial analyst has reviewed your portfolio submission and raised the following concerns:\n\n"
             f"{critique}\n\n"
             f"You may revise your portfolio in response to these concerns, or resubmit the same portfolio if you believe it is sound. "
-            f"Call propose_portfolio when ready."
+            f"Call propose_portfolio when ready. "
+            f"Remember to include feedback_acknowledged=true and worst_call_response in your thesis, as in your original submission."
         )
         try:
             tool_completion(
@@ -2454,10 +2454,10 @@ def run_ai_pm(
         except Exception as exc:
             log.warning("[AIPMAgent] Revision pass failed: %s — using initial proposal", exc)
 
-        if result_store_v2:
+        if result_store_v2 and not result_store_v2[-1].fallback and result_store_v2[-1].portfolio:
             log.info("[AIPMAgent] AI PM revised portfolio after red team critique")
             return result_store_v2[-1]
         else:
-            log.info("[AIPMAgent] AI PM did not revise — using initial proposal")
+            log.info("[AIPMAgent] AI PM revision fallback/empty — using initial proposal")
 
     return initial_result
