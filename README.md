@@ -24,9 +24,7 @@ The AI PM starts with zero allocation. It earns the right to manage capital by o
 
 ---
 
-## How it differs from other AI trading repos
-
-Most open-source "AI trading" repos are backtests with an LLM bolted on. The AI is a report writer: it reads some data, generates an opinion, and hands off to a portfolio optimizer that runs the same way with or without it. There's no memory, no feedback, no accountability. The AI's "decisions" don't compound.
+## Design principles
 
 Ascent is structured around three things that require the AI to actually be right over time:
 
