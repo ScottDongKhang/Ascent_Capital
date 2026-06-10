@@ -24,6 +24,10 @@ The AI PM starts with zero allocation. It earns the right to manage capital by o
 
 ---
 
+![Ascent Capital Architecture](docs/architecture.png)
+
+---
+
 ## Design principles
 
 Ascent is structured around three things that require the AI to actually be right over time:
