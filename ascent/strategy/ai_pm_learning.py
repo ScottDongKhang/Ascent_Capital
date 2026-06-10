@@ -145,8 +145,7 @@ def run_post_mortem(today: date, feedback: dict) -> Optional[str]:
         dec_date = dec.get("date", "")
         if dec_date in postmortems_done:
             continue
-        if dec.get("overrides_applied") and \
-           (today - date.fromisoformat(dec_date)).days >= 21:
+        if (today - date.fromisoformat(dec_date)).days >= 21:
             target = dec
             break
 
@@ -157,20 +156,28 @@ def run_post_mortem(today: date, feedback: dict) -> Optional[str]:
     scored = [s for s in feedback.get("last_5_decisions", [])
               if s.get("date", "") >= target["date"]]
     if not scored:
-        return None
+        # No individual override scores available — score the portfolio-level decision
+        n_overrides = target.get("n_overrides", len(target.get("overrides_applied", [])))
+        fallback_txt = (
+            f"  No individual override scores available for this rebalance.\n"
+            f"  AI PM made {n_overrides} override(s) vs quant. "
+            f"  {'Fallback: AI PM applied quant portfolio unchanged.' if target.get('fallback') else ''}\n"
+            f"  Overall portfolio-level performance data should be in the daily counterfactual log."
+        )
+        outcomes_text = fallback_txt
+    else:
+        outcomes_text = "\n".join(
+            f"  {s['symbol']:6s} {s['type']:8s}  AI={s['ai_w']:.1%} vs Quant={s['quant_w']:.1%}"
+            f"  10d={s.get('outcome_10d',0):+.3%}  21d={s.get('outcome_21d',0):+.3%}"
+            f"  → {(s.get('verdict','?') or '?').upper()}"
+            for s in scored
+        )
 
     from ascent.llm.client import SONNET_MODEL
     import anthropic
     client = anthropic.Anthropic()
 
     patterns = _load_pattern_memory()
-
-    outcomes_text = "\n".join(
-        f"  {s['symbol']:6s} {s['type']:8s}  AI={s['ai_w']:.1%} vs Quant={s['quant_w']:.1%}"
-        f"  10d={s.get('outcome_10d',0):+.3%}  21d={s.get('outcome_21d',0):+.3%}"
-        f"  → {(s.get('verdict','?') or '?').upper()}"
-        for s in scored
-    )
 
     prompt = f"""You are doing a post-mortem on your rebalance from {target['date']} (21+ days ago).
 

@@ -150,6 +150,7 @@ def _write_decision_log(today, ai_pm_result, quant_weights: dict,
             "overrides_applied":     overrides,
             "final_blended":         {k: round(v, 6) for k, v in blended_weights.items()},
             "thesis_summary":        str((ai_pm_result.thesis or {}).get("market_view", ""))[:200] if ai_pm_result and ai_pm_result.thesis else "",
+            "tool_failures":         list(ai_pm_result.tool_failures) if (ai_pm_result and hasattr(ai_pm_result, "tool_failures")) else [],
         }
         with open(AI_PM_DECISION_LOG, "a") as f:
             f.write(json.dumps(entry) + "\n")

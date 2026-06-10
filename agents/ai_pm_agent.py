@@ -303,6 +303,7 @@ class AIPMResult:
     portfolio: Dict[str, float]
     thesis: Dict[str, Any]
     fallback: bool = False
+    tool_failures: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -990,11 +991,10 @@ def _build_temporal_context(feedback: dict | None = None) -> str:
     # Inject accumulated pattern memory (grows after every post-mortem)
     pattern_str = ""
     try:
-        _pp = Path(__file__).resolve().parent.parent / "data_cache" / "ai_pm_pattern_context.txt"
-        if _pp.exists():
-            _content = _pp.read_text().strip()
-            if _content:
-                pattern_str = f"\n\n{_content}"
+        from ascent.strategy.ai_pm_learning import get_pattern_summary
+        _summary = get_pattern_summary()
+        if _summary:
+            pattern_str = f"\n\n{_summary}"
     except Exception:
         pass
 
@@ -1975,7 +1975,7 @@ def _make_prethesis_executor(result_store: list):
     return executor
 
 
-def _make_executor(result_store: list, precomputed: dict | None = None):
+def _make_executor(result_store: list, precomputed: dict | None = None, failures: list | None = None):
     from debate.agent_tools import (
         get_var_estimate, get_sector_concentration, get_position_momentum,
     )
@@ -2025,9 +2025,17 @@ def _make_executor(result_store: list, precomputed: dict | None = None):
         if fn is None:
             return f"Unknown tool: {tool_name}"
         try:
-            return fn(tool_inputs)
+            result = fn(tool_inputs)
+            # Record tools that indicate unavailability in-band
+            if failures is not None and isinstance(result, str):
+                _lower = result.lower()
+                if any(kw in _lower for kw in ("unavailable", "failed:", "timeout", "error:")):
+                    failures.append(tool_name)
+            return result
         except Exception as exc:
             log.warning("[AIPMAgent] Tool %s failed: %s", tool_name, exc)
+            if failures is not None:
+                failures.append(tool_name)
             return f"Tool {tool_name} failed: {exc}"
 
     return executor
@@ -2395,12 +2403,13 @@ def run_ai_pm(
 
     _system = _p2_grounding + _ticker_ctx + _system  # prepend grounding + history
 
+    _phase2_failures: List[str] = []
     try:
         tool_completion(
             system_prompt=_system,
             user_prompt=user_prompt,
             tools=AI_PM_TOOLS,
-            tool_executor=_make_executor(result_store, precomputed),
+            tool_executor=_make_executor(result_store, precomputed, failures=_phase2_failures),
             model=_phase2_model,
             max_tokens=4000,
             max_tool_calls=14,
@@ -2416,6 +2425,10 @@ def run_ai_pm(
     if not result_store:
         log.warning("[AIPMAgent] No propose_portfolio call — using fallback")
         return AIPMResult(portfolio={}, thesis={}, fallback=True)
+
+    # Attach Phase 2 tool failures to the result before red team pass
+    if _phase2_failures:
+        result_store[-1].tool_failures = list(_phase2_failures)
 
     # ── Red team adversarial self-play ────────────────────────────────────────
     initial_result = result_store[-1]
