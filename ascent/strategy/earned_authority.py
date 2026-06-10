@@ -263,23 +263,40 @@ def _apply_demotion(state: dict, today: str, target_level: int, cooldown_days: i
 
 
 def blend(ai_portfolio: Dict[str, float], quant_portfolio: Dict[str, float]) -> Dict[str, float]:
-    """Weight-average AI PM + quant portfolios using current level's ai_weight."""
+    """Apply AI PM changes as active-weight budget against quant portfolio.
+
+    ai_weight is the max one-way tracking-error budget (e.g. 0.05 = 5pp).
+    Deltas are scaled so gross one-way deviation stays within budget,
+    then dust positions (<0.5%) are dropped and weights renormalized.
+    """
+    if not ai_portfolio:
+        return dict(quant_portfolio)
+
     state = get_state()
-    ai_w  = state.get("ai_weight", 0.0)
-    qt_w  = 1.0 - ai_w
+    budget = state.get("ai_weight", 0.0)
 
-    blended: Dict[str, float] = {}
-    for sym in set(ai_portfolio) | set(quant_portfolio):
-        w = ai_w * ai_portfolio.get(sym, 0.0) + qt_w * quant_portfolio.get(sym, 0.0)
-        if w >= MIN_WEIGHT:
-            blended[sym] = w
+    if budget <= 0.0:
+        return dict(quant_portfolio)
 
+    all_syms = set(ai_portfolio) | set(quant_portfolio)
+    deltas = {
+        s: ai_portfolio.get(s, 0.0) - quant_portfolio.get(s, 0.0)
+        for s in all_syms
+    }
+    gross = sum(abs(d) for d in deltas.values()) / 2.0  # one-way deviation
+    scale = min(1.0, budget / gross) if gross > 0.0 else 0.0
+
+    blended = {
+        s: max(0.0, quant_portfolio.get(s, 0.0) + scale * deltas[s])
+        for s in all_syms
+    }
+    # Drop dust after scaling, then renormalize
+    DUST_THRESHOLD = 0.005  # 0.5% — lower than old MIN_WEIGHT to allow budgeted new names
+    blended = {s: w for s, w in blended.items() if w >= DUST_THRESHOLD}
     total = sum(blended.values())
     if total <= 0:
-        if not quant_portfolio:
-            log.error("[EarnedAuthority] blend() called with both portfolios empty")
         return dict(quant_portfolio)
-    return {sym: w / total for sym, w in blended.items()}
+    return {s: w / total for s, w in blended.items()}
 
 
 def _log_shadow_return(today: str, d_ret: float, as_ret: float, ai_weight: float) -> None:

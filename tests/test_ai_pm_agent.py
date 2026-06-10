@@ -148,18 +148,25 @@ def test_blend_union_of_positions():
 
 
 def test_blend_min_weight_filter():
-    """Positions below 0.02 after blending are dropped."""
+    """Positions that land below DUST_THRESHOLD (0.5%) after budget scaling are dropped.
+
+    With budget=0.01 (1pp) and TINY proposing 1% weight against 50%/50% quant,
+    the scaled delta is tiny enough that TINY lands well below the 0.5% dust threshold.
+    """
     with tempfile.TemporaryDirectory() as tmp:
         state_path = Path(tmp) / "earned_authority.json"
-        state_path.write_text(json.dumps(_make_state(phase=0, ai_weight=0.1)))
+        # Use budget=0.01 (1pp) — very tight, so TINY's budgeted weight stays sub-dust
+        state_path.write_text(json.dumps(_make_state(phase=0, ai_weight=0.01)))
         shadow_path = Path(tmp) / "shadow.jsonl"
         with patch("ascent.strategy.earned_authority.STATE_PATH", state_path):
             with patch("ascent.strategy.earned_authority.SHADOW_RETURNS_PATH", shadow_path):
                 import ascent.strategy.earned_authority as ea
-                ai = {"TINY": 0.05}   # 0.1 * 0.05 = 0.005 < 0.02
+                # TINY proposes 0.002 (0.2%) but quant has it at 0%; gross one-way ≈ 0.501
+                # scale = 0.01/0.501 ≈ 0.02 → TINY lands at ~0.004%, below 0.5% dust
+                ai = {"TINY": 0.002, "AAPL": 0.499, "MSFT": 0.499}
                 quant = {"AAPL": 0.50, "MSFT": 0.50}
                 result = ea.blend(ai, quant)
-    assert "TINY" not in result
+    assert "TINY" not in result, f"TINY should be dust-filtered but was {result.get('TINY', 0):.5f}"
     assert abs(sum(result.values()) - 1.0) < 0.001
 
 

@@ -57,7 +57,8 @@ def test_blend_at_level1_uses_5pct():
         with patch.object(ea, "STATE_PATH", sp):
             with patch.object(ea, "SHADOW_RETURNS_PATH", shadow):
                 result = ea.blend({"STRL": 1.0}, {"AAPL": 0.5, "MSFT": 0.5})
-    # 5% AI + 95% quant → STRL should appear at ~5% weight
+    # Budget=5pp one-way. AI delta is +1.0 for STRL, -0.5 each for AAPL/MSFT.
+    # Gross one-way=1.0 → scale=0.05 → STRL lands at ~5% after renorm.
     assert "STRL" in result
     assert abs(result["STRL"] - 0.05) < 0.01
 
