@@ -1,89 +1,56 @@
 # Ascent Capital
 
-![Tests](https://img.shields.io/badge/tests-716%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-777%20passing-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.12-blue)
 ![Status](https://img.shields.io/badge/status-live%20paper%20trading-informational)
 ![AI PM](https://img.shields.io/badge/AI%20PM-Claude%20Opus%204.6-blueviolet)
 ![Alpha](https://img.shields.io/badge/alpha%20sleeves-14-orange)
-![Learning](https://img.shields.io/badge/learning-Bayesian%20meta--learner-purple)
 ![OOS Sharpe](https://img.shields.io/badge/OOS%20Sharpe-0.518-green)
 
 ### [📊 Live Performance Dashboard →](https://scottdongkhang.github.io/Ascent_Capital)
-> Equity curve vs SPY · Current holdings · Full rebalance debate history · Updates automatically after every daily run.
+> Equity curve vs SPY · Current holdings · Full rebalance debate history · Updates after every daily run.
 
-**An AI-native quantitative investment fund built from scratch.** Not a backtest. Not a demo. A live system that reads SEC filings every night, debates its own trades before placing them, and earns the right to manage capital by being demonstrably right in live markets.
+A live Python trading system with an AI portfolio manager that earns capital allocation by demonstrating measurable edge in live markets.
 
----
-
-## In plain English
-
-Most investment funds employ portfolio managers who read research, argue about trade ideas, and decide where to put money. Ascent replaces that workflow with layered software — but software designed to be *harder on itself* than any human committee would be.
-
-Here's the full loop:
-
-1. **The system reads the market every night** — prices for 901 stocks, economic data from the Federal Reserve, SEC filings, earnings call transcripts, and analyst estimates.
-2. **14 independent signals score every stock** — from traditional price momentum to machine learning to a language model that reads quarterly earnings reports and flags when a company's narrative is quietly changing.
-3. **Before the quant model runs, an AI PM forms a thesis from scratch.** A Sonnet model reads macro data, SEC filings, earnings calls, and narratives, selects 8–15 names with written reasoning, and declares a regime view and market character — all before seeing a single quant ranking. This thesis is sealed. The quant cannot influence it retroactively.
-4. **Four specialist teams run their quantitative analysis** — US equities, bonds and commodities, international markets, and alternatives each compute their own alpha stack in parallel.
-5. **The AI PM synthesises its sealed thesis against the quant output** using Claude Opus. Where quant confirms the thesis, it concentrates. Where quant contradicts, it must defend the thesis with new evidence or stand down. Quant-only finds get included only if they fit the macro thesis. A separate "red team" AI then attacks the proposal from every angle.
-6. **A three-layer risk committee reviews every trade** — generating the strongest possible bearish case for each position, checking whether position sizes fit the current market regime, and verifying the portfolio isn't accidentally a single concentrated bet in disguise.
-7. **Orders execute, outcomes are tracked.** Every decision is logged with the full context that drove it. Twenty-one days later, the actual market result flows back in and permanently updates three compounding learning systems: a Bayesian sleeve-weight learner, an AI calibration tracker, and a regime blend authority tracker.
-
-The AI portfolio manager starts with zero authority and earns the right to manage real capital by demonstrating a measurable edge in live markets — one rebalance at a time.
+Paper trading on Alpaca since April 1, 2026.
 
 ---
 
-## What makes this different
+## What this is
 
-Most quant repos are backtests dressed up as systems. This one has four properties that don't exist elsewhere:
+Four quantitative agents (US equities, macro, international, alternatives) run in parallel. An AI PM forms an independent investment thesis before seeing quant output. The two are reconciled — the quant can confirm, contradict, or be overridden, but it cannot shape the thesis retroactively. A debate layer reviews every proposed trade before execution.
 
-### 1. A risk committee that earns its authority by being right
+The AI PM starts with zero allocation. It earns the right to manage capital by outperforming the quant system over 21 rebalances with a Sharpe edge ≥ 0.05, and loses authority automatically if its drawdown exceeds the quant's by 5 percentage points.
 
-Before every rebalance, an adversarial engine runs three analyses the mathematical model structurally cannot perform:
+---
 
-- **Short thesis generation** — A language model generates the strongest possible bearish case for every position in the book, scored 0–1. Positions above 0.6 are flagged to the debate agents.
-- **Regime-conditional sizing** — Is each position sized correctly for the current market environment? A trend-following ETF should carry different weight in a crisis than in a calm bull market. The engine maps every position to a type (`event_momentum`, `trend`, `reversion`, `etf`) and checks against a regime-conditional sizing table.
-- **Narrative coherence** — How many genuinely independent bets does the portfolio contain? If five positions are all effectively "EM export growth plays," that's one risk, not five. The engine clusters positions by narrative bucket and estimates the portfolio impact of a regime flip.
+## How it differs from other AI trading repos
 
-The engine makes **exactly one prioritized weight change** per rebalance, paired with a falsifiable 10-day prediction. That prediction is scored 14 calendar days later: did the flagged position underperform SPY by more than 1pp? If an intervention type falls below 40% accuracy after 30 outcomes, it loses authority and gets suspended. This is not a veto layer — it's a calibrated specialist that strengthens the longer it runs.
+Most open-source "AI trading" repos are backtests with an LLM bolted on. The AI is a report writer: it reads some data, generates an opinion, and hands off to a portfolio optimizer that runs the same way with or without it. There's no memory, no feedback, no accountability. The AI's "decisions" don't compound.
 
-### 2. A portfolio manager that learns from its own history — permanently
+Ascent is structured around three things that require the AI to actually be right over time:
 
-Every override the AI PM makes is stored with full context: override type, market regime, its weight vs. the quant model's weight, momentum, and any available alt-data signals (SEC tone, transcript sentiment, insider activity). Twenty-one days later, the realized return fills in automatically.
+**1. The AI PM forms its thesis before the quant runs.**
 
-Before any future decision of the same type in the same regime, the AI PM queries its own historical win rate. If it has been wrong on valuation calls in calm bull markets, the conviction gate reduces position size or blocks the move. At 30 matured cases, a logistic regression trains automatically on the accumulated history.
+The pre-thesis is sealed. Macro data, SEC filings, earnings transcripts → 8–15 conviction names with written reasoning and a regime assessment. The quant agents run after. Where quant confirms the thesis, Opus concentrates. Where quant contradicts, it must defend with new evidence or stand down. Quant-only finds get included only if they fit the thesis. This ordering matters: most AI-quant integrations let the quant run first, then use the AI to post-hoc rationalize the output.
 
-This is a compounding proprietary database. No system starting today has it, and it becomes more accurate with every rebalance.
+**2. Three compounding feedback loops run after every rebalance.**
 
-### 3. Earned authority, not assumed authority
+- **Bayesian meta-learner**: after each holding period, realized IC of every alpha sleeve updates a per-(regime, sleeve) Gaussian posterior. At rebalance 20, the sleeve weights are fully empirical — the system has learned on its own that, say, the fundamental sleeve adds no value in calm bull markets.
+- **AI calibration tracker**: the AI PM predicts the market character before every rebalance. That prediction is logged against realized IC leaders. At the next rebalance, the accuracy track record is injected back into the pre-thesis prompt. After 5+ rebalances, the AI is reasoning from its own performance history.
+- **AI regime blend**: the AI PM's regime assessment blends into the HMM's output at weight α, starting at 5%. Every accurate AI regime call increases α by 3pp, capped at 30%. Wrong calls don't increment it.
 
-The AI PM starts at 0% allocation and shadow-trades alongside the quant system. After 21 rebalance days with a Sharpe edge ≥ 0.05, it earns 25% of the capital allocation. It can reach 75%. If its drawdown exceeds the quant's by 5 percentage points at any point, it automatically reverts to Phase 0. The quant system always retains at least 20%.
+All three are running in production code, not described in a README.
 
-This is not a toggle — it's a continuous trust protocol with automatic safeguards.
+**3. Every component that makes claims earns the right to make them.**
 
-### 4. Three compounding learning loops that run after every rebalance
-
-Most AI trading systems are static — the model today is the same model it was six months ago. Ascent has three loops that make the system measurably smarter after every rebalance:
-
-**Loop 1: Bayesian sleeve-weight learning.** After each holding period, the realized IC of every alpha sleeve gets fed into a per-(regime, sleeve) Gaussian posterior. The system starts from evidence (29 days of real IC data), not theory. By rebalance 20 in a given regime, the sleeve weights are fully empirical — the system has discovered on its own that, in calm bull markets, the fundamental sleeve adds no value and should be zeroed. No one has to notice and patch it manually.
-
-**Loop 2: AI calibration.** Before every rebalance, the AI PM declares a market character prediction: *"This period looks like momentum_continuation."* That prediction is logged alongside the actual realized IC leaders. At the next rebalance, the system fills in whether it was right and injects the accuracy track record into the AI PM's pre-thesis prompt. After 5+ rebalances, Sonnet is reasoning from its own performance history, not from scratch each time.
-
-**Loop 3: AI regime blend.** The AI PM's pre-thesis declares a regime view with confidence. This blends into the HMM's regime output at weight α, starting at 5% and growing by 3pp each time the AI's call proves correct — capped at 30% (HMM always retains majority vote). When the HMM called "stressed" during April's tariff relief rally and triggered a 30% exposure cut, a well-calibrated AI reading the actual Fed language and earnings calls would have overridden it.
-
-### 5. A weekend brain that feeds the weekday
-
-Every Saturday and Sunday, the system runs a closed intelligence cycle: full alt-data sweep across 901 symbols, weekly post-mortem on attribution and AI PM override performance, adversarial scenario planning with probability-weighted stress tests, ML model retraining with hyperparameter search, and an AI PM deep research session across the full universe.
-
-Monday morning, the AI PM reads the debrief, the flagged scenarios, and the research memo before considering a single trade. The devil's advocate in the debate layer sees scenarios with LLM-assessed probabilities and estimated portfolio impact.
-
-Total cost: approximately $1.50 in API calls.
+The adversarial debate engine makes exactly one falsifiable weight change per rebalance and a 10-day prediction. Fourteen days later, the actual outcome is scored. Intervention types below 40% accuracy are suspended. Debate agents see their per-regime historical accuracy injected into their system prompts at each session. The AI PM can only increase its capital allocation by being demonstrably right over 21 consecutive rebalances.
 
 ---
 
 ## Live Track Record
 
-> Paper trading since April 1, 2026 · AI PM shadow period began May 19, 2026 · **[Full dashboard with equity curve →](https://scottdongkhang.github.io/Ascent_Capital)**
+> Paper trading since April 1, 2026 · AI PM shadow period began May 19, 2026 · **[Full dashboard →](https://scottdongkhang.github.io/Ascent_Capital)**
 
 <!-- LIVE_STATS_START -->
 | Metric | Value |
@@ -98,23 +65,18 @@ Total cost: approximately $1.50 in API calls.
 | Last Updated | 2026-06-09 |
 <!-- LIVE_STATS_END -->
 
-*Sharpe standard error over ~40 days is ~2.8 — not statistically significant yet. This is tracked honestly, which is why authority is earned over 21 rebalances, not calendar time.*
+*Sharpe standard error over ~47 days is large — not statistically significant. This is tracked honestly, which is why authority is earned over 21 rebalances, not calendar time.*
 
 | Date | Event |
 |------|-------|
 | Apr 1, 2026 | Paper trading live · 29 orders · 9 initial positions |
 | Apr 15, 2026 | Rebalance #1 · `REDUCE_SIZE` debate verdict · 27 orders |
 | May 5, 2026 | Rebalance #2 · Full rotation · 40 orders · NAV $104,815 |
-| May 19, 2026 | Rebalance #3 · 30 orders · NAV $103,790 · 18 positions · AI PM shadow begins |
-| May 22, 2026 | Decision memory + ML conviction gate live |
-| May 23, 2026 | Position health monitor grounded in live return data |
-| May 25, 2026 | Weekend intelligence pipeline + bidirectional wiring |
+| May 19, 2026 | Rebalance #3 · AI PM shadow begins |
 | May 26, 2026 | Adversarial Intelligence live — 3-layer engine, earned authority, one falsifiable change per rebalance |
-| May 27, 2026 | Rebalance #4 · AI PM two-phase architecture live (Sonnet pre-thesis + Opus synthesis) |
-| May 30, 2026 | AI-Native Learning System — Bayesian meta-learner, AI calibration, AI regime blend all wired |
-| May 31, 2026 | Anti-hallucination hardening — structured outputs enforced on LLM fundamental, narrative alpha, and all debate agents |
-| Jun 1, 2026 | Causal Intelligence (Phases A–D) — PC-algorithm DAG, regime-causal gate, priced-in filter, early-exit tracker, devil's advocate causal attacks |
-| Jun 1, 2026 | Monthly investor letter auto-generation wired into daily run |
+| May 27, 2026 | AI PM two-phase architecture live (Sonnet pre-thesis + Opus synthesis) |
+| May 30, 2026 | Bayesian meta-learner, AI calibration, AI regime blend all wired |
+| Jun 1, 2026 | Causal intelligence — PC-algorithm DAG, regime-causal gate, priced-in filter |
 
 ---
 
@@ -122,7 +84,7 @@ Total cost: approximately $1.50 in API calls.
 
 > Survivorship bias eliminated · fold-local regime fit · CPCV C(6,2) = 15 folds · no look-ahead
 
-The walk-forward runner uses `get_universe_on_date()` on every fold — symbols excluded if outside their validity window at the decision point. The regime engine is fitted on the training slice only. No future data contaminates any fold.
+`walk_forward_runner.py` calls `get_universe_on_date()` on every fold — symbols excluded if outside their validity window at the decision point. Regime engine fitted on training slice only.
 
 | Metric | Value | Period |
 |--------|------:|--------|
@@ -131,7 +93,7 @@ The walk-forward runner uses `get_universe_on_date()` on every fold — symbols 
 | Alpha vs SPY | +0.68% | |
 | Max Drawdown | −23.4% | |
 
-These figures reflect the quant system only. The AI PM, debate layer, and self-improve loop require live feedback by design and are not in this backtest. Survivorship bias is eliminated — `walk_forward_runner.py` calls `get_universe_on_date()` on every fold, excluding symbols outside their validity window at each decision point.
+These figures reflect the quant system only. The AI PM, debate layer, and self-improve loop require live feedback by design and are not in this backtest.
 
 ---
 
@@ -143,7 +105,7 @@ pip install -r requirements.txt
 
 python run_all_agents.py            # daily pipeline (auto-detects weekend mode on Sat/Sun)
 python run_all_agents.py --dry-run  # full logic, no orders submitted
-python -m pytest --tb=short -q     # 716 passed, 1 skipped
+python -m pytest --tb=short -q     # 777 passed
 streamlit run demo_app.py           # interactive investor demo
 streamlit run ascent/dashboard/live_dashboard.py --server.port 8502
 ```
@@ -224,38 +186,29 @@ python run_all_agents.py  ·  daily  ·  1:45 PM ET via launchd
 ├── AI-Native Learning System (three compounding loops — update each rebalance)
 │   ├── Bayesian Meta-Learner (sleeve weights → per-(regime,sleeve) Gaussian posterior)
 │   │   ├── Seeded from sleeve_ic_log.jsonl on first run (29 days of real IC data)
-│   │   ├── Gaussian conjugate update after each holding period: precision_post = 1/σ² + 1/σ²_ε
-│   │   ├── Kelly weights blended toward regime defaults: α_conf = min(1.0, n/20)
-│   │   └── AI prior injection: pre-thesis sleeve_weight_prior shifts μ_effective (this rebalance only)
+│   │   ├── Gaussian conjugate update after each holding period
+│   │   └── Kelly weights blended toward regime defaults: α_conf = min(1.0, n/20)
 │   ├── AI Calibration (market_character prediction tracking)
 │   │   ├── log_thesis(): records market_character before every rebalance
 │   │   ├── update_outcome(): fills realized IC leaders at next rebalance
 │   │   └── get_context(): injects ~200-token accuracy track record into pre-thesis
 │   └── AI Regime Blend (HMM × AI assessment)
-│       ├── blend_with_ai(): post-processes signal cache after engine.fit()
 │       ├── α starts at 0.05, grows +0.03 when AI call proves accurate, capped at 0.30
 │       └── Label override only when α × ai_confidence > 0.50
 │
-├── AI PM Agent (two-phase AI-native · rebalance days only)
+├── AI PM Agent (two-phase · rebalance days only)
 │   ├── Pre-thesis (Sonnet · runs BEFORE quant agents)
 │   │   ├── Reads: macro · SEC filings · earnings calls · narratives · crowding
 │   │   ├── Forms: 8-15 conviction names with written theses (independent of quant)
 │   │   └── Declares: regime_assessment · market_character · sleeve_weight_prior
-│   │       (regime blend + meta-learner picks these up immediately)
-│   ├── Synthesis (Opus · runs AFTER quant agents)
+│   ├── Synthesis (Opus · runs AFTER quant agents · 24-tool loop)
 │   │   ├── Quant confirms → concentrate (9-10%)
-│   │   │   Quant neutral → hold thesis weight
 │   │   │   Quant contradicts → defend with new catalyst or stand down
 │   │   │   Quant-only finds → include if macro thesis fits
 │   │   ├── Conviction gate before every override (win rate check + size friction)
-│   │   ├── PRE-MORTEM · coherence check · propose_portfolio(weights, thesis)
 │   │   ├── Red Team: Sonnet attacks per-position delta + systemic kill shot
 │   │   └── Revision: Opus defends or revises (max 6 tool calls)
 │   └── Post-thesis: calibration.log_thesis() records market_character prediction
-│
-├── Decision memory ingestion (each override → decision_memory.jsonl)
-│   └── Alt-data context auto-filled: sec_tone · transcript_sentiment ·
-│       trends_direction
 │
 ├── Earned authority blend (Phase 0 → 1 → 2 → 3 · hard cap 0.80)
 │
@@ -263,12 +216,14 @@ python run_all_agents.py  ·  daily  ·  1:45 PM ET via launchd
 │   ├── Layer 1: Short thesis per position (batched Haiku · score 0–1 · >0.6 flagged)
 │   ├── Layer 2: Regime-conditional sizing (5 position types × 5 regime states)
 │   ├── Layer 3: Narrative coherence (cluster → independent bets · regime flip cost)
-│   ├── Asymmetric debate: bull sees alt-data positives · bear sees flagged positions
-│   │                      devil sees coherence analysis · regime specialist sizes
 │   ├── Judge → ONE position change + falsifiable 10-day prediction
 │   └── Authority tiers: win_rate >70% → 4% max change · >50% → 2% · <40% → suspended
 │
 ├── Debate (advisory · 5 agents · 2 rounds · Monte Carlo + weekend scenario injection)
+│   ├── Bull: Druckenmiller lens — where is the asymmetry?
+│   ├── Bear: Burry lens — what is the weakest number?
+│   ├── Devil's advocate: Taleb lens — is this portfolio convex or concave?
+│   ├── Regime specialist (Haiku) · Quant sanity checker (no LLM)
 │   └── Verdict: proceed / reduce_size (Haiku adjusts weights) / halt_and_review
 │
 └── Execution
@@ -282,26 +237,24 @@ python run_all_agents.py  ·  daily  ·  1:45 PM ET via launchd
 
 ## Alpha Stack — 14 Sleeves
 
-Weights shown are the `calm_bull` regime defaults from `DEFAULT_ALPHA_WEIGHTS_BY_REGIME` in `ascent/alpha/stack.py`. In calm_bull, statarb and fundamental are zeroed and their weight is absorbed by trend (38%→58%). The Bayesian meta-learner then overrides these with empirically derived posteriors as rebalance data accumulates (100% empirical at n=20 observations per regime). IC gate zeroes any sleeve with rolling mean IC < −0.010.
+Weights are the `calm_bull` regime defaults from `DEFAULT_ALPHA_WEIGHTS_BY_REGIME` in `ascent/alpha/stack.py`. The Bayesian meta-learner overrides these with empirically derived posteriors as rebalance data accumulates (100% empirical at n=20 per regime). IC gate zeroes any sleeve with rolling mean IC < −0.010.
 
-| Sleeve | calm_bull | stressed/crisis | Signal Construction |
-|--------|----------:|----------------:|---------------------|
-| Trend | **58%** | 33–35% | Cross-sectional momentum; `mom_252d − mom_21d` skip-month at 20% sub-weight; absorbs statarb+fundamental in calm_bull |
-| Stat-arb | **0%** | 15% | Sector-residual mean reversion (requires `profiles.parquet`); zeroed in calm_bull — momentum dominates |
-| ML (XGBoost/CPCV) | 10% | 10% | C(6,2)=15 folds · 5-day purge + embargo · 12 features · weekend GridSearch |
+| Sleeve | calm_bull | stressed/crisis | Signal |
+|--------|----------:|----------------:|--------|
+| Trend | **58%** | 33–35% | Cross-sectional momentum; `mom_252d − mom_21d` skip-month |
+| Stat-arb | **0%** | 15% | Sector-residual mean reversion; zeroed in calm_bull |
+| ML (XGBoost/CPCV) | 10% | 10% | C(6,2)=15 folds · 5-day purge + embargo · 12 features |
 | Mean Reversion | 5% | 5% | Short-term reversal (z-score, 20-day window) |
-| Volatility | 5% | 5% | Long declining+stable vol: `−vol_trend_10d / vol_of_vol_21d` |
-| Fundamental | **0%** | **8%** | Gross profitability + accruals + asset growth; 45-day filing lag; zeroed in calm_bull by regime override |
-| Earnings (PEAD) | 5% | 5% | EPS surprise z-score · OLS momentum-beta residual · 1-bday lag |
+| Volatility | 5% | 5% | Long declining+stable vol |
+| Fundamental | **0%** | **8%** | Gross profitability + accruals + asset growth; zeroed in calm_bull |
+| Earnings (PEAD) | 5% | 5% | EPS surprise z-score · OLS momentum-beta residual |
 | Analyst | 5% | 5% | Revision signal; zero-filled when cache absent |
-| LLM Fundamental | 3% | 3% | Chicago Booth 6-step chain-of-thought via Haiku; cached by (symbol, quarter) |
-| Narrative Alpha | 3% | 3% | Quarter-over-quarter thesis shift detection via Haiku; keyed by md5(content) |
-| Options Flow | 2% | 2% | IV-adjusted sentiment; sparse — zero-filled if cache absent |
+| LLM Fundamental | 3% | 3% | Chicago Booth 6-step CoT via Haiku; cached by (symbol, quarter) |
+| Narrative Alpha | 3% | 3% | Quarter-over-quarter thesis shift via Haiku |
+| Options Flow | 2% | 2% | IV-adjusted sentiment; sparse |
 | Insider | 2% | 2% | Net transaction score; sparse |
 | Short Interest | 2% | 2% | Short squeeze signal; sparse |
 | Alt Data | 0% | 0% | SEC 10-K · earnings transcripts · Google Trends; 0% until IC gate passes |
-
-Weight priority chain: `active_alpha_config.json by_regime` → Bayesian meta-learner posterior → `DEFAULT_ALPHA_WEIGHTS_BY_REGIME` → config global → flat default. Distressed filter zeroes names with `mom_252d < −0.65` after blending. The `DEFAULT_ALPHA_WEIGHTS` dict exists in both `stack.py` and `self_improve.py` — adding a sleeve requires updating both.
 
 ---
 
@@ -327,60 +280,57 @@ Alpha scores
 
 ---
 
-## The Decision Memory System
+## Decision Memory
 
-Every AI PM override is stored in this schema:
+Every AI PM override is stored with this schema:
 
 ```python
 {
   "entry_id":              "2026-05-19_SATS",
-  "override_type":         "data_quality",    # data_quality / regime_macro /
-  "regime":                "calm_bull",        # news_event / correlation_risk / valuation
+  "override_type":         "data_quality",
+  "regime":                "calm_bull",
   "ai_action":             "REMOVED",
   "ai_weight":             0.0,
   "quant_weight":          0.065,
-  "momentum_252d":         31.96,             # 3196% = SanDisk/WDC merger artifact; correctly caught
-  "sec_tone":              -0.3,              # auto-filled from alt-data caches
+  "momentum_252d":         31.96,
+  "sec_tone":              -0.3,
   "transcript_sentiment":  null,
-  "wedge_21d":             null               # auto-filled 21 calendar days later
+  "wedge_21d":             null        # auto-filled 21 calendar days later
 }
 ```
 
-The conviction gate reads this history before every future override of the same type and regime:
+The conviction gate reads this history before any future override of the same type and regime:
 
 | Cases | Win Rate | Result |
 |-------|----------|--------|
-| < 5 | any | Proceed at −15% size (building track record) |
+| < 5 | any | Proceed at −15% size |
 | ≥ 5 | ≥ 60% + positive wedge | Full size |
 | ≥ 5 | ≥ 50% | 75% size |
 | ≥ 8 | < 35% | Blocked |
-| any | — | `data_quality`, `news_event`, `correlation_risk` always approved |
 
-At n ≥ 30 matured cases, a logistic regression trains automatically on the 15-dimensional feature vector. The AI PM interface never changes — it just becomes more accurate.
+At n ≥ 30 matured cases, a logistic regression trains automatically on the 15-dimensional feature vector.
 
 ---
 
 ## Weekend Intelligence Pipeline
 
-`run_all_agents.py` auto-detects Saturday/Sunday and branches into an 11-job intelligence run. A second run the same weekend skips expensive once-per-weekend jobs.
+`run_all_agents.py` auto-detects Saturday/Sunday and runs an 11-job intelligence pipeline. A second run the same weekend skips the once-per-weekend jobs.
 
 | Job | Frequency | Cost driver |
 |-----|-----------|-------------|
 | Alt-data sweep (901 symbols) | Every run | Haiku · SEC + transcripts |
 | LLM fundamental cache | Every run | Haiku · stale symbols only |
-| ML GridSearch retrain | Once | No LLM · writes flag for Monday |
-| Factor discovery | Once | PySR + Haiku proposals → `outputs/factor_proposals/` |
+| ML GridSearch retrain | Once | No LLM |
+| Factor discovery | Once | PySR + Haiku proposals |
 | Self-improve (20 variants) | Once | No LLM · `walk_forward_lightweight` |
 | Conviction gate retrain | Every run | No LLM · sklearn |
-| Adversarial calibration | Every run | No LLM · yfinance T+14d outcome scoring |
+| Adversarial calibration | Every run | No LLM · T+14d outcome scoring |
 | AI PM deep research | Once | Opus · full universe · no trade output |
-| Weekly debrief | Every run | Haiku · one synthesis call |
+| Weekly debrief | Every run | Haiku |
 | Adversarial scenario plan | Every run | Sonnet · 6 scenarios |
 | Memory ingestion | Every run | No LLM |
 
 **~$1.50 first run · ~$0.20 second run · ~$6–8/month.**
-
-Monday's AI PM reads the debrief, scenario plan, and research memo as its first three inputs before considering any individual position.
 
 ---
 
@@ -388,7 +338,7 @@ Monday's AI PM reads the debrief, scenario plan, and research memo as its first 
 
 HMM with K=2–4 states (best K selected via walk-forward cross-validation). Labels: `calm_bull`, `stressed`, `crisis`, `neutral`, `uncertain`.
 
-**Transition logic**: enter threshold 0.55 · exit threshold 0.35 · minimum dwell 3 days · entropy > 0.90 forces `uncertain`. Particle filter (500-particle SIR) runs continuously; batch refit every 5 days. Emergency refit triggers: SPY −3% + VIX > 30, 200MA cross, SPY/TLT correlation flip, break z-score > 3.5.
+Enter threshold 0.55 · exit threshold 0.35 · minimum dwell 3 days · entropy > 0.90 forces `uncertain`. Particle filter (500-particle SIR) runs continuously; batch refit every 5 days. Emergency refit triggers: SPY −3% + VIX > 30, 200MA cross, SPY/TLT correlation flip.
 
 Regime propagates through sleeve weights, position size caps, orchestrator base allocations, debate context, AI PM episodic memory, and VIXY hedge sizing.
 
@@ -399,32 +349,25 @@ Regime propagates through sleeve weights, position size caps, orchestrator base 
 | Component | Status | Notes |
 |-----------|--------|-------|
 | 14-sleeve alpha stack | ✅ live | Regime-conditional weights · Bayesian meta-learner · IC gate |
-| MVO + Black-Litterman | ✅ live | CLARABEL → SCS → rank-weight fallback chain |
+| MVO + Black-Litterman | ✅ live | CLARABEL → SCS → rank-weight fallback |
 | Factor risk model | ✅ live | FF5+UMD rolling OLS · Ledoit-Wolf shrinkage |
 | 4 specialist agents | ✅ live | US equities · macro · international · alternatives |
 | Multi-agent orchestration | ✅ live | Skill blend · correlation guard · coherence · position cap |
-| AI PM — two-phase AI-native | ✅ shadow | Sonnet pre-thesis (before quant) + Opus synthesis (after quant) · Phase 0 (0% weight) |
+| AI PM — two-phase | ✅ shadow | Phase 0 (0% weight) · Sonnet pre-thesis + Opus synthesis |
 | Adversarial self-play | ✅ live | Sonnet red team attacks before every AI PM submission |
-| Adversarial Intelligence | ✅ live | 3-layer engine · ONE falsifiable change per rebalance · earned authority by type |
+| Adversarial Intelligence | ✅ live | 3-layer engine · ONE falsifiable change per rebalance · earned authority |
 | Debate layer | ✅ live | 5 agents · 2 rounds · Monte Carlo + weekend scenario injection |
-| AI-Native Learning System | ✅ live | Bayesian meta-learner · AI calibration · AI regime blend (α=0.05→0.30) |
-| Decision memory | ✅ live | Compounding from May 19 · ML gate activates at n≥30 matured cases |
-| Conviction gate | ✅ live | Rules-based · logistic regression ready at n≥30 |
+| AI-Native Learning System | ✅ live | Bayesian meta-learner · AI calibration · AI regime blend |
+| Decision memory | ✅ live | Compounding from May 19 · ML gate at n≥30 |
+| Conviction gate | ✅ live | Rules-based now · logistic regression ready at n≥30 |
 | Earned authority | ✅ live | Phase 0 → 25% after 21 rebalances with Sharpe edge ≥0.05 |
-| Episodic regime memory | ✅ live | Per-regime outcome log · prefix-match query by AI PM |
-| AI calibration tracking | ✅ live | market_character prediction log · realized IC outcome fill · context injection |
-| Non-rebalance intelligence | ✅ live | 7 monitors daily · position health · rebalance brief |
-| Weekend intelligence pipeline | ✅ live | 11 jobs · debrief · scenarios · AI PM research · GridSearch |
-| Alt-data pipeline | ✅ live | SEC 7-signal · transcripts · Google Trends · IC gate |
-| Anti-hallucination hardening | ✅ live | Structured outputs enforced on LLM fundamental, narrative alpha, and all 4 debate agents via Anthropic `json_schema` wire-level enforcement |
-| Causal Intelligence (A–D) | ✅ live | PC-algorithm macro DAG · per-symbol causal graph (Haiku) · regime-causal Gate 1 · priced-in Gate 2 · early-exit tracker (Gate 4) · devil's advocate causal attacks |
-| Monthly investor letter | ✅ live | Auto-generated on first trading day of each month; Sonnet writes full attribution + risk narrative to `outputs/investor_reports/` |
+| Causal Intelligence | ✅ live | PC-algorithm macro DAG · per-symbol causal graph · regime-causal gate |
+| Monthly investor letter | ✅ live | Auto-generated on first trading day of each month |
+| Anti-hallucination hardening | ✅ live | Anthropic `json_schema` wire-level enforcement on all LLM outputs |
 | Self-improve loop | ✅ built | `SELF_MODIFY_ENABLED=False` until positive Sharpe for 30 consecutive days |
-| Factor discovery | ✅ built | PySR + LLM proposals · Harvey FDR gate · human review required |
 | 130/30 long-short | ✅ built | `LONG_SHORT_ENABLED=False` until ≥30 paper rebalances (~Aug 2026) |
-| TimescaleDB / WebSocket | 🔧 pending | Requires Docker + `ALPACA_KEY` configuration |
 | Real capital deployment | 🔧 pending | Targeting live after 12-month paper track record |
-| 12-month live track record | 📅 April 2027 | YC milestone |
+| 12-month live track record | 📅 April 2027 | |
 
 ---
 
@@ -434,8 +377,8 @@ Regime propagates through sleeve weights, position size caps, orchestrator base 
 ascent/
   config/        settings · types (AgentOutput) · universe (901 symbols)
   data/ingest/   yahoo · fred · sec_filings · earnings_transcripts · google_trends
-  features/      build_features · feature_defs (12 ML features including sector-rel-mom)
-  alpha/         14 sleeves + stack combiner + narrative_alpha
+  features/      build_features · feature_defs (12 ML features)
+  alpha/         14 sleeves + stack combiner + meta_learner (Bayesian IC posterior)
   portfolio/     mvo_optimizer · black_litterman · regime_covariance · long_short
   research/      walk_forward_runner · cpcv · self_improve · factor_discovery/
   regime/        hmm engine · particle_filter · breaks · posture
@@ -444,24 +387,20 @@ ascent/
   monitoring/    position_health · daily_intelligence · rebalance_brief
                  weekend_runner · weekly_debrief · scenario_planner
   strategy/      earned_authority · calibration_tracker · conviction_gate · ai_calibration
-  alpha/         14 sleeves + stack combiner + meta_learner (Bayesian IC posterior)
   memory/        decision_memory · regime_memory
   llm/           client.py (Opus/Sonnet/Haiku · retry · per-model cost tracking)
+  causal/        causal_discovery · dag_builder · compatibility · tracker
 
 agents/          us_equities_agent · macro_agent · international_agent
                  alternatives_agent · ai_pm_agent · red_team_agent
 orchestrator/    central_intelligence.py
-debate/          adversarial_engine · adversarial_authority · adversarial_monitor
-                 debate_runner · agents · judge · outcome_tracker
+debate/          adversarial_engine · adversarial_authority · debate_runner · agents · judge
 compliance/      audit_trail (SHA-256 hash chain) · performance_report (GIPS TWR)
-docs/            methodology.md · risk_disclosures.md · superpowers/plans/ · specs/
 ```
 
 ---
 
 ## Integrity Constraints
-
-These are enforced in code, not just convention:
 
 1. **No look-ahead bias** — walk-forward uses `get_universe_on_date()` per fold; regime engine fitted on training slice only; ML targets not leaked into feature windows
 2. **No simulated data under live cache names** — fallback writes to `prices_live_fallback_simulated`; cache name always reflects data provenance
