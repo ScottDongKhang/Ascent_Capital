@@ -1887,6 +1887,7 @@ def _log_holdings(today):
               f"portfolio {day_ret:+.2%} vs SPY {spy_ret:+.2%} ({sign})")
 
         # ── Counterfactual daily scoring ─────────────────────────────────────
+        _cf_record = None
         try:
             _as_w, _a_w, _d_w = cf_load_snapshots()
             _cf_prices: dict = {}
@@ -1923,16 +1924,19 @@ def _log_holdings(today):
             _fb = compute_ai_feedback()
             _auth_state = get_authority_state()
             # Update authority with today's Track D vs Track A★ returns
-            _d_ret_today  = _cf_record.get("track_d_return", 0.0) if "_cf_record" in dir() else 0.0
-            _as_ret_today = _cf_record.get("track_astar_return", 0.0) if "_cf_record" in dir() else 0.0
-            update_authority(
-                track_d_return=_d_ret_today,
-                track_astar_return=_as_ret_today,
-                n_decisions_evaluated=_fb.get("n_decisions_evaluated", 0),
-                hit_rate=_fb.get("hit_rate_21d"),
-                profit_factor=_fb.get("profit_factor"),
-                fade_rate=_fb.get("fade_rate"),
-            )
+            _d_ret_today  = _cf_record.get("track_d_return")      if _cf_record else None
+            _as_ret_today = _cf_record.get("track_astar_return")   if _cf_record else None
+            if _d_ret_today is not None and _as_ret_today is not None:
+                update_authority(
+                    track_d_return=_d_ret_today,
+                    track_astar_return=_as_ret_today,
+                    n_decisions_evaluated=_fb.get("n_decisions_evaluated", 0),
+                    hit_rate=_fb.get("hit_rate_21d"),
+                    profit_factor=_fb.get("profit_factor"),
+                    fade_rate=_fb.get("fade_rate"),
+                )
+            else:
+                print("[Runner] Authority update skipped — no Track D snapshot yet")
         except Exception as _fbe:
             print(f"[Runner] Feedback/authority update skipped: {_fbe}")
 

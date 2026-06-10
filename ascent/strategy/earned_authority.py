@@ -110,15 +110,16 @@ def _save_state(state: dict) -> None:
 
 
 def update_authority(
-    track_d_return: float,
-    track_astar_return: float,
+    track_d_return: Optional[float],
+    track_astar_return: Optional[float],
     n_decisions_evaluated: int = 0,
     hit_rate: Optional[float] = None,
     profit_factor: Optional[float] = None,
     fade_rate: Optional[float] = None,
     regime_gate_pass: bool = True,
 ) -> dict:
-    """Append daily Track D / Track A★ returns. Check demotion then promotion. Returns updated state."""
+    """Append daily Track D / Track A★ returns. Check demotion then promotion. Returns updated state.
+    If either track_d_return or track_astar_return is None, skips buffer append and returns unchanged state."""
     state = get_state()
     today = str(date.today())
 
@@ -127,6 +128,13 @@ def update_authority(
         return state
 
     level = state.get("level", 0)
+
+    # Guard: only append to buffers when both returns are real numbers (not None)
+    if track_d_return is None or track_astar_return is None:
+        log.debug("[EarnedAuthority] Skipping buffer append — Track D or A★ return is None")
+        state["last_updated"] = today
+        _save_state(state)
+        return state
 
     # Update rolling buffers (keep last 63 days for Level 3+ windows)
     d_buf  = (state.get("track_d_returns", [])     + [float(track_d_return)])[-63:]

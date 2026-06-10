@@ -95,3 +95,92 @@ def test_load_snapshots_returns_empty_on_missing_files():
     assert star_w == {}
     assert quant_w == {}
     assert ai_w == {}
+
+
+# ── Fix 3 regression tests: None inputs must not produce fabricated 0.0 values ──
+
+def test_score_daily_returns_none_for_missing_ai_pm_weights():
+    """score_daily with ai_pm_weights=None must set track_d_return to None, not 0.0."""
+    from ascent.monitoring.ai_pm_counterfactual import score_daily
+    with tempfile.TemporaryDirectory() as tmp:
+        log_path = Path(tmp) / "cf_daily.jsonl"
+        with patch("ascent.monitoring.ai_pm_counterfactual.DAILY_LOG", log_path):
+            record = score_daily(
+                run_date=date(2026, 6, 10),
+                quant_star_weights={"AAPL": 0.5, "MSFT": 0.5},
+                quant_weights={"AAPL": 0.5, "MSFT": 0.5},
+                ai_pm_weights=None,
+                track_b_return=0.010,
+                spy_return=0.005,
+                prices={"AAPL": {"prev": 100.0, "curr": 101.0}, "MSFT": {"prev": 200.0, "curr": 201.0}},
+            )
+    assert record["track_d_return"] is None, (
+        f"Expected None for missing ai_pm_weights, got {record['track_d_return']!r}"
+    )
+    # Other tracks with weights present must still compute normally
+    assert record["track_astar_return"] is not None
+    assert record["track_b_return"] == 0.010
+    assert record["track_c_return"] == 0.005
+
+
+def test_score_daily_returns_none_for_missing_quant_star_weights():
+    """score_daily with quant_star_weights=None must set track_astar_return to None, not 0.0."""
+    from ascent.monitoring.ai_pm_counterfactual import score_daily
+    with tempfile.TemporaryDirectory() as tmp:
+        log_path = Path(tmp) / "cf_daily.jsonl"
+        with patch("ascent.monitoring.ai_pm_counterfactual.DAILY_LOG", log_path):
+            record = score_daily(
+                run_date=date(2026, 6, 10),
+                quant_star_weights=None,
+                quant_weights={"AAPL": 0.5, "MSFT": 0.5},
+                ai_pm_weights={"AAPL": 0.6, "MSFT": 0.4},
+                track_b_return=0.010,
+                spy_return=0.005,
+                prices={"AAPL": {"prev": 100.0, "curr": 101.0}, "MSFT": {"prev": 200.0, "curr": 201.0}},
+            )
+    assert record["track_astar_return"] is None, (
+        f"Expected None for missing quant_star_weights, got {record['track_astar_return']!r}"
+    )
+    # track_d should still compute normally
+    assert record["track_d_return"] is not None
+
+
+def test_update_authority_none_inputs_skip_buffer_append():
+    """update_authority(None, None) must not modify track_d_returns or track_astar_returns buffers."""
+    from ascent.strategy.earned_authority import update_authority, _save_state, get_state
+    with tempfile.TemporaryDirectory() as tmp:
+        state_path = Path(tmp) / "earned_authority.json"
+        # Write a state with known non-empty buffers
+        initial_state = {
+            "level": 1,
+            "title": "Analyst",
+            "ai_weight": 0.05,
+            "phase": 1,
+            "level_start_date": "2026-06-04",
+            "phase_start_date": "2026-06-04",
+            "days_at_level": 3,
+            "days_stuck": 3,
+            "in_cooldown": False,
+            "cooldown_until": None,
+            "auto_revert_count": 0,
+            "last_updated": "2026-06-09",  # yesterday, so today's call is allowed
+            "track_d_returns": [0.001, 0.002, 0.003],
+            "track_astar_returns": [0.002, 0.001, 0.002],
+            "ai_returns_21d": [0.001, 0.002, 0.003],
+            "quant_returns_21d": [0.002, 0.001, 0.002],
+            "disable_sleeve_priors": False,
+        }
+        state_path.write_text(json.dumps(initial_state))
+        with patch("ascent.strategy.earned_authority.STATE_PATH", state_path):
+            with patch("ascent.strategy.earned_authority.SHADOW_RETURNS_PATH", Path(tmp) / "shadow.jsonl"):
+                result = update_authority(
+                    track_d_return=None,
+                    track_astar_return=None,
+                )
+        # Buffers must be unchanged
+        assert result["track_d_returns"] == [0.001, 0.002, 0.003], (
+            f"Buffer was mutated with None input: {result['track_d_returns']}"
+        )
+        assert result["track_astar_returns"] == [0.002, 0.001, 0.002], (
+            f"Buffer was mutated with None input: {result['track_astar_returns']}"
+        )

@@ -114,17 +114,17 @@ def score_daily(
     prices: Dict[str, dict],
 ) -> dict:
     """Compute all five track daily returns and append to DAILY_LOG."""
-    astar_ret = _portfolio_return(quant_star_weights or {}, prices) if quant_star_weights else 0.0
-    a_ret     = _portfolio_return(quant_weights or {}, prices)      if quant_weights     else 0.0
-    d_ret     = _portfolio_return(ai_pm_weights or {}, prices)      if ai_pm_weights     else 0.0
+    astar_ret = _portfolio_return(quant_star_weights, prices) if quant_star_weights else None
+    a_ret     = _portfolio_return(quant_weights, prices)      if quant_weights     else None
+    d_ret     = _portfolio_return(ai_pm_weights, prices)      if ai_pm_weights     else None
 
     record = {
         "date":               run_date.isoformat(),
-        "track_astar_return": round(astar_ret, 6),
-        "track_a_return":     round(a_ret, 6),
+        "track_astar_return": round(astar_ret, 6) if astar_ret is not None else None,
+        "track_a_return":     round(a_ret, 6)     if a_ret     is not None else None,
         "track_b_return":     round(float(track_b_return), 6),
         "track_c_return":     round(float(spy_return), 6),
-        "track_d_return":     round(d_ret, 6),
+        "track_d_return":     round(d_ret, 6)     if d_ret     is not None else None,
     }
 
     DAILY_LOG.parent.mkdir(parents=True, exist_ok=True)
