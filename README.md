@@ -64,7 +64,7 @@ The adversarial debate engine makes exactly one falsifiable weight change per re
 | Max Drawdown | -5.34% |
 | Days Live | 48 |
 | Open Positions | 17 |
-| Last Updated | 2026-06-10 |
+| Last Updated | 2026-06-11 |
 <!-- LIVE_STATS_END -->
 
 *Sharpe standard error over ~47 days is large — not statistically significant. This is tracked honestly, which is why authority is earned over 21 rebalances, not calendar time.*
