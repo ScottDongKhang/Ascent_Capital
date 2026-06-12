@@ -1,1 +1,1757 @@
-{"bootstrapped": false, "entries": []}
+{
+  "bootstrapped": true,
+  "entries": [
+    {
+      "event_id": "covid_crash_2020",
+      "sentiment_label": "bearish",
+      "sector": "Energy",
+      "symbol": "XLE",
+      "realized_21d_return": -0.42,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "covid_crash_2020",
+      "sentiment_label": "bearish",
+      "sector": "Energy",
+      "symbol": "XLF",
+      "realized_21d_return": -0.28,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "covid_crash_2020",
+      "sentiment_label": "bearish",
+      "sector": "Energy",
+      "symbol": "XLI",
+      "realized_21d_return": -0.25,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "covid_crash_2020",
+      "sentiment_label": "bearish",
+      "sector": "Financials",
+      "symbol": "XLE",
+      "realized_21d_return": -0.42,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "covid_crash_2020",
+      "sentiment_label": "bearish",
+      "sector": "Financials",
+      "symbol": "XLF",
+      "realized_21d_return": -0.28,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "covid_crash_2020",
+      "sentiment_label": "bearish",
+      "sector": "Financials",
+      "symbol": "XLI",
+      "realized_21d_return": -0.25,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "covid_crash_2020",
+      "sentiment_label": "bearish",
+      "sector": "Consumer Discretionary",
+      "symbol": "XLE",
+      "realized_21d_return": -0.42,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "covid_crash_2020",
+      "sentiment_label": "bearish",
+      "sector": "Consumer Discretionary",
+      "symbol": "XLF",
+      "realized_21d_return": -0.28,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "covid_crash_2020",
+      "sentiment_label": "bearish",
+      "sector": "Consumer Discretionary",
+      "symbol": "XLI",
+      "realized_21d_return": -0.25,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "covid_crash_2020",
+      "sentiment_label": "bearish",
+      "sector": "Industrials",
+      "symbol": "XLE",
+      "realized_21d_return": -0.42,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "covid_crash_2020",
+      "sentiment_label": "bearish",
+      "sector": "Industrials",
+      "symbol": "XLF",
+      "realized_21d_return": -0.28,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "covid_crash_2020",
+      "sentiment_label": "bearish",
+      "sector": "Industrials",
+      "symbol": "XLI",
+      "realized_21d_return": -0.25,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "fed_qe_infinity_2020",
+      "sentiment_label": "bullish",
+      "sector": "Financials",
+      "symbol": "LQD",
+      "realized_21d_return": 0.18,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "fed_qe_infinity_2020",
+      "sentiment_label": "bullish",
+      "sector": "Financials",
+      "symbol": "TLT",
+      "realized_21d_return": 0.04,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "fed_qe_infinity_2020",
+      "sentiment_label": "bullish",
+      "sector": "Financials",
+      "symbol": "GLD",
+      "realized_21d_return": 0.1,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "fed_qe_infinity_2020",
+      "sentiment_label": "bullish",
+      "sector": "Real Estate",
+      "symbol": "LQD",
+      "realized_21d_return": 0.18,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "fed_qe_infinity_2020",
+      "sentiment_label": "bullish",
+      "sector": "Real Estate",
+      "symbol": "TLT",
+      "realized_21d_return": 0.04,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "fed_qe_infinity_2020",
+      "sentiment_label": "bullish",
+      "sector": "Real Estate",
+      "symbol": "GLD",
+      "realized_21d_return": 0.1,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "fed_qe_infinity_2020",
+      "sentiment_label": "bullish",
+      "sector": "Utilities",
+      "symbol": "LQD",
+      "realized_21d_return": 0.18,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "fed_qe_infinity_2020",
+      "sentiment_label": "bullish",
+      "sector": "Utilities",
+      "symbol": "TLT",
+      "realized_21d_return": 0.04,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "fed_qe_infinity_2020",
+      "sentiment_label": "bullish",
+      "sector": "Utilities",
+      "symbol": "GLD",
+      "realized_21d_return": 0.1,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "iija_infrastructure_2021",
+      "sentiment_label": "bullish",
+      "sector": "Industrials",
+      "symbol": "CAT",
+      "realized_21d_return": 0.04,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "iija_infrastructure_2021",
+      "sentiment_label": "bullish",
+      "sector": "Industrials",
+      "symbol": "VMC",
+      "realized_21d_return": 0.05,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "iija_infrastructure_2021",
+      "sentiment_label": "bullish",
+      "sector": "Industrials",
+      "symbol": "MLM",
+      "realized_21d_return": 0.06,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "iija_infrastructure_2021",
+      "sentiment_label": "bullish",
+      "sector": "Industrials",
+      "symbol": "STRL",
+      "realized_21d_return": 0.08,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "iija_infrastructure_2021",
+      "sentiment_label": "bullish",
+      "sector": "Industrials",
+      "symbol": "IFRA",
+      "realized_21d_return": 0.03,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "iija_infrastructure_2021",
+      "sentiment_label": "bullish",
+      "sector": "Materials",
+      "symbol": "CAT",
+      "realized_21d_return": 0.04,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "iija_infrastructure_2021",
+      "sentiment_label": "bullish",
+      "sector": "Materials",
+      "symbol": "VMC",
+      "realized_21d_return": 0.05,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "iija_infrastructure_2021",
+      "sentiment_label": "bullish",
+      "sector": "Materials",
+      "symbol": "MLM",
+      "realized_21d_return": 0.06,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "iija_infrastructure_2021",
+      "sentiment_label": "bullish",
+      "sector": "Materials",
+      "symbol": "STRL",
+      "realized_21d_return": 0.08,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "iija_infrastructure_2021",
+      "sentiment_label": "bullish",
+      "sector": "Materials",
+      "symbol": "IFRA",
+      "realized_21d_return": 0.03,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "iija_infrastructure_2021",
+      "sentiment_label": "bullish",
+      "sector": "Utilities",
+      "symbol": "CAT",
+      "realized_21d_return": 0.04,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "iija_infrastructure_2021",
+      "sentiment_label": "bullish",
+      "sector": "Utilities",
+      "symbol": "VMC",
+      "realized_21d_return": 0.05,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "iija_infrastructure_2021",
+      "sentiment_label": "bullish",
+      "sector": "Utilities",
+      "symbol": "MLM",
+      "realized_21d_return": 0.06,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "iija_infrastructure_2021",
+      "sentiment_label": "bullish",
+      "sector": "Utilities",
+      "symbol": "STRL",
+      "realized_21d_return": 0.08,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "iija_infrastructure_2021",
+      "sentiment_label": "bullish",
+      "sector": "Utilities",
+      "symbol": "IFRA",
+      "realized_21d_return": 0.03,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "iija_infrastructure_2021",
+      "sentiment_label": "bullish",
+      "sector": "Information Technology",
+      "symbol": "CAT",
+      "realized_21d_return": 0.04,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "iija_infrastructure_2021",
+      "sentiment_label": "bullish",
+      "sector": "Information Technology",
+      "symbol": "VMC",
+      "realized_21d_return": 0.05,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "iija_infrastructure_2021",
+      "sentiment_label": "bullish",
+      "sector": "Information Technology",
+      "symbol": "MLM",
+      "realized_21d_return": 0.06,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "iija_infrastructure_2021",
+      "sentiment_label": "bullish",
+      "sector": "Information Technology",
+      "symbol": "STRL",
+      "realized_21d_return": 0.08,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "iija_infrastructure_2021",
+      "sentiment_label": "bullish",
+      "sector": "Information Technology",
+      "symbol": "IFRA",
+      "realized_21d_return": 0.03,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "omicron_variant_2021",
+      "sentiment_label": "bearish",
+      "sector": "Consumer Discretionary",
+      "symbol": "DAL",
+      "realized_21d_return": -0.09,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "omicron_variant_2021",
+      "sentiment_label": "bearish",
+      "sector": "Consumer Discretionary",
+      "symbol": "UAL",
+      "realized_21d_return": -0.11,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "omicron_variant_2021",
+      "sentiment_label": "bearish",
+      "sector": "Consumer Discretionary",
+      "symbol": "XLE",
+      "realized_21d_return": -0.06,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "omicron_variant_2021",
+      "sentiment_label": "bearish",
+      "sector": "Industrials",
+      "symbol": "DAL",
+      "realized_21d_return": -0.09,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "omicron_variant_2021",
+      "sentiment_label": "bearish",
+      "sector": "Industrials",
+      "symbol": "UAL",
+      "realized_21d_return": -0.11,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "omicron_variant_2021",
+      "sentiment_label": "bearish",
+      "sector": "Industrials",
+      "symbol": "XLE",
+      "realized_21d_return": -0.06,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "omicron_variant_2021",
+      "sentiment_label": "bearish",
+      "sector": "Energy",
+      "symbol": "DAL",
+      "realized_21d_return": -0.09,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "omicron_variant_2021",
+      "sentiment_label": "bearish",
+      "sector": "Energy",
+      "symbol": "UAL",
+      "realized_21d_return": -0.11,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "omicron_variant_2021",
+      "sentiment_label": "bearish",
+      "sector": "Energy",
+      "symbol": "XLE",
+      "realized_21d_return": -0.06,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "fed_pivot_hike_start_2022",
+      "sentiment_label": "bearish",
+      "sector": "Information Technology",
+      "symbol": "QQQ",
+      "realized_21d_return": -0.06,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "fed_pivot_hike_start_2022",
+      "sentiment_label": "bearish",
+      "sector": "Information Technology",
+      "symbol": "XLK",
+      "realized_21d_return": -0.05,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "fed_pivot_hike_start_2022",
+      "sentiment_label": "bearish",
+      "sector": "Information Technology",
+      "symbol": "VNQ",
+      "realized_21d_return": -0.07,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "fed_pivot_hike_start_2022",
+      "sentiment_label": "bearish",
+      "sector": "Consumer Discretionary",
+      "symbol": "QQQ",
+      "realized_21d_return": -0.06,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "fed_pivot_hike_start_2022",
+      "sentiment_label": "bearish",
+      "sector": "Consumer Discretionary",
+      "symbol": "XLK",
+      "realized_21d_return": -0.05,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "fed_pivot_hike_start_2022",
+      "sentiment_label": "bearish",
+      "sector": "Consumer Discretionary",
+      "symbol": "VNQ",
+      "realized_21d_return": -0.07,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "fed_pivot_hike_start_2022",
+      "sentiment_label": "bearish",
+      "sector": "Real Estate",
+      "symbol": "QQQ",
+      "realized_21d_return": -0.06,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "fed_pivot_hike_start_2022",
+      "sentiment_label": "bearish",
+      "sector": "Real Estate",
+      "symbol": "XLK",
+      "realized_21d_return": -0.05,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "fed_pivot_hike_start_2022",
+      "sentiment_label": "bearish",
+      "sector": "Real Estate",
+      "symbol": "VNQ",
+      "realized_21d_return": -0.07,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "russia_ukraine_invasion_2022",
+      "sentiment_label": "mixed",
+      "sector": "Energy",
+      "symbol": "XLE",
+      "realized_21d_return": 0.12,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "russia_ukraine_invasion_2022",
+      "sentiment_label": "mixed",
+      "sector": "Energy",
+      "symbol": "LMT",
+      "realized_21d_return": 0.08,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "russia_ukraine_invasion_2022",
+      "sentiment_label": "mixed",
+      "sector": "Energy",
+      "symbol": "RTX",
+      "realized_21d_return": 0.07,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "russia_ukraine_invasion_2022",
+      "sentiment_label": "mixed",
+      "sector": "Energy",
+      "symbol": "GLD",
+      "realized_21d_return": 0.06,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "russia_ukraine_invasion_2022",
+      "sentiment_label": "mixed",
+      "sector": "Defense",
+      "symbol": "XLE",
+      "realized_21d_return": 0.12,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "russia_ukraine_invasion_2022",
+      "sentiment_label": "mixed",
+      "sector": "Defense",
+      "symbol": "LMT",
+      "realized_21d_return": 0.08,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "russia_ukraine_invasion_2022",
+      "sentiment_label": "mixed",
+      "sector": "Defense",
+      "symbol": "RTX",
+      "realized_21d_return": 0.07,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "russia_ukraine_invasion_2022",
+      "sentiment_label": "mixed",
+      "sector": "Defense",
+      "symbol": "GLD",
+      "realized_21d_return": 0.06,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "russia_ukraine_invasion_2022",
+      "sentiment_label": "mixed",
+      "sector": "Materials",
+      "symbol": "XLE",
+      "realized_21d_return": 0.12,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "russia_ukraine_invasion_2022",
+      "sentiment_label": "mixed",
+      "sector": "Materials",
+      "symbol": "LMT",
+      "realized_21d_return": 0.08,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "russia_ukraine_invasion_2022",
+      "sentiment_label": "mixed",
+      "sector": "Materials",
+      "symbol": "RTX",
+      "realized_21d_return": 0.07,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "russia_ukraine_invasion_2022",
+      "sentiment_label": "mixed",
+      "sector": "Materials",
+      "symbol": "GLD",
+      "realized_21d_return": 0.06,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "svb_collapse_2023",
+      "sentiment_label": "bearish",
+      "sector": "Financials",
+      "symbol": "KRE",
+      "realized_21d_return": -0.24,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "chips_act_2022",
+      "sentiment_label": "bullish",
+      "sector": "Information Technology",
+      "symbol": "INTC",
+      "realized_21d_return": 0.05,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "chips_act_2022",
+      "sentiment_label": "bullish",
+      "sector": "Information Technology",
+      "symbol": "AMAT",
+      "realized_21d_return": 0.08,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "chips_act_2022",
+      "sentiment_label": "bullish",
+      "sector": "Information Technology",
+      "symbol": "SOXX",
+      "realized_21d_return": 0.06,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "chips_act_2022",
+      "sentiment_label": "bullish",
+      "sector": "Semiconductors",
+      "symbol": "INTC",
+      "realized_21d_return": 0.05,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "chips_act_2022",
+      "sentiment_label": "bullish",
+      "sector": "Semiconductors",
+      "symbol": "AMAT",
+      "realized_21d_return": 0.08,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "chips_act_2022",
+      "sentiment_label": "bullish",
+      "sector": "Semiconductors",
+      "symbol": "SOXX",
+      "realized_21d_return": 0.06,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "ira_inflation_reduction_act_2022",
+      "sentiment_label": "bullish",
+      "sector": "Utilities",
+      "symbol": "NEE",
+      "realized_21d_return": 0.06,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "ira_inflation_reduction_act_2022",
+      "sentiment_label": "bullish",
+      "sector": "Utilities",
+      "symbol": "ENPH",
+      "realized_21d_return": 0.15,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "ira_inflation_reduction_act_2022",
+      "sentiment_label": "bullish",
+      "sector": "Utilities",
+      "symbol": "FSLR",
+      "realized_21d_return": 0.12,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "ira_inflation_reduction_act_2022",
+      "sentiment_label": "bullish",
+      "sector": "Energy",
+      "symbol": "NEE",
+      "realized_21d_return": 0.06,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "ira_inflation_reduction_act_2022",
+      "sentiment_label": "bullish",
+      "sector": "Energy",
+      "symbol": "ENPH",
+      "realized_21d_return": 0.15,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "ira_inflation_reduction_act_2022",
+      "sentiment_label": "bullish",
+      "sector": "Energy",
+      "symbol": "FSLR",
+      "realized_21d_return": 0.12,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "ira_inflation_reduction_act_2022",
+      "sentiment_label": "bullish",
+      "sector": "Consumer Discretionary",
+      "symbol": "NEE",
+      "realized_21d_return": 0.06,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "ira_inflation_reduction_act_2022",
+      "sentiment_label": "bullish",
+      "sector": "Consumer Discretionary",
+      "symbol": "ENPH",
+      "realized_21d_return": 0.15,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "ira_inflation_reduction_act_2022",
+      "sentiment_label": "bullish",
+      "sector": "Consumer Discretionary",
+      "symbol": "FSLR",
+      "realized_21d_return": 0.12,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "cpi_shock_2022",
+      "sentiment_label": "bearish",
+      "sector": "Consumer Discretionary",
+      "symbol": "QQQ",
+      "realized_21d_return": -0.1,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "cpi_shock_2022",
+      "sentiment_label": "bearish",
+      "sector": "Consumer Discretionary",
+      "symbol": "XLY",
+      "realized_21d_return": -0.09,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "cpi_shock_2022",
+      "sentiment_label": "bearish",
+      "sector": "Consumer Discretionary",
+      "symbol": "VNQ",
+      "realized_21d_return": -0.11,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "cpi_shock_2022",
+      "sentiment_label": "bearish",
+      "sector": "Information Technology",
+      "symbol": "QQQ",
+      "realized_21d_return": -0.1,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "cpi_shock_2022",
+      "sentiment_label": "bearish",
+      "sector": "Information Technology",
+      "symbol": "XLY",
+      "realized_21d_return": -0.09,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "cpi_shock_2022",
+      "sentiment_label": "bearish",
+      "sector": "Information Technology",
+      "symbol": "VNQ",
+      "realized_21d_return": -0.11,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "cpi_shock_2022",
+      "sentiment_label": "bearish",
+      "sector": "Real Estate",
+      "symbol": "QQQ",
+      "realized_21d_return": -0.1,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "cpi_shock_2022",
+      "sentiment_label": "bearish",
+      "sector": "Real Estate",
+      "symbol": "XLY",
+      "realized_21d_return": -0.09,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "cpi_shock_2022",
+      "sentiment_label": "bearish",
+      "sector": "Real Estate",
+      "symbol": "VNQ",
+      "realized_21d_return": -0.11,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "fed_75bp_hike_2022",
+      "sentiment_label": "mixed",
+      "sector": "Information Technology",
+      "symbol": "QQQ",
+      "realized_21d_return": 0.08,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "fed_75bp_hike_2022",
+      "sentiment_label": "mixed",
+      "sector": "Information Technology",
+      "symbol": "VNQ",
+      "realized_21d_return": 0.05,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "fed_75bp_hike_2022",
+      "sentiment_label": "mixed",
+      "sector": "Real Estate",
+      "symbol": "QQQ",
+      "realized_21d_return": 0.08,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "fed_75bp_hike_2022",
+      "sentiment_label": "mixed",
+      "sector": "Real Estate",
+      "symbol": "VNQ",
+      "realized_21d_return": 0.05,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "fed_75bp_hike_2022",
+      "sentiment_label": "mixed",
+      "sector": "Consumer Discretionary",
+      "symbol": "QQQ",
+      "realized_21d_return": 0.08,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "fed_75bp_hike_2022",
+      "sentiment_label": "mixed",
+      "sector": "Consumer Discretionary",
+      "symbol": "VNQ",
+      "realized_21d_return": 0.05,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "fed_75bp_hike_2022",
+      "sentiment_label": "mixed",
+      "sector": "Financials",
+      "symbol": "QQQ",
+      "realized_21d_return": 0.08,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "fed_75bp_hike_2022",
+      "sentiment_label": "mixed",
+      "sector": "Financials",
+      "symbol": "VNQ",
+      "realized_21d_return": 0.05,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "ftx_collapse_2022",
+      "sentiment_label": "bearish",
+      "sector": "Financials",
+      "symbol": "COIN",
+      "realized_21d_return": -0.35,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "ftx_collapse_2022",
+      "sentiment_label": "bearish",
+      "sector": "Financials",
+      "symbol": "MSTR",
+      "realized_21d_return": -0.3,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "ftx_collapse_2022",
+      "sentiment_label": "bearish",
+      "sector": "Financials",
+      "symbol": "SQ",
+      "realized_21d_return": -0.12,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "ftx_collapse_2022",
+      "sentiment_label": "bearish",
+      "sector": "Information Technology",
+      "symbol": "COIN",
+      "realized_21d_return": -0.35,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "ftx_collapse_2022",
+      "sentiment_label": "bearish",
+      "sector": "Information Technology",
+      "symbol": "MSTR",
+      "realized_21d_return": -0.3,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "ftx_collapse_2022",
+      "sentiment_label": "bearish",
+      "sector": "Information Technology",
+      "symbol": "SQ",
+      "realized_21d_return": -0.12,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "china_reopening_2022",
+      "sentiment_label": "bullish",
+      "sector": "Materials",
+      "symbol": "PDBC",
+      "realized_21d_return": 0.07,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "china_reopening_2022",
+      "sentiment_label": "bullish",
+      "sector": "Materials",
+      "symbol": "EEM",
+      "realized_21d_return": 0.09,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "china_reopening_2022",
+      "sentiment_label": "bullish",
+      "sector": "Materials",
+      "symbol": "FCX",
+      "realized_21d_return": 0.14,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "china_reopening_2022",
+      "sentiment_label": "bullish",
+      "sector": "Energy",
+      "symbol": "PDBC",
+      "realized_21d_return": 0.07,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "china_reopening_2022",
+      "sentiment_label": "bullish",
+      "sector": "Energy",
+      "symbol": "EEM",
+      "realized_21d_return": 0.09,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "china_reopening_2022",
+      "sentiment_label": "bullish",
+      "sector": "Energy",
+      "symbol": "FCX",
+      "realized_21d_return": 0.14,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "china_reopening_2022",
+      "sentiment_label": "bullish",
+      "sector": "Consumer Discretionary",
+      "symbol": "PDBC",
+      "realized_21d_return": 0.07,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "china_reopening_2022",
+      "sentiment_label": "bullish",
+      "sector": "Consumer Discretionary",
+      "symbol": "EEM",
+      "realized_21d_return": 0.09,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "china_reopening_2022",
+      "sentiment_label": "bullish",
+      "sector": "Consumer Discretionary",
+      "symbol": "FCX",
+      "realized_21d_return": 0.14,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "debt_ceiling_crisis_2023",
+      "sentiment_label": "bearish",
+      "sector": "Financials",
+      "symbol": "TLT",
+      "realized_21d_return": -0.04,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "debt_ceiling_crisis_2023",
+      "sentiment_label": "bearish",
+      "sector": "Financials",
+      "symbol": "BIL",
+      "realized_21d_return": 0.01,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "debt_ceiling_crisis_2023",
+      "sentiment_label": "bearish",
+      "sector": "Utilities",
+      "symbol": "TLT",
+      "realized_21d_return": -0.04,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "debt_ceiling_crisis_2023",
+      "sentiment_label": "bearish",
+      "sector": "Utilities",
+      "symbol": "BIL",
+      "realized_21d_return": 0.01,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "debt_ceiling_crisis_2023",
+      "sentiment_label": "bearish",
+      "sector": "Consumer Staples",
+      "symbol": "TLT",
+      "realized_21d_return": -0.04,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "debt_ceiling_crisis_2023",
+      "sentiment_label": "bearish",
+      "sector": "Consumer Staples",
+      "symbol": "BIL",
+      "realized_21d_return": 0.01,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "ai_rally_nvidia_2023",
+      "sentiment_label": "bullish",
+      "sector": "Information Technology",
+      "symbol": "NVDA",
+      "realized_21d_return": 0.3,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "ai_rally_nvidia_2023",
+      "sentiment_label": "bullish",
+      "sector": "Information Technology",
+      "symbol": "AMD",
+      "realized_21d_return": 0.15,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "ai_rally_nvidia_2023",
+      "sentiment_label": "bullish",
+      "sector": "Information Technology",
+      "symbol": "QQQ",
+      "realized_21d_return": 0.05,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "ai_rally_nvidia_2023",
+      "sentiment_label": "bullish",
+      "sector": "Semiconductors",
+      "symbol": "NVDA",
+      "realized_21d_return": 0.3,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "ai_rally_nvidia_2023",
+      "sentiment_label": "bullish",
+      "sector": "Semiconductors",
+      "symbol": "AMD",
+      "realized_21d_return": 0.15,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "ai_rally_nvidia_2023",
+      "sentiment_label": "bullish",
+      "sector": "Semiconductors",
+      "symbol": "QQQ",
+      "realized_21d_return": 0.05,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "jackson_hole_pivot_signal_2023",
+      "sentiment_label": "bullish",
+      "sector": "Real Estate",
+      "symbol": "VNQ",
+      "realized_21d_return": 0.04,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "jackson_hole_pivot_signal_2023",
+      "sentiment_label": "bullish",
+      "sector": "Real Estate",
+      "symbol": "QQQ",
+      "realized_21d_return": 0.03,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "jackson_hole_pivot_signal_2023",
+      "sentiment_label": "bullish",
+      "sector": "Real Estate",
+      "symbol": "TLT",
+      "realized_21d_return": 0.02,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "jackson_hole_pivot_signal_2023",
+      "sentiment_label": "bullish",
+      "sector": "Utilities",
+      "symbol": "VNQ",
+      "realized_21d_return": 0.04,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "jackson_hole_pivot_signal_2023",
+      "sentiment_label": "bullish",
+      "sector": "Utilities",
+      "symbol": "QQQ",
+      "realized_21d_return": 0.03,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "jackson_hole_pivot_signal_2023",
+      "sentiment_label": "bullish",
+      "sector": "Utilities",
+      "symbol": "TLT",
+      "realized_21d_return": 0.02,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "jackson_hole_pivot_signal_2023",
+      "sentiment_label": "bullish",
+      "sector": "Information Technology",
+      "symbol": "VNQ",
+      "realized_21d_return": 0.04,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "jackson_hole_pivot_signal_2023",
+      "sentiment_label": "bullish",
+      "sector": "Information Technology",
+      "symbol": "QQQ",
+      "realized_21d_return": 0.03,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "jackson_hole_pivot_signal_2023",
+      "sentiment_label": "bullish",
+      "sector": "Information Technology",
+      "symbol": "TLT",
+      "realized_21d_return": 0.02,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "10y_treasury_5pct_2023",
+      "sentiment_label": "bearish",
+      "sector": "Real Estate",
+      "symbol": "VNQ",
+      "realized_21d_return": -0.06,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "10y_treasury_5pct_2023",
+      "sentiment_label": "bearish",
+      "sector": "Real Estate",
+      "symbol": "XLU",
+      "realized_21d_return": -0.05,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "10y_treasury_5pct_2023",
+      "sentiment_label": "bearish",
+      "sector": "Real Estate",
+      "symbol": "QQQ",
+      "realized_21d_return": -0.04,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "10y_treasury_5pct_2023",
+      "sentiment_label": "bearish",
+      "sector": "Real Estate",
+      "symbol": "TLT",
+      "realized_21d_return": -0.06,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "10y_treasury_5pct_2023",
+      "sentiment_label": "bearish",
+      "sector": "Utilities",
+      "symbol": "VNQ",
+      "realized_21d_return": -0.06,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "10y_treasury_5pct_2023",
+      "sentiment_label": "bearish",
+      "sector": "Utilities",
+      "symbol": "XLU",
+      "realized_21d_return": -0.05,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "10y_treasury_5pct_2023",
+      "sentiment_label": "bearish",
+      "sector": "Utilities",
+      "symbol": "QQQ",
+      "realized_21d_return": -0.04,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "10y_treasury_5pct_2023",
+      "sentiment_label": "bearish",
+      "sector": "Utilities",
+      "symbol": "TLT",
+      "realized_21d_return": -0.06,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "10y_treasury_5pct_2023",
+      "sentiment_label": "bearish",
+      "sector": "Information Technology",
+      "symbol": "VNQ",
+      "realized_21d_return": -0.06,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "10y_treasury_5pct_2023",
+      "sentiment_label": "bearish",
+      "sector": "Information Technology",
+      "symbol": "XLU",
+      "realized_21d_return": -0.05,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "10y_treasury_5pct_2023",
+      "sentiment_label": "bearish",
+      "sector": "Information Technology",
+      "symbol": "QQQ",
+      "realized_21d_return": -0.04,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "10y_treasury_5pct_2023",
+      "sentiment_label": "bearish",
+      "sector": "Information Technology",
+      "symbol": "TLT",
+      "realized_21d_return": -0.06,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "soft_landing_signal_2023",
+      "sentiment_label": "bullish",
+      "sector": "Consumer Discretionary",
+      "symbol": "XLY",
+      "realized_21d_return": 0.06,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "soft_landing_signal_2023",
+      "sentiment_label": "bullish",
+      "sector": "Consumer Discretionary",
+      "symbol": "QQQ",
+      "realized_21d_return": 0.07,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "soft_landing_signal_2023",
+      "sentiment_label": "bullish",
+      "sector": "Financials",
+      "symbol": "XLY",
+      "realized_21d_return": 0.06,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "soft_landing_signal_2023",
+      "sentiment_label": "bullish",
+      "sector": "Financials",
+      "symbol": "QQQ",
+      "realized_21d_return": 0.07,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "soft_landing_signal_2023",
+      "sentiment_label": "bullish",
+      "sector": "Information Technology",
+      "symbol": "XLY",
+      "realized_21d_return": 0.06,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "soft_landing_signal_2023",
+      "sentiment_label": "bullish",
+      "sector": "Information Technology",
+      "symbol": "QQQ",
+      "realized_21d_return": 0.07,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "opec_surprise_cut_2023",
+      "sentiment_label": "bullish",
+      "sector": "Energy",
+      "symbol": "XLE",
+      "realized_21d_return": 0.07,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "opec_surprise_cut_2023",
+      "sentiment_label": "bullish",
+      "sector": "Energy",
+      "symbol": "CVX",
+      "realized_21d_return": 0.05,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "opec_surprise_cut_2023",
+      "sentiment_label": "bullish",
+      "sector": "Energy",
+      "symbol": "MPC",
+      "realized_21d_return": 0.06,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "regional_bank_contagion_2023",
+      "sentiment_label": "bearish",
+      "sector": "Financials",
+      "symbol": "KRE",
+      "realized_21d_return": -0.08,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "regional_bank_contagion_2023",
+      "sentiment_label": "bearish",
+      "sector": "Financials",
+      "symbol": "USB",
+      "realized_21d_return": -0.07,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "liberation_day_tariffs_2026",
+      "sentiment_label": "bearish",
+      "sector": "Industrials",
+      "symbol": "CAT",
+      "realized_21d_return": -0.12,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "liberation_day_tariffs_2026",
+      "sentiment_label": "bearish",
+      "sector": "Industrials",
+      "symbol": "DE",
+      "realized_21d_return": -0.1,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "liberation_day_tariffs_2026",
+      "sentiment_label": "bearish",
+      "sector": "Industrials",
+      "symbol": "XLI",
+      "realized_21d_return": -0.09,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "liberation_day_tariffs_2026",
+      "sentiment_label": "bearish",
+      "sector": "Industrials",
+      "symbol": "AAPL",
+      "realized_21d_return": -0.11,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "liberation_day_tariffs_2026",
+      "sentiment_label": "bearish",
+      "sector": "Consumer Discretionary",
+      "symbol": "CAT",
+      "realized_21d_return": -0.12,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "liberation_day_tariffs_2026",
+      "sentiment_label": "bearish",
+      "sector": "Consumer Discretionary",
+      "symbol": "DE",
+      "realized_21d_return": -0.1,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "liberation_day_tariffs_2026",
+      "sentiment_label": "bearish",
+      "sector": "Consumer Discretionary",
+      "symbol": "XLI",
+      "realized_21d_return": -0.09,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "liberation_day_tariffs_2026",
+      "sentiment_label": "bearish",
+      "sector": "Consumer Discretionary",
+      "symbol": "AAPL",
+      "realized_21d_return": -0.11,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "liberation_day_tariffs_2026",
+      "sentiment_label": "bearish",
+      "sector": "Materials",
+      "symbol": "CAT",
+      "realized_21d_return": -0.12,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "liberation_day_tariffs_2026",
+      "sentiment_label": "bearish",
+      "sector": "Materials",
+      "symbol": "DE",
+      "realized_21d_return": -0.1,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "liberation_day_tariffs_2026",
+      "sentiment_label": "bearish",
+      "sector": "Materials",
+      "symbol": "XLI",
+      "realized_21d_return": -0.09,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "liberation_day_tariffs_2026",
+      "sentiment_label": "bearish",
+      "sector": "Materials",
+      "symbol": "AAPL",
+      "realized_21d_return": -0.11,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "liberation_day_tariffs_2026",
+      "sentiment_label": "bearish",
+      "sector": "Information Technology",
+      "symbol": "CAT",
+      "realized_21d_return": -0.12,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "liberation_day_tariffs_2026",
+      "sentiment_label": "bearish",
+      "sector": "Information Technology",
+      "symbol": "DE",
+      "realized_21d_return": -0.1,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "liberation_day_tariffs_2026",
+      "sentiment_label": "bearish",
+      "sector": "Information Technology",
+      "symbol": "XLI",
+      "realized_21d_return": -0.09,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "liberation_day_tariffs_2026",
+      "sentiment_label": "bearish",
+      "sector": "Information Technology",
+      "symbol": "AAPL",
+      "realized_21d_return": -0.11,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "dollar_strength_spike_2022",
+      "sentiment_label": "bearish",
+      "sector": "Materials",
+      "symbol": "EEM",
+      "realized_21d_return": -0.07,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "dollar_strength_spike_2022",
+      "sentiment_label": "bearish",
+      "sector": "Materials",
+      "symbol": "GLD",
+      "realized_21d_return": -0.04,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "dollar_strength_spike_2022",
+      "sentiment_label": "bearish",
+      "sector": "Energy",
+      "symbol": "EEM",
+      "realized_21d_return": -0.07,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "dollar_strength_spike_2022",
+      "sentiment_label": "bearish",
+      "sector": "Energy",
+      "symbol": "GLD",
+      "realized_21d_return": -0.04,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "dollar_strength_spike_2022",
+      "sentiment_label": "bearish",
+      "sector": "Financials",
+      "symbol": "EEM",
+      "realized_21d_return": -0.07,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "dollar_strength_spike_2022",
+      "sentiment_label": "bearish",
+      "sector": "Financials",
+      "symbol": "GLD",
+      "realized_21d_return": -0.04,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "energy_crisis_europe_2022",
+      "sentiment_label": "mixed",
+      "sector": "Energy",
+      "symbol": "XLE",
+      "realized_21d_return": 0.05,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "energy_crisis_europe_2022",
+      "sentiment_label": "mixed",
+      "sector": "Energy",
+      "symbol": "LNG",
+      "realized_21d_return": 0.08,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "energy_crisis_europe_2022",
+      "sentiment_label": "mixed",
+      "sector": "Utilities",
+      "symbol": "XLE",
+      "realized_21d_return": 0.05,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "energy_crisis_europe_2022",
+      "sentiment_label": "mixed",
+      "sector": "Utilities",
+      "symbol": "LNG",
+      "realized_21d_return": 0.08,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "energy_crisis_europe_2022",
+      "sentiment_label": "mixed",
+      "sector": "Industrials",
+      "symbol": "XLE",
+      "realized_21d_return": 0.05,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "energy_crisis_europe_2022",
+      "sentiment_label": "mixed",
+      "sector": "Industrials",
+      "symbol": "LNG",
+      "realized_21d_return": 0.08,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "fed_rate_cut_start_2024",
+      "sentiment_label": "bullish",
+      "sector": "Real Estate",
+      "symbol": "VNQ",
+      "realized_21d_return": 0.04,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "fed_rate_cut_start_2024",
+      "sentiment_label": "bullish",
+      "sector": "Real Estate",
+      "symbol": "XLU",
+      "realized_21d_return": 0.03,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "fed_rate_cut_start_2024",
+      "sentiment_label": "bullish",
+      "sector": "Real Estate",
+      "symbol": "IWM",
+      "realized_21d_return": 0.05,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "fed_rate_cut_start_2024",
+      "sentiment_label": "bullish",
+      "sector": "Real Estate",
+      "symbol": "TLT",
+      "realized_21d_return": 0.03,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "fed_rate_cut_start_2024",
+      "sentiment_label": "bullish",
+      "sector": "Utilities",
+      "symbol": "VNQ",
+      "realized_21d_return": 0.04,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "fed_rate_cut_start_2024",
+      "sentiment_label": "bullish",
+      "sector": "Utilities",
+      "symbol": "XLU",
+      "realized_21d_return": 0.03,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "fed_rate_cut_start_2024",
+      "sentiment_label": "bullish",
+      "sector": "Utilities",
+      "symbol": "IWM",
+      "realized_21d_return": 0.05,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "fed_rate_cut_start_2024",
+      "sentiment_label": "bullish",
+      "sector": "Utilities",
+      "symbol": "TLT",
+      "realized_21d_return": 0.03,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "fed_rate_cut_start_2024",
+      "sentiment_label": "bullish",
+      "sector": "Consumer Discretionary",
+      "symbol": "VNQ",
+      "realized_21d_return": 0.04,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "fed_rate_cut_start_2024",
+      "sentiment_label": "bullish",
+      "sector": "Consumer Discretionary",
+      "symbol": "XLU",
+      "realized_21d_return": 0.03,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "fed_rate_cut_start_2024",
+      "sentiment_label": "bullish",
+      "sector": "Consumer Discretionary",
+      "symbol": "IWM",
+      "realized_21d_return": 0.05,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "fed_rate_cut_start_2024",
+      "sentiment_label": "bullish",
+      "sector": "Consumer Discretionary",
+      "symbol": "TLT",
+      "realized_21d_return": 0.03,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "fed_rate_cut_start_2024",
+      "sentiment_label": "bullish",
+      "sector": "Small Cap",
+      "symbol": "VNQ",
+      "realized_21d_return": 0.04,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "fed_rate_cut_start_2024",
+      "sentiment_label": "bullish",
+      "sector": "Small Cap",
+      "symbol": "XLU",
+      "realized_21d_return": 0.03,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "fed_rate_cut_start_2024",
+      "sentiment_label": "bullish",
+      "sector": "Small Cap",
+      "symbol": "IWM",
+      "realized_21d_return": 0.05,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "fed_rate_cut_start_2024",
+      "sentiment_label": "bullish",
+      "sector": "Small Cap",
+      "symbol": "TLT",
+      "realized_21d_return": 0.03,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "trump_election_2024",
+      "sentiment_label": "bullish",
+      "sector": "Financials",
+      "symbol": "XLF",
+      "realized_21d_return": 0.1,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "trump_election_2024",
+      "sentiment_label": "bullish",
+      "sector": "Financials",
+      "symbol": "XLE",
+      "realized_21d_return": 0.05,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "trump_election_2024",
+      "sentiment_label": "bullish",
+      "sector": "Financials",
+      "symbol": "LMT",
+      "realized_21d_return": 0.04,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "trump_election_2024",
+      "sentiment_label": "bullish",
+      "sector": "Energy",
+      "symbol": "XLF",
+      "realized_21d_return": 0.1,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "trump_election_2024",
+      "sentiment_label": "bullish",
+      "sector": "Energy",
+      "symbol": "XLE",
+      "realized_21d_return": 0.05,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "trump_election_2024",
+      "sentiment_label": "bullish",
+      "sector": "Energy",
+      "symbol": "LMT",
+      "realized_21d_return": 0.04,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "trump_election_2024",
+      "sentiment_label": "bullish",
+      "sector": "Defense",
+      "symbol": "XLF",
+      "realized_21d_return": 0.1,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "trump_election_2024",
+      "sentiment_label": "bullish",
+      "sector": "Defense",
+      "symbol": "XLE",
+      "realized_21d_return": 0.05,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "trump_election_2024",
+      "sentiment_label": "bullish",
+      "sector": "Defense",
+      "symbol": "LMT",
+      "realized_21d_return": 0.04,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "trump_election_2024",
+      "sentiment_label": "bullish",
+      "sector": "Industrials",
+      "symbol": "XLF",
+      "realized_21d_return": 0.1,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "trump_election_2024",
+      "sentiment_label": "bullish",
+      "sector": "Industrials",
+      "symbol": "XLE",
+      "realized_21d_return": 0.05,
+      "recorded_at": "2026-06-08"
+    },
+    {
+      "event_id": "trump_election_2024",
+      "sentiment_label": "bullish",
+      "sector": "Industrials",
+      "symbol": "LMT",
+      "realized_21d_return": 0.04,
+      "recorded_at": "2026-06-08"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "date": "2026-05-27",
+  "verdict_recommendation": "proceed",
+  "verdict_confidence": 0.62,
+  "regime": "calm_bull",
+  "nav_change": -0.00209,
+  "outcome_correctness": "PARTIALLY CORRECT",
+  "lesson": "**2026-05-27 Debrief: Partial Correctness Masked a Calibration Failure**\n\nThe PROCEED verdict at 62% confidence was technically justified by calm_bull base rates (72%), but the debate failed to operationalize its own risk flags into a decision rule: the bear case correctly identified that EM cluster correlation (17.5% combined) masks 3.5-4.2% true tail exposure vs. the model's -1.2% estimate, and that VaR-99 at -3.31% consumes 79% of the regime's drawdown budget\u2014yet neither of these quantitative red flags triggered a mandatory position-size reduction or explicit hedging mandate. The -0.21% outcome over 14 days was close enough to zero that it felt like a win, but it was actually a near-miss: the portfolio absorbed exactly the kind of micro-stress (EM correlation tightening, momentum distribution tops) that the bear flagged without consequence only because the stress event was small. **Next time: when a debate flags that a single position cluster (EM at 17.5%) has a 3-4x gap between model and stress-estimated tail exposure, and VaR-99 consumes >75% of regime budget, that is a *veto condition* for full-size execution in a 62%-confidence",
+  "lesson_tags": [
+    "regime",
+    "concentration",
+    "macro",
+    "confidence"
+  ]
+}

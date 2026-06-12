@@ -5,6 +5,11 @@
       "bear": 0.5,
       "devils_advocate": 0.5
     },
+    "calm_bull": {
+      "bull": 0.5,
+      "bear": 0.5,
+      "devils_advocate": 0.5
+    },
     "regimelabel.stressed": {
       "bull": 0.1,
       "bear": 0.0,
@@ -12,12 +17,17 @@
     }
   },
   "overall": {
-    "bull": 0.3,
-    "bear": 0.25,
-    "devils_advocate": 0.25
+    "bull": 0.367,
+    "bear": 0.333,
+    "devils_advocate": 0.333
   },
   "sample_counts": {
     "stressed": {
+      "bull": 1,
+      "bear": 1,
+      "devils_advocate": 1
+    },
+    "calm_bull": {
       "bull": 1,
       "bear": 1,
       "devils_advocate": 1

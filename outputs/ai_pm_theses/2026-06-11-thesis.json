@@ -1,0 +1,60 @@
+{
+  "market_view": "Calm bull regime persists as of 2026-06-11. AI capex super-cycle drives semiconductor and infrastructure spending. Rate path stabilizing supports REITs and infrastructure. International equity (Taiwan/Asia) outperforms on AI supply-chain tailwinds. Credit spreads tight (HYG not distressed), reinforcing risk-on tilt. Dominant 21-day risk: sudden shock to AI capex expectations or Treasury yield spike above 4.67%.",
+  "regime_assessment": "Calm bull confirmed by VNQ 52-week high, tight HY spreads, EWT/TSMC AI-capex momentum. Historically rewards momentum continuation in quality growth, selective international equity with earnings momentum, infrastructure/REIT as rates stabilize, and managed futures as low-correlation ballast. Unusual concentration in AI/Taiwan supply chain creates idiosyncratic risk vs. typical calm-bull episodes.",
+  "quant_baseline_summary": "Quant signals broadly support risk-on positioning with momentum continuation in EWT, MGM, MU, JEF, STLD, HAE, ORA, and SJM. Defensive ballast (BIL, HYG, KMLM) provides portfolio-level Sharpe improvement. DBB and MPC add commodity/energy diversification consistent with broadening bull thesis.",
+  "ai_pm_portfolio": {
+    "EWT": 0.12,
+    "VNQ": 0.09,
+    "IFRA": 0.07,
+    "MU": 0.08,
+    "ORA": 0.07,
+    "JEF": 0.07,
+    "DBB": 0.06,
+    "SJM": 0.06,
+    "KMLM": 0.05,
+    "MGM": 0.08,
+    "STLD": 0.07,
+    "MPC": 0.05,
+    "HAE": 0.05,
+    "BIL": 0.04,
+    "HYG": 0.04
+  },
+  "quant_agreement": [
+    "EWT",
+    "MGM",
+    "MU",
+    "JEF",
+    "STLD",
+    "HAE",
+    "ORA",
+    "SJM",
+    "VNQ"
+  ],
+  "quant_overrides": [],
+  "position_rationale": {
+    "EWT": "12% \u2014 Highest conviction. TSMC AI capex backbone. 21d +1.2%, 63d +16.3%, 252d +50%. Expected 3mo return: +10-15%. Vol: HIGH (concentrated Taiwan/TSMC). Wrong if: TSMC cuts AI capex guidance or 10Y breaks 4.67%.",
+    "VNQ": "9% \u2014 52-week high breakout, rate stabilization beneficiary. 21d +0.9%, 63d +2.3%, 252d +8.7%. Expected 3mo return: +4-7%. Vol: MEDIUM. Wrong if: 10Y Treasury spikes above 4.67%.",
+    "MU": "8% \u2014 Binary earnings event June 24. AI HBM demand structural. 63d +79.6%, 252d +276%. Expected 3mo return: +8-15%. Vol: HIGH (earnings binary). Wrong if: MU guides HBM revenue below consensus.",
+    "MGM": "8% \u2014 Event-driven: Diller privatization bid. 21d +22%. Expected 3mo return: +5-10%. Vol: MEDIUM (deal risk). Wrong if: bid withdrawn and no competing offers.",
+    "ORA": "7% \u2014 Q1 EPS beat by 41.3%, revenue beat by 15.6%. Energy storage +153% YoY. Expected 3mo return: +5-9%. Vol: MEDIUM. Wrong if: estimates decline >10% further.",
+    "JEF": "7% \u2014 Wall Street turning optimistic, deal cycle reopening. 21d +11.5%, 63d +22%. Expected 3mo return: +6-10%. Vol: MEDIUM. Wrong if: First Brands writedown or M&A volumes collapse.",
+    "STLD": "7% \u2014 Analyst upgrade + earnings optimism. Tariff protection, reshoring demand. 21d +7.1%, 252d +62.4%. Expected 3mo return: +5-8%. Vol: MEDIUM. Wrong if: tariffs reduced or ISM Mfg <48.",
+    "IFRA": "7% \u2014 AI data center build-out, grid upgrades, rate stabilization. Low-medium vol ballast. Expected 3mo return: +4-6%. Vol: LOW-MEDIUM. Wrong if: federal infrastructure spending cut.",
+    "SJM": "6% \u2014 Q4 FY2026 results positive, stock jumped. Low-vol defensive alpha. 21d +14.4%. Expected 3mo return: +3-6%. Vol: LOW. Wrong if: FY2027 guidance revised down.",
+    "DBB": "6% \u2014 Short interest collapsed 87.8%, institutional accumulation. Base metals = broadening bull play. Expected 3mo return: +4-7%. Vol: MEDIUM. Wrong if: China PMI <49 for 2 months.",
+    "MPC": "5% \u2014 Refining margins in calm bull. 21d +6.1%, 252d +38.2%. Expected 3mo return: +3-6%. Vol: MEDIUM. Wrong if: crack spreads collapse.",
+    "HAE": "5% \u2014 21d +17.9%, 63d +31.5%. Restructured into two segments. Expected 3mo return: +5-8%. Vol: MEDIUM-HIGH. Wrong if: FY2027 guidance disappoints.",
+    "KMLM": "5% \u2014 Low-correlation managed futures ballast. Expected 3mo return: +2-4%. Vol: LOW-MEDIUM. Wrong if: trendless/choppy markets persist >2 months.",
+    "BIL": "4% \u2014 Cash-equivalent risk-free ballast. Expected 3mo return: ~0%. Vol: NEAR-ZERO. Sharpe stabilizer.",
+    "HYG": "4% \u2014 Credit spread monitor + income. Tight spreads confirm risk-on. Expected 3mo return: +1-2%. Vol: LOW. Wrong if: credit spreads widen sharply."
+  },
+  "key_risks": [
+    "TSMC AI capex guidance cut on next earnings would crater EWT and MU simultaneously \u2014 ~20% of portfolio exposed",
+    "US 10-year Treasury yield breaking above 4.67% compresses multiples on rate-sensitive positions (VNQ, IFRA, ORA) \u2014 ~23% of portfolio",
+    "MGM privatization bid withdrawal would cause 10-15% drawdown in that position",
+    "China macro weakness (PMI <49) would hit DBB and indirectly EWT through Asia supply chain",
+    "MU earnings miss on June 24 is a near-term binary risk \u2014 sized at 8% to contain damage"
+  ],
+  "what_could_be_wrong": "The biggest risk is that I'm overweight a narrow AI capex theme (EWT + MU = 20%) in a regime that rewards breadth. If TSMC or Micron disappoint on AI-specific revenue, the concentrated exposure could cause outsized drawdown. Additionally, the MGM privatization bid may not materialize into a firm offer, creating deal-break downside. The calm bull regime could transition to stressed if a geopolitical shock (Taiwan Strait, tariff escalation) materializes suddenly.",
+  "as_of_date": "2026-06-11"
+}
