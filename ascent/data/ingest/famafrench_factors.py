@@ -20,39 +20,44 @@ _DEFAULT_CACHE = _REPO_ROOT / "data_cache" / "famafrench_factors.parquet"
 _DEFAULT_START = "2018-01-01"
 
 
-def _get_obb():
-    from ascent.integrations.openbb_client import _get_obb
-    return _get_obb()
+_FF5_URL  = "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Research_Data_5_Factors_2x3_daily_CSV.zip"
+_FMOM_URL = "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Momentum_Factor_daily_CSV.zip"
+
+
+def _parse_french_zip(url: str) -> Optional[pd.DataFrame]:
+    """Download and parse a Ken French CSV zip. Returns DataFrame indexed by date."""
+    import io, zipfile, requests
+    r = requests.get(url, timeout=30)
+    r.raise_for_status()
+    z = zipfile.ZipFile(io.BytesIO(r.content))
+    csv_name = next(n for n in z.namelist() if n.upper().endswith(".CSV"))
+    raw = z.read(csv_name).decode("utf-8")
+    lines = raw.splitlines()
+    # Find first line that starts with a digit (data rows)
+    start_idx = next(i for i, l in enumerate(lines) if l.strip() and l.strip()[0].isdigit())
+    header = [c.strip().lower().replace("-", "_") for c in lines[start_idx - 1].split(",")]
+    data_lines = []
+    for line in lines[start_idx:]:
+        stripped = line.strip()
+        if not stripped or not stripped[0].isdigit():
+            break
+        data_lines.append(stripped)
+    df = pd.read_csv(io.StringIO("\n".join(data_lines)), header=None, names=header)
+    df.columns = ["date"] + list(df.columns[1:])
+    df["date"] = pd.to_datetime(df["date"].astype(str), format="%Y%m%d", errors="coerce")
+    df = df.dropna(subset=["date"]).set_index("date")
+    return df
 
 
 def fetch_ff_factors(start: str = _DEFAULT_START) -> Optional[pd.DataFrame]:
     """
-    Fetch Fama-French 5-factor + momentum daily returns for America.
-    Returns DataFrame indexed by date with columns: mkt_rf, smb, hml, rmw, cma, mom.
+    Fetch Fama-French 5-factor + momentum daily returns from Ken French's website.
+    Returns DataFrame indexed by date with columns: mkt_rf, smb, hml, rmw, cma, rf, mom.
     Returns None on failure.
     """
     try:
-        obb = _get_obb()
-
-        df_5f = obb.famafrench.factors(
-            factor="5_factors",
-            frequency="daily",
-            region="america",
-            provider="famafrench",
-        ).to_dataframe()
-
-        df_mom = obb.famafrench.factors(
-            factor="momentum",
-            frequency="daily",
-            region="america",
-            provider="famafrench",
-        ).to_dataframe()
-
-        for df in (df_5f, df_mom):
-            df.columns = [c.lower() for c in df.columns]
-            if "date" in df.columns:
-                df.set_index("date", inplace=True)
-            df.index = pd.to_datetime(df.index)
+        df_5f  = _parse_french_zip(_FF5_URL)
+        df_mom = _parse_french_zip(_FMOM_URL)
 
         keep_5f  = [c for c in ("mkt_rf", "smb", "hml", "rmw", "cma", "rf") if c in df_5f.columns]
         keep_mom = [c for c in ("mom", "wml") if c in df_mom.columns]
@@ -62,6 +67,7 @@ def fetch_ff_factors(start: str = _DEFAULT_START) -> Optional[pd.DataFrame]:
         if mom_col:
             combined["mom"] = df_mom[mom_col]
 
+        # Ken French reports in percent — divide by 100
         sample = combined["mkt_rf"].dropna()
         if not sample.empty and abs(sample.iloc[-1]) > 1.0:
             combined = combined / 100.0

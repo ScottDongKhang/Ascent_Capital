@@ -264,7 +264,8 @@ def get_cot_snapshot() -> Optional[dict]:
     """
     try:
         obb = _get_obb()
-        df = obb.regulators.cftc.cot(
+        # Route moved from obb.regulators.cftc to obb.cftc in OpenBB 4.7+
+        df = obb.cftc.cot(
             code=_SP500_COT_CODE, provider="cftc", limit=2
         ).to_dataframe()
 
@@ -272,21 +273,37 @@ def get_cot_snapshot() -> Optional[dict]:
             return None
 
         df.columns = [c.lower() for c in df.columns]
-        latest = df.sort_values("date").iloc[-1] if "date" in df.columns else df.iloc[-1]
+        date_col = next((c for c in ("report_week", "date") if c in df.columns), None)
+        latest = df.sort_values(date_col).iloc[-1] if date_col else df.iloc[-1]
 
-        # Column names from CFTC legacy report
-        long_col  = next((c for c in df.columns if "noncomm" in c and "long" in c and "spread" not in c), None)
-        short_col = next((c for c in df.columns if "noncomm" in c and "short" in c and "spread" not in c), None)
-        oi_col    = next((c for c in df.columns if "open_interest" in c or c == "oi"), None)
+        # Column names in OpenBB 4.7+ CFTC legacy report
+        long_col = next(
+            (c for c in df.columns
+             if ("non_commercial" in c or "noncomm" in c)
+             and "long" in c and "spread" not in c and "other" not in c),
+            None
+        )
+        short_col = next(
+            (c for c in df.columns
+             if ("non_commercial" in c or "noncomm" in c)
+             and "short" in c and "spread" not in c and "other" not in c),
+            None
+        )
+        oi_col = next(
+            (c for c in df.columns
+             if "open_interest" in c and "other" not in c and "pct" not in c
+             and "change" not in c),
+            None
+        )
 
         if not long_col or not short_col:
             log.warning("[OBBClient] COT column names unexpected: %s", list(df.columns[:10]))
             return None
 
-        net_long  = int(latest[long_col]) - int(latest[short_col])
-        oi        = int(latest[oi_col]) if oi_col and pd.notna(latest.get(oi_col)) else None
-        pct_long  = round(int(latest[long_col]) / oi * 100, 1) if oi else None
-        as_of     = str(latest["date"])[:10] if "date" in df.columns else "unknown"
+        net_long = int(latest[long_col]) - int(latest[short_col])
+        oi       = int(latest[oi_col]) if oi_col and pd.notna(latest.get(oi_col)) else None
+        pct_long = round(int(latest[long_col]) / oi * 100, 1) if oi else None
+        as_of    = str(latest[date_col]) if date_col else "unknown"
 
         return {
             "net_noncommercial_long": net_long,

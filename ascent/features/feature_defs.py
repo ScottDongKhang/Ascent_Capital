@@ -401,20 +401,22 @@ def build_options_panel(
     if not required.issubset(set(options_df.columns)):
         return {}
 
-    clean_index = date_index.tz_localize(None) if date_index.tz is not None else date_index
+    _idx = date_index.normalize()
+    clean_index = _idx.tz_localize(None) if _idx.tz is not None else _idx
+    clean_index = clean_index[~clean_index.duplicated(keep="last")]
     result = {}
 
     for col in ("iv_skew", "put_call_ratio"):
         if col not in options_df.columns:
             continue
         sub = options_df[["symbol", "date", col]].copy()
-        sub["date"] = pd.to_datetime(sub["date"]).dt.tz_localize(None)
+        sub["date"] = pd.to_datetime(sub["date"]).dt.normalize().dt.tz_localize(None)
         sub = sub.dropna(subset=[col])
         if sub.empty:
             continue
         wide = sub.pivot_table(index="date", columns="symbol", values=col, aggfunc="last")
         if wide.index.tz is not None:
-            wide.index = wide.index.tz_localize(None)
+            wide.index = wide.index.normalize().tz_localize(None)
         # Forward-fill gaps up to 5 days; data should refresh daily
         wide = wide.reindex(clean_index).ffill(limit=5)
         wide = wide.reindex(columns=symbols)
@@ -491,20 +493,22 @@ def build_short_panel(
     if not required.issubset(set(short_df.columns)):
         return {}
 
-    clean_index = date_index.tz_localize(None) if date_index.tz is not None else date_index
+    _idx = date_index.normalize()
+    clean_index = _idx.tz_localize(None) if _idx.tz is not None else _idx
+    clean_index = clean_index[~clean_index.duplicated(keep="last")]
     result = {}
 
     for col in ("short_pct_float", "short_ratio"):
         if col not in short_df.columns:
             continue
         sub = short_df[["symbol", "date", col]].copy()
-        sub["date"] = pd.to_datetime(sub["date"]).dt.tz_localize(None)
+        sub["date"] = pd.to_datetime(sub["date"]).dt.normalize().dt.tz_localize(None)
         sub = sub.dropna(subset=[col])
         if sub.empty:
             continue
         wide = sub.pivot_table(index="date", columns="symbol", values=col, aggfunc="last")
         if wide.index.tz is not None:
-            wide.index = wide.index.tz_localize(None)
+            wide.index = wide.index.normalize().tz_localize(None)
         wide = wide.reindex(clean_index).ffill(limit=15)
         wide = wide.reindex(columns=symbols)
         result[col] = wide

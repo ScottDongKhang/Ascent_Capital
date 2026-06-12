@@ -161,18 +161,16 @@ def test_format_prethesis_renders_directional_stance_first():
 # ── Test 5: _tool_propose_portfolio rejects missing prethesis_disposition ──────
 
 def test_tool_propose_portfolio_rejects_missing_disposition(tmp_path):
-    """Fix 3 (Finding 8): When ai_prethesis_latest.json exists, submission without
-    prethesis_disposition must be rejected."""
+    """Fix 3 (Finding 8): When this session sealed a pre-thesis (prethesis_active=True),
+    submission without prethesis_disposition must be rejected. The gate is
+    session-scoped — a stale ai_prethesis_latest.json from a previous run must
+    NOT trigger it (that caused spurious rejections)."""
     m = _import_agent()
 
     # Temporarily monkey-patch _REPO_ROOT to our tmp dir
     orig_root = m._REPO_ROOT
     m._REPO_ROOT = tmp_path
     (tmp_path / "data_cache").mkdir(parents=True, exist_ok=True)
-    # Write a fake prethesis file to trigger the gate
-    (tmp_path / "data_cache" / "ai_prethesis_latest.json").write_text(
-        json.dumps({"macro_view": "test", "directional_stance": {}})
-    )
 
     try:
         result_store: list = []
@@ -180,6 +178,7 @@ def test_tool_propose_portfolio_rejects_missing_disposition(tmp_path):
         result = m._tool_propose_portfolio(
             inputs={"weights": {"AAPL": 0.1}, "thesis": {"feedback_acknowledged": True}},
             result_store=result_store,
+            prethesis_active=True,
         )
         assert isinstance(result, str) and "REJECTED" in result, (
             f"Should be rejected for missing prethesis_disposition, got: {result!r}"

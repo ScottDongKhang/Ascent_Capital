@@ -739,7 +739,12 @@ AI_PM_TOOLS = [
                         "override_type ∈ [momentum_exhaustion, regime_macro, news_event, correlation_risk, data_quality] "
                         "— max 2 overrides; data_quality only for confirmed corporate actions), "
                         "position_rationale (dict), key_risks (list), what_could_be_wrong, "
-                        "pre_mortem (string: the 30-day loss scenario written before submitting)."
+                        "pre_mortem (string: the 30-day loss scenario written before submitting), "
+                        "feedback_acknowledged (boolean, ALWAYS set to true — required every submission), "
+                        "worst_call_response (string — name the worst recent call shown in system context and explain what you learned), "
+                        "prethesis_disposition (string — REQUIRED if a pre-thesis was sealed this session: "
+                        "either 'FOLLOWED' if your stance is intact or 'OVERRIDDEN' with the specific "
+                        "post-seal event that changed your view; omit only if no pre-thesis was produced)."
                     ),
                 },
             },
@@ -747,6 +752,10 @@ AI_PM_TOOLS = [
         },
     },
 ]
+
+# Standalone handle on the propose_portfolio schema for the Phase 2 force-seal
+# pass (the forced tool_choice call sends this single tool definition).
+_PROPOSE_PORTFOLIO_TOOL = next(t for t in AI_PM_TOOLS if t["name"] == "propose_portfolio")
 
 # ── Pre-thesis tool (Phase 1 only) ────────────────────────────────────────────
 
@@ -1122,7 +1131,11 @@ Questions to guide your research:
   • What would a smart, informed fundamental investor buy or avoid this cycle?
 
 ══ TOOLS AVAILABLE ══
-Use up to 10 tools. Suggested sequence:
+HARD LIMIT: You may call at most 7 research tools. After that, the system will block further
+research calls. Your 8th call MUST be propose_prethesis or you will produce no thesis.
+Plan your research to fit within 7 calls — do not waste calls on low-priority lookups.
+
+Suggested sequence (pick the 7 most relevant):
   1. get_rebalance_brief — recent intelligence synthesis
   2. get_regime_state + get_macro_data — macro context
   3. get_regime_memory — how have similar regimes played out?
@@ -1130,7 +1143,7 @@ Use up to 10 tools. Suggested sequence:
   5. get_sec_signal / get_earnings_signal / get_narrative_shift — on your candidate names
   6. get_crowding_signal — are your thesis names clean or exhausted?
   7. get_analyst_estimates — on high-conviction candidates
-  8. propose_prethesis — seal your thesis
+  8. propose_prethesis — REQUIRED FINAL CALL — seal your thesis
 
 ══ OUTPUT: propose_prethesis ══
 Write 8–15 names with genuine written theses. Not "strong momentum" — the actual business driver.
@@ -1712,7 +1725,7 @@ def _tool_get_weekend_research(_: dict) -> str:
         return f"Weekend research unavailable: {exc}"
 
 
-def _tool_propose_portfolio(inputs: dict, result_store: list) -> str:
+def _tool_propose_portfolio(inputs: dict, result_store: list, prethesis_active: bool = False) -> str:
     weights = inputs.get("weights", {})
     thesis  = inputs.get("thesis", {})
 
@@ -1727,9 +1740,9 @@ def _tool_propose_portfolio(inputs: dict, result_store: list) -> str:
             return ("REJECTED: You must set feedback_acknowledged=true and include worst_call_response "
                     "before submitting. Read the feedback file and acknowledge your worst recent call.")
 
-    # Enforce prethesis_disposition when a pre-thesis has been sealed.
-    _pt_path = _REPO_ROOT / "data_cache" / "ai_prethesis_latest.json"
-    if _pt_path.exists():
+    # Enforce prethesis_disposition only when THIS SESSION produced a pre-thesis.
+    # Do not check stale file from previous runs — that causes spurious rejections.
+    if prethesis_active:
         disposition = thesis.get("prethesis_disposition", "")
         if not disposition or disposition not in ("FOLLOWED", "OVERRIDDEN"):
             log.warning("[AIPMAgent] Phase 2 rejected — prethesis_disposition missing or invalid.")
@@ -2016,6 +2029,17 @@ def _tool_propose_prethesis(inputs: dict, result_store: list) -> str:
     return f"Pre-thesis sealed: {n} conviction names, {avoid} to avoid. Phase 1 complete."
 
 
+_PRETHESIS_RESEARCH_TOOLS = {
+    "get_rebalance_brief", "get_live_news", "get_analyst_estimates",
+    "get_regime_state", "get_macro_data", "get_sec_signal",
+    "get_transcript_signal", "get_attribution_history", "get_earnings_signal",
+    "get_regime_memory", "get_narrative_shift", "get_calibration_report",
+    "get_scenario_plan", "get_weekend_research", "get_crowding_signal",
+    "get_causal_graph",
+}
+_PRETHESIS_RESEARCH_CAP = 7  # hard cap; 8th call must be propose_prethesis
+
+
 def _make_prethesis_executor(result_store: list):
     """Dispatcher for Phase 1 (pre-thesis) tools — no quant agents, no propose_portfolio."""
     _map = {
@@ -2037,8 +2061,17 @@ def _make_prethesis_executor(result_store: list):
         "get_causal_graph":         _tool_get_causal_graph,
         "propose_prethesis":        lambda i: _tool_propose_prethesis(i, result_store),
     }
+    _research_calls = [0]  # mutable counter
 
     def executor(tool_name: str, tool_inputs: dict) -> str:
+        if tool_name in _PRETHESIS_RESEARCH_TOOLS:
+            if _research_calls[0] >= _PRETHESIS_RESEARCH_CAP:
+                return (
+                    f"RESEARCH BUDGET EXHAUSTED ({_PRETHESIS_RESEARCH_CAP} calls used). "
+                    "You have gathered enough data. You MUST call propose_prethesis NOW "
+                    "to seal your thesis and complete Phase 1. Do not call any more research tools."
+                )
+            _research_calls[0] += 1
         fn = _map.get(tool_name)
         if fn is None:
             return f"Tool '{tool_name}' not available in Phase 1 (pre-thesis). Call propose_prethesis to complete Phase 1."
@@ -2051,7 +2084,7 @@ def _make_prethesis_executor(result_store: list):
     return executor
 
 
-def _make_executor(result_store: list, precomputed: dict | None = None, failures: list | None = None):
+def _make_executor(result_store: list, precomputed: dict | None = None, failures: list | None = None, prethesis_active: bool = False):
     from debate.agent_tools import (
         get_var_estimate, get_sector_concentration, get_position_momentum,
     )
@@ -2093,7 +2126,7 @@ def _make_executor(result_store: list, precomputed: dict | None = None, failures
         "get_mirofish_sentiment":       _tool_get_mirofish_sentiment,
         "get_live_options_flow":        _tool_get_live_options_flow,
         "get_cot_positioning":          _tool_get_cot_positioning,
-        "propose_portfolio":            lambda i: _tool_propose_portfolio(i, result_store),
+        "propose_portfolio":            lambda i: _tool_propose_portfolio(i, result_store, prethesis_active=prethesis_active),
     }
 
     def executor(tool_name: str, tool_inputs: dict) -> str:
@@ -2277,12 +2310,41 @@ def run_ai_pm_prethesis(
             tool_executor=executor,
             model=SONNET_MODEL,   # Sonnet reads + summarises; Opus reserved for synthesis judgment
             max_tokens=6000,
-            max_tool_calls=10,
+            max_tool_calls=18,
             use_cache=True,
         )
     except Exception as exc:
         log.error("[AIPMAgent] Pre-thesis phase failed: %s", exc)
         return None
+
+    # Force-seal pass: bypass tool_completion and use tool_choice to hard-force the call.
+    # tool_choice={"type":"tool","name":"propose_prethesis"} makes the API require that exact tool.
+    if not result_store:
+        log.warning("[AIPMAgent] Pre-thesis: main pass exhausted without sealing — running force-seal pass")
+        try:
+            from ascent.llm.client import _get_client, _check_api_key, _record_usage
+            _check_api_key()
+            _cli = _get_client()
+            _resp = _cli.messages.create(
+                model=SONNET_MODEL,
+                max_tokens=4000,
+                system=_build_temporal_context(feedback=_p1_feedback) + _p1_grounding + sentiment_block,
+                messages=[{"role": "user", "content": (
+                    f"Today is {date.today()}. Seal your investment thesis now. "
+                    "Base it on the regime, macro, and portfolio data in the system prompt."
+                    + _causal_context
+                )}],
+                tools=[_PROPOSE_PRETHESIS_TOOL],
+                tool_choice={"type": "tool", "name": "propose_prethesis"},
+            )
+            _record_usage(SONNET_MODEL, _resp.usage.input_tokens, _resp.usage.output_tokens)
+            for _block in _resp.content:
+                if getattr(_block, "type", "") == "tool_use" and _block.name == "propose_prethesis":
+                    _tool_propose_prethesis(_block.input, result_store)
+                    print("[AIPMAgent] Pre-thesis: force-seal succeeded")
+                    break
+        except Exception as exc:
+            print(f"[AIPMAgent] Force-seal pass failed: {exc}")
 
     if not result_store:
         log.warning("[AIPMAgent] Pre-thesis: propose_prethesis never called — no thesis")
@@ -2511,7 +2573,7 @@ def run_ai_pm(
             system_prompt=_system,
             user_prompt=user_prompt,
             tools=AI_PM_TOOLS,
-            tool_executor=_make_executor(result_store, precomputed, failures=_phase2_failures),
+            tool_executor=_make_executor(result_store, precomputed, failures=_phase2_failures, prethesis_active=(prethesis is not None)),
             model=_phase2_model,
             max_tokens=4000,
             max_tool_calls=14,
@@ -2520,6 +2582,59 @@ def run_ai_pm(
     except Exception as exc:
         log.error("[AIPMAgent] tool_completion failed: %s", exc)
         return AIPMResult(portfolio={}, thesis={}, fallback=True)
+
+    # Force-seal pass: mirror of the Phase 1 force-seal. If the main loop exhausted
+    # max_tool_calls without calling propose_portfolio, bypass tool_completion and
+    # use tool_choice to hard-force the submission. The executor keeps the
+    # validation gates (feedback_acknowledged / prethesis_disposition) intact —
+    # a gate rejection gets one retry with the rejection text fed back.
+    if not result_store:
+        log.warning("[AIPMAgent] Phase 2: main pass exhausted without sealing — running force-seal pass")
+        try:
+            from ascent.llm.client import _get_client, _check_api_key, _record_usage
+            _check_api_key()
+            _cli = _get_client()
+            _seal_executor = _make_executor(
+                result_store, precomputed,
+                failures=_phase2_failures,
+                prethesis_active=(prethesis is not None),
+            )
+            _seal_prompt = (
+                f"Today is {date.today()}. Submit your final portfolio NOW by calling propose_portfolio. "
+                "Base it on the quant baseline and the grounding data in the system prompt. "
+                "Your thesis MUST set feedback_acknowledged=true and include worst_call_response."
+                + (" It MUST also set prethesis_disposition to 'FOLLOWED' or 'OVERRIDDEN'."
+                   if prethesis is not None else "")
+                + " If you see no reason to deviate, submit the quant baseline weights unchanged."
+            )
+            for _seal_attempt in range(2):
+                _resp = _cli.messages.create(
+                    model=_phase2_model,
+                    max_tokens=4000,
+                    system=_system,
+                    messages=[{"role": "user", "content": _seal_prompt}],
+                    tools=[_PROPOSE_PORTFOLIO_TOOL],
+                    tool_choice={"type": "tool", "name": "propose_portfolio"},
+                )
+                _record_usage(_phase2_model, _resp.usage.input_tokens, _resp.usage.output_tokens)
+                _rejection = ""
+                for _block in _resp.content:
+                    if getattr(_block, "type", "") == "tool_use" and _block.name == "propose_portfolio":
+                        _out = _seal_executor("propose_portfolio", _block.input)
+                        if isinstance(_out, str) and _out.startswith("REJECTED"):
+                            _rejection = _out
+                        break
+                if result_store:
+                    print("[AIPMAgent] Phase 2: force-seal succeeded")
+                    break
+                if not _rejection:
+                    break
+                _seal_prompt = (
+                    f"Your submission was rejected:\n{_rejection}\n\n"
+                    "Fix exactly these issues and call propose_portfolio again with the full weights and thesis."
+                )
+        except Exception as exc:
+            print(f"[AIPMAgent] Phase 2 force-seal pass failed: {exc}")
 
     if len(result_store) > 1:
         log.warning("[AIPMAgent] propose_portfolio called %d times; using last submission", len(result_store))
@@ -2560,7 +2675,7 @@ def run_ai_pm(
                 system_prompt=_system,
                 user_prompt=revision_prompt,
                 tools=AI_PM_TOOLS,
-                tool_executor=_make_executor(result_store_v2, precomputed),
+                tool_executor=_make_executor(result_store_v2, precomputed, prethesis_active=(prethesis is not None)),
                 model=DEFAULT_MODEL,
                 max_tokens=2000,
                 max_tool_calls=6,

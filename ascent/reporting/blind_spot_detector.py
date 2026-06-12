@@ -163,7 +163,7 @@ def detect_blind_spots(force: bool = False) -> Optional[dict]:
         raw = generate_structured(
             system_prompt, user_prompt,
             model=HAIKU_MODEL,
-            max_tokens=1500,
+            max_tokens=3000,
             temperature=0.2,
         )
         raw = raw.strip()

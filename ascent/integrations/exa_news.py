@@ -64,11 +64,13 @@ def fetch_news(
             )
             resp.raise_for_status()
             data = resp.json()
-            summaries = [
-                r["summary"]["answer"]
-                for r in data.get("results", [])
-                if r.get("summary", {}).get("answer")
-            ]
+            summaries = []
+            for r in data.get("results", []):
+                summary = r.get("summary")
+                if isinstance(summary, str) and summary:
+                    summaries.append(summary)
+                elif isinstance(summary, dict) and summary.get("answer"):
+                    summaries.append(summary["answer"])
             results[sym] = summaries[:max_per_symbol]
         except Exception as exc:
             logger.warning("[ExaNews] Failed for %s: %s", sym, exc)

@@ -8,7 +8,7 @@ log = logging.getLogger(__name__)
 
 _MIROFISH_BASE_URL = "http://localhost:5001"
 _N_ROUNDS = 10
-_TIMEOUT_SECS = 480
+_TIMEOUT_SECS = 1500
 
 
 def _compute_alignment_score(
@@ -87,6 +87,10 @@ def get_mirofish_sentiment(inputs: dict[str, Any]) -> str:
     crowd_sentiment = raw["overall_sentiment"]
     crowd_confidence = raw["confidence"]
     alignment_score = _compute_alignment_score(best_analogue_sentiment, crowd_sentiment, crowd_confidence)
+    print(
+        f"[MiroFish] alignment_score={alignment_score:.2f} "
+        f"sentiment={crowd_sentiment} confidence={crowd_confidence:.2f}"
+    )
 
     return _format_result(
         alignment_score=alignment_score,

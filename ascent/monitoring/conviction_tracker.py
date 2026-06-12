@@ -81,7 +81,7 @@ def save_rebalance_alpha_state(
     us_agent = next((ao for ao in agent_outputs if ao.agent_id == "us_equities"), None)
     alpha_ranks, alpha_scores = {}, {}
 
-    if us_agent is not None and not us_agent.alpha_scores.empty:
+    if us_agent is not None and us_agent.alpha_scores is not None and not us_agent.alpha_scores.empty:
         try:
             latest = us_agent.alpha_scores.iloc[-1].to_dict()
             sorted_syms = sorted(latest, key=lambda s: latest[s], reverse=True)

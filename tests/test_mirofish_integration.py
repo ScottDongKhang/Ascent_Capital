@@ -165,6 +165,160 @@ def test_run_sync_timeout_returns_none():
         )
     assert result is None
 
+
+def test_prepare_fails_fast_on_zero_entities():
+    """If /prepare reports expected_entities_count=0 the prepare cannot succeed
+    (server fails it instantly), so the client must not poll until the deadline."""
+    import time
+    from ascent.integrations.mirofish_client import MiroFishClient
+    client = MiroFishClient(base_url="http://localhost:5001")
+    with patch("requests.post") as mock_post:
+        r = MagicMock()
+        r.raise_for_status = MagicMock()
+        r.json.return_value = {"success": True, "data": {
+            "simulation_id": "sim_zero", "task_id": "task_p1", "status": "preparing",
+            "already_prepared": False, "expected_entities_count": 0, "entity_types": [],
+        }}
+        mock_post.return_value = r
+        t0 = time.monotonic()
+        out = client._prepare_simulation("sim_zero", deadline=time.monotonic() + 60)
+    assert out == "no_entities"
+    assert time.monotonic() - t0 < 2
+
+
+def test_prepare_detects_server_side_failure():
+    """A prepare that fails server-side never reaches 'ready' — the client must
+    notice the simulation state flipping to 'failed' and stop polling promptly."""
+    import time
+    from ascent.integrations.mirofish_client import MiroFishClient
+    client = MiroFishClient(base_url="http://localhost:5001")
+
+    def post_side_effect(url, **kwargs):
+        r = MagicMock()
+        r.raise_for_status = MagicMock()
+        if "simulation/prepare" in url and "status" not in url:
+            r.json.return_value = {"success": True, "data": {
+                "simulation_id": "sim_fail", "task_id": "task_p2", "status": "preparing",
+                "already_prepared": False, "expected_entities_count": 3,
+            }}
+        elif "simulation/prepare/status" in url:
+            r.json.return_value = {"success": True, "data": {"status": "not_started", "already_prepared": False}}
+        return r
+
+    def get_side_effect(url, **kwargs):
+        r = MagicMock()
+        r.raise_for_status = MagicMock()
+        if "simulation/sim_fail" in url:
+            r.json.return_value = {"success": True, "data": {"simulation_id": "sim_fail", "status": "failed", "error": "no entities"}}
+        return r
+
+    with patch("requests.post", side_effect=post_side_effect), \
+         patch("requests.get", side_effect=get_side_effect), \
+         patch("time.sleep"):
+        t0 = time.monotonic()
+        out = client._prepare_simulation("sim_fail", deadline=time.monotonic() + 120)
+    assert out == "failed"
+    assert time.monotonic() - t0 < 5
+
+
+def test_wait_for_simulation_detects_wait_for_commands_mode():
+    """The reddit runner never reports 'completed' while idling in
+    wait-for-commands mode after its rounds finish. The client must detect
+    env_alive=True, stop the simulation, and treat the run as complete."""
+    import time
+    from ascent.integrations.mirofish_client import MiroFishClient
+    client = MiroFishClient(base_url="http://localhost:5001")
+    stopped = {"called": False}
+
+    def post_side_effect(url, **kwargs):
+        r = MagicMock()
+        r.raise_for_status = MagicMock()
+        if "env-status" in url:
+            r.json.return_value = {"success": True, "data": {"env_alive": True, "reddit_available": True}}
+        elif "simulation/stop" in url:
+            stopped["called"] = True
+            r.json.return_value = {"success": True, "data": {"runner_status": "stopped"}}
+        return r
+
+    def get_side_effect(url, **kwargs):
+        r = MagicMock()
+        r.raise_for_status = MagicMock()
+        # runner stays 'running' forever — the old client polled until deadline
+        r.json.return_value = {"success": True, "data": {"runner_status": "running", "current_round": 0}}
+        return r
+
+    with patch("requests.post", side_effect=post_side_effect), \
+         patch("requests.get", side_effect=get_side_effect), \
+         patch("time.sleep"):
+        t0 = time.monotonic()
+        ok = client._wait_for_simulation("sim_wait", deadline=time.monotonic() + 120)
+    assert ok is True
+    assert stopped["called"], "client must stop the idle env to release it"
+    assert time.monotonic() - t0 < 5
+
+
+def test_run_sync_rebuilds_graph_when_zero_entities():
+    """Zep entity classification is stochastic — a graph can come back with 0
+    classified entities. run_sync must rebuild the graph once and continue."""
+    from ascent.integrations.mirofish_client import MiroFishClient
+    state = {"builds": 0, "sims": 0}
+
+    def post_side_effect(url, **kwargs):
+        r = MagicMock()
+        r.raise_for_status = MagicMock()
+        if "ontology/generate" in url:
+            r.json.return_value = {"success": True, "data": {"project_id": "proj_retry"}}
+        elif "graph/build" in url:
+            state["builds"] += 1
+            r.json.return_value = {"success": True, "data": {"task_id": f"task_build_{state['builds']}"}}
+        elif "simulation/create" in url:
+            state["sims"] += 1
+            r.json.return_value = {"success": True, "data": {"simulation_id": f"sim_{state['sims']}"}}
+        elif "simulation/prepare" in url and "status" not in url:
+            sim_id = kwargs.get("json", {}).get("simulation_id", "")
+            if sim_id == "sim_1":
+                r.json.return_value = {"success": True, "data": {
+                    "simulation_id": sim_id, "task_id": "task_p", "status": "preparing",
+                    "already_prepared": False, "expected_entities_count": 0,
+                }}
+            else:
+                r.json.return_value = {"success": True, "data": {
+                    "simulation_id": sim_id, "status": "ready", "already_prepared": True,
+                }}
+        elif "simulation/prepare/status" in url:
+            r.json.return_value = {"success": True, "data": {"status": "ready", "already_prepared": True}}
+        elif "simulation/start" in url:
+            r.json.return_value = {"success": True, "data": {"runner_status": "running"}}
+        elif "report/generate" in url and "status" not in url:
+            r.json.return_value = {"success": True, "data": {"report_id": "report_r", "task_id": "task_r", "already_generated": False}}
+        elif "report/generate/status" in url:
+            r.json.return_value = {"success": True, "data": {"status": "completed", "report_id": "report_r"}}
+        return r
+
+    def get_side_effect(url, **kwargs):
+        r = MagicMock()
+        r.raise_for_status = MagicMock()
+        if "graph/task/" in url:
+            r.json.return_value = {"success": True, "data": {"status": "completed", "result": {"graph_id": f"graph_{state['builds']}"}}}
+        elif "run-status" in url:
+            r.json.return_value = {"success": True, "data": {"runner_status": "completed", "current_round": 10}}
+        elif "report/report_r" in url:
+            r.json.return_value = {"success": True, "data": {
+                "report_id": "report_r", "status": "completed",
+                "markdown_content": "## Summary\nCrowd bullish on growth and momentum.",
+            }}
+        return r
+
+    with patch("requests.post", side_effect=post_side_effect), \
+         patch("requests.get", side_effect=get_side_effect), \
+         patch("time.sleep"):
+        client = MiroFishClient(base_url="http://localhost:5001")
+        result = client.run_sync("retry event", ["STRL"], n_rounds=10, timeout_secs=120)
+
+    assert state["builds"] == 2, "graph should be rebuilt once after 0-entity prepare"
+    assert result is not None
+    assert result["overall_sentiment"] in ("bullish", "bearish", "mixed")
+
 def test_parse_sentiment_bullish():
     from ascent.integrations.mirofish_client import _parse_sentiment_from_markdown
     md = "The crowd was overwhelmingly bullish. Participants expressed optimism. Buy signals everywhere."

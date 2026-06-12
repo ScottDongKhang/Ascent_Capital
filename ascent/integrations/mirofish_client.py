@@ -70,17 +70,24 @@ class MiroFishClient:
     def __init__(self, base_url: str = "http://localhost:5001") -> None:
         self._base = base_url.rstrip("/")
 
+    # MiroFish localises server output (incl. report markdown) from the
+    # Accept-Language header, defaulting to Chinese. Our sentiment parser uses
+    # English keywords, so always request English.
+    _HEADERS = {"Accept-Language": "en"}
+
     def _post(self, path: str, **kwargs) -> dict:
         import requests
         url = f"{self._base}{path}"
-        r = requests.post(url, timeout=30, **kwargs)
+        headers = {**self._HEADERS, **kwargs.pop("headers", {})}
+        r = requests.post(url, timeout=30, headers=headers, **kwargs)
         r.raise_for_status()
         return r.json()
 
     def _get(self, path: str, **kwargs) -> dict:
         import requests
         url = f"{self._base}{path}"
-        r = requests.get(url, timeout=30, **kwargs)
+        headers = {**self._HEADERS, **kwargs.pop("headers", {})}
+        r = requests.get(url, timeout=30, headers=headers, **kwargs)
         r.raise_for_status()
         return r.json()
 
@@ -109,7 +116,25 @@ class MiroFishClient:
             f"Focus on: (1) bullish or bearish sentiment toward these stocks, "
             f"(2) crowd conviction about timing, (3) risk factors the crowd discusses."
         )
-        event_text = f"Market Event Analysis\n\n{event_description}\n\nSymbols: {', '.join(symbols)}"
+        # Zep's entity extraction/classification only labels entities it can
+        # ground in the document text. A bare event description often yields
+        # only abstract concept nodes (0 classified entities -> prepare fails),
+        # so name the participant archetypes and companies explicitly.
+        company_lines = "\n".join(
+            f"- {s} is a publicly traded company whose stock is directly affected by this event."
+            for s in symbols
+        )
+        event_text = (
+            f"Market Event Analysis\n\n{event_description}\n\n"
+            f"Symbols: {', '.join(symbols)}\n\n"
+            f"Companies involved:\n{company_lines}\n\n"
+            "Market participants reacting to this event:\n"
+            "- Retail investors discuss the event on social media and decide whether to buy or sell.\n"
+            "- Professional traders adjust their positions in the affected stocks.\n"
+            "- Financial analysts at investment firms publish research notes on the affected companies.\n"
+            "- Hedge fund managers evaluate the event's impact on their portfolios.\n"
+            "- Media commentators cover the story for financial news outlets.\n"
+        )
         result = self._post(
             "/api/graph/ontology/generate",
             data={
@@ -138,18 +163,52 @@ class MiroFishClient:
         result = self._post("/api/simulation/create", json={"project_id": project_id, "graph_id": graph_id})
         return result["data"]["simulation_id"]
 
-    def _prepare_simulation(self, sim_id: str, deadline: float) -> bool:
-        """Trigger and wait for simulation preparation. Returns True when ready."""
+    def _get_sim_status(self, sim_id: str) -> str:
+        """Fetch the simulation state status string ('preparing', 'ready', 'failed', ...)."""
+        try:
+            result = self._get(f"/api/simulation/{sim_id}")
+            return str(result.get("data", {}).get("status", ""))
+        except Exception as exc:
+            log.debug("[MiroFish] sim status fetch failed: %s", exc)
+            return ""
+
+    def _prepare_simulation(self, sim_id: str, deadline: float) -> str:
+        """
+        Trigger and wait for simulation preparation.
+
+        Returns one of:
+          'ready'       — preparation complete
+          'no_entities' — graph has 0 classified entities; prepare cannot succeed
+          'failed'      — server-side preparation failure
+          'timeout'     — deadline expired while still preparing
+        """
         result = self._post("/api/simulation/prepare", json={"simulation_id": sim_id})
         data = result.get("data", {})
         if data.get("already_prepared") or data.get("status") == "ready":
-            return True
+            return "ready"
 
-        def check():
-            return self._post("/api/simulation/prepare/status", json={"simulation_id": sim_id})
+        # The /prepare response carries the synchronously computed entity count.
+        # 0 entities means the server-side prepare task fails immediately, but
+        # /prepare/status (simulation_id-only) never surfaces that failure —
+        # without this check we would poll until the deadline.
+        if data.get("expected_entities_count") == 0:
+            log.warning("[MiroFish] Graph yielded 0 classified entities — preparation cannot proceed")
+            return "no_entities"
 
-        polled = self._poll(check, interval=4.0, deadline=deadline, success_key="status", success_vals={"ready"})
-        return polled is not None
+        while time.monotonic() < deadline:
+            try:
+                polled = self._post("/api/simulation/prepare/status", json={"simulation_id": sim_id})
+                status = polled.get("data", {}).get("status", "")
+                if status == "ready":
+                    return "ready"
+                if self._get_sim_status(sim_id) == "failed":
+                    log.warning("[MiroFish] Simulation preparation failed server-side")
+                    return "failed"
+                log.debug("[MiroFish] preparing… status=%s", status)
+            except Exception as exc:
+                log.debug("[MiroFish] prepare poll error: %s", exc)
+            time.sleep(4.0)
+        return "timeout"
 
     def _start_simulation(self, sim_id: str, max_rounds: int = 10) -> bool:
         """Start the simulation. Returns True on success."""
@@ -165,15 +224,44 @@ class MiroFishClient:
             return False
 
     def _wait_for_simulation(self, sim_id: str, deadline: float) -> bool:
-        """Poll run-status until completed or stopped."""
-        def check():
-            return self._get(f"/api/simulation/{sim_id}/run-status")
+        """
+        Poll until the simulation rounds are done.
 
-        data = self._poll(
-            check, interval=6.0, deadline=deadline,
-            success_key="runner_status", success_vals={"completed", "stopped"},
-        )
-        return data is not None
+        The reddit runner idles in wait-for-commands mode after its round loop
+        (run-status stays 'running' forever — it never writes the actions.jsonl
+        events the server's monitor needs to flip it to 'completed'). The
+        reliable rounds-done signal is env_alive=True from /env-status, which
+        the runner only sets after the loop finishes; on seeing it we stop the
+        simulation to release the process and proceed to the report.
+        """
+        while time.monotonic() < deadline:
+            try:
+                result = self._get(f"/api/simulation/{sim_id}/run-status")
+                data = result.get("data", {})
+                status = data.get("runner_status", "")
+                if status in ("completed", "stopped"):
+                    return True
+                if status == "failed":
+                    log.warning("[MiroFish] Simulation failed server-side: %s", data.get("error"))
+                    return False
+                log.debug("[MiroFish] polling runner_status=%s", status)
+            except Exception as exc:
+                log.debug("[MiroFish] run-status poll error: %s", exc)
+
+            try:
+                env = self._post("/api/simulation/env-status", json={"simulation_id": sim_id})
+                if env.get("data", {}).get("env_alive"):
+                    log.info("[MiroFish] Rounds complete (env in wait-for-commands mode) — stopping simulation")
+                    try:
+                        self._post("/api/simulation/stop", json={"simulation_id": sim_id})
+                    except Exception as exc:
+                        log.debug("[MiroFish] stop request failed: %s", exc)
+                    return True
+            except Exception as exc:
+                log.debug("[MiroFish] env-status poll error: %s", exc)
+
+            time.sleep(6.0)
+        return False
 
     def _generate_report(self, sim_id: str, deadline: float) -> str | None:
         """Trigger async report generation. Returns report_id or None."""
@@ -206,7 +294,7 @@ class MiroFishClient:
         event_description: str,
         symbols: list[str],
         n_rounds: int = 10,
-        timeout_secs: int = 480,
+        timeout_secs: int = 900,
     ) -> dict[str, Any] | None:
         """
         Run the full MiroFish pipeline synchronously.
@@ -225,19 +313,34 @@ class MiroFishClient:
             if time.monotonic() > deadline:
                 return None
 
-            graph_id = self._build_graph(project_id, deadline)
-            if not graph_id:
-                log.warning("[MiroFish] Graph build timed out or failed")
-                return None
-            log.info("[MiroFish] graph_id=%s", graph_id)
+            # Zep entity classification is stochastic: the same project text can
+            # yield a graph with 0 classified entities, which makes preparation
+            # fail instantly. Rebuilding the graph re-runs extraction, so retry
+            # the build->create->prepare leg once before giving up.
+            sim_id = None
+            max_build_attempts = 2
+            for attempt in range(1, max_build_attempts + 1):
+                graph_id = self._build_graph(project_id, deadline)
+                if not graph_id:
+                    log.warning("[MiroFish] Graph build timed out or failed")
+                    return None
+                log.info("[MiroFish] graph_id=%s (attempt %d)", graph_id, attempt)
 
-            sim_id = self._create_simulation(project_id, graph_id)
-            log.info("[MiroFish] sim_id=%s", sim_id)
-            if time.monotonic() > deadline:
-                return None
+                candidate = self._create_simulation(project_id, graph_id)
+                log.info("[MiroFish] sim_id=%s", candidate)
+                if time.monotonic() > deadline:
+                    return None
 
-            if not self._prepare_simulation(sim_id, deadline):
-                log.warning("[MiroFish] Simulation preparation timed out")
+                prep = self._prepare_simulation(candidate, deadline)
+                if prep == "ready":
+                    sim_id = candidate
+                    break
+                if prep in ("no_entities", "failed") and attempt < max_build_attempts and time.monotonic() < deadline:
+                    log.warning("[MiroFish] Preparation %s on attempt %d — rebuilding graph", prep, attempt)
+                    continue
+                log.warning("[MiroFish] Simulation preparation %s", prep)
+                return None
+            if sim_id is None:
                 return None
 
             if not self._start_simulation(sim_id, max_rounds=n_rounds):
