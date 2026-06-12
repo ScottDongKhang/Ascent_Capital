@@ -194,13 +194,57 @@ class AscentPortfolioStrategy(PortfolioBaseStrategy):
         rebal_dates    = [alpha_dates[i] for i in range(0, len(alpha_dates), self.rebalance_freq)]
         alpha_at_rebal = alpha_scores.loc[rebal_dates]
 
+        # Risk-aware construction — same config flags as production (parity)
+        try:
+            from ascent.config.settings import get_config as _get_cfg
+            _bt = _get_cfg().backtest
+            _tilt_on, _cluster_on = _bt.inverse_vol_tilt, _bt.cluster_cap_enabled
+            _max_cluster, _cluster_corr = _bt.max_cluster_weight, _bt.cluster_corr_threshold
+        except Exception:
+            _tilt_on, _cluster_on = True, True
+            _max_cluster, _cluster_corr = 0.20, 0.70
+
+        _close_panel = None
+        _vol_panel = None
+        try:
+            _close_panel = data.pivot_table(
+                index="date", columns="symbol", values="close", aggfunc="last"
+            )
+            _close_panel.index = pd.to_datetime(_close_panel.index)
+            if getattr(_close_panel.index, "tz", None) is not None:
+                _close_panel.index = _close_panel.index.tz_localize(None)
+            _close_panel = _close_panel.sort_index()
+            if _tilt_on:
+                _vol_panel = (_close_panel.pct_change()
+                              .rolling(63, min_periods=21).std()
+                              .mul(np.sqrt(252)).shift(1))
+        except Exception:
+            pass
+
         weights_at_rebal = sector_constrained_weighted(
             alpha_at_rebal,
             n=self.top_n,
             max_weight=self.max_weight,
             sector_map=self.sector_map,
             regime_signal=None,
+            vol_panel=_vol_panel,
         )
+
+        # Correlation-cluster cap per rebalance row (causal trailing returns)
+        if _cluster_on and _close_panel is not None and not weights_at_rebal.empty:
+            try:
+                from ascent.portfolio.optimizer import enforce_cluster_cap
+                _rets_all = _close_panel.pct_change()
+                for _dt in weights_at_rebal.index:
+                    _trail = _rets_all.loc[:_dt].iloc[-63:]
+                    weights_at_rebal.loc[_dt] = enforce_cluster_cap(
+                        weights_at_rebal.loc[_dt], _trail,
+                        max_cluster_weight=_max_cluster,
+                        corr_threshold=_cluster_corr,
+                        max_weight=self.max_weight,
+                    )
+            except Exception:
+                pass
 
         # --- Step 3b: Long/short extension ---
         # Short bottom-N momentum stocks with half the gross of the long side.
@@ -244,10 +288,14 @@ class AscentPortfolioStrategy(PortfolioBaseStrategy):
         """
         When SPY closes below its ma_window-day MA at a rebalance date,
         multiply all weights by `multiplier` (default 0.70 = 30% cut).
-        Mirrors the production pipeline's SPY 200MA overlay.
+        Delegates to ascent/portfolio/exposure.py — the single source of truth
+        shared with production. Includes the production VIX>20 confirmation
+        (loaded point-in-time from the macro cache; MA-only when unavailable).
         Fully causal — uses only prices available before each rebalance date.
         """
         try:
+            from ascent.portfolio.exposure import ma_filter_scale, load_vix_from_macro_cache
+
             spy = (
                 data[data["symbol"] == "SPY"]
                 .copy()
@@ -255,15 +303,12 @@ class AscentPortfolioStrategy(PortfolioBaseStrategy):
                 .sort_values("date")
                 .set_index("date")["close"]
             )
-            scaled = weights.copy()
-            for rebal_date in weights.index:
-                past = spy[spy.index <= rebal_date]
-                if len(past) < 50:
-                    continue
-                ma = float(past.iloc[-min(ma_window, len(past)):].mean())
-                if float(past.iloc[-1]) < ma:
-                    scaled.loc[rebal_date] = weights.loc[rebal_date] * multiplier
-            return scaled
+            vix = load_vix_from_macro_cache()
+            scale = ma_filter_scale(
+                spy, weights.index, vix_close=vix,
+                ma_window=ma_window, multiplier=multiplier,
+            )
+            return weights.mul(scale, axis=0)
         except Exception:
             return weights
 
@@ -282,8 +327,13 @@ class AscentPortfolioStrategy(PortfolioBaseStrategy):
         Uses SPY trailing 21-day vol as proxy. Fully causal.
 
         scale = clip(target_vol / realized_spy_vol, floor, cap)
+
+        Delegates to ascent/portfolio/exposure.py — single source of truth
+        shared with production.
         """
         try:
+            from ascent.portfolio.exposure import vol_target_scale
+
             spy = (
                 data[data["symbol"] == "SPY"]
                 .copy()
@@ -291,18 +341,11 @@ class AscentPortfolioStrategy(PortfolioBaseStrategy):
                 .sort_values("date")
                 .set_index("date")["close"]
             )
-            spy_rets = spy.pct_change().dropna()
-
-            scaled = weights.copy()
-            for rebal_date in weights.index:
-                past_spy = spy_rets[spy_rets.index < rebal_date].iloc[-lookback:]
-                realized_vol = float(past_spy.std() * np.sqrt(252)) if len(past_spy) >= 5 else target_vol
-
-                if realized_vol < 1e-6:
-                    continue
-                scale = float(np.clip(target_vol / realized_vol, floor, cap))
-                scaled.loc[rebal_date] = weights.loc[rebal_date] * scale
-            return scaled
+            scale = vol_target_scale(
+                spy, weights.index, target_vol=target_vol,
+                lookback=lookback, floor=floor, cap=cap,
+            )
+            return weights.mul(scale, axis=0)
         except Exception:
             return weights
 

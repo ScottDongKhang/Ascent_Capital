@@ -680,6 +680,16 @@ def run_pipeline(
     )
     print(f"[Portfolio] Optimization method: {opt_method}")
 
+    # Inverse-vol tilt input: trailing 63d annualized vol, shifted 1d (causal)
+    _vol_panel = None
+    if cfg.backtest.inverse_vol_tilt:
+        try:
+            _vol_panel = (builder.close.pct_change()
+                          .rolling(63, min_periods=21).std()
+                          .mul(np.sqrt(252)).shift(1))
+        except Exception as _vp_e:
+            print(f"[Portfolio] Inverse-vol tilt skipped: {_vp_e}")
+
     # Historical dates: rank-weighting (MVO is single-period, not a panel optimizer)
     target_weights = sector_constrained_weighted(
         alpha,
@@ -688,6 +698,7 @@ def run_pipeline(
         max_per_sector=1,
         sector_map=sector_map,
         regime_signal=None,
+        vol_panel=_vol_panel,
     )
 
     # Overwrite the last date with MVO weights if successful
@@ -698,40 +709,57 @@ def run_pipeline(
             if sym in target_weights.columns:
                 target_weights.loc[last_dt, sym] = float(w)
 
+    # Correlation-cluster cap on the live row: names with different sector
+    # labels can still move as one factor in stress (e.g. EM cluster).
+    if cfg.backtest.cluster_cap_enabled and not target_weights.empty:
+        try:
+            from ascent.portfolio.optimizer import enforce_cluster_cap
+            last_dt = target_weights.index[-1]
+            _trail_rets = builder.close.pct_change().loc[:last_dt].iloc[-63:]
+            capped_row = enforce_cluster_cap(
+                target_weights.loc[last_dt],
+                _trail_rets,
+                max_cluster_weight=cfg.backtest.max_cluster_weight,
+                corr_threshold=cfg.backtest.cluster_corr_threshold,
+                max_weight=cfg.backtest.max_weight,
+            )
+            target_weights.loc[last_dt] = capped_row
+        except Exception as _cc_e:
+            print(f"[Portfolio] Cluster cap skipped: {_cc_e}")
+
     warmup = 252 + 21
     if len(target_weights) > warmup:
         target_weights = target_weights.iloc[warmup:]
 
     try:
-        spy_close         = benchmark_df.set_index("date")["close"].sort_index()
-        spy_close         = spy_close[~spy_close.index.duplicated(keep="last")]
-        spy_ma200         = spy_close.rolling(200, min_periods=150).mean()
-        spy_below_ma      = spy_close < spy_ma200
+        # VIX-confirmed 200MA cut + vol targeting — single source of truth shared
+        # with the WF framework. See ascent/portfolio/exposure.py.
+        from ascent.portfolio.exposure import apply_exposure_overlays
 
-        # VIX confirmation: only cut exposure when both SPY < 200MA AND VIX > 20.
-        # SPY-alone fires during relief rallies (e.g. April 2026) where markets
-        # recover faster than the MA catches up. VIX < 20 = options market disagrees.
-        from ascent.regime.engine import VIX_STRESSED_CONFIRMATION as _VIX_MA_THRESHOLD
+        spy_close = benchmark_df.set_index("date")["close"].sort_index()
+        spy_close = spy_close[~spy_close.index.duplicated(keep="last")]
+
+        _vix_close = None
         if vix_series is not None and not (hasattr(vix_series, "empty") and vix_series.empty):
             if hasattr(vix_series, "columns"):
                 _vix_close = vix_series["Close"] if "Close" in vix_series.columns else vix_series.iloc[:, 0]
             else:
                 _vix_close = vix_series
-            _vix_aligned      = _vix_close.reindex(spy_below_ma.index, method="ffill").fillna(25.0)
-            spy_below_confirmed = spy_below_ma & _vix_aligned.gt(_VIX_MA_THRESHOLD)
-        else:
-            spy_below_confirmed = spy_below_ma  # no VIX data — fall back to MA-only
 
-        spy_below_aligned = spy_below_confirmed.reindex(target_weights.index, method="ffill").fillna(False)
-        below_dates       = spy_below_aligned[spy_below_aligned].index
-        if len(below_dates) > 0:
-            target_weights.loc[below_dates] = target_weights.loc[below_dates] * 0.70
-            pct = len(below_dates) / max(len(target_weights), 1) * 100
-            print(f"[Portfolio] SPY 200d MA filter: {len(below_dates)} dates below MA+VIX>{_VIX_MA_THRESHOLD:.0f} ({pct:.1f}%) → 30% exposure cut")
-        else:
-            print("[Portfolio] SPY 200d MA filter: no confirmed stress dates — no cuts applied")
+        target_weights, _exp_meta = apply_exposure_overlays(
+            target_weights,
+            spy_close,
+            vix_close=_vix_close,
+            target_vol=cfg.backtest.target_vol,
+            vol_floor=cfg.backtest.vol_floor,
+            vol_cap=cfg.backtest.vol_cap,
+            vol_targeting_enabled=cfg.backtest.vol_targeting_enabled,
+        )
+        print(f"[Portfolio] Exposure overlays: {_exp_meta['ma_cut_dates']} MA+VIX cut dates | "
+              f"vol scale mean {_exp_meta['mean_vol_scale']:.2f}, min {_exp_meta['min_vol_scale']:.2f} "
+              f"(target {cfg.backtest.target_vol:.0%})")
     except Exception as _e:
-        print(f"[Portfolio] SPY 200d MA filter skipped: {_e}")
+        print(f"[Portfolio] Exposure overlays skipped: {_e}")
 
     active_dates = (target_weights.sum(axis=1) > 0.01).sum()
     print(f"[Portfolio] Target weights: {target_weights.shape}")

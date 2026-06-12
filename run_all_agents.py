@@ -376,7 +376,9 @@ def _get_portfolio_symbols() -> list:
     try:
         p = Path("execution/merged_weights.json")
         if p.exists():
-            weights = json.loads(p.read_text())
+            payload = json.loads(p.read_text())
+            # Payload format: {"date", "weights": {sym: w}, ...}; legacy: flat {sym: w}
+            weights = payload.get("weights", payload) if isinstance(payload, dict) else {}
             return [s for s, w in weights.items()
                     if isinstance(w, (int, float)) and w > 0]
     except Exception:
@@ -529,7 +531,8 @@ def _fill_wedge_and_decision_outcomes(as_of_date: str) -> None:
 def main():
     dry_run             = "--dry-run" in sys.argv
     skip_sector_check   = "--skip-sector-check" in sys.argv
-    today               = date.today()
+    _date_override      = next((a.split("=",1)[1] for a in sys.argv if a.startswith("--date=")), None)
+    today               = date.fromisoformat(_date_override) if _date_override else date.today()
 
     # ── Weekend branch: runs before everything else ───────────────────────────
     if today.weekday() >= 5:  # Saturday=5, Sunday=6
@@ -642,6 +645,16 @@ def main():
             print("[Runner] Fama-French factors: updated")
     except Exception as _ff_e:
         print(f"[Runner] Fama-French factors ingest skipped: {_ff_e}")
+
+    # ── Sector profile coverage guard: backfill live-book gaps, warn <90% ────
+    try:
+        from ascent.data.ingest.supplementary import check_book_sector_coverage
+        _book_w = _get_portfolio_symbols()
+        if isinstance(_book_w, list):
+            _book_w = {s: 1.0 / max(len(_book_w), 1) for s in _book_w}
+        check_book_sector_coverage(_book_w or {})
+    except Exception as _prof_e:
+        print(f"[Runner] Profile coverage guard skipped: {_prof_e}")
 
     # ── Alt data collection (runs before agents; each source fails silently) ──
     _collect_altdata(
@@ -1082,25 +1095,19 @@ def main():
         except Exception as _am_e:
             print(f"[AdvMonitor] Skipped: {_am_e}")
 
-        # Gate 4 — causal early exit check
+        # Gate 4 — falsifier enforcement: evaluate every registered
+        # "what would prove me wrong" condition (prethesis, judge, pre-mortem,
+        # causal early exits) and act on the first fired one with a bounded
+        # 25% trim. Replaces the old shadow-log-only early-exit check.
         try:
-            from ascent.causal.tracker import check_early_exits as _check_exits
-            _early_exit_symbols = _check_exits()
-            if _early_exit_symbols:
-                print(f"[Causal] Early exit flagged for: {_early_exit_symbols}")
-                import json as _json
-                _shadow_path = Path("data_cache/ai_pm_shadow_returns.jsonl")
-                _shadow_path.parent.mkdir(parents=True, exist_ok=True)
-                with open(_shadow_path, "a") as _sf:
-                    for _sym in _early_exit_symbols:
-                        _sf.write(_json.dumps({
-                            "date": today.isoformat(),
-                            "symbol": _sym,
-                            "ai_pm_shadow_weight": 0.0,
-                            "reason": "causal_mechanism_broken",
-                        }) + "\n")
+            from ascent.strategy.falsifier_registry import check_all as _falsifier_check
+            _fired = _falsifier_check(today, news_context=_news_context)
+            if _fired:
+                print(f"[Falsifier] {len(_fired)} falsifier(s) fired: "
+                      f"{[(f.get('symbol'), f.get('source')) for f in _fired]}")
+                _apply_falsifier_trim(_fired, merged_weights, today, dry_run)
         except Exception as _ce:
-            print(f"[Causal] Gate 4 early exit check failed: {_ce}")
+            print(f"[Falsifier] Gate 4 check failed: {_ce}")
 
         # Ticker discovery — surface a new candidate from today's Exa news
         try:
@@ -1416,6 +1423,24 @@ def main():
 
         except Exception as exc:
             print(f"[Runner] AI PM agent failed: {exc} — using quant portfolio")
+
+    # Build the falsifier registry for this holding period (rebalance only):
+    # prethesis "what would change my mind" + AI PM pre-mortem become daily-
+    # checked conditions. Judge predictions are appended after the verdict.
+    if is_rebalance:
+        try:
+            from ascent.strategy.falsifier_registry import build_registry
+            _fr_prethesis = getattr(_ai_prethesis, "raw", None) if _ai_prethesis else None
+            _fr_thesis = None
+            try:
+                if ai_pm_result and not ai_pm_result.fallback:
+                    _fr_thesis = ai_pm_result.thesis
+            except Exception:
+                pass
+            _n_fals = build_registry(today, prethesis_raw=_fr_prethesis, thesis=_fr_thesis)
+            print(f"[Falsifier] Registry built: {_n_fals} conditions watching this holding period")
+        except Exception as _fr_e:
+            print(f"[Falsifier] Registry build skipped: {_fr_e}")
 
     # Log episode for regime-aware memory
     try:
@@ -1733,6 +1758,13 @@ def main():
                 except Exception as _ai_e:
                     print(f"[AdvInt] Authority log failed: {_ai_e}")
 
+                # Register the judge's prediction as a daily-checked falsifier
+                try:
+                    from ascent.strategy.falsifier_registry import add_judge_falsifier
+                    add_judge_falsifier(sym, change.get("prediction", ""), today)
+                except Exception as _jf_e:
+                    print(f"[Falsifier] Judge falsifier registration failed: {_jf_e}")
+
                 # Re-write merged_weights.json with the adjusted weights
                 weights_path = Path("execution/merged_weights.json")
                 with open(weights_path, "w") as f:
@@ -2013,6 +2045,120 @@ def _write_mini_rebalance_log(symbol: str, conviction: float) -> None:
     }))
 
 
+def _apply_falsifier_trim(fired: list, current_weights: dict, today, dry_run: bool = False) -> None:
+    """
+    Execute ONE bounded trim for the highest-priority fired falsifier:
+    reduce the position 25% (floor 4%), proceeds to cash (single sell order —
+    no intra-period churn in the rest of the book).
+
+    Gates: shares the mini-rebalance 5-trading-day cooldown; skipped while the
+    'falsifier_trim' intervention type is suspended (win rate < 40% after 30
+    scored). Each trim is recorded via record_intervention and scored at 10
+    days exactly like judge interventions. One trim per falsifier entry.
+    """
+    try:
+        if _check_mini_rebalance_cooldown():
+            print("[Falsifier] Cooldown active (shared with mini-rebalance) — no trim")
+            return
+
+        from debate.adversarial_authority import get_authority, record_intervention
+        auth = get_authority("falsifier_trim")
+        if auth.get("suspended"):
+            print("[Falsifier] falsifier_trim authority SUSPENDED — alert only, no trim")
+            return
+
+        # Base = live book when available, else today's merged weights
+        book = {}
+        try:
+            from ascent.execution.alpaca_broker import get_positions
+            pos = get_positions()
+            if pos is not None and not pos.empty and {"symbol", "weight"}.issubset(pos.columns):
+                book = {r["symbol"]: float(r["weight"]) for _, r in pos.iterrows()}
+        except Exception:
+            pass
+        if not book:
+            book = dict(current_weights or {})
+        if not book:
+            print("[Falsifier] No book available — no trim")
+            return
+
+        # Priority: hard evidence (price/causal/relative_price/macro) before news
+        ordered = sorted(fired, key=lambda f: f.get("kind") == "news")
+        target = None
+        for f in ordered:
+            sym = f.get("symbol", "")
+            if sym in ("", "__PORTFOLIO__"):
+                print(f"[Falsifier] Portfolio-level falsifier fired ({f.get('source')}): "
+                      f"{f.get('raw_text', '')[:120]} — alert only")
+                continue
+            if f.get("trimmed"):
+                continue
+            w = book.get(sym, 0.0)
+            if w < 0.045:  # already at/near floor or not held
+                continue
+            target = (f, sym, w)
+            break
+        if target is None:
+            print("[Falsifier] No trimmable position among fired falsifiers")
+            return
+
+        f, sym, w = target
+        new_w = max(0.04, round(w * 0.75, 6))
+        if w - new_w < 0.005:
+            print(f"[Falsifier] {sym} trim too small ({w:.1%}→{new_w:.1%}) — skipped")
+            return
+
+        new_weights = dict(book)
+        new_weights[sym] = new_w  # freed weight stays in cash until next rebalance
+
+        print(f"\n[Falsifier] TRIM: {sym} {w:.1%} → {new_w:.1%} "
+              f"[source={f.get('source')}, kind={f.get('kind')}]")
+        print(f"[Falsifier] Condition: {f.get('raw_text', '')[:150]}")
+        if f.get("fired_value") is not None:
+            print(f"[Falsifier] Fired value: {f['fired_value']}")
+
+        try:
+            record_intervention(
+                date_str=today.isoformat(),
+                symbol=sym,
+                intervention_type="falsifier_trim",
+                from_weight=w,
+                to_weight=new_w,
+                prediction=f"falsifier fired: {f.get('raw_text', '')[:200]}",
+                regime=_get_current_regime(),
+            )
+        except Exception as _ri_e:
+            print(f"[Falsifier] Intervention log failed: {_ri_e}")
+
+        try:
+            from ascent.strategy.falsifier_registry import mark_trimmed
+            mark_trimmed(f.get("id", ""))
+        except Exception:
+            pass
+
+        _write_mini_rebalance_log(sym, 0.0)  # start the shared cooldown
+
+        if dry_run:
+            print(f"[Falsifier] DRY RUN — would sell {sym} down to {new_w:.1%}")
+        else:
+            from ascent.execution.eod_runner import run_eod_with_weights
+            run_eod_with_weights(new_weights, run_date=today, dry_run=False, force=True)
+
+        Path("logs/eod_log.jsonl").open("a").write(json.dumps({
+            "date": today.isoformat(),
+            "trigger": "falsifier_trim",
+            "symbol": sym,
+            "from_weight": round(w, 6),
+            "to_weight": new_w,
+            "source": f.get("source"),
+            "raw_text": f.get("raw_text", "")[:200],
+        }) + "\n")
+        print(f"[Falsifier] Trim complete — {sym} scored in 10 trading days")
+
+    except Exception as exc:
+        print(f"[Falsifier] Trim failed: {exc}")
+
+
 def _trigger_mini_rebalance(
     result,
     current_weights: dict,
@@ -2070,6 +2216,7 @@ def _trigger_mini_rebalance(
                 run_date=today,
                 dry_run=False,
                 precomputed_verdict=verdict,
+                force=True,  # mini-rebalance is intra-period by definition
             )
 
         _write_mini_rebalance_log(result.symbol, result.conviction_score)

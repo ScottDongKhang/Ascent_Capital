@@ -61,6 +61,66 @@ def fetch_stock_profiles(symbols):
     return pd.DataFrame(profiles)
 
 
+def backfill_missing_profiles(symbols=None, min_coverage_warn: float = 0.90):
+    """
+    Fill sector/industry for symbols missing from profiles.parquet or labeled
+    'Unknown'. Restricted to `symbols` when given (e.g. the live book), else
+    scans the whole cache. Only rows that resolve to a real sector are updated.
+    Returns the list of symbols that were fixed. Never raises.
+    """
+    try:
+        prof = load_parquet("profiles") if has_data("profiles") else pd.DataFrame(
+            columns=["symbol", "sector", "industry", "market_cap", "beta"])
+        known = set(
+            prof[prof["sector"].notna() & (prof["sector"] != "Unknown")]["symbol"]
+        ) if "sector" in prof.columns else set()
+
+        targets = [s for s in (symbols or prof["symbol"].tolist()) if s not in known]
+        targets = sorted(set(targets))
+        if not targets:
+            return []
+
+        fetched = fetch_stock_profiles(targets)
+        resolved = fetched[fetched["sector"].notna() & (fetched["sector"] != "Unknown")]
+        if resolved.empty:
+            return []
+
+        prof = prof[~prof["symbol"].isin(resolved["symbol"])]
+        prof = pd.concat([prof, resolved], ignore_index=True)
+        save_parquet(prof, "profiles")
+        fixed = resolved["symbol"].tolist()
+        print("  [Profiles] Backfilled sector for: %s" % ", ".join(fixed))
+        return fixed
+    except Exception as e:
+        print("  [Profiles] Backfill skipped: %s" % e)
+        return []
+
+
+def check_book_sector_coverage(weights: dict) -> float:
+    """
+    Return the fraction of book weight with a known sector label and warn
+    below `0.90`. Auto-backfills missing names first. Never raises.
+    """
+    try:
+        if not weights:
+            return 1.0
+        backfill_missing_profiles(list(weights.keys()))
+        prof = load_parquet("profiles")
+        known = set(
+            prof[prof["sector"].notna() & (prof["sector"] != "Unknown")]["symbol"]
+        )
+        total = sum(weights.values()) or 1.0
+        covered = sum(w for s, w in weights.items() if s in known) / total
+        if covered < 0.90:
+            missing = [s for s in weights if s not in known]
+            print(f"  [Profiles] WARNING: only {covered:.0%} of book weight has a "
+                  f"sector label (missing: {missing}) — sector caps degraded")
+        return covered
+    except Exception as e:
+        print("  [Profiles] Coverage check skipped: %s" % e)
+        return 1.0
+
+
 # ══════════════════════════════════════════════════════════════════════
 # 2. EARNINGS DATES (Yahoo Finance)
 # ══════════════════════════════════════════════════════════════════════

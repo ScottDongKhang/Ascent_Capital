@@ -90,12 +90,12 @@ One step at a time. Verify existing logic before proposing fixes. `ast.parse` af
 
 ---
 
-## Current state (as of 2026-06-07)
+## Current state (as of 2026-06-11)
 
-- **AI PM**: Level 1 (Analyst, 5% authority). Day 1: June 4. Next rebalance June 10. `data_cache/earned_authority.json` is ground truth.
-- **Regime**: calm_bull. **Tests**: ~777 passing.
+- **AI PM**: Level 1 (Analyst, 5% authority budget). Day 1: June 4. Next rebalance June 24. First real blended portfolio applied June 10 late rerun (force-seal → blend at ai_weight=5%, 31 orders). `data_cache/earned_authority.json` buffer has fabricated 0.0/0.0 pairs Jun 4-9 that should be stripped manually before June 24.
+- **Regime**: calm_bull. **Tests**: 928 passing, 6 pre-existing failures in `test_wf_framework`.
 - **WF OOS baseline**: Sharpe 0.483, CAGR +12.61%, true alpha +2.54% vs SPY.
-- **Live perf**: +8.8% portfolio vs +15.9% SPY (Apr 1 – Jun 3). Early April defensive drag is the main gap.
+- **Live perf**: +8.8% portfolio vs +15.9% SPY (Apr 1 – Jun 3). Judge structural bias (reduction-only) was the primary driver — now fixed.
 - **GitHub Pages**: `https://scottdongkhang.github.io/Ascent_Capital` — auto-updated after every daily run.
 
 ---
@@ -103,6 +103,57 @@ One step at a time. Verify existing logic before proposing fixes. `ast.parse` af
 ## Session log
 
 > Full history archived to `docs/session_log_archive.md`.
+
+### 2026-06-11 (next-phase improvements implemented — all 3 workstreams + repairs)
+- Implemented `docs/superpowers/specs/2026-06-10-alpha-sharpe-ainative-spec.md` in full.
+- **C3 profiles**: `backfill_missing_profiles()` + `check_book_sector_coverage()` in `ascent/data/ingest/supplementary.py`; coverage guard wired into daily runner. Live book now 100% sector-labeled (was 78.8%); 59 more universe symbols backfilled. Also fixed `_get_portfolio_symbols()` — it always returned [] (read payload keys instead of nested `weights`), so alt-data collection had been getting an empty portfolio list.
+- **Authority repair (closes prior session's open item)**: `earned_authority.json` track buffers rebuilt from shadow log — 9 honest paired observations, all fabricated 0.0 entries removed (backup: `.bak-2026-06-11`).
+- **A exposure parity**: new `ascent/portfolio/exposure.py` = single source of truth for VIX-confirmed 200MA cut + vol targeting (15% target, floor 0.25, cap 1.0, frozen at rebalance rows). `ascent/main.py` and `wf_framework/ascent_strategy.py` both delegate to it — production now vol-targets, research now VIX-gates. Config knobs in `BacktestConfig`. 15 tests incl. parity + no-lookahead.
+- **C1+C2 risk construction**: `_apply_inverse_vol_tilt()` (half-strength, clip [0.5,2]) via `sector_constrained_weighted(vol_panel=...)`; `enforce_cluster_cap()` (corr>0.70 connected components capped at 20%, pro-rata redistribution, max_weight re-enforced). Wired in main.py (live row) + WF (per rebalance row), flags in BacktestConfig. 11 tests. NOTE: pre-existing `_water_fill_cap` precision ~cap+1e-4 (clamp-renorm loop), not introduced here.
+- **B falsifier enforcement**: new `ascent/strategy/falsifier_registry.py` — registry built each rebalance from prethesis `what_would_change_my_mind` (one Haiku structuring call) + AI PM pre_mortem; judge predictions registered as relative-vs-SPY conditions at intervention time; causal early exits folded in. Daily Gate 4 now calls `check_all()` (price/macro evaluated in code, news via one Haiku call) and `_apply_falsifier_trim()` executes ONE 25% trim (floor 4%, proceeds to cash, single sell) gated by shared mini-rebalance cooldown + new `falsifier_trim` authority type (scored at 10d like judge interventions). Old shadow-log-only Gate 4 removed. 14 tests.
+- **Latent bug fixed**: `run_eod_with_weights()` silently no-opped on non-rebalance days — discovery mini-rebalances never actually executed orders. Added `force=True` calendar bypass (kill switch + approval still apply); discovery path now passes it.
+- WF framework's 6 failures confirmed pre-existing via stash test (same failures without these changes).
+- Files: ascent/portfolio/exposure.py (new), ascent/strategy/falsifier_registry.py (new), ascent/data/ingest/supplementary.py, ascent/main.py, ascent/config/settings.py, ascent/portfolio/optimizer.py, ascent/research/wf_framework/ascent_strategy.py, ascent/execution/eod_runner.py, debate/adversarial_authority.py, run_all_agents.py, tests/portfolio/test_exposure.py (new), tests/portfolio/test_risk_construction.py (new), tests/strategy/test_falsifier_registry.py (new), data_cache/earned_authority.json.
+- Open: re-run WF baseline to re-baseline Sharpe/CAGR with the parity overlays — "Current state" numbers are stale until then. First live falsifier registry builds at the June 24 rebalance.
+
+### 2026-06-11 (MiroFish 10-round fix + AI PM Phase 2 force-seal + clean rebalance rerun)
+- MiroFish "preparation timeout" root-caused as three stacked bugs, none round-count-related: (1) client polled `/prepare/status` with simulation_id only, which can never report failure — a server-side prepare failure looked like a timeout and burned the whole deadline; (2) Zep entity classification is stochastic on thin event text (22:30 run got 0 classified entities of 5 nodes → prepare failed instantly by design); (3) the reddit runner idles in wait-for-commands mode after its rounds, so `run-status` stays "running" forever — even successful sims looked like timeouts (today's earlier 3-round runs included).
+- `mirofish_client.py` fixes: `_prepare_simulation` returns ready/no_entities/failed/timeout (fast-fail via `expected_entities_count` and sim-state polling); `run_sync` rebuilds the graph once on 0 entities; `_create_project` event text enriched with named companies + participant archetypes (9 classified entities vs 0-3 before); `_wait_for_simulation` detects rounds-done via `/env-status` `env_alive` then POSTs `/stop`; all requests send `Accept-Language: en` (report language follows it — Chinese reports broke the English keyword sentiment parser, "mixed 0.50" vs real "bullish 0.82/alignment 0.89").
+- `get_mirofish_sentiment.py`: `_N_ROUNDS` 3→10, `_TIMEOUT_SECS` 900→1500 (measured full 10-round run: ~403s), prints `[MiroFish] alignment_score=...` on success.
+- `agents/ai_pm_agent.py`: Phase 2 force-seal pass mirroring Phase 1 — if the main tool loop exhausts without `propose_portfolio`, direct Anthropic call with `tool_choice={"type":"tool","name":"propose_portfolio"}` on `_phase2_model`, validation gates kept intact with one retry feeding the rejection back. New `_PROPOSE_PORTFOLIO_TOOL` constant. Worked live: first rejection (missing prethesis_disposition) → retry → sealed → blend applied.
+- Clean rebalance rerun (`--date=2026-06-10`, run overnight): Phase 1 + Phase 2 both force-sealed, MiroFish alignment_score=0.82 bullish, PROCEED 0.62, AI PM blend applied (ai_weight=5%), 31 orders submitted to Alpaca (queue for June 11 open). June 11 daily non-rebalance run executed after.
+- Tests: +3 MiroFish client tests, +1 wait-for-commands test, +4 Phase 2 force-seal tests (tests/agents/test_ai_pm_phase2_force_seal.py new). Stale test updated for session-scoped disposition gate. 885 passed; 2 pre-existing failures from earlier uncommitted drift (`test_new_ingest` patches removed `_get_obb` in famafrench_factors; `test_openbb_client` COT snapshot) — not from this session.
+- MiroFish env note: `/Users/scott/MiroFish/.env` now points LLM to LiteLLM proxy (port 4000 → Haiku). Proxy must be running alongside the MiroFish server on rebalance days. Earlier OpenRouter 402s were because profile-gen leaves max_tokens unset → provider defaults to model max (64000) → OpenRouter afford-check rejected.
+- Files: `ascent/integrations/mirofish_client.py`, `ascent/integrations/get_mirofish_sentiment.py`, `agents/ai_pm_agent.py`, `tests/test_mirofish_integration.py`, `tests/agents/test_ai_pm_phase2_force_seal.py` (new), `tests/agents/test_ai_pm_prethesis_fixes.py`, CLAUDE.md.
+- Open: fix the 2 stale tests for famafrench/openbb drift; earned_authority.json buffer repair still pending before June 24.
+
+### 2026-06-10 (next-phase improvement spec — alpha/Sharpe/AI-native/drawdown)
+- New spec: `docs/superpowers/specs/2026-06-10-alpha-sharpe-ainative-spec.md`. Three workstreams, diagnosis verified in code, no code changed this session.
+- KEY NEW FINDING — research/production divergence: WF baseline (`wf_framework/ascent_strategy.py`) applies `_apply_vol_target` (15% target, floor 0.25) which production `ascent/main.py` lacks; production's VIX-gated 200MA cut is absent from research (research cuts on MA alone). Live book and validated strategy are different strategies in both directions.
+- Workstream A: port vol targeting to production, backport VIX gate to research, parity test, re-run WF baseline.
+- Workstream B: falsifier enforcement — `check_early_exits` (Gate 4, run_all_agents.py:1086) flags causal breaks but only writes a shadow-log line; prethesis `what_would_change_my_mind` / judge predictions / pre-mortems never checked. Build unified falsifier registry + daily code/Haiku evaluation + bounded 25% trims via existing mini-rebalance path, scored like judge interventions.
+- Workstream C: inverse-vol half-tilt in `sector_constrained_weighted()`, correlation-cluster cap (20%, corr>0.70), profiles backfill — verified VVV/WDC/YETI = 21.2% of live book missing sector labels.
+- Implementation order: C3 → A → C1+C2 → B (B last; shares run_all_agents.py with audit-fix PR).
+- Files: docs/superpowers/specs/2026-06-10-alpha-sharpe-ainative-spec.md (new), CLAUDE.md.
+
+### 2026-06-10 (AI PM alpha audit fixes — all 11 findings implemented)
+- Implemented all fixes from Fable's alpha audit spec (`docs/superpowers/specs/2026-06-10-ai-pm-alpha-audit.md`).
+- Finding 1+10: removed fallback-append from `_tool_propose_portfolio` rejection path; `run_ai_pm` revision now falls back to initial result if revision is empty/fallback; decision log writes on every rebalance including fallback.
+- Finding 3: `score_daily()` returns `None` (not 0.0) for missing Track D/A★; `update_authority()` skips buffer append on None — authority ladder no longer fed fabricated zeros.
+- Finding 2: `blend()` rewritten as active-weight budget — `ai_weight=0.05` means 5pp one-way tracking-error cap, not 5% mixing coefficient. `DUST_THRESHOLD=0.005` replaces 2% floor inside blend.
+- Finding 4+9: judge can now `conviction_press` (increase) as well as reduce; parse failure defaults to `proceed+degraded` not `reduce_size`.
+- Finding 5+11: post-mortem fires on any decision ≥21d old (override filter dropped); pattern memory reads from `ai_pm_pattern_memory.json` via `get_pattern_summary()` (path mismatch fixed); `AIPMResult.tool_failures` records unavailable tools per rebalance.
+- Finding 6+7+8: `_prethesis_universe` defined from holdings + top alpha scores; `_build_data_grounding` returns news even with empty symbols; `AIPreThesis` gains `conviction_reasons`, `sector_thesis`, `directional_stance` fields; `directional_stance` required in schema with falsifier; `_tool_propose_portfolio` enforces `prethesis_disposition: FOLLOWED|OVERRIDDEN`.
+- 52 new tests across 6 new test files. 928 passing, 6 pre-existing failures unchanged.
+- Files: `agents/ai_pm_agent.py`, `ascent/monitoring/ai_pm_counterfactual.py`, `ascent/strategy/ai_pm_learning.py`, `ascent/strategy/earned_authority.py`, `debate/adversarial_authority.py`, `debate/judge.py`, `run_all_agents.py`, + 6 new test files.
+- Open: `data_cache/earned_authority.json` buffer repair (strip leading 0.0/0.0 pairs from Jun 4-9) should be done manually before June 24 rebalance. First real AI PM blended portfolio expected June 24.
+
+### 2026-06-10 (AI PM alpha audit — diagnosis only, no code changed)
+- Full audit of why AI PM contributes zero alpha. Spec: `docs/superpowers/specs/2026-06-10-ai-pm-alpha-audit.md`.
+- CRITICAL confirmed: (1) feedback gate × red-team revision swallows valid Phase 2 portfolios into fallback — Jun 10 rebalance applied nothing, decision log never written once; (2) `earned_authority.blend()` is a 5% mixing coefficient + 2% floor → ±2pp overrides become ±0.1pp, AI cannot add names below Level 3; (3) Track D fed literal 0.0 since Jun 4 promotion (shadow log proof) — authority ladder scoring fabricated data; (4) judge is reduction-only + reduce_size parse default → net judge delta strictly negative (−1.96pp + Apr 15 book trim); (5) learning loop triple-gated — pattern memory empty forever without code change.
+- HIGH: `_prethesis_universe` undefined → Phase 1 gets no grounding/news; `_strip_prethesis_for_phase2` reads nonexistent attrs → sourced claims never reach Phase 2; no directional/falsifiable macro stance required → hedges pass as theses.
+- Files touched: docs/superpowers/specs/2026-06-10-ai-pm-alpha-audit.md (new), CLAUDE.md.
+- Open: all findings now fixed (see entry above).
 
 ### 2026-06-08 (OpenBB integration — hub reliability + CBOE/CFTC/FF alpha data + AI PM live tools)
 - `ascent/integrations/openbb_client.py` (new): central adapter — `fetch_symbol` (tiingo→yfinance fallback), `fetch_return`, `get_live_macro`, `get_options_snapshot` (IV skew/PCR/ATM IV), `get_cot_snapshot`. All OpenBB calls go here.
@@ -203,6 +254,15 @@ What the debate layer can now catch that it couldn't before: a portfolio that pa
 
 ### 2026-05-31 (anti-hallucination hardening)
 - `generate_structured` gains `json_schema` param (wire-level Anthropic enforcement). Amnesia/grounding instructions + evidence schema in `llm_fundamental` and `narrative_alpha`. `_EVIDENCE_RULE` in `debate/agents.py`.
+
+### 2026-06-10 (rebalance run — Phase 1 force-seal + MiroFish diagnosis)
+- AI PM Phase 1 never sealing fixed: added force-seal pass that bypasses `tool_completion` and calls the Anthropic API directly with `tool_choice={"type":"tool","name":"propose_prethesis"}` — hard-forces the model to seal. Phase 1 now seals: 12 conviction names confirmed.
+- MiroFish 500 on `ontology/generate` root-caused: OpenRouter account drained (402, "can only afford 3569 tokens, requested 64000"). Killed 3 zombie `run_reddit_simulation.py` processes. Fix: top up OpenRouter credits at `openrouter.ai/settings/credits`.
+- MiroFish timeout increased: 480s → 900s in both `mirofish_client.py` and `get_mirofish_sentiment.py`.
+- `clean_index` dedup fix (options/short panels, `feature_defs.py`) confirmed working — US equities no longer zero-positions.
+- Rebalance completed: PROCEED verdict (0.6 confidence), 27 orders submitted to Alpaca.
+- Files: `agents/ai_pm_agent.py`, `ascent/integrations/mirofish_client.py`, `ascent/integrations/get_mirofish_sentiment.py`.
+- Open: Add OpenRouter credits to restore MiroFish functionality on next run.
 
 ### 2026-05-25 — 2026-05-28 (adversarial intelligence + two-phase AI PM + GitHub Pages)
 - Debate redesigned as genuine risk committee: `adversarial_engine.py`, `adversarial_authority.py`, `adversarial_monitor.py`. ONE falsifiable change per rebalance.

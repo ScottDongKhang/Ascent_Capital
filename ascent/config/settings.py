@@ -138,6 +138,16 @@ class BacktestConfig:
     impact_bps: float = 5.0
     commission_per_share: float = 0.0
     slippage_vol_mult: float = 0.1
+    # Exposure overlays (shared with WF framework via ascent/portfolio/exposure.py)
+    vol_targeting_enabled: bool = True
+    target_vol: float = 0.15
+    vol_floor: float = 0.25
+    vol_cap: float = 1.0
+    # Risk-aware construction
+    inverse_vol_tilt: bool = True
+    cluster_cap_enabled: bool = True
+    max_cluster_weight: float = 0.20
+    cluster_corr_threshold: float = 0.70
 
 
 @dataclass

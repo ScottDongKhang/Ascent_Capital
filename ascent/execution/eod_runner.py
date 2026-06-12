@@ -612,7 +612,7 @@ def _apply_verdict_adjustments(merged_weights: dict, verdict: dict) -> dict:
         print(f"[Debate] Weight adjustment failed ({e}) — using original weights")
         return merged_weights
 
-def run_eod_with_weights(merged_weights: dict, run_date=None, dry_run: bool = False, precomputed_verdict: dict = None):
+def run_eod_with_weights(merged_weights: dict, run_date=None, dry_run: bool = False, precomputed_verdict: dict = None, force: bool = False):
     """
     Execute EOD with pre-computed weights from the orchestrator.
     Called by run_all_agents.py instead of run_eod().
@@ -620,6 +620,10 @@ def run_eod_with_weights(merged_weights: dict, run_date=None, dry_run: bool = Fa
     Handles: rebalance calendar check, kill switch, order computation,
     large-trade approval, order submission, slippage tracking, and logging.
     Does NOT run the ascent pipeline internally.
+
+    force=True bypasses ONLY the rebalance-calendar gate (used by intra-period
+    actions: discovery mini-rebalances and falsifier trims). Kill switch and
+    large-trade approval still apply.
     """
     import time as _time
     from datetime import date as _date
@@ -648,10 +652,12 @@ def run_eod_with_weights(merged_weights: dict, run_date=None, dry_run: bool = Fa
         is_rebalance = True
         print("[EOD-Multi] No rebalance calendar found — treating as rebalance day")
 
-    if not is_rebalance:
+    if not is_rebalance and not force:
         print("[EOD-Multi] Not a rebalance day — logging only")
         _log_multi_run(today_str, merged_weights, rebalanced=False)
         return
+    if not is_rebalance and force:
+        print("[EOD-Multi] Calendar gate bypassed (force=True, intra-period action)")
 
     # 1.5. Debate layer
     if precomputed_verdict is not None:

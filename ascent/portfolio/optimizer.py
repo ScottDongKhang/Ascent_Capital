@@ -444,6 +444,106 @@ def sector_constrained_weighted_mvo(
     return rw, "rank_weight_fallback"
 
 
+def _apply_inverse_vol_tilt(scores: pd.Series, vol_row: pd.Series | None) -> pd.Series:
+    """
+    Half-strength inverse-vol tilt: scores × (median_vol / vol)^0.5, ratio
+    clipped to [0.5, 2.0]. Preserves the alpha ranking's character while
+    shrinking the riskiest slots — a 10% slot in a 60%-vol name carries far
+    more risk than a 10% slot in a 15%-vol name. Names without vol data get
+    tilt 1.0. No-op when vol_row is None.
+    """
+    if vol_row is None:
+        return scores
+    v = vol_row.reindex(scores.index)
+    med = v.median()
+    if not pd.notna(med) or med <= 0:
+        return scores
+    tilt = (med / v).clip(0.5, 2.0).pow(0.5).fillna(1.0)
+    return scores * tilt
+
+
+def enforce_cluster_cap(
+    weights: pd.Series,
+    returns: pd.DataFrame,
+    max_cluster_weight: float = 0.20,
+    corr_threshold: float = 0.70,
+    max_weight: float | None = None,
+) -> pd.Series:
+    """
+    Cap the combined weight of any correlation cluster among held names.
+
+    Clusters are connected components of the pairwise-correlation graph at
+    `corr_threshold` (single linkage), computed from trailing `returns`
+    (dates × symbols, should already be sliced causally by the caller).
+    Sector caps miss these: EWY/EWT/EEM carry different labels but move as one
+    factor in stress. Freed weight is redistributed pro-rata to names outside
+    the capped cluster, then the per-name max is re-enforced.
+
+    Post-conditions: no cluster > max_cluster_weight (+tol), weights sum
+    preserved, no name above max_weight when provided. Never raises — returns
+    the input unchanged on any failure.
+    """
+    try:
+        held = [s for s, w in weights.items() if w > 0]
+        if len(held) < 2:
+            return weights
+        rets = returns.reindex(columns=held).dropna(axis=1, how="all")
+        rets = rets.dropna(how="all")
+        cols = [c for c in rets.columns if rets[c].notna().sum() >= 20]
+        if len(cols) < 2:
+            return weights
+        corr = rets[cols].corr()
+
+        # Connected components of the corr>threshold graph (single linkage)
+        adj = {c: set() for c in cols}
+        for i, a in enumerate(cols):
+            for b in cols[i + 1:]:
+                if pd.notna(corr.at[a, b]) and corr.at[a, b] > corr_threshold:
+                    adj[a].add(b)
+                    adj[b].add(a)
+        seen: set = set()
+        clusters = []
+        for c in cols:
+            if c in seen or not adj[c]:
+                continue
+            comp, stack = set(), [c]
+            while stack:
+                node = stack.pop()
+                if node in seen:
+                    continue
+                seen.add(node)
+                comp.add(node)
+                stack.extend(adj[node] - seen)
+            if len(comp) >= 2:
+                clusters.append(sorted(comp))
+
+        out = weights.copy().astype(float)
+        for cluster in clusters:
+            cl_w = float(out[cluster].sum())
+            if cl_w <= max_cluster_weight + 1e-9:
+                continue
+            scale = max_cluster_weight / cl_w
+            freed = cl_w - max_cluster_weight
+            for s in cluster:
+                out[s] *= scale
+            others = [s for s in held if s not in cluster and out.get(s, 0) > 0]
+            other_total = float(out[others].sum()) if others else 0.0
+            if other_total > 0:
+                for s in others:
+                    out[s] += freed * out[s] / other_total
+            print(f"[Portfolio] Cluster cap: {cluster} {cl_w:.1%} → "
+                  f"{max_cluster_weight:.0%} (corr>{corr_threshold:.2f})")
+
+        if max_weight is not None and out.max() > max_weight + 1e-9:
+            capped = _water_fill_cap(out[out > 0], max_weight) * out.sum()
+            out.loc[capped.index] = capped
+
+        return out
+    except Exception as exc:
+        print(f"[Portfolio] Cluster cap skipped: {exc}")
+        return weights
+
+
 def sector_constrained_weighted(
     alpha,
     n=10,
@@ -451,6 +551,7 @@ def sector_constrained_weighted(
     max_per_sector=1,
     sector_map=None,
     regime_signal=None,
+    vol_panel=None,
 ):
     """
     Sector-constrained rank-weighted portfolio.
@@ -474,6 +575,15 @@ def sector_constrained_weighted(
 
     if sector_map is None:
         sector_map = {}
+
+    # Optional inverse-vol tilt: vol_panel is (dates × symbols) annualized
+    # trailing vol, already causal (caller shifts). Align once for the loop.
+    _vol_aligned = None
+    if vol_panel is not None and len(vol_panel) > 0:
+        try:
+            _vol_aligned = vol_panel.reindex(alpha.index, method="ffill")
+        except Exception:
+            _vol_aligned = None
 
     weights = pd.DataFrame(0.0, index=alpha.index, columns=alpha.columns)
 
@@ -499,6 +609,8 @@ def sector_constrained_weighted(
             # dates when the expanded universe (901 symbols) has sparse sector labels.
             selected_fallback = ranked.iloc[:n_actual].index
             scores_fb = ranked[selected_fallback] - ranked[selected_fallback].min() + 1e-8
+            if _vol_aligned is not None:
+                scores_fb = _apply_inverse_vol_tilt(scores_fb, _vol_aligned.loc[dt])
             raw_w_fb = _water_fill_cap(scores_fb, max_weight)
             weights.loc[dt, raw_w_fb.index] = raw_w_fb
             continue
@@ -519,6 +631,8 @@ def sector_constrained_weighted(
 
         scores = ranked[selected]
         scores = scores - scores.min() + 1e-8
+        if _vol_aligned is not None:
+            scores = _apply_inverse_vol_tilt(scores, _vol_aligned.loc[dt])
 
         # Bug 2 fix: use water-filling instead of clip-and-renormalize
         raw_w = _water_fill_cap(scores, max_weight)
