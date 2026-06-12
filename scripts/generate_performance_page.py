@@ -18,7 +18,7 @@ import os
 import statistics
 import subprocess
 import sys
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import requests
@@ -142,11 +142,20 @@ VERDICT_COLORS = {
 }
 
 REGIME_COLORS = {
-    "calm_bull":  "rgba(63,185,80,0.07)",
-    "neutral":    "rgba(88,166,255,0.06)",
-    "stressed":   "rgba(210,153,34,0.10)",
-    "crisis":     "rgba(248,81,73,0.12)",
-    "uncertain":  "rgba(139,148,158,0.08)",
+    "calm_bull":  "rgba(63,185,80,0.05)",
+    "neutral":    "rgba(88,166,255,0.05)",
+    "stressed":   "rgba(210,153,34,0.08)",
+    "crisis":     "rgba(248,81,73,0.10)",
+    "uncertain":  "rgba(139,148,158,0.06)",
+}
+
+# Solid accents for regime boundary labels on the equity chart
+REGIME_ACCENT = {
+    "calm_bull":  "#3fb950",
+    "neutral":    "#58a6ff",
+    "stressed":   "#d29922",
+    "crisis":     "#f85149",
+    "uncertain":  "#8b949e",
 }
 
 
@@ -590,10 +599,19 @@ def _counterfactual_chart_html(cfdata: list) -> str:
     if not cfdata:
         return '<p class="empty">No AI PM data yet — starts after next rebalance.</p>'
 
+    # The raw jsonl can contain replayed or out-of-order rows (manual reruns) —
+    # keep the last row per date and sort, or the line chart renders jagged loops.
+    by_date: dict = {}
+    for r in cfdata:
+        d = r.get("date")
+        if d:
+            by_date[d] = r
+    cfdata = [by_date[d] for d in sorted(by_date)]
+
     def cumulative(key):
         v, vals = 1.0, []
         for r in cfdata:
-            v *= (1 + r.get(key, 0.0))
+            v *= (1 + (r.get(key) or 0.0))
             vals.append(round((v - 1) * 100, 3))
         return vals
 
@@ -611,29 +629,63 @@ def _counterfactual_chart_html(cfdata: list) -> str:
     sq_color  = "#3fb950" if sq >= 0 else "#f85149"
     imp_color = "#3fb950" if impact >= 0 else "#f85149"
 
+    # Shadow period: leading stretch where the AI PM track produced no returns
+    # (tracks logged, no capital). Annotate it so the flat segment reads as
+    # intentional rather than broken.
+    first_live = next(
+        (i for i, r in enumerate(cfdata) if abs(r.get("track_d_return") or 0.0) > 1e-9),
+        None,
+    )
+    shadow_js = "null"
+    if first_live is not None and first_live > 0:
+        shadow_js = json.dumps({"start": dates[0], "end": dates[first_live]})
+    elif first_live is None and len(dates) > 1:
+        shadow_js = json.dumps({"start": dates[0], "end": dates[-1]})
+
     return f"""
 <div style="font-size:12px;color:#8b949e;margin-bottom:8px">
   AI signal quality (D−A★): <span style="color:{sq_color}">{'+'if sq>=0 else ''}{sq:.2f}pp</span> since live &nbsp;|&nbsp;
   Actual portfolio impact: <span style="color:{imp_color}">{'+'if impact>=0 else ''}{impact:.2f}pp</span> at current weight
 </div>
-<canvas id="cfChart" height="110"></canvas>
+<div style="position:relative;height:230px"><canvas id="cfChart"></canvas></div>
 <script>
 (function(){{
-  var ctx = document.getElementById('cfChart');
-  if (!ctx) return;
-  new Chart(ctx, {{
+  var el = document.getElementById('cfChart');
+  if (!el || typeof Chart === 'undefined') return;
+  var shadow = {shadow_js};
+  var anns = {{}};
+  if (shadow) {{
+    anns.shadow = {{type:'box', xMin:shadow.start, xMax:shadow.end,
+      backgroundColor:'rgba(139,148,158,0.06)', borderWidth:0,
+      label:{{display:true, content:'SHADOW PERIOD — tracks scored, no capital',
+        position:{{x:'center', y:'start'}}, color:'#6e7681',
+        font:{{size:9, weight:'600'}}, backgroundColor:'rgba(13,17,23,0.85)',
+        padding:{{x:5,y:2}}, borderRadius:4, yAdjust:4}}}};
+  }}
+  new Chart(el, {{
     type: 'line',
     data: {{
       labels: {json.dumps(dates)},
       datasets: [
-        {{label:'Pure Quant (A★)', data:{json.dumps(astar)},  borderColor:'#8b949e', borderDash:[4,2], pointRadius:0, borderWidth:1.5, fill:false}},
-        {{label:'Actual (B)',       data:{json.dumps(actual)}, borderColor:'#3fb950', pointRadius:0,    borderWidth:2,   fill:false}},
-        {{label:'SPY (C)',          data:{json.dumps(spy)},    borderColor:'#58a6ff', borderDash:[4,2], pointRadius:0, borderWidth:1.5, fill:false}},
-        {{label:'Pure AI PM (D)',   data:{json.dumps(ai_pm)},  borderColor:'#d29922', pointRadius:0,    borderWidth:2,   fill:false}},
+        {{label:'Pure Quant (A★)', data:{json.dumps(astar)},  borderColor:'#8b949e', borderDash:[4,3], pointRadius:0, borderWidth:1.5, fill:false, tension:0.25}},
+        {{label:'Actual (B)',       data:{json.dumps(actual)}, borderColor:'#3fb950', pointRadius:0,    borderWidth:2,   fill:false, tension:0.25}},
+        {{label:'SPY (C)',          data:{json.dumps(spy)},    borderColor:'#58a6ff', borderDash:[4,3], pointRadius:0, borderWidth:1.5, fill:false, tension:0.25}},
+        {{label:'Pure AI PM (D)',   data:{json.dumps(ai_pm)},  borderColor:'#d29922', pointRadius:0,    borderWidth:2,   fill:false, tension:0.25}},
       ]
     }},
-    options:{{responsive:true,plugins:{{legend:{{position:'bottom',labels:{{boxWidth:10,font:{{size:10}}}}}}}},
-      scales:{{y:{{ticks:{{callback:function(v){{return v.toFixed(1)+'%'}}}}}}}}}}
+    options:{{responsive:true, maintainAspectRatio:false, interaction:{{mode:'index',intersect:false}},
+      plugins:{{
+        legend:{{position:'bottom', labels:{{color:'#8b949e', boxWidth:10, boxHeight:2, font:{{size:10}}, padding:10}}}},
+        tooltip:{{backgroundColor:'#1c2128', borderColor:'#30363d', borderWidth:1, titleColor:'#8b949e',
+          bodyColor:'#e6edf3', cornerRadius:10, padding:12, boxPadding:4, usePointStyle:true,
+          callbacks:{{label:function(c){{return ' '+c.dataset.label+': '+(c.raw>=0?'+':'')+c.raw.toFixed(2)+'%';}}}}}},
+        annotation:{{annotations:anns}}
+      }},
+      scales:{{
+        x:{{ticks:{{color:'#6e7681', maxTicksLimit:8, maxRotation:0, font:{{size:10}}}}, grid:{{color:'#1b212a'}}}},
+        y:{{ticks:{{color:'#6e7681', font:{{size:10}}, callback:function(v){{return (v>=0?'+':'')+v.toFixed(1)+'%';}}}}, grid:{{color:'#1b212a'}}}}
+      }}
+    }}
   }});
 }})();
 </script>"""
@@ -842,30 +894,44 @@ def build_html(
     # ── Chart.js annotation objects ──────────────────────────────────────────
     annotations = {}
 
-    # Regime bands
+    # Regime bands: a faint tint + a labeled boundary edge at the regime start.
+    # The full-box label approach was unreadable; the left-edge label marks the
+    # transition without painting over the curve.
     for i, band in enumerate(regime_bands):
         if band["start"] not in dates and band["end"] not in dates:
             continue
-        color = REGIME_COLORS.get(band["label"], "rgba(100,100,100,0.05)")
+        tint   = REGIME_COLORS.get(band["label"], "rgba(100,100,100,0.04)")
+        accent = REGIME_ACCENT.get(band["label"], "#8b949e")
         annotations[f"regime{i}"] = {
             "type":            "box",
             "xMin":            band["start"],
             "xMax":            band["end"],
-            "backgroundColor": color,
+            "backgroundColor": tint,
             "borderWidth":     0,
+        }
+        annotations[f"regimeEdge{i}"] = {
+            "type":        "line",
+            "xMin":        band["start"],
+            "xMax":        band["start"],
+            "borderColor": accent + "55",
+            "borderWidth": 1,
+            "borderDash":  [2, 3],
             "label": {
                 "display":         True,
-                "content":         band["label"].replace("_", " "),
-                "position":        {"x": "start", "y": "start"},
-                "color":           "#8b949e",
-                "font":            {"size": 9},
-                "backgroundColor": "transparent",
-                "yAdjust":         4,
-                "xAdjust":         4,
+                "content":         band["label"].replace("_", " ").upper(),
+                "position":        "start",
+                "color":           accent,
+                "font":            {"size": 9, "weight": "700"},
+                "backgroundColor": "rgba(13,17,23,0.85)",
+                "padding":         {"x": 5, "y": 2},
+                "borderRadius":    4,
+                "xAdjust":         30,
+                "yAdjust":         2,
             },
         }
 
-    # Rebalance / milestone lines — only draw for actual executions and milestones
+    # Rebalance / milestone lines — compact icon-only markers (legend explains them)
+    verdict_icons = {"proceed": "✓", "reduce_size": "↓", "halt_and_review": "✗"}
     for i, ev in enumerate(verdicts):
         if ev["date"] not in dates:
             continue
@@ -874,25 +940,26 @@ def build_html(
         color = VERDICT_COLORS.get(ev["verdict"], "#58a6ff")
         if ev["type"] == "milestone":
             color = "#58a6ff"
-            short = "Live Start"
+            icon  = "★"
         else:
-            short = (ev["verdict"] or "executed").replace("_", " ").title()
+            icon = verdict_icons.get(ev["verdict"], "↻")
         annotations[f"reb{i}"] = {
             "type":        "line",
             "xMin":        ev["date"],
             "xMax":        ev["date"],
-            "borderColor": color,
-            "borderWidth": 2,
+            "borderColor": color + "99",
+            "borderWidth": 1.5,
             "borderDash":  [5, 4],
             "label": {
                 "display":         True,
-                "content":         short,
+                "content":         icon,
                 "position":        "end",
-                "backgroundColor": color + "22",
+                "backgroundColor": color + "26",
                 "color":           color,
-                "font":            {"size": 10, "weight": "600"},
-                "padding":         3,
-                "yAdjust":         6,
+                "font":            {"size": 11, "weight": "700"},
+                "padding":         {"x": 5, "y": 2},
+                "borderRadius":    10,
+                "yAdjust":         4,
             },
         }
 
@@ -948,33 +1015,45 @@ def build_html(
 <html lang="en">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Ascent Capital — Live Performance</title>
+<title>Ascent Capital — Autonomous Multi-Agent Investment System</title>
+<meta name="description" content="An autonomous, multi-agent investment system — regime-aware quant engine gated by an adversarial AI debate committee, with an AI PM earning allocative authority through verified performance. Live paper trading.">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
 body{{background:#0d1117;color:#e6edf3;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;line-height:1.5}}
 a{{color:#58a6ff;text-decoration:none}}
+.num{{font-variant-numeric:tabular-nums}}
 .wrap{{max-width:1300px;margin:0 auto;padding:0 24px 80px}}
-.hero{{background:linear-gradient(135deg,#0d1117 0%,#161b22 60%,#0d1117 100%);border-bottom:1px solid #30363d;padding:48px 24px 40px;margin:0 -24px 36px}}
-.hero-inner{{display:grid;grid-template-columns:1fr auto;gap:32px;align-items:center;max-width:1300px;margin:0 auto}}
-.hero-brand h1{{font-size:34px;font-weight:800;letter-spacing:-1px;margin-bottom:4px}}
+.kicker{{font-size:11px;font-weight:700;color:#6e7681;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:6px}}
+.jsfx .fx{{opacity:0;transform:translateY(10px);transition:opacity .55s ease,transform .55s ease}}
+.jsfx .fx.in{{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){{.jsfx .fx{{opacity:1;transform:none;transition:none}}}}
+.hero{{background:radial-gradient(1200px 420px at 18% -10%,#16202e 0%,#0d1117 55%),linear-gradient(135deg,#0d1117 0%,#11161d 60%,#0d1117 100%);border-bottom:1px solid #21262d;padding:52px 24px 44px;margin:0 0 36px}}
+.hero-inner{{display:grid;grid-template-columns:1fr auto;gap:36px;align-items:start;max-width:1300px;margin:0 auto}}
+@media(max-width:760px){{.hero-inner{{grid-template-columns:1fr;gap:20px}}.regime-ring{{justify-self:start;align-self:start}}}}
+.hero-top{{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px}}
+.hero-brand h1{{font-size:34px;font-weight:800;letter-spacing:-1px}}
 .hero-brand h1 em{{color:#58a6ff;font-style:normal}}
-.hero-brand p{{color:#8b949e;font-size:14px;margin-bottom:14px}}
-.live-pill{{display:inline-flex;align-items:center;gap:6px;background:#3fb95011;border:1px solid #3fb95033;color:#3fb950;border-radius:20px;padding:4px 12px;font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase}}
+.hero-pitch{{color:#c9d1d9;font-size:16px;line-height:1.55;max-width:760px;margin-bottom:10px;font-weight:500}}
+.hero-sub{{color:#6e7681;font-size:12.5px;max-width:720px;margin-bottom:4px}}
+.live-pill{{display:inline-flex;align-items:center;gap:6px;background:#3fb95011;border:1px solid #3fb95033;color:#3fb950;border-radius:20px;padding:4px 12px;font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;white-space:nowrap}}
 .live-pill::before{{content:'';width:6px;height:6px;border-radius:50%;background:#3fb950;animation:pulse 1.6s infinite}}
 @keyframes pulse{{0%,100%{{opacity:1}}50%{{opacity:.3}}}}
-.hero-numbers{{display:flex;gap:0;margin-top:28px;flex-wrap:wrap}}
-.hn{{padding:0 28px 0 0;border-right:1px solid #30363d;margin-right:28px}}
+.hero-numbers{{display:flex;gap:0;margin-top:30px;flex-wrap:wrap;align-items:flex-end}}
+.hn{{padding:0 28px 0 0;border-right:1px solid #21262d;margin-right:28px;margin-top:10px}}
 .hn:last-child{{border-right:none;margin-right:0}}
-.hn-label{{font-size:11px;color:#6e7681;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}}
-.hn-val{{font-size:28px;font-weight:800;letter-spacing:-0.5px}}
-.hn-val.main{{font-size:40px}}
-.regime-ring{{text-align:center;background:#161b22;border:2px solid #30363d;border-radius:16px;padding:20px 28px;min-width:140px}}
-.regime-ring.calm_bull{{border-color:#3fb95066;background:#3fb95008}}
+.hn-label{{font-size:11px;color:#6e7681;text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px;display:flex;align-items:center;gap:8px}}
+.hn-val{{font-size:24px;font-weight:700;letter-spacing:-0.5px;font-variant-numeric:tabular-nums}}
+.hn-val.main{{font-size:clamp(42px,5.5vw,56px);font-weight:800;letter-spacing:-1.5px;line-height:1.05;color:#e6edf3}}
+.fresh{{font-size:10px;font-weight:600;color:#3fb950;background:#3fb9500d;border:1px solid #3fb95026;border-radius:10px;padding:1px 8px;letter-spacing:.4px;text-transform:none;white-space:nowrap}}
+.regime-ring{{text-align:center;background:#161b22;border:2px solid #30363d;border-radius:16px;padding:20px 28px;min-width:150px;align-self:center}}
+.regime-ring.calm_bull{{border-color:#3fb95066;background:#3fb95008;animation:ringGlow 3.2s ease-in-out infinite}}
 .regime-ring.stressed{{border-color:#d2992266;background:#d2992208}}
 .regime-ring.crisis{{border-color:#f8514966;background:#f8514908}}
 .regime-ring.neutral{{border-color:#58a6ff66;background:#58a6ff08}}
+@keyframes ringGlow{{0%,100%{{box-shadow:0 0 0 rgba(63,185,80,0)}}50%{{box-shadow:0 0 22px rgba(63,185,80,0.13)}}}}
+@media(prefers-reduced-motion:reduce){{.regime-ring.calm_bull{{animation:none}}}}
 .regime-name{{font-size:16px;font-weight:700;text-transform:uppercase;letter-spacing:1px}}
 .regime-ring.calm_bull .regime-name{{color:#3fb950}}
 .regime-ring.stressed  .regime-name{{color:#d29922}}
@@ -984,10 +1063,26 @@ a{{color:#58a6ff;text-decoration:none}}
 .stats{{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:24px}}
 .stat-card{{background:#161b22;border:1px solid #30363d;border-radius:10px;padding:14px 16px}}
 .stat-label{{font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}}
-.stat-value{{font-size:21px;font-weight:700}}
+.stat-value{{font-size:21px;font-weight:700;font-variant-numeric:tabular-nums}}
 .stat-note{{font-size:10px;color:#6e7681;margin-top:3px}}
 .chart-card,.card{{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:20px 24px;margin-bottom:24px}}
 .chart-card h2,.card h2{{font-size:15px;font-weight:600;color:#8b949e;margin-bottom:14px}}
+.arch{{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:24px 28px;margin-bottom:24px}}
+.arch-head{{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:18px}}
+.arch-head h2{{font-size:16px;font-weight:700;color:#e6edf3}}
+.arch-head span{{font-size:12px;color:#6e7681}}
+.arch-flow{{display:flex;align-items:stretch;gap:10px;flex-wrap:nowrap}}
+.arch-node{{flex:1;min-width:0;background:#0d1117;border:1px solid #21262d;border-radius:10px;padding:14px 14px 12px;text-align:center;position:relative;transition:border-color .25s}}
+.arch-node:hover{{border-color:#58a6ff44}}
+.arch-node.ai{{border-color:#a78bfa33}}
+.arch-node.ai:hover{{border-color:#a78bfa66}}
+.an-icon{{font-size:18px;margin-bottom:6px;opacity:.85}}
+.an-name{{font-size:13px;font-weight:700;color:#e6edf3;margin-bottom:4px;white-space:nowrap}}
+.an-sub{{font-size:10.5px;color:#6e7681;line-height:1.45}}
+.an-tag{{position:absolute;top:-8px;right:8px;font-size:9px;font-weight:700;letter-spacing:.5px;color:#a78bfa;background:#0d1117;border:1px solid #a78bfa44;border-radius:8px;padding:0 6px;text-transform:uppercase}}
+.arch-arrow{{display:flex;align-items:center;color:#30363d;font-size:16px;flex-shrink:0;user-select:none}}
+.arch-note{{font-size:11.5px;color:#6e7681;margin-top:14px;line-height:1.55;border-top:1px solid #21262d;padding-top:12px}}
+@media(max-width:900px){{.arch-flow{{flex-direction:column}}.arch-arrow{{justify-content:center;transform:rotate(90deg);height:14px}}.an-name{{white-space:normal}}}}
 .chart-title-row{{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}}
 .chart-title-row h2{{margin-bottom:0}}
 .regime-chip{{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:3px 10px;border-radius:12px;border:1px solid}}
@@ -1036,12 +1131,12 @@ tbody tr:last-child td{{border-bottom:none}}
 .phase-steps{{display:flex;align-items:center;margin-bottom:12px}}
 .ph-step{{text-align:center;flex-shrink:0}}
 .ph-dot{{width:12px;height:12px;border-radius:50%;background:#21262d;border:2px solid #30363d;margin:0 auto 4px}}
-.ph-step.active .ph-dot{{background:#a78bfa;border-color:#a78bfa;box-shadow:0 0 8px #a78bfa66}}
-.ph-step.done .ph-dot{{background:#3fb950;border-color:#3fb950}}
+.ph-step.ph-active .ph-dot{{background:#a78bfa;border-color:#a78bfa;box-shadow:0 0 8px #a78bfa66}}
+.ph-step.ph-done .ph-dot{{background:#3fb950;border-color:#3fb950}}
 .ph-name{{font-size:10px;color:#6e7681}}
-.ph-step.active .ph-name{{color:#a78bfa;font-weight:600}}
+.ph-step.ph-active .ph-name{{color:#a78bfa;font-weight:600}}
 .ph-line{{flex:1;height:2px;background:#21262d;margin:0 4px;margin-bottom:14px}}
-.ph-line.done{{background:#3fb950}}
+.ph-line.ph-done{{background:#3fb950}}
 .phase-progress-bar{{height:6px;background:#21262d;border-radius:3px;margin-bottom:8px;overflow:hidden}}
 .phase-fill{{height:100%;background:linear-gradient(90deg,#a78bfa,#818cf8);border-radius:3px}}
 .phase-detail{{display:flex;justify-content:space-between;font-size:11px;color:#6e7681;margin-bottom:14px}}
@@ -1091,12 +1186,15 @@ footer{{text-align:center;color:#30363d;font-size:12px;margin-top:40px;padding-t
   <div class="hero-inner">
     <div>
       <div class="hero-brand">
-        <h1>Ascent <em>Capital</em></h1>
-        <p>AI-native quant fund · Multi-agent debate · Adversarial risk committee · Alpaca paper trading</p>
-        <div class="live-pill">Paper trading live</div>
+        <div class="hero-top">
+          <h1>Ascent <em>Capital</em></h1>
+          <div class="live-pill">Paper Trading · Live</div>
+        </div>
+        <p class="hero-pitch">An autonomous, multi-agent investment system — a regime-aware quant engine gated by an adversarial AI debate committee, with an AI PM earning allocative authority through verified performance.</p>
+        <p class="hero-sub">Runs daily on live market data and executes through the Alpaca paper API. Built and operated by one person. Not a backtest — and not live capital.</p>
       </div>
       <div class="hero-numbers">
-        <div class="hn"><div class="hn-label">Current NAV</div><div class="hn-val main" id="nav-ctr">${nav:,.0f}</div></div>
+        <div class="hn"><div class="hn-label">Net Asset Value <span class="fresh">Updated {generated_at}</span></div><div class="hn-val main" id="nav-ctr">${nav:,.0f}</div></div>
         <div class="hn"><div class="hn-label">Portfolio Return</div><div class="hn-val" id="ret-ctr" style="color:{_pct_color(tr)}">{_fmt_pct(tr)}</div></div>
         <div class="hn"><div class="hn-label">Alpha vs SPY</div><div class="hn-val" id="alpha-ctr" style="color:{_pct_color(alph)}">{_fmt_pct(alph)}</div></div>
         <div class="hn"><div class="hn-label">SPY Return</div><div class="hn-val" id="spy-ctr" style="color:{_pct_color(spy_r)}">{_fmt_pct(spy_r)}</div></div>
@@ -1114,31 +1212,61 @@ footer{{text-align:center;color:#30363d;font-size:12px;margin-top:40px;padding-t
   <div class="stat-card"><div class="stat-label">Worst Day</div><div class="stat-value" style="color:#f85149">{_fmt_pct(stats.get('worst_day'),False)}</div></div>
   <div class="stat-card"><div class="stat-label">Start NAV</div><div class="stat-value">${base:,.0f}</div></div>
 </div>
-<div class="chart-card">
+<div class="chart-card fx">
   <div class="chart-title-row">
-    <h2>Equity Curve — Portfolio vs SPY</h2>
+    <div><div class="kicker">Performance</div><h2 style="margin-bottom:0">Equity Curve — Portfolio vs SPY</h2></div>
     <div class="regime-chip {regime_class}">{regime_label}</div>
   </div>
   <div class="legend">
     <div class="leg"><div class="leg-dot" style="background:#58a6ff"></div>Ascent Capital</div>
     <div class="leg"><div class="leg-dash"></div>SPY</div>
-    <div class="leg"><div class="leg-dot" style="background:#3fb950"></div>Proceed</div>
-    <div class="leg"><div class="leg-dot" style="background:#d29922"></div>Reduce Size</div>
-    <div class="leg"><div class="leg-dot" style="background:#f85149"></div>Halt &amp; Review</div>
+    <div class="leg"><div class="leg-dot" style="background:#3fb950"></div>✓ Proceed</div>
+    <div class="leg"><div class="leg-dot" style="background:#d29922"></div>↓ Reduce Size</div>
+    <div class="leg"><div class="leg-dot" style="background:#f85149"></div>✗ Halt &amp; Review</div>
   </div>
   <div class="chart-wrap"><canvas id="equityChart"></canvas></div>
   <p class="chart-note">⚠ Sharpe annualized from {n_days} trading days (SE {sharpe_se_str}) — not statistically significant. Walk-forward OOS Sharpe (0.518, 2020–2026) is the rigorous number. Live since April 1, 2026.</p>
 </div>
-<div class="grid2">
+<div class="grid2 fx">
   <div class="chart-card" style="margin-bottom:0"><h2>Drawdown from Peak</h2><div class="chart-wrap short"><canvas id="ddChart"></canvas></div></div>
   <div class="chart-card" style="margin-bottom:0"><h2>Cumulative Alpha vs SPY</h2><div class="chart-wrap short"><canvas id="alphaChart"></canvas></div></div>
 </div>
 <div style="margin-bottom:24px"></div>
-<div class="ai-section">
+<div class="arch fx">
+  <div class="arch-head">
+    <div><div class="kicker">System Architecture</div><h2>One autonomous daily loop</h2></div>
+    <span>every position passes the full chain before capital moves</span>
+  </div>
+  <div class="arch-flow">
+    <div class="arch-node"><div class="an-icon">▦</div><div class="an-name">Quant Engine</div><div class="an-sub">4 specialist agents · multi-sleeve alpha · walk-forward validated</div></div>
+    <div class="arch-arrow">›</div>
+    <div class="arch-node"><div class="an-icon">◍</div><div class="an-name">Regime Model</div><div class="an-sub">hidden-state market detection · scales exposure to conditions</div></div>
+    <div class="arch-arrow">›</div>
+    <div class="arch-node ai"><div class="an-tag">LLM</div><div class="an-icon">⚖</div><div class="an-name">AI Debate</div><div class="an-sub">bull · bear · devil's advocate · judge — can trim or halt any trade</div></div>
+    <div class="arch-arrow">›</div>
+    <div class="arch-node ai"><div class="an-tag">LLM</div><div class="an-icon">⬡</div><div class="an-name">AI PM</div><div class="an-sub">independent thesis before quant runs · authority earned by results</div></div>
+    <div class="arch-arrow">›</div>
+    <div class="arch-node"><div class="an-icon">⇄</div><div class="an-name">Execution</div><div class="an-sub">position caps · kill switch · Alpaca paper API</div></div>
+  </div>
+  <p class="arch-note">The quant engine proposes; the debate committee disposes. The AI PM forms its own thesis before seeing quant output and can tilt the book only within an authority budget it has earned — verified on out-of-sample results, never granted.</p>
+</div>
+<div class="ai-section fx">
+  <div class="ai-header">
+    <div class="ai-header-left">
+      <div class="ai-glyph">⚖</div>
+      <div><h2>Decision Process — Adversarial Debate</h2><p>Before any order is placed, four AI agents argue the book — and the judge's verdict gates execution.</p></div>
+    </div>
+  </div>
+  <div style="background:#0d1117;border:1px solid #21262d;border-radius:10px;padding:18px 20px">
+    <p class="debate-intro">Bull and bear argue from different evidence; the devil's advocate attacks portfolio convexity; a judge synthesizes a verdict — proceed, reduce size, or halt. Interventions are tracked and scored. Click any row to read the full debate.</p>
+    {debate_html}
+  </div>
+</div>
+<div class="ai-section fx">
   <div class="ai-header">
     <div class="ai-header-left">
       <div class="ai-glyph">⬡</div>
-      <div><h2>AI Intelligence Layer</h2><p>Multi-agent debate · Adversarial risk committee · Earned authority model</p></div>
+      <div><h2>AI Portfolio Manager — Earned Authority</h2><p>The AI PM's influence on the book is a budget it earns: promoted on verified out-of-sample results, demoted on misses.</p></div>
     </div>
     <div class="ai-phase-chip">{phase_chip}</div>
   </div>
@@ -1152,22 +1280,18 @@ footer{{text-align:center;color:#30363d;font-size:12px;margin-top:40px;padding-t
     <div class="ai-card" style="grid-column:span 2"><h3>Four-Track Counterfactual (A★ / Actual / SPY / Pure AI PM)</h3>{cf_chart_html}</div>
   </div>
   <div class="ai-card" style="margin-top:16px"><h3>Override Scorecard</h3>{scorecard_html}</div>
-  <div style="background:#0d1117;border:1px solid #21262d;border-radius:10px;padding:18px 20px">
-    <h3 style="font-size:13px;font-weight:600;color:#a78bfa;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Rebalance Debate History</h3>
-    <p class="debate-intro">Before every rebalance, four AI agents debate the proposed portfolio — bull, bear, devil's advocate, and a judge. Arguments are adversarial by design. Click any row to read the full debate.</p>
-    {debate_html}
-  </div>
 </div>
-<div class="grid2">
+<div class="grid2 fx">
   <div class="card"><h2>Current Holdings</h2>{pos_html}</div>
   <div class="card"><h2>Event Timeline</h2><div class="timeline">{tl_html}</div></div>
 </div>
-<footer>Generated {generated_at} &nbsp;·&nbsp; Alpaca paper API + Yahoo Finance &nbsp;·&nbsp; <a href="https://github.com/ScottDongKhang/Ascent_Capital">Source on GitHub</a></footer>
+<footer>Updated {generated_at} &nbsp;·&nbsp; Alpaca paper API + Yahoo Finance &nbsp;·&nbsp; Paper trading — performance is not indicative of live-capital results &nbsp;·&nbsp; <a href="https://github.com/ScottDongKhang/Ascent_Capital">Source on GitHub</a></footer>
 </div>
 <script>
 Chart.register(window['chartjs-plugin-annotation']);
 const dates={dates_js},portNAV={port_js},spyNAV={spy_js},startNAV={start_nav_js};
 const ANNOTATIONS={annotations_js};
+const REDUCED=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 function animateNum(el,end,prefix,suffix,decimals){{
   const dur=1600,t0=performance.now();
   const go=t=>{{const p=Math.min((t-t0)/dur,1),e=1-Math.pow(1-p,3),v=end*e;
@@ -1181,19 +1305,62 @@ window.addEventListener('load',()=>{{
   animateNum(document.getElementById('alpha-ctr'),{abs(alph or 0):.4f},'{'+' if (alph or 0)>=0 else '-'}','%',2);
   animateNum(document.getElementById('spy-ctr'),{abs(spy_r or 0):.4f},'{'+' if (spy_r or 0)>=0 else '-'}','%',2);
 }});
-const TT={{backgroundColor:'#161b22',borderColor:'#30363d',borderWidth:1,titleColor:'#8b949e',bodyColor:'#e6edf3',padding:10}};
-const SX={{ticks:{{color:'#6e7681',maxTicksLimit:9,maxRotation:0}},grid:{{color:'#21262d'}}}};
-const SY={{ticks:{{color:'#6e7681'}},grid:{{color:'#21262d'}}}};
+// Section fade-in on scroll. Scoped behind .jsfx so content is never hidden
+// when JS or IntersectionObserver is unavailable; respects reduced motion.
+if('IntersectionObserver' in window && !REDUCED){{
+  document.documentElement.classList.add('jsfx');
+  const io=new IntersectionObserver(es=>es.forEach(e=>{{if(e.isIntersecting){{e.target.classList.add('in');io.unobserve(e.target);}}}}),{{threshold:.07}});
+  document.querySelectorAll('.fx').forEach(el=>io.observe(el));
+}}
+const TT={{backgroundColor:'#1c2128',borderColor:'#30363d',borderWidth:1,titleColor:'#8b949e',bodyColor:'#e6edf3',
+  padding:12,cornerRadius:10,boxPadding:5,usePointStyle:true,titleFont:{{weight:'600',size:11}},bodyFont:{{size:12}},
+  bodySpacing:5,caretSize:0,displayColors:true}};
+const SX={{ticks:{{color:'#6e7681',maxTicksLimit:9,maxRotation:0,font:{{size:10.5}}}},grid:{{color:'#1b212a'}}}};
+const SY={{ticks:{{color:'#6e7681',font:{{size:10.5}}}},grid:{{color:'#1b212a'}}}};
+// Gradient fill under the portfolio line (rebuilt per layout to track chart area)
+function navGradient(ctx){{
+  const a=ctx.chart.chartArea;
+  if(!a)return 'rgba(88,166,255,0.05)';
+  const g=ctx.chart.ctx.createLinearGradient(0,a.top,0,a.bottom);
+  g.addColorStop(0,'rgba(88,166,255,0.26)');g.addColorStop(.55,'rgba(88,166,255,0.07)');g.addColorStop(1,'rgba(88,166,255,0)');
+  return g;
+}}
+// Soft glow dot on the live endpoint of the portfolio series
+const endGlow={{id:'endGlow',afterDatasetsDraw(c){{
+  const m=c.getDatasetMeta(0);const p=m.data[m.data.length-1];if(!p)return;
+  const x=p.x,y=p.y;
+  if(!isFinite(x)||!isFinite(y))return;  // mid draw-on animation
+  const g=c.ctx;g.save();
+  const r=g.createRadialGradient(x,y,0,x,y,13);
+  r.addColorStop(0,'rgba(88,166,255,0.5)');r.addColorStop(1,'rgba(88,166,255,0)');
+  g.fillStyle=r;g.beginPath();g.arc(x,y,13,0,Math.PI*2);g.fill();
+  g.fillStyle='#58a6ff';g.beginPath();g.arc(x,y,3.5,0,Math.PI*2);g.fill();
+  g.strokeStyle='#0d1117';g.lineWidth=1.5;g.stroke();g.restore();
+}}}};
+// Progressive left-to-right draw on load (~1.2s, Chart.js delayed-point pattern)
+const STEP=1200/Math.max(dates.length,1);
+const prevY=ctx=>{{
+  if(ctx.index===0)return ctx.chart.scales.y.getPixelForValue(startNAV);
+  const d=ctx.chart.getDatasetMeta(ctx.datasetIndex).data[ctx.index-1];
+  return d?d.getProps(['y'],true).y:ctx.chart.scales.y.getPixelForValue(startNAV);
+}};
+const drawOn=REDUCED?undefined:{{
+  x:{{type:'number',easing:'linear',duration:STEP,from:NaN,
+     delay(ctx){{if(ctx.type!=='data'||ctx.xStarted)return 0;ctx.xStarted=true;return ctx.index*STEP;}}}},
+  y:{{type:'number',easing:'linear',duration:STEP,from:prevY,
+     delay(ctx){{if(ctx.type!=='data'||ctx.yStarted)return 0;ctx.yStarted=true;return ctx.index*STEP;}}}}
+}};
 new Chart(document.getElementById('equityChart'),{{type:'line',data:{{labels:dates,datasets:[
-  {{label:'Ascent Capital',data:portNAV,borderColor:'#58a6ff',backgroundColor:'rgba(88,166,255,0.07)',borderWidth:2.5,pointRadius:0,pointHoverRadius:5,fill:true,tension:0.3}},
-  {{label:'SPY',data:spyNAV,borderColor:'#6b7280',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,pointHoverRadius:4,borderDash:[6,4],fill:false,tension:0.3}},
+  {{label:'Ascent Capital',data:portNAV,borderColor:'#58a6ff',backgroundColor:navGradient,borderWidth:2.5,pointRadius:0,pointHoverRadius:5,pointHoverBackgroundColor:'#58a6ff',fill:true,tension:0.3}},
+  {{label:'SPY',data:spyNAV,borderColor:'#6b7280',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,pointHoverRadius:4,pointHoverBackgroundColor:'#6b7280',borderDash:[6,4],fill:false,tension:0.3}},
 ]}},options:{{responsive:true,maintainAspectRatio:false,interaction:{{mode:'index',intersect:false}},
+  animation:drawOn,
   plugins:{{legend:{{display:false}},tooltip:{{...TT,callbacks:{{label:ctx=>{{
     const v=ctx.raw;if(!v)return'';const r=((v-startNAV)/startNAV*100),s=r>=0?'+':'';
     return ` ${{ctx.dataset.label}}: $${{v.toLocaleString('en-US',{{maximumFractionDigits:0}})}} (${{s}}${{r.toFixed(2)}}%)`;
   }}}}}},annotation:{{annotations:ANNOTATIONS}}}},
   scales:{{x:SX,y:{{...SY,ticks:{{...SY.ticks,callback:v=>'$'+Math.round(v).toLocaleString('en-US')}}}}}}
-}}}});
+}},plugins:[endGlow]}});
 const dd=[];let pk=portNAV[0];
 portNAV.forEach(v=>{{pk=Math.max(pk,v);dd.push(+((v-pk)/pk*100).toFixed(3));}});
 new Chart(document.getElementById('ddChart'),{{type:'bar',data:{{labels:dates,datasets:[{{
@@ -1318,7 +1485,7 @@ def main():
           f"Macro={allocation['macro']}% Alt={allocation['alternatives']}%")
     stats               = compute_stats(records, spy)
     dates, port, spy_v  = build_chart_data(records, spy)
-    generated_at        = datetime.now().strftime("%Y-%m-%d %H:%M UTC")
+    generated_at        = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     html                = build_html(dates, port, spy_v, verdicts, regime_bands,
                                      stats, positions, generated_at,
                                      authority=authority, thesis=thesis, allocation=allocation)

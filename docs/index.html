@@ -2,33 +2,45 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Ascent Capital — Live Performance</title>
+<title>Ascent Capital — Autonomous Multi-Agent Investment System</title>
+<meta name="description" content="An autonomous, multi-agent investment system — regime-aware quant engine gated by an adversarial AI debate committee, with an AI PM earning allocative authority through verified performance. Live paper trading.">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#0d1117;color:#e6edf3;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;line-height:1.5}
 a{color:#58a6ff;text-decoration:none}
+.num{font-variant-numeric:tabular-nums}
 .wrap{max-width:1300px;margin:0 auto;padding:0 24px 80px}
-.hero{background:linear-gradient(135deg,#0d1117 0%,#161b22 60%,#0d1117 100%);border-bottom:1px solid #30363d;padding:48px 24px 40px;margin:0 -24px 36px}
-.hero-inner{display:grid;grid-template-columns:1fr auto;gap:32px;align-items:center;max-width:1300px;margin:0 auto}
-.hero-brand h1{font-size:34px;font-weight:800;letter-spacing:-1px;margin-bottom:4px}
+.kicker{font-size:11px;font-weight:700;color:#6e7681;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:6px}
+.jsfx .fx{opacity:0;transform:translateY(10px);transition:opacity .55s ease,transform .55s ease}
+.jsfx .fx.in{opacity:1;transform:none}
+@media(prefers-reduced-motion:reduce){.jsfx .fx{opacity:1;transform:none;transition:none}}
+.hero{background:radial-gradient(1200px 420px at 18% -10%,#16202e 0%,#0d1117 55%),linear-gradient(135deg,#0d1117 0%,#11161d 60%,#0d1117 100%);border-bottom:1px solid #21262d;padding:52px 24px 44px;margin:0 0 36px}
+.hero-inner{display:grid;grid-template-columns:1fr auto;gap:36px;align-items:start;max-width:1300px;margin:0 auto}
+@media(max-width:760px){.hero-inner{grid-template-columns:1fr;gap:20px}.regime-ring{justify-self:start;align-self:start}}
+.hero-top{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px}
+.hero-brand h1{font-size:34px;font-weight:800;letter-spacing:-1px}
 .hero-brand h1 em{color:#58a6ff;font-style:normal}
-.hero-brand p{color:#8b949e;font-size:14px;margin-bottom:14px}
-.live-pill{display:inline-flex;align-items:center;gap:6px;background:#3fb95011;border:1px solid #3fb95033;color:#3fb950;border-radius:20px;padding:4px 12px;font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase}
+.hero-pitch{color:#c9d1d9;font-size:16px;line-height:1.55;max-width:760px;margin-bottom:10px;font-weight:500}
+.hero-sub{color:#6e7681;font-size:12.5px;max-width:720px;margin-bottom:4px}
+.live-pill{display:inline-flex;align-items:center;gap:6px;background:#3fb95011;border:1px solid #3fb95033;color:#3fb950;border-radius:20px;padding:4px 12px;font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;white-space:nowrap}
 .live-pill::before{content:'';width:6px;height:6px;border-radius:50%;background:#3fb950;animation:pulse 1.6s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
-.hero-numbers{display:flex;gap:0;margin-top:28px;flex-wrap:wrap}
-.hn{padding:0 28px 0 0;border-right:1px solid #30363d;margin-right:28px}
+.hero-numbers{display:flex;gap:0;margin-top:30px;flex-wrap:wrap;align-items:flex-end}
+.hn{padding:0 28px 0 0;border-right:1px solid #21262d;margin-right:28px;margin-top:10px}
 .hn:last-child{border-right:none;margin-right:0}
-.hn-label{font-size:11px;color:#6e7681;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
-.hn-val{font-size:28px;font-weight:800;letter-spacing:-0.5px}
-.hn-val.main{font-size:40px}
-.regime-ring{text-align:center;background:#161b22;border:2px solid #30363d;border-radius:16px;padding:20px 28px;min-width:140px}
-.regime-ring.calm_bull{border-color:#3fb95066;background:#3fb95008}
+.hn-label{font-size:11px;color:#6e7681;text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px;display:flex;align-items:center;gap:8px}
+.hn-val{font-size:24px;font-weight:700;letter-spacing:-0.5px;font-variant-numeric:tabular-nums}
+.hn-val.main{font-size:clamp(42px,5.5vw,56px);font-weight:800;letter-spacing:-1.5px;line-height:1.05;color:#e6edf3}
+.fresh{font-size:10px;font-weight:600;color:#3fb950;background:#3fb9500d;border:1px solid #3fb95026;border-radius:10px;padding:1px 8px;letter-spacing:.4px;text-transform:none;white-space:nowrap}
+.regime-ring{text-align:center;background:#161b22;border:2px solid #30363d;border-radius:16px;padding:20px 28px;min-width:150px;align-self:center}
+.regime-ring.calm_bull{border-color:#3fb95066;background:#3fb95008;animation:ringGlow 3.2s ease-in-out infinite}
 .regime-ring.stressed{border-color:#d2992266;background:#d2992208}
 .regime-ring.crisis{border-color:#f8514966;background:#f8514908}
 .regime-ring.neutral{border-color:#58a6ff66;background:#58a6ff08}
+@keyframes ringGlow{0%,100%{box-shadow:0 0 0 rgba(63,185,80,0)}50%{box-shadow:0 0 22px rgba(63,185,80,0.13)}}
+@media(prefers-reduced-motion:reduce){.regime-ring.calm_bull{animation:none}}
 .regime-name{font-size:16px;font-weight:700;text-transform:uppercase;letter-spacing:1px}
 .regime-ring.calm_bull .regime-name{color:#3fb950}
 .regime-ring.stressed  .regime-name{color:#d29922}
@@ -38,10 +50,26 @@ a{color:#58a6ff;text-decoration:none}
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:24px}
 .stat-card{background:#161b22;border:1px solid #30363d;border-radius:10px;padding:14px 16px}
 .stat-label{font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
-.stat-value{font-size:21px;font-weight:700}
+.stat-value{font-size:21px;font-weight:700;font-variant-numeric:tabular-nums}
 .stat-note{font-size:10px;color:#6e7681;margin-top:3px}
 .chart-card,.card{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:20px 24px;margin-bottom:24px}
 .chart-card h2,.card h2{font-size:15px;font-weight:600;color:#8b949e;margin-bottom:14px}
+.arch{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:24px 28px;margin-bottom:24px}
+.arch-head{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:18px}
+.arch-head h2{font-size:16px;font-weight:700;color:#e6edf3}
+.arch-head span{font-size:12px;color:#6e7681}
+.arch-flow{display:flex;align-items:stretch;gap:10px;flex-wrap:nowrap}
+.arch-node{flex:1;min-width:0;background:#0d1117;border:1px solid #21262d;border-radius:10px;padding:14px 14px 12px;text-align:center;position:relative;transition:border-color .25s}
+.arch-node:hover{border-color:#58a6ff44}
+.arch-node.ai{border-color:#a78bfa33}
+.arch-node.ai:hover{border-color:#a78bfa66}
+.an-icon{font-size:18px;margin-bottom:6px;opacity:.85}
+.an-name{font-size:13px;font-weight:700;color:#e6edf3;margin-bottom:4px;white-space:nowrap}
+.an-sub{font-size:10.5px;color:#6e7681;line-height:1.45}
+.an-tag{position:absolute;top:-8px;right:8px;font-size:9px;font-weight:700;letter-spacing:.5px;color:#a78bfa;background:#0d1117;border:1px solid #a78bfa44;border-radius:8px;padding:0 6px;text-transform:uppercase}
+.arch-arrow{display:flex;align-items:center;color:#30363d;font-size:16px;flex-shrink:0;user-select:none}
+.arch-note{font-size:11.5px;color:#6e7681;margin-top:14px;line-height:1.55;border-top:1px solid #21262d;padding-top:12px}
+@media(max-width:900px){.arch-flow{flex-direction:column}.arch-arrow{justify-content:center;transform:rotate(90deg);height:14px}.an-name{white-space:normal}}
 .chart-title-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
 .chart-title-row h2{margin-bottom:0}
 .regime-chip{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:3px 10px;border-radius:12px;border:1px solid}
@@ -90,12 +118,12 @@ tbody tr:last-child td{border-bottom:none}
 .phase-steps{display:flex;align-items:center;margin-bottom:12px}
 .ph-step{text-align:center;flex-shrink:0}
 .ph-dot{width:12px;height:12px;border-radius:50%;background:#21262d;border:2px solid #30363d;margin:0 auto 4px}
-.ph-step.active .ph-dot{background:#a78bfa;border-color:#a78bfa;box-shadow:0 0 8px #a78bfa66}
-.ph-step.done .ph-dot{background:#3fb950;border-color:#3fb950}
+.ph-step.ph-active .ph-dot{background:#a78bfa;border-color:#a78bfa;box-shadow:0 0 8px #a78bfa66}
+.ph-step.ph-done .ph-dot{background:#3fb950;border-color:#3fb950}
 .ph-name{font-size:10px;color:#6e7681}
-.ph-step.active .ph-name{color:#a78bfa;font-weight:600}
+.ph-step.ph-active .ph-name{color:#a78bfa;font-weight:600}
 .ph-line{flex:1;height:2px;background:#21262d;margin:0 4px;margin-bottom:14px}
-.ph-line.done{background:#3fb950}
+.ph-line.ph-done{background:#3fb950}
 .phase-progress-bar{height:6px;background:#21262d;border-radius:3px;margin-bottom:8px;overflow:hidden}
 .phase-fill{height:100%;background:linear-gradient(90deg,#a78bfa,#818cf8);border-radius:3px}
 .phase-detail{display:flex;justify-content:space-between;font-size:11px;color:#6e7681;margin-bottom:14px}
@@ -145,14 +173,17 @@ footer{text-align:center;color:#30363d;font-size:12px;margin-top:40px;padding-to
   <div class="hero-inner">
     <div>
       <div class="hero-brand">
-        <h1>Ascent <em>Capital</em></h1>
-        <p>AI-native quant fund · Multi-agent debate · Adversarial risk committee · Alpaca paper trading</p>
-        <div class="live-pill">Paper trading live</div>
+        <div class="hero-top">
+          <h1>Ascent <em>Capital</em></h1>
+          <div class="live-pill">Paper Trading · Live</div>
+        </div>
+        <p class="hero-pitch">An autonomous, multi-agent investment system — a regime-aware quant engine gated by an adversarial AI debate committee, with an AI PM earning allocative authority through verified performance.</p>
+        <p class="hero-sub">Runs daily on live market data and executes through the Alpaca paper API. Built and operated by one person. Not a backtest — and not live capital.</p>
       </div>
       <div class="hero-numbers">
-        <div class="hn"><div class="hn-label">Current NAV</div><div class="hn-val main" id="nav-ctr">$109,066</div></div>
-        <div class="hn"><div class="hn-label">Portfolio Return</div><div class="hn-val" id="ret-ctr" style="color:#3fb950">+8.18%</div></div>
-        <div class="hn"><div class="hn-label">Alpha vs SPY</div><div class="hn-val" id="alpha-ctr" style="color:#f85149">-4.41%</div></div>
+        <div class="hn"><div class="hn-label">Net Asset Value <span class="fresh">Updated 2026-06-12 05:55 UTC</span></div><div class="hn-val main" id="nav-ctr">$108,754</div></div>
+        <div class="hn"><div class="hn-label">Portfolio Return</div><div class="hn-val" id="ret-ctr" style="color:#3fb950">+7.87%</div></div>
+        <div class="hn"><div class="hn-label">Alpha vs SPY</div><div class="hn-val" id="alpha-ctr" style="color:#f85149">-4.72%</div></div>
         <div class="hn"><div class="hn-label">SPY Return</div><div class="hn-val" id="spy-ctr" style="color:#3fb950">+12.59%</div></div>
         <div class="hn"><div class="hn-label">Trading Days</div><div class="hn-val">50</div></div>
       </div>
@@ -162,95 +193,59 @@ footer{text-align:center;color:#30363d;font-size:12px;margin-top:40px;padding-to
 </div>
 <div class="wrap">
 <div class="stats">
-  <div class="stat-card"><div class="stat-label">Sharpe (Ann.) ⚠</div><div class="stat-value">1.792</div><div class="stat-note">±3.6 SE · N=50 days — unreliable at this sample size</div></div>
+  <div class="stat-card"><div class="stat-label">Sharpe (Ann.) ⚠</div><div class="stat-value">1.739</div><div class="stat-note">±3.6 SE · N=50 days — unreliable at this sample size</div></div>
   <div class="stat-card"><div class="stat-label">Max Drawdown</div><div class="stat-value" style="color:#f85149">-6.58%</div></div>
   <div class="stat-card"><div class="stat-label">Best Day</div><div class="stat-value" style="color:#3fb950">+4.02%</div></div>
   <div class="stat-card"><div class="stat-label">Worst Day</div><div class="stat-value" style="color:#f85149">-5.34%</div></div>
   <div class="stat-card"><div class="stat-label">Start NAV</div><div class="stat-value">$100,816</div></div>
 </div>
-<div class="chart-card">
+<div class="chart-card fx">
   <div class="chart-title-row">
-    <h2>Equity Curve — Portfolio vs SPY</h2>
+    <div><div class="kicker">Performance</div><h2 style="margin-bottom:0">Equity Curve — Portfolio vs SPY</h2></div>
     <div class="regime-chip calm_bull">calm bull</div>
   </div>
   <div class="legend">
     <div class="leg"><div class="leg-dot" style="background:#58a6ff"></div>Ascent Capital</div>
     <div class="leg"><div class="leg-dash"></div>SPY</div>
-    <div class="leg"><div class="leg-dot" style="background:#3fb950"></div>Proceed</div>
-    <div class="leg"><div class="leg-dot" style="background:#d29922"></div>Reduce Size</div>
-    <div class="leg"><div class="leg-dot" style="background:#f85149"></div>Halt &amp; Review</div>
+    <div class="leg"><div class="leg-dot" style="background:#3fb950"></div>✓ Proceed</div>
+    <div class="leg"><div class="leg-dot" style="background:#d29922"></div>↓ Reduce Size</div>
+    <div class="leg"><div class="leg-dot" style="background:#f85149"></div>✗ Halt &amp; Review</div>
   </div>
   <div class="chart-wrap"><canvas id="equityChart"></canvas></div>
   <p class="chart-note">⚠ Sharpe annualized from 50 trading days (SE ±3.6) — not statistically significant. Walk-forward OOS Sharpe (0.518, 2020–2026) is the rigorous number. Live since April 1, 2026.</p>
 </div>
-<div class="grid2">
+<div class="grid2 fx">
   <div class="chart-card" style="margin-bottom:0"><h2>Drawdown from Peak</h2><div class="chart-wrap short"><canvas id="ddChart"></canvas></div></div>
   <div class="chart-card" style="margin-bottom:0"><h2>Cumulative Alpha vs SPY</h2><div class="chart-wrap short"><canvas id="alphaChart"></canvas></div></div>
 </div>
 <div style="margin-bottom:24px"></div>
-<div class="ai-section">
+<div class="arch fx">
+  <div class="arch-head">
+    <div><div class="kicker">System Architecture</div><h2>One autonomous daily loop</h2></div>
+    <span>every position passes the full chain before capital moves</span>
+  </div>
+  <div class="arch-flow">
+    <div class="arch-node"><div class="an-icon">▦</div><div class="an-name">Quant Engine</div><div class="an-sub">4 specialist agents · multi-sleeve alpha · walk-forward validated</div></div>
+    <div class="arch-arrow">›</div>
+    <div class="arch-node"><div class="an-icon">◍</div><div class="an-name">Regime Model</div><div class="an-sub">hidden-state market detection · scales exposure to conditions</div></div>
+    <div class="arch-arrow">›</div>
+    <div class="arch-node ai"><div class="an-tag">LLM</div><div class="an-icon">⚖</div><div class="an-name">AI Debate</div><div class="an-sub">bull · bear · devil's advocate · judge — can trim or halt any trade</div></div>
+    <div class="arch-arrow">›</div>
+    <div class="arch-node ai"><div class="an-tag">LLM</div><div class="an-icon">⬡</div><div class="an-name">AI PM</div><div class="an-sub">independent thesis before quant runs · authority earned by results</div></div>
+    <div class="arch-arrow">›</div>
+    <div class="arch-node"><div class="an-icon">⇄</div><div class="an-name">Execution</div><div class="an-sub">position caps · kill switch · Alpaca paper API</div></div>
+  </div>
+  <p class="arch-note">The quant engine proposes; the debate committee disposes. The AI PM forms its own thesis before seeing quant output and can tilt the book only within an authority budget it has earned — verified on out-of-sample results, never granted.</p>
+</div>
+<div class="ai-section fx">
   <div class="ai-header">
     <div class="ai-header-left">
-      <div class="ai-glyph">⬡</div>
-      <div><h2>AI Intelligence Layer</h2><p>Multi-agent debate · Adversarial risk committee · Earned authority model</p></div>
+      <div class="ai-glyph">⚖</div>
+      <div><h2>Decision Process — Adversarial Debate</h2><p>Before any order is placed, four AI agents argue the book — and the judge's verdict gates execution.</p></div>
     </div>
-    <div class="ai-phase-chip">Level 1 — Analyst · 5% Authority</div>
   </div>
-  <div class="grid3">
-    <div class="ai-card"><h3>Earned Authority</h3>
-
-<div class="level-badge" style="font-size:14px;font-weight:600;margin-bottom:10px">Analyst — 5% authority — Day 6 of 21d</div>
-<div class="phase-steps"><div class="ph-step ph-done"><div class="ph-dot"></div><div class="ph-name">Shadow<br><small>0%</small></div></div><div class="ph-line ph-done"></div><div class="ph-step ph-active"><div class="ph-dot"></div><div class="ph-name">Analyst<br><small>5%</small></div></div><div class="ph-line "></div><div class="ph-step ph-future"><div class="ph-dot"></div><div class="ph-name">Associate<br><small>15%</small></div></div><div class="ph-line "></div><div class="ph-step ph-future"><div class="ph-dot"></div><div class="ph-name">Manager<br><small>30%</small></div></div><div class="ph-line "></div><div class="ph-step ph-future"><div class="ph-dot"></div><div class="ph-name">Director<br><small>50%</small></div></div><div class="ph-line "></div><div class="ph-step ph-future"><div class="ph-dot"></div><div class="ph-name">CEO<br><small>75%</small></div></div></div>
-<div class="phase-progress-bar"><div class="phase-fill" style="width:29%"></div></div>
-<div class="auth-stats">
-  <div class="auth-stat"><div class="as-val" style="color:#3fb950">+0.000</div><div class="as-lbl">Sortino edge</div></div>
-  <div class="auth-stat"><div class="as-val">0%</div><div class="as-lbl">Hit rate</div></div>
-  <div class="auth-stat"><div class="as-val">1.00x</div><div class="as-lbl">Profit factor</div></div>
-  <div class="auth-stat"><div class="as-val">0</div><div class="as-lbl">Decisions scored</div></div>
-  <div class="auth-stat"><div class="as-val">0</div><div class="as-lbl">Demotions</div></div>
-</div>
-<p class="auth-note">Promotion: all 7 gates must clear simultaneously (Sortino edge, hit rate, profit factor, min decisions, fade rate, regime diversity, cooldown clear).</p></div>
-    <div class="ai-card"><h3>Capital Allocation</h3><div class="alloc-chart-wrap"><canvas id="allocChart"></canvas></div><p class="alloc-note">AI PM Level 1 (Analyst) · 5% active-weight budget</p></div>
-    <div class="ai-card"><h3>Latest AI PM Decision</h3>
-<div class="thesis-meta">As of 2026-06-11 · Claude Opus 4.6 · 24 tools</div>
-<div class="thesis-mv">Calm bull regime persists as of 2026-06-11. AI capex super-cycle drives semiconductor and infrastructure spending. Rate path stabilizing supports REITs and infrastructure. International equity (Taiwan…</div>
-
-<ul class='thesis-risks'><li>TSMC AI capex guidance cut on next earnings would crater EWT and MU simultaneously — ~20% of portfolio exposed</li><li>US 10-year Treasury yield breaking above 4.67% compresses multiples on rate-sensitive positions (VNQ, IFRA, ORA) — ~23% </li></ul>
-<div class='thesis-wrong'><strong>What could be wrong:</strong> The biggest risk is that I'm overweight a narrow AI capex theme (EWT + MU = 20%) in a regime that rewards breadth. If TSMC or Micron disappoint on AI-specific revenue, the concentr…</div></div>
-  </div>
-  <div class="grid3" style="margin-top:16px">
-    <div class="ai-card"><h3>Promotion Gates</h3><div style="font-size:13px"><div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #21262d"><span style="color:#f85149">✗ Sortino edge</span><span style="color:#8b949e;font-size:12px">0.0 / need 0.2</span></div><div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #21262d"><span style="color:#f85149">✗ Hit rate</span><span style="color:#8b949e;font-size:12px">0.0 / need 0.52</span></div><div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #21262d"><span style="color:#f85149">✗ Profit factor</span><span style="color:#8b949e;font-size:12px">1.0 / need 1.2</span></div><div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #21262d"><span style="color:#f85149">✗ Min decisions</span><span style="color:#8b949e;font-size:12px">0 / need 5</span></div><div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #21262d"><span style="color:#3fb950">✓ Fade rate</span><span style="color:#8b949e;font-size:12px">0.0 / need 0.3</span></div><div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #21262d"><span style="color:#3fb950">✓ Regime diversity</span><span style="color:#8b949e;font-size:12px">not yet evaluated</span></div><div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #21262d"><span style="color:#3fb950">✓ Cooldown clear</span><span style="color:#8b949e;font-size:12px">clear</span></div></div></div>
-    <div class="ai-card" style="grid-column:span 2"><h3>Four-Track Counterfactual (A★ / Actual / SPY / Pure AI PM)</h3>
-<div style="font-size:12px;color:#8b949e;margin-bottom:8px">
-  AI signal quality (D−A★): <span style="color:#f85149">-6.87pp</span> since live &nbsp;|&nbsp;
-  Actual portfolio impact: <span style="color:#f85149">-14.22pp</span> at current weight
-</div>
-<canvas id="cfChart" height="110"></canvas>
-<script>
-(function(){
-  var ctx = document.getElementById('cfChart');
-  if (!ctx) return;
-  new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: ["2026-04-06", "2026-04-07", "2026-04-08", "2026-04-09", "2026-04-10", "2026-04-13", "2026-04-14", "2026-04-15", "2026-04-16", "2026-04-17", "2026-04-22", "2026-04-23", "2026-05-05", "2026-05-06", "2026-05-07", "2026-05-08", "2026-05-19", "2026-05-20", "2026-05-21", "2026-05-22", "2026-05-26", "2026-05-27", "2026-05-28", "2026-05-29", "2026-06-01", "2026-06-02", "2026-06-03", "2026-06-04", "2026-04-16", "2026-04-16", "2026-04-16", "2026-04-16", "2026-04-16", "2026-04-16", "2026-04-16", "2026-04-16", "2026-04-16", "2026-04-16", "2026-06-08", "2026-06-09", "2026-06-10", "2026-06-10", "2026-06-10", "2026-06-10", "2026-06-10", "2026-06-10", "2026-06-10", "2026-06-10", "2026-04-16", "2026-06-10", "2026-04-16", "2026-06-11"],
-      datasets: [
-        {label:'Pure Quant (A★)', data:[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.736, -0.126, 1.066, 2.458, 2.948, 4.648, 5.773, 3.089, 4.241, 3.418, 4.493, 5.228, 4.788, 8.81, 7.604, 9.174, 8.391, 10.802, 10.929, 11.567, 11.727, 11.727, 11.727, 11.727, 11.727, 11.727, 11.727, 11.727, 11.727, 11.727, 11.727, 11.727, 11.727, 11.727, 11.727, 11.727, 11.727, 11.727, 11.727, 11.727, 11.727, 11.727, 11.727, 11.727, 11.727],  borderColor:'#8b949e', borderDash:[4,2], pointRadius:0, borderWidth:1.5, fill:false},
-        {label:'Actual (B)',       data:[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, -2.637, -1.663, -0.68, 0.313, 1.316, 2.329, 3.353, 4.386, 5.43, 6.484, 7.549, 8.863, 8.207, 7.865, 5.358, 2.805, 0.816, -1.059, -2.954, -4.348, -5.623, -4.679, -5.631, -4.687, -2.495], borderColor:'#3fb950', pointRadius:0,    borderWidth:2,   fill:false},
-        {label:'SPY (C)',          data:[0.473, 0.517, 3.077, 3.672, 3.603, 4.616, 5.89, 6.726, 6.988, 8.281, 9.378, 8.953, 9.827, 11.354, 11.012, 11.929, 11.183, 12.323, 12.545, 12.988, 13.738, 13.718, 14.346, 14.631, 14.943, 15.099, 14.291, 14.723, 15.297, 15.873, 16.453, 17.035, 17.62, 18.208, 18.799, 19.393, 19.99, 20.59, 20.863, 20.508, 20.154, 18.26, 16.396, 14.561, 12.754, 10.977, 10.977, 10.977, 11.532, 11.532, 12.089, 13.994],    borderColor:'#58a6ff', borderDash:[4,2], pointRadius:0, borderWidth:1.5, fill:false},
-        {label:'Pure AI PM (D)',   data:[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.124, -0.403, -0.307, -0.183, 2.565, 1.62, 2.624, 2.003, 3.599, 3.987, 4.498, 4.853, 4.853, 4.853, 4.853, 4.853, 4.853, 4.853, 4.853, 4.853, 4.853, 4.853, 4.853, 4.853, 4.853, 4.853, 4.853, 4.853, 4.853, 4.853, 4.853, 4.853, 4.853, 4.853, 4.853, 4.853],  borderColor:'#d29922', pointRadius:0,    borderWidth:2,   fill:false},
-      ]
-    },
-    options:{responsive:true,plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:10}}}},
-      scales:{y:{ticks:{callback:function(v){return v.toFixed(1)+'%'}}}}}
-  });
-})();
-</script></div>
-  </div>
-  <div class="ai-card" style="margin-top:16px"><h3>Override Scorecard</h3><p class="empty">No scored overrides yet — outcomes available after 10 trading days.</p></div>
   <div style="background:#0d1117;border:1px solid #21262d;border-radius:10px;padding:18px 20px">
-    <h3 style="font-size:13px;font-weight:600;color:#a78bfa;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Rebalance Debate History</h3>
-    <p class="debate-intro">Before every rebalance, four AI agents debate the proposed portfolio — bull, bear, devil's advocate, and a judge. Arguments are adversarial by design. Click any row to read the full debate.</p>
+    <p class="debate-intro">Bull and bear argue from different evidence; the devil's advocate attacks portfolio convexity; a judge synthesizes a verdict — proceed, reduce size, or halt. Interventions are tracked and scored. Click any row to read the full debate.</p>
     
 <details class="debate-item">
   <summary class="debate-summary">
@@ -483,15 +478,97 @@ Here's the catastrophic scenario: Oil prices spike due to Middle East conflict, 
 </details>
   </div>
 </div>
-<div class="grid2">
+<div class="ai-section fx">
+  <div class="ai-header">
+    <div class="ai-header-left">
+      <div class="ai-glyph">⬡</div>
+      <div><h2>AI Portfolio Manager — Earned Authority</h2><p>The AI PM's influence on the book is a budget it earns: promoted on verified out-of-sample results, demoted on misses.</p></div>
+    </div>
+    <div class="ai-phase-chip">Level 1 — Analyst · 5% Authority</div>
+  </div>
+  <div class="grid3">
+    <div class="ai-card"><h3>Earned Authority</h3>
+
+<div class="level-badge" style="font-size:14px;font-weight:600;margin-bottom:10px">Analyst — 5% authority — Day 6 of 21d</div>
+<div class="phase-steps"><div class="ph-step ph-done"><div class="ph-dot"></div><div class="ph-name">Shadow<br><small>0%</small></div></div><div class="ph-line ph-done"></div><div class="ph-step ph-active"><div class="ph-dot"></div><div class="ph-name">Analyst<br><small>5%</small></div></div><div class="ph-line "></div><div class="ph-step ph-future"><div class="ph-dot"></div><div class="ph-name">Associate<br><small>15%</small></div></div><div class="ph-line "></div><div class="ph-step ph-future"><div class="ph-dot"></div><div class="ph-name">Manager<br><small>30%</small></div></div><div class="ph-line "></div><div class="ph-step ph-future"><div class="ph-dot"></div><div class="ph-name">Director<br><small>50%</small></div></div><div class="ph-line "></div><div class="ph-step ph-future"><div class="ph-dot"></div><div class="ph-name">CEO<br><small>75%</small></div></div></div>
+<div class="phase-progress-bar"><div class="phase-fill" style="width:29%"></div></div>
+<div class="auth-stats">
+  <div class="auth-stat"><div class="as-val" style="color:#3fb950">+0.000</div><div class="as-lbl">Sortino edge</div></div>
+  <div class="auth-stat"><div class="as-val">0%</div><div class="as-lbl">Hit rate</div></div>
+  <div class="auth-stat"><div class="as-val">1.00x</div><div class="as-lbl">Profit factor</div></div>
+  <div class="auth-stat"><div class="as-val">0</div><div class="as-lbl">Decisions scored</div></div>
+  <div class="auth-stat"><div class="as-val">0</div><div class="as-lbl">Demotions</div></div>
+</div>
+<p class="auth-note">Promotion: all 7 gates must clear simultaneously (Sortino edge, hit rate, profit factor, min decisions, fade rate, regime diversity, cooldown clear).</p></div>
+    <div class="ai-card"><h3>Capital Allocation</h3><div class="alloc-chart-wrap"><canvas id="allocChart"></canvas></div><p class="alloc-note">AI PM Level 1 (Analyst) · 5% active-weight budget</p></div>
+    <div class="ai-card"><h3>Latest AI PM Decision</h3>
+<div class="thesis-meta">As of 2026-06-11 · Claude Opus 4.6 · 24 tools</div>
+<div class="thesis-mv">Calm bull regime persists as of 2026-06-11. AI capex super-cycle drives semiconductor and infrastructure spending. Rate path stabilizing supports REITs and infrastructure. International equity (Taiwan…</div>
+
+<ul class='thesis-risks'><li>TSMC AI capex guidance cut on next earnings would crater EWT and MU simultaneously — ~20% of portfolio exposed</li><li>US 10-year Treasury yield breaking above 4.67% compresses multiples on rate-sensitive positions (VNQ, IFRA, ORA) — ~23% </li></ul>
+<div class='thesis-wrong'><strong>What could be wrong:</strong> The biggest risk is that I'm overweight a narrow AI capex theme (EWT + MU = 20%) in a regime that rewards breadth. If TSMC or Micron disappoint on AI-specific revenue, the concentr…</div></div>
+  </div>
+  <div class="grid3" style="margin-top:16px">
+    <div class="ai-card"><h3>Promotion Gates</h3><div style="font-size:13px"><div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #21262d"><span style="color:#f85149">✗ Sortino edge</span><span style="color:#8b949e;font-size:12px">0.0 / need 0.2</span></div><div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #21262d"><span style="color:#f85149">✗ Hit rate</span><span style="color:#8b949e;font-size:12px">0.0 / need 0.52</span></div><div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #21262d"><span style="color:#f85149">✗ Profit factor</span><span style="color:#8b949e;font-size:12px">1.0 / need 1.2</span></div><div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #21262d"><span style="color:#f85149">✗ Min decisions</span><span style="color:#8b949e;font-size:12px">0 / need 5</span></div><div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #21262d"><span style="color:#3fb950">✓ Fade rate</span><span style="color:#8b949e;font-size:12px">0.0 / need 0.3</span></div><div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #21262d"><span style="color:#3fb950">✓ Regime diversity</span><span style="color:#8b949e;font-size:12px">not yet evaluated</span></div><div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #21262d"><span style="color:#3fb950">✓ Cooldown clear</span><span style="color:#8b949e;font-size:12px">clear</span></div></div></div>
+    <div class="ai-card" style="grid-column:span 2"><h3>Four-Track Counterfactual (A★ / Actual / SPY / Pure AI PM)</h3>
+<div style="font-size:12px;color:#8b949e;margin-bottom:8px">
+  AI signal quality (D−A★): <span style="color:#f85149">-6.19pp</span> since live &nbsp;|&nbsp;
+  Actual portfolio impact: <span style="color:#f85149">-11.83pp</span> at current weight
+</div>
+<div style="position:relative;height:230px"><canvas id="cfChart"></canvas></div>
+<script>
+(function(){
+  var el = document.getElementById('cfChart');
+  if (!el || typeof Chart === 'undefined') return;
+  var shadow = {"start": "2026-04-06", "end": "2026-05-19"};
+  var anns = {};
+  if (shadow) {
+    anns.shadow = {type:'box', xMin:shadow.start, xMax:shadow.end,
+      backgroundColor:'rgba(139,148,158,0.06)', borderWidth:0,
+      label:{display:true, content:'SHADOW PERIOD — tracks scored, no capital',
+        position:{x:'center', y:'start'}, color:'#6e7681',
+        font:{size:9, weight:'600'}, backgroundColor:'rgba(13,17,23,0.85)',
+        padding:{x:5,y:2}, borderRadius:4, yAdjust:4}};
+  }
+  new Chart(el, {
+    type: 'line',
+    data: {
+      labels: ["2026-04-06", "2026-04-07", "2026-04-08", "2026-04-09", "2026-04-10", "2026-04-13", "2026-04-14", "2026-04-15", "2026-04-16", "2026-04-17", "2026-04-22", "2026-04-23", "2026-05-05", "2026-05-06", "2026-05-07", "2026-05-08", "2026-05-19", "2026-05-20", "2026-05-21", "2026-05-22", "2026-05-26", "2026-05-27", "2026-05-28", "2026-05-29", "2026-06-01", "2026-06-02", "2026-06-03", "2026-06-04", "2026-06-08", "2026-06-09", "2026-06-10", "2026-06-11"],
+      datasets: [
+        {label:'Pure Quant (A★)', data:[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.736, -0.736, 0.45, 1.833, 2.319, 4.01, 5.127, 2.46, 3.604, 2.787, 3.856, 4.586, 4.148, 8.146, 6.948, 8.508, 7.73, 10.126, 10.252, 10.886, 11.045, 11.045, 11.045, 11.045, 11.045],  borderColor:'#8b949e', borderDash:[4,3], pointRadius:0, borderWidth:1.5, fill:false, tension:0.25},
+        {label:'Actual (B)',       data:[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, -2.637, -1.448, -2.042, -3.02, -0.789], borderColor:'#3fb950', pointRadius:0,    borderWidth:2,   fill:false, tension:0.25},
+        {label:'SPY (C)',          data:[0.473, 0.517, 3.077, 3.672, 3.603, 4.616, 5.89, 6.726, 7.259, 8.556, 9.655, 9.23, 10.106, 11.636, 11.294, 12.213, 11.465, 12.608, 12.831, 13.275, 14.027, 14.007, 14.636, 14.921, 15.234, 15.391, 14.581, 15.014, 15.275, 14.936, 14.936, 16.89],    borderColor:'#58a6ff', borderDash:[4,3], pointRadius:0, borderWidth:1.5, fill:false, tension:0.25},
+        {label:'Pure AI PM (D)',   data:[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.124, -0.403, -0.307, -0.183, 2.565, 1.62, 2.624, 2.003, 3.599, 3.987, 4.498, 4.853, 4.853, 4.853, 4.853, 4.853],  borderColor:'#d29922', pointRadius:0,    borderWidth:2,   fill:false, tension:0.25},
+      ]
+    },
+    options:{responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{position:'bottom', labels:{color:'#8b949e', boxWidth:10, boxHeight:2, font:{size:10}, padding:10}},
+        tooltip:{backgroundColor:'#1c2128', borderColor:'#30363d', borderWidth:1, titleColor:'#8b949e',
+          bodyColor:'#e6edf3', cornerRadius:10, padding:12, boxPadding:4, usePointStyle:true,
+          callbacks:{label:function(c){return ' '+c.dataset.label+': '+(c.raw>=0?'+':'')+c.raw.toFixed(2)+'%';}}},
+        annotation:{annotations:anns}
+      },
+      scales:{
+        x:{ticks:{color:'#6e7681', maxTicksLimit:8, maxRotation:0, font:{size:10}}, grid:{color:'#1b212a'}},
+        y:{ticks:{color:'#6e7681', font:{size:10}, callback:function(v){return (v>=0?'+':'')+v.toFixed(1)+'%';}}, grid:{color:'#1b212a'}}
+      }
+    }
+  });
+})();
+</script></div>
+  </div>
+  <div class="ai-card" style="margin-top:16px"><h3>Override Scorecard</h3><p class="empty">No scored overrides yet — outcomes available after 10 trading days.</p></div>
+</div>
+<div class="grid2 fx">
   <div class="card"><h2>Current Holdings</h2><table>
       <thead><tr><th>Symbol</th><th>Weight</th><th>Value</th><th>Price</th><th>Unrealized</th></tr></thead>
       <tbody><tr>
           <td class="sym">MU</td>
-          <td>8.1%</td>
-          <td>$8,906</td>
-          <td>$1010.00</td>
-          <td style="color:#3fb950">+10.88%</td>
+          <td>7.9%</td>
+          <td>$8,651</td>
+          <td>$981.09</td>
+          <td style="color:#3fb950">+7.71%</td>
         </tr><tr>
           <td class="sym">STLD</td>
           <td>7.2%</td>
@@ -499,17 +576,17 @@ Here's the catastrophic scenario: Oil prices spike due to Middle East conflict, 
           <td>$279.55</td>
           <td style="color:#3fb950">+1.45%</td>
         </tr><tr>
+          <td class="sym">MGM</td>
+          <td>7.2%</td>
+          <td>$7,854</td>
+          <td>$47.50</td>
+          <td style="color:#3fb950">+1.07%</td>
+        </tr><tr>
           <td class="sym">JEF</td>
           <td>7.1%</td>
           <td>$7,831</td>
           <td>$59.66</td>
           <td style="color:#3fb950">+2.48%</td>
-        </tr><tr>
-          <td class="sym">MGM</td>
-          <td>7.1%</td>
-          <td>$7,807</td>
-          <td>$47.22</td>
-          <td style="color:#3fb950">+0.47%</td>
         </tr><tr>
           <td class="sym">ORA</td>
           <td>6.9%</td>
@@ -518,7 +595,7 @@ Here's the catastrophic scenario: Oil prices spike due to Middle East conflict, 
           <td style="color:#f85149">-1.87%</td>
         </tr><tr>
           <td class="sym">SJM</td>
-          <td>6.7%</td>
+          <td>6.8%</td>
           <td>$7,425</td>
           <td>$116.83</td>
           <td style="color:#f85149">-0.19%</td>
@@ -530,7 +607,7 @@ Here's the catastrophic scenario: Oil prices spike due to Middle East conflict, 
           <td style="color:#3fb950">+0.20%</td>
         </tr><tr>
           <td class="sym">MPC</td>
-          <td>6.5%</td>
+          <td>6.6%</td>
           <td>$7,200</td>
           <td>$260.62</td>
           <td style="color:#f85149">-3.23%</td>
@@ -548,10 +625,10 @@ Here's the catastrophic scenario: Oil prices spike due to Middle East conflict, 
           <td style="color:#3fb950">+0.18%</td>
         </tr><tr>
           <td class="sym">EWT</td>
-          <td>4.5%</td>
-          <td>$4,945</td>
-          <td>$103.47</td>
-          <td style="color:#3fb950">+12.23%</td>
+          <td>4.4%</td>
+          <td>$4,845</td>
+          <td>$101.38</td>
+          <td style="color:#3fb950">+9.96%</td>
         </tr><tr>
           <td class="sym">VNQ</td>
           <td>3.9%</td>
@@ -566,16 +643,16 @@ Here's the catastrophic scenario: Oil prices spike due to Middle East conflict, 
           <td style="color:#f85149">-0.16%</td>
         </tr><tr>
           <td class="sym">DBB</td>
-          <td>3.0%</td>
+          <td>3.1%</td>
           <td>$3,349</td>
           <td>$25.46</td>
           <td style="color:#3fb950">+1.52%</td>
         </tr><tr>
           <td class="sym">EWJ</td>
           <td>2.6%</td>
-          <td>$2,877</td>
-          <td>$92.23</td>
-          <td style="color:#3fb950">+2.43%</td>
+          <td>$2,856</td>
+          <td>$91.55</td>
+          <td style="color:#3fb950">+1.67%</td>
         </tr><tr>
           <td class="sym">EFA</td>
           <td>2.6%</td>
@@ -597,15 +674,15 @@ Here's the catastrophic scenario: Oil prices spike due to Middle East conflict, 
         </tr><tr>
           <td class="sym">PDBC</td>
           <td>2.5%</td>
-          <td>$2,772</td>
-          <td>$17.12</td>
-          <td style="color:#f85149">-4.79%</td>
+          <td>$2,789</td>
+          <td>$17.23</td>
+          <td style="color:#f85149">-4.18%</td>
         </tr><tr>
           <td class="sym">BIL</td>
           <td>2.1%</td>
           <td>$2,333</td>
-          <td>$91.49</td>
-          <td style="color:#3fb950">+0.01%</td>
+          <td>$91.50</td>
+          <td style="color:#3fb950">+0.02%</td>
         </tr><tr>
           <td class="sym">KMLM</td>
           <td>1.1%</td>
@@ -739,201 +816,254 @@ Here's the catastrophic scenario: Oil prices spike due to Middle East conflict, 
   </div>
 </div></div></div>
 </div>
-<footer>Generated 2026-06-11 17:50 UTC &nbsp;·&nbsp; Alpaca paper API + Yahoo Finance &nbsp;·&nbsp; <a href="https://github.com/ScottDongKhang/Ascent_Capital">Source on GitHub</a></footer>
+<footer>Updated 2026-06-12 05:55 UTC &nbsp;·&nbsp; Alpaca paper API + Yahoo Finance &nbsp;·&nbsp; Paper trading — performance is not indicative of live-capital results &nbsp;·&nbsp; <a href="https://github.com/ScottDongKhang/Ascent_Capital">Source on GitHub</a></footer>
 </div>
 <script>
 Chart.register(window['chartjs-plugin-annotation']);
-const dates=["2026-04-01", "2026-04-02", "2026-04-06", "2026-04-07", "2026-04-08", "2026-04-09", "2026-04-10", "2026-04-13", "2026-04-14", "2026-04-15", "2026-04-16", "2026-04-17", "2026-04-20", "2026-04-21", "2026-04-22", "2026-04-23", "2026-04-24", "2026-04-27", "2026-04-28", "2026-04-29", "2026-04-30", "2026-05-01", "2026-05-04", "2026-05-05", "2026-05-06", "2026-05-07", "2026-05-08", "2026-05-11", "2026-05-12", "2026-05-13", "2026-05-14", "2026-05-15", "2026-05-18", "2026-05-19", "2026-05-20", "2026-05-21", "2026-05-22", "2026-05-26", "2026-05-27", "2026-05-28", "2026-05-29", "2026-06-01", "2026-06-02", "2026-06-03", "2026-06-04", "2026-06-05", "2026-06-08", "2026-06-09", "2026-06-10", "2026-06-11"],portNAV=[100815.52, 101126.97, 101292.65, 101051.15, 101985.1, 101883.89, 101347.97, 101004.31, 100664.52, 99882.2, 99977.68, 101125.28, 101241.35, 100856.49, 102232.36, 102669.08, 103770.47, 103484.9, 102546.71, 102531.14, 105501.78, 105236.72, 105236.72, 107025.25, 108103.68, 105349.62, 106483.08, 109932.51, 109142.74, 110025.85, 109720.02, 108100.11, 106285.24, 105276.29, 105834.21, 106563.35, 106082.49, 110351.73, 110100.09, 111061.07, 110251.05, 112871.1, 112902.95, 113682.35, 114051.74, 107957.01, 108881.57, 108463.18, 106544.29, 109065.88],spyNAV=[100815.52, 100906.3, 101383.27, 101427.88, 104011.2, 104611.26, 104542.02, 105563.65, 106849.93, 107693.08, 107957.72, 109262.46, 109043.98, 108330.06, 109427.09, 109002.43, 109847.13, 110036.38, 109500.94, 109484.02, 110573.35, 110879.53, 110473.34, 111359.58, 112907.41, 112561.23, 113490.54, 113749.03, 113576.71, 114212.15, 115113.77, 113729.03, 113649.02, 112892.03, 114049.06, 114275.23, 114724.5, 115486.11, 115466.11, 116103.09, 116392.35, 116709.3, 116867.78, 116047.7, 116486.21, 113479.77, 113736.72, 113402.84, 111614.98, 113512.08],startNAV=100815.52;
+const dates=["2026-04-01", "2026-04-02", "2026-04-06", "2026-04-07", "2026-04-08", "2026-04-09", "2026-04-10", "2026-04-13", "2026-04-14", "2026-04-15", "2026-04-16", "2026-04-17", "2026-04-20", "2026-04-21", "2026-04-22", "2026-04-23", "2026-04-24", "2026-04-27", "2026-04-28", "2026-04-29", "2026-04-30", "2026-05-01", "2026-05-04", "2026-05-05", "2026-05-06", "2026-05-07", "2026-05-08", "2026-05-11", "2026-05-12", "2026-05-13", "2026-05-14", "2026-05-15", "2026-05-18", "2026-05-19", "2026-05-20", "2026-05-21", "2026-05-22", "2026-05-26", "2026-05-27", "2026-05-28", "2026-05-29", "2026-06-01", "2026-06-02", "2026-06-03", "2026-06-04", "2026-06-05", "2026-06-08", "2026-06-09", "2026-06-10", "2026-06-11"],portNAV=[100815.52, 101126.97, 101292.65, 101051.15, 101985.1, 101883.89, 101347.97, 101004.31, 100664.52, 99882.2, 99977.68, 101125.28, 101241.35, 100856.49, 102232.36, 102669.08, 103770.47, 103484.9, 102546.71, 102531.14, 105501.78, 105236.72, 105236.72, 107025.25, 108103.68, 105349.62, 106483.08, 109932.51, 109142.74, 110025.85, 109720.02, 108100.11, 106285.24, 105276.29, 105834.21, 106563.35, 106082.49, 110351.73, 110100.09, 111061.07, 110251.05, 112871.1, 112902.95, 113682.35, 114051.74, 107957.01, 108881.57, 108463.18, 106544.29, 108754.21],spyNAV=[100815.52, 100906.3, 101383.27, 101427.88, 104011.2, 104611.26, 104542.02, 105563.65, 106849.93, 107693.08, 107957.72, 109262.46, 109043.98, 108330.06, 109427.09, 109002.43, 109847.13, 110036.38, 109500.94, 109484.02, 110573.35, 110879.53, 110473.34, 111359.58, 112907.41, 112561.23, 113490.54, 113749.03, 113576.71, 114212.15, 115113.77, 113729.03, 113649.02, 112892.03, 114049.06, 114275.23, 114724.5, 115486.11, 115466.11, 116103.09, 116392.35, 116709.3, 116867.78, 116047.7, 116486.21, 113479.77, 113736.72, 113402.84, 111614.98, 113512.08],startNAV=100815.52;
 const ANNOTATIONS={
   "regime0": {
     "type": "box",
     "xMin": "2026-03-31",
     "xMax": "2026-04-22",
-    "backgroundColor": "rgba(210,153,34,0.10)",
-    "borderWidth": 0,
+    "backgroundColor": "rgba(210,153,34,0.08)",
+    "borderWidth": 0
+  },
+  "regimeEdge0": {
+    "type": "line",
+    "xMin": "2026-03-31",
+    "xMax": "2026-03-31",
+    "borderColor": "#d2992255",
+    "borderWidth": 1,
+    "borderDash": [
+      2,
+      3
+    ],
     "label": {
       "display": true,
-      "content": "stressed",
-      "position": {
-        "x": "start",
-        "y": "start"
-      },
-      "color": "#8b949e",
+      "content": "STRESSED",
+      "position": "start",
+      "color": "#d29922",
       "font": {
-        "size": 9
+        "size": 9,
+        "weight": "700"
       },
-      "backgroundColor": "transparent",
-      "yAdjust": 4,
-      "xAdjust": 4
+      "backgroundColor": "rgba(13,17,23,0.85)",
+      "padding": {
+        "x": 5,
+        "y": 2
+      },
+      "borderRadius": 4,
+      "xAdjust": 30,
+      "yAdjust": 2
     }
   },
   "regime1": {
     "type": "box",
     "xMin": "2026-04-22",
     "xMax": "2026-06-11",
-    "backgroundColor": "rgba(63,185,80,0.07)",
-    "borderWidth": 0,
+    "backgroundColor": "rgba(63,185,80,0.05)",
+    "borderWidth": 0
+  },
+  "regimeEdge1": {
+    "type": "line",
+    "xMin": "2026-04-22",
+    "xMax": "2026-04-22",
+    "borderColor": "#3fb95055",
+    "borderWidth": 1,
+    "borderDash": [
+      2,
+      3
+    ],
     "label": {
       "display": true,
-      "content": "calm bull",
-      "position": {
-        "x": "start",
-        "y": "start"
-      },
-      "color": "#8b949e",
+      "content": "CALM BULL",
+      "position": "start",
+      "color": "#3fb950",
       "font": {
-        "size": 9
+        "size": 9,
+        "weight": "700"
       },
-      "backgroundColor": "transparent",
-      "yAdjust": 4,
-      "xAdjust": 4
+      "backgroundColor": "rgba(13,17,23,0.85)",
+      "padding": {
+        "x": 5,
+        "y": 2
+      },
+      "borderRadius": 4,
+      "xAdjust": 30,
+      "yAdjust": 2
     }
   },
   "reb0": {
     "type": "line",
     "xMin": "2026-04-01",
     "xMax": "2026-04-01",
-    "borderColor": "#58a6ff",
-    "borderWidth": 2,
+    "borderColor": "#58a6ff99",
+    "borderWidth": 1.5,
     "borderDash": [
       5,
       4
     ],
     "label": {
       "display": true,
-      "content": "Live Start",
+      "content": "\u2605",
       "position": "end",
-      "backgroundColor": "#58a6ff22",
+      "backgroundColor": "#58a6ff26",
       "color": "#58a6ff",
       "font": {
-        "size": 10,
-        "weight": "600"
+        "size": 11,
+        "weight": "700"
       },
-      "padding": 3,
-      "yAdjust": 6
+      "padding": {
+        "x": 5,
+        "y": 2
+      },
+      "borderRadius": 10,
+      "yAdjust": 4
     }
   },
   "reb4": {
     "type": "line",
     "xMin": "2026-04-15",
     "xMax": "2026-04-15",
-    "borderColor": "#d29922",
-    "borderWidth": 2,
+    "borderColor": "#d2992299",
+    "borderWidth": 1.5,
     "borderDash": [
       5,
       4
     ],
     "label": {
       "display": true,
-      "content": "Reduce Size",
+      "content": "\u2193",
       "position": "end",
-      "backgroundColor": "#d2992222",
+      "backgroundColor": "#d2992226",
       "color": "#d29922",
       "font": {
-        "size": 10,
-        "weight": "600"
+        "size": 11,
+        "weight": "700"
       },
-      "padding": 3,
-      "yAdjust": 6
+      "padding": {
+        "x": 5,
+        "y": 2
+      },
+      "borderRadius": 10,
+      "yAdjust": 4
     }
   },
   "reb5": {
     "type": "line",
     "xMin": "2026-05-05",
     "xMax": "2026-05-05",
-    "borderColor": "#3fb950",
-    "borderWidth": 2,
+    "borderColor": "#3fb95099",
+    "borderWidth": 1.5,
     "borderDash": [
       5,
       4
     ],
     "label": {
       "display": true,
-      "content": "Proceed",
+      "content": "\u2713",
       "position": "end",
-      "backgroundColor": "#3fb95022",
+      "backgroundColor": "#3fb95026",
       "color": "#3fb950",
       "font": {
-        "size": 10,
-        "weight": "600"
+        "size": 11,
+        "weight": "700"
       },
-      "padding": 3,
-      "yAdjust": 6
+      "padding": {
+        "x": 5,
+        "y": 2
+      },
+      "borderRadius": 10,
+      "yAdjust": 4
     }
   },
   "reb6": {
     "type": "line",
     "xMin": "2026-05-19",
     "xMax": "2026-05-19",
-    "borderColor": "#3fb950",
-    "borderWidth": 2,
+    "borderColor": "#3fb95099",
+    "borderWidth": 1.5,
     "borderDash": [
       5,
       4
     ],
     "label": {
       "display": true,
-      "content": "Proceed",
+      "content": "\u2713",
       "position": "end",
-      "backgroundColor": "#3fb95022",
+      "backgroundColor": "#3fb95026",
       "color": "#3fb950",
       "font": {
-        "size": 10,
-        "weight": "600"
+        "size": 11,
+        "weight": "700"
       },
-      "padding": 3,
-      "yAdjust": 6
+      "padding": {
+        "x": 5,
+        "y": 2
+      },
+      "borderRadius": 10,
+      "yAdjust": 4
     }
   },
   "reb7": {
     "type": "line",
     "xMin": "2026-05-27",
     "xMax": "2026-05-27",
-    "borderColor": "#3fb950",
-    "borderWidth": 2,
+    "borderColor": "#3fb95099",
+    "borderWidth": 1.5,
     "borderDash": [
       5,
       4
     ],
     "label": {
       "display": true,
-      "content": "Proceed",
+      "content": "\u2713",
       "position": "end",
-      "backgroundColor": "#3fb95022",
+      "backgroundColor": "#3fb95026",
       "color": "#3fb950",
       "font": {
-        "size": 10,
-        "weight": "600"
+        "size": 11,
+        "weight": "700"
       },
-      "padding": 3,
-      "yAdjust": 6
+      "padding": {
+        "x": 5,
+        "y": 2
+      },
+      "borderRadius": 10,
+      "yAdjust": 4
     }
   },
   "reb8": {
     "type": "line",
     "xMin": "2026-06-10",
     "xMax": "2026-06-10",
-    "borderColor": "#3fb950",
-    "borderWidth": 2,
+    "borderColor": "#3fb95099",
+    "borderWidth": 1.5,
     "borderDash": [
       5,
       4
     ],
     "label": {
       "display": true,
-      "content": "Proceed",
+      "content": "\u2713",
       "position": "end",
-      "backgroundColor": "#3fb95022",
+      "backgroundColor": "#3fb95026",
       "color": "#3fb950",
       "font": {
-        "size": 10,
-        "weight": "600"
+        "size": 11,
+        "weight": "700"
       },
-      "padding": 3,
-      "yAdjust": 6
+      "padding": {
+        "x": 5,
+        "y": 2
+      },
+      "borderRadius": 10,
+      "yAdjust": 4
     }
   }
 };
+const REDUCED=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 function animateNum(el,end,prefix,suffix,decimals){
   const dur=1600,t0=performance.now();
   const go=t=>{const p=Math.min((t-t0)/dur,1),e=1-Math.pow(1-p,3),v=end*e;
@@ -942,24 +1072,67 @@ function animateNum(el,end,prefix,suffix,decimals){
   requestAnimationFrame(go);
 }
 window.addEventListener('load',()=>{
-  animateNum(document.getElementById('nav-ctr'),109065.88,'$','',0);
-  animateNum(document.getElementById('ret-ctr'),8.1800,'+','%',2);
-  animateNum(document.getElementById('alpha-ctr'),4.4100,'-','%',2);
+  animateNum(document.getElementById('nav-ctr'),108754.21,'$','',0);
+  animateNum(document.getElementById('ret-ctr'),7.8700,'+','%',2);
+  animateNum(document.getElementById('alpha-ctr'),4.7200,'-','%',2);
   animateNum(document.getElementById('spy-ctr'),12.5900,'+','%',2);
 });
-const TT={backgroundColor:'#161b22',borderColor:'#30363d',borderWidth:1,titleColor:'#8b949e',bodyColor:'#e6edf3',padding:10};
-const SX={ticks:{color:'#6e7681',maxTicksLimit:9,maxRotation:0},grid:{color:'#21262d'}};
-const SY={ticks:{color:'#6e7681'},grid:{color:'#21262d'}};
+// Section fade-in on scroll. Scoped behind .jsfx so content is never hidden
+// when JS or IntersectionObserver is unavailable; respects reduced motion.
+if('IntersectionObserver' in window && !REDUCED){
+  document.documentElement.classList.add('jsfx');
+  const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target);}}),{threshold:.07});
+  document.querySelectorAll('.fx').forEach(el=>io.observe(el));
+}
+const TT={backgroundColor:'#1c2128',borderColor:'#30363d',borderWidth:1,titleColor:'#8b949e',bodyColor:'#e6edf3',
+  padding:12,cornerRadius:10,boxPadding:5,usePointStyle:true,titleFont:{weight:'600',size:11},bodyFont:{size:12},
+  bodySpacing:5,caretSize:0,displayColors:true};
+const SX={ticks:{color:'#6e7681',maxTicksLimit:9,maxRotation:0,font:{size:10.5}},grid:{color:'#1b212a'}};
+const SY={ticks:{color:'#6e7681',font:{size:10.5}},grid:{color:'#1b212a'}};
+// Gradient fill under the portfolio line (rebuilt per layout to track chart area)
+function navGradient(ctx){
+  const a=ctx.chart.chartArea;
+  if(!a)return 'rgba(88,166,255,0.05)';
+  const g=ctx.chart.ctx.createLinearGradient(0,a.top,0,a.bottom);
+  g.addColorStop(0,'rgba(88,166,255,0.26)');g.addColorStop(.55,'rgba(88,166,255,0.07)');g.addColorStop(1,'rgba(88,166,255,0)');
+  return g;
+}
+// Soft glow dot on the live endpoint of the portfolio series
+const endGlow={id:'endGlow',afterDatasetsDraw(c){
+  const m=c.getDatasetMeta(0);const p=m.data[m.data.length-1];if(!p)return;
+  const x=p.x,y=p.y;
+  if(!isFinite(x)||!isFinite(y))return;  // mid draw-on animation
+  const g=c.ctx;g.save();
+  const r=g.createRadialGradient(x,y,0,x,y,13);
+  r.addColorStop(0,'rgba(88,166,255,0.5)');r.addColorStop(1,'rgba(88,166,255,0)');
+  g.fillStyle=r;g.beginPath();g.arc(x,y,13,0,Math.PI*2);g.fill();
+  g.fillStyle='#58a6ff';g.beginPath();g.arc(x,y,3.5,0,Math.PI*2);g.fill();
+  g.strokeStyle='#0d1117';g.lineWidth=1.5;g.stroke();g.restore();
+}};
+// Progressive left-to-right draw on load (~1.2s, Chart.js delayed-point pattern)
+const STEP=1200/Math.max(dates.length,1);
+const prevY=ctx=>{
+  if(ctx.index===0)return ctx.chart.scales.y.getPixelForValue(startNAV);
+  const d=ctx.chart.getDatasetMeta(ctx.datasetIndex).data[ctx.index-1];
+  return d?d.getProps(['y'],true).y:ctx.chart.scales.y.getPixelForValue(startNAV);
+};
+const drawOn=REDUCED?undefined:{
+  x:{type:'number',easing:'linear',duration:STEP,from:NaN,
+     delay(ctx){if(ctx.type!=='data'||ctx.xStarted)return 0;ctx.xStarted=true;return ctx.index*STEP;}},
+  y:{type:'number',easing:'linear',duration:STEP,from:prevY,
+     delay(ctx){if(ctx.type!=='data'||ctx.yStarted)return 0;ctx.yStarted=true;return ctx.index*STEP;}}
+};
 new Chart(document.getElementById('equityChart'),{type:'line',data:{labels:dates,datasets:[
-  {label:'Ascent Capital',data:portNAV,borderColor:'#58a6ff',backgroundColor:'rgba(88,166,255,0.07)',borderWidth:2.5,pointRadius:0,pointHoverRadius:5,fill:true,tension:0.3},
-  {label:'SPY',data:spyNAV,borderColor:'#6b7280',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,pointHoverRadius:4,borderDash:[6,4],fill:false,tension:0.3},
+  {label:'Ascent Capital',data:portNAV,borderColor:'#58a6ff',backgroundColor:navGradient,borderWidth:2.5,pointRadius:0,pointHoverRadius:5,pointHoverBackgroundColor:'#58a6ff',fill:true,tension:0.3},
+  {label:'SPY',data:spyNAV,borderColor:'#6b7280',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,pointHoverRadius:4,pointHoverBackgroundColor:'#6b7280',borderDash:[6,4],fill:false,tension:0.3},
 ]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+  animation:drawOn,
   plugins:{legend:{display:false},tooltip:{...TT,callbacks:{label:ctx=>{
     const v=ctx.raw;if(!v)return'';const r=((v-startNAV)/startNAV*100),s=r>=0?'+':'';
     return ` ${ctx.dataset.label}: $${v.toLocaleString('en-US',{maximumFractionDigits:0})} (${s}${r.toFixed(2)}%)`;
   }}},annotation:{annotations:ANNOTATIONS}},
   scales:{x:SX,y:{...SY,ticks:{...SY.ticks,callback:v=>'$'+Math.round(v).toLocaleString('en-US')}}}
-}});
+},plugins:[endGlow]});
 const dd=[];let pk=portNAV[0];
 portNAV.forEach(v=>{pk=Math.max(pk,v);dd.push(+((v-pk)/pk*100).toFixed(3));});
 new Chart(document.getElementById('ddChart'),{type:'bar',data:{labels:dates,datasets:[{
