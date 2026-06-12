@@ -213,8 +213,36 @@ HARDCODED_EVENTS = [
 # Listed here just for documentation; ACTUAL_REBALANCE_DATES handles the labeling.
 
 
+def _execution_dates_from_eod_log() -> set[str]:
+    """Dates where eod_runner actually submitted orders (rebalanced=True)."""
+    dates: set[str] = set()
+    try:
+        with open("logs/eod_log.jsonl") as fh:
+            for line in fh:
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if rec.get("rebalanced"):
+                    d = rec.get("date") or rec.get("run_date")
+                    if d:
+                        dates.add(d)
+    except FileNotFoundError:
+        pass
+    return dates
+
+
 def load_verdicts() -> list[dict]:
     events = list(HARDCODED_EVENTS)  # start with known milestones
+
+    # Execution days: hardcoded history + anything the EOD log proves was executed
+    execution_dates = ACTUAL_REBALANCE_DATES | _execution_dates_from_eod_log()
+    reb_numbers = dict(REBALANCE_NUMBERS)
+    next_num = max(reb_numbers.values(), default=0) + 1
+    for d in sorted(execution_dates):
+        if d not in reb_numbers:
+            reb_numbers[d] = next_num
+            next_num += 1
 
     for f in sorted(glob.glob("outputs/debate_log/verdict_*.json")):
         try:
@@ -244,9 +272,9 @@ def load_verdicts() -> list[dict]:
                 regime = regime.replace("RegimeLabel.", "")
             outcome = v.get("outcome_nav_change")
 
-            is_execution = ev_date in ACTUAL_REBALANCE_DATES
+            is_execution = ev_date in execution_dates
             if is_execution:
-                reb_num = REBALANCE_NUMBERS.get(ev_date, "")
+                reb_num = reb_numbers.get(ev_date, "")
                 num_str = f" #{reb_num}" if reb_num else ""
                 label = f"Rebalance{num_str} — Executed · {rec.replace('_', ' ').title()}"
                 ev_type = "rebalance"
@@ -897,6 +925,16 @@ def build_html(
     thesis_html    = _thesis_html(thesis)
     debate_html    = _debate_html(verdicts)
 
+    # AI PM phase chip + allocation note from live authority state
+    _lvl    = authority.get("level", 0)
+    _title  = authority.get("title", "Shadow")
+    _ai_pct = authority.get("ai_weight", 0.0) * 100
+    if _lvl > 0:
+        phase_chip = f"Level {_lvl} — {_title} · {_ai_pct:.0f}% Authority"
+    else:
+        phase_chip = "Phase 0 — Shadow Mode"
+    alloc_note = f"AI PM Level {_lvl} ({_title}) · {_ai_pct:.0f}% active-weight budget"
+
     sharpe_se_str = f"±{sharpe_se:.1f}" if sharpe_se else "±?"
 
     # ── Serialize for JS ──────────────────────────────────────────────────────
@@ -1102,11 +1140,11 @@ footer{{text-align:center;color:#30363d;font-size:12px;margin-top:40px;padding-t
       <div class="ai-glyph">⬡</div>
       <div><h2>AI Intelligence Layer</h2><p>Multi-agent debate · Adversarial risk committee · Earned authority model</p></div>
     </div>
-    <div class="ai-phase-chip">Phase 0 — Shadow Mode</div>
+    <div class="ai-phase-chip">{phase_chip}</div>
   </div>
   <div class="grid3">
     <div class="ai-card"><h3>Earned Authority</h3>{auth_html}</div>
-    <div class="ai-card"><h3>Capital Allocation</h3><div class="alloc-chart-wrap"><canvas id="allocChart"></canvas></div><p class="alloc-note">Calm bull · AI PM 0% authority</p></div>
+    <div class="ai-card"><h3>Capital Allocation</h3><div class="alloc-chart-wrap"><canvas id="allocChart"></canvas></div><p class="alloc-note">{alloc_note}</p></div>
     <div class="ai-card"><h3>Latest AI PM Decision</h3>{thesis_html}</div>
   </div>
   <div class="grid3" style="margin-top:16px">
