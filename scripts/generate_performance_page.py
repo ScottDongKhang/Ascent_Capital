@@ -72,6 +72,25 @@ def fetch_portfolio_history() -> list[dict]:
         records.append({"date": dt.isoformat(), "equity": round(eq, 2), "day_return": round(day_ret, 6)})
         prev_eq = eq
 
+    # Alpaca publishes the 1D bar for a session only after ~00:00 UTC (17:00 PT),
+    # i.e. after our daily run — so the series above always ends at YESTERDAY.
+    # Append today's session from live account equity so the chart is current.
+    today = date.today()
+    if records and records[-1]["date"] < today.isoformat() and today.weekday() < 5:
+        try:
+            r = requests.get(f"{PAPER_BASE}/v2/account", headers=_alpaca_headers(), timeout=15)
+            r.raise_for_status()
+            live_eq = float(r.json().get("equity", 0) or 0)
+            if live_eq > 0:
+                prev = records[-1]["equity"]
+                records.append({
+                    "date":       today.isoformat(),
+                    "equity":     round(live_eq, 2),
+                    "day_return": round(live_eq / prev - 1, 6) if prev else 0.0,
+                })
+        except Exception:
+            pass  # chart falls back to ending at the last published bar
+
     return records
 
 
