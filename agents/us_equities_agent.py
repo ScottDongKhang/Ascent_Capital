@@ -95,11 +95,20 @@ def run_us_equities_agent(
         except Exception:
             pass
 
+        _alpha_scores_df = None
+        try:
+            _lar = _alpha_breakdown.get("last_alpha_row")
+            if _lar is not None and not _lar.empty:
+                _alpha_scores_df = pd.DataFrame([_lar])
+        except Exception:
+            pass
+
         output = AgentOutput(
             agent_id=AGENT_ID,
             as_of_date=as_of_date,
             target_weights=target_weights,
             regime_signal=regime_signal,
+            alpha_scores=_alpha_scores_df,
             skill_score=None,  # skill tracker fills this
             metadata={
                 "n_positions":    len(target_weights),

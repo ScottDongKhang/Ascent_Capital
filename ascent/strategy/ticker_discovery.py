@@ -74,7 +74,13 @@ def run_discovery(
             max_tokens=300,
             temperature=0.2,
         )
-        data = json.loads(raw.strip())
+        raw = raw.strip()
+        if raw.startswith("```"):
+            lines = raw.split("\n")
+            raw = "\n".join(lines[1:]).rstrip("`").strip()
+        if not raw:
+            return None
+        data = json.loads(raw)
         symbol = str(data.get("symbol", "")).upper().strip()
         conviction = float(data.get("conviction_score", 0.0))
 

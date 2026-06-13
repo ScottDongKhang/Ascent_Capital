@@ -639,6 +639,7 @@ def run_pipeline(
     # ── MVO on the latest rebalance date; rank-weight for historical dates ──────
     opt_method = "rank_weight_fallback"
     last_alpha_row = alpha.iloc[-1].dropna() if not alpha.empty else pd.Series(dtype=float)
+    _alpha_breakdown["last_alpha_row"] = last_alpha_row
 
     # Build factor covariance for the last date (Plan 1 integration)
     mvo_covariance = None
