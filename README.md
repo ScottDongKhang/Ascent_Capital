@@ -1,6 +1,6 @@
 # Ascent Capital
 
-![Tests](https://img.shields.io/badge/tests-986%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-977%20passing-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.12-blue)
 ![Status](https://img.shields.io/badge/status-live%20paper%20trading-informational)
 ![AI PM](https://img.shields.io/badge/AI%20PM-Level%201%20Analyst%20%E2%80%93%205%25%20authority-blueviolet)
