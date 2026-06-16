@@ -181,8 +181,8 @@ footer{text-align:center;color:#30363d;font-size:12px;margin-top:40px;padding-to
         <p class="hero-sub">Runs daily on live market data and executes through the Alpaca paper API. Built and operated by one person. Not a backtest — and not live capital.</p>
       </div>
       <div class="hero-numbers">
-        <div class="hn"><div class="hn-label">Net Asset Value <span class="fresh">Updated 2026-06-16 05:29 UTC</span></div><div class="hn-val main" id="nav-ctr">$109,749</div></div>
-        <div class="hn"><div class="hn-label">Portfolio Return</div><div class="hn-val" id="ret-ctr" style="color:#3fb950">+8.86%</div></div>
+        <div class="hn"><div class="hn-label">Net Asset Value <span class="fresh">Updated 2026-06-16 06:45 UTC</span></div><div class="hn-val main" id="nav-ctr">$109,694</div></div>
+        <div class="hn"><div class="hn-label">Portfolio Return</div><div class="hn-val" id="ret-ctr" style="color:#3fb950">+8.81%</div></div>
         <div class="hn"><div class="hn-label">Alpha vs SPY</div><div class="hn-val" id="alpha-ctr" style="color:#f85149">nan%</div></div>
         <div class="hn"><div class="hn-label">SPY Return</div><div class="hn-val" id="spy-ctr" style="color:#f85149">nan%</div></div>
         <div class="hn"><div class="hn-label">Trading Days</div><div class="hn-val">52</div></div>
@@ -193,7 +193,7 @@ footer{text-align:center;color:#30363d;font-size:12px;margin-top:40px;padding-to
 </div>
 <div class="wrap">
 <div class="stats">
-  <div class="stat-card"><div class="stat-label">Sharpe (Ann.) ⚠</div><div class="stat-value">1.898</div><div class="stat-note">±3.7 SE · N=52 days — unreliable at this sample size</div></div>
+  <div class="stat-card"><div class="stat-label">Sharpe (Ann.) ⚠</div><div class="stat-value">1.887</div><div class="stat-note">±3.7 SE · N=52 days — unreliable at this sample size</div></div>
   <div class="stat-card"><div class="stat-label">Max Drawdown</div><div class="stat-value" style="color:#f85149">-6.58%</div></div>
   <div class="stat-card"><div class="stat-label">Best Day</div><div class="stat-value" style="color:#3fb950">+4.02%</div></div>
   <div class="stat-card"><div class="stat-label">Worst Day</div><div class="stat-value" style="color:#f85149">-5.34%</div></div>
@@ -557,7 +557,7 @@ Here's the catastrophic scenario: Oil prices spike due to Middle East conflict, 
     <div class="ai-card" style="grid-column:span 2"><h3>Four-Track Counterfactual (A★ / Actual / SPY / Pure AI PM)</h3>
 <div style="font-size:12px;color:#8b949e;margin-bottom:8px">
   AI signal quality (D−A★): <span style="color:#f85149">-6.19pp</span> since live &nbsp;|&nbsp;
-  Actual portfolio impact: <span style="color:#f85149">-10.91pp</span> at current weight
+  Actual portfolio impact: <span style="color:#f85149">-10.96pp</span> at current weight
 </div>
 <div style="position:relative;height:230px"><canvas id="cfChart"></canvas></div>
 <script>
@@ -580,7 +580,7 @@ Here's the catastrophic scenario: Oil prices spike due to Middle East conflict, 
       labels: ["2026-04-06", "2026-04-07", "2026-04-08", "2026-04-09", "2026-04-10", "2026-04-13", "2026-04-14", "2026-04-15", "2026-04-16", "2026-04-17", "2026-04-22", "2026-04-23", "2026-05-05", "2026-05-06", "2026-05-07", "2026-05-08", "2026-05-19", "2026-05-20", "2026-05-21", "2026-05-22", "2026-05-26", "2026-05-27", "2026-05-28", "2026-05-29", "2026-06-01", "2026-06-02", "2026-06-03", "2026-06-04", "2026-06-08", "2026-06-09", "2026-06-10", "2026-06-11", "2026-06-12", "2026-06-15"],
       datasets: [
         {label:'Pure Quant (A★)', data:[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.736, -0.736, 0.45, 1.833, 2.319, 4.01, 5.127, 2.46, 3.604, 2.787, 3.856, 4.586, 4.148, 8.146, 6.948, 8.508, 7.73, 10.126, 10.252, 10.886, 11.045, 11.045, 11.045, 11.045, 11.045, 11.045, 11.045],  borderColor:'#8b949e', borderDash:[4,3], pointRadius:0, borderWidth:1.5, fill:false, tension:0.25},
-        {label:'Actual (B)',       data:[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, -2.637, -1.448, -2.042, -3.02, -0.789, -0.125, 0.13], borderColor:'#3fb950', pointRadius:0,    borderWidth:2,   fill:false, tension:0.25},
+        {label:'Actual (B)',       data:[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, -2.637, -1.448, -2.042, -3.02, -0.789, -0.125, 0.08], borderColor:'#3fb950', pointRadius:0,    borderWidth:2,   fill:false, tension:0.25},
         {label:'SPY (C)',          data:[0.473, 0.517, 3.077, 3.672, 3.603, 4.616, 5.89, 6.726, 7.259, 8.556, 9.655, 9.23, 10.106, 11.636, 11.294, 12.213, 11.465, 12.608, 12.831, 13.275, 14.027, 14.007, 14.636, 14.921, 15.234, 15.391, 14.581, 15.014, 15.275, 14.936, 14.936, 16.89, 17.522, 17.522],    borderColor:'#58a6ff', borderDash:[4,3], pointRadius:0, borderWidth:1.5, fill:false, tension:0.25},
         {label:'Pure AI PM (D)',   data:[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.124, -0.403, -0.307, -0.183, 2.565, 1.62, 2.624, 2.003, 3.599, 3.987, 4.498, 4.853, 4.853, 4.853, 4.853, 4.853, 4.853, 4.853],  borderColor:'#d29922', pointRadius:0,    borderWidth:2,   fill:false, tension:0.25},
       ]
@@ -610,9 +610,9 @@ Here's the catastrophic scenario: Oil prices spike due to Middle East conflict, 
       <tbody><tr>
           <td class="sym">MU</td>
           <td>8.6%</td>
-          <td>$9,547</td>
-          <td>$1082.65</td>
-          <td style="color:#3fb950">+18.86%</td>
+          <td>$9,543</td>
+          <td>$1082.20</td>
+          <td style="color:#3fb950">+18.81%</td>
         </tr><tr>
           <td class="sym">JEF</td>
           <td>7.3%</td>
@@ -657,10 +657,10 @@ Here's the catastrophic scenario: Oil prices spike due to Middle East conflict, 
           <td style="color:#f85149">-3.48%</td>
         </tr><tr>
           <td class="sym">MPC</td>
-          <td>6.3%</td>
-          <td>$6,934</td>
-          <td>$251.00</td>
-          <td style="color:#f85149">-6.80%</td>
+          <td>6.2%</td>
+          <td>$6,886</td>
+          <td>$249.25</td>
+          <td style="color:#f85149">-7.45%</td>
         </tr><tr>
           <td class="sym">VNO</td>
           <td>4.9%</td>
@@ -694,9 +694,9 @@ Here's the catastrophic scenario: Oil prices spike due to Middle East conflict, 
         </tr><tr>
           <td class="sym">EWJ</td>
           <td>2.6%</td>
-          <td>$2,932</td>
-          <td>$93.99</td>
-          <td style="color:#3fb950">+4.38%</td>
+          <td>$2,930</td>
+          <td>$93.91</td>
+          <td style="color:#3fb950">+4.29%</td>
         </tr><tr>
           <td class="sym">EWC</td>
           <td>2.6%</td>
@@ -873,11 +873,11 @@ Here's the catastrophic scenario: Oil prices spike due to Middle East conflict, 
   </div>
 </div></div></div>
 </div>
-<footer>Updated 2026-06-16 05:29 UTC &nbsp;·&nbsp; Alpaca paper API + Yahoo Finance &nbsp;·&nbsp; Paper trading — performance is not indicative of live-capital results &nbsp;·&nbsp; <a href="https://github.com/ScottDongKhang/Ascent_Capital">Source on GitHub</a></footer>
+<footer>Updated 2026-06-16 06:45 UTC &nbsp;·&nbsp; Alpaca paper API + Yahoo Finance &nbsp;·&nbsp; Paper trading — performance is not indicative of live-capital results &nbsp;·&nbsp; <a href="https://github.com/ScottDongKhang/Ascent_Capital">Source on GitHub</a></footer>
 </div>
 <script>
 Chart.register(window['chartjs-plugin-annotation']);
-const dates=["2026-04-01", "2026-04-02", "2026-04-06", "2026-04-07", "2026-04-08", "2026-04-09", "2026-04-10", "2026-04-13", "2026-04-14", "2026-04-15", "2026-04-16", "2026-04-17", "2026-04-20", "2026-04-21", "2026-04-22", "2026-04-23", "2026-04-24", "2026-04-27", "2026-04-28", "2026-04-29", "2026-04-30", "2026-05-01", "2026-05-04", "2026-05-05", "2026-05-06", "2026-05-07", "2026-05-08", "2026-05-11", "2026-05-12", "2026-05-13", "2026-05-14", "2026-05-15", "2026-05-18", "2026-05-19", "2026-05-20", "2026-05-21", "2026-05-22", "2026-05-26", "2026-05-27", "2026-05-28", "2026-05-29", "2026-06-01", "2026-06-02", "2026-06-03", "2026-06-04", "2026-06-05", "2026-06-08", "2026-06-09", "2026-06-10", "2026-06-11", "2026-06-12", "2026-06-15"],portNAV=[100815.52, 101126.97, 101292.65, 101051.15, 101985.1, 101883.89, 101347.97, 101004.31, 100664.52, 99882.2, 99977.68, 101125.28, 101241.35, 100856.49, 102232.36, 102669.08, 103770.47, 103484.9, 102546.71, 102531.14, 105501.78, 105236.72, 105236.72, 107025.25, 108103.68, 105349.62, 106483.08, 109932.51, 109142.74, 110025.85, 109720.02, 108100.11, 106285.24, 105276.29, 105834.21, 106563.35, 106082.49, 110351.73, 110100.09, 111061.07, 110251.05, 112871.1, 112902.95, 113682.35, 114051.74, 107957.01, 108881.57, 108463.18, 106544.29, 108741.48, 109469.25, 109749.02],spyNAV=[100815.52, 100906.3, 101383.27, 101427.88, 104011.2, 104611.26, 104542.02, 105563.65, 106849.93, 107693.08, 107957.72, 109262.46, 109043.98, 108330.06, 109427.09, 109002.43, 109847.13, 110036.38, 109500.94, 109484.02, 110573.35, 110879.53, 110473.34, 111359.58, 112907.41, 112561.23, 113490.54, 113749.03, 113576.71, 114212.15, 115113.77, 113729.03, 113649.02, 112892.03, 114049.06, 114275.23, 114724.5, 115486.11, 115466.11, 116103.09, 116392.35, 116709.3, 116867.78, 116047.7, 116486.21, 113479.77, 113736.72, 113402.84, 111614.98, 113512.08, 114125.99, NaN],startNAV=100815.52;
+const dates=["2026-04-01", "2026-04-02", "2026-04-06", "2026-04-07", "2026-04-08", "2026-04-09", "2026-04-10", "2026-04-13", "2026-04-14", "2026-04-15", "2026-04-16", "2026-04-17", "2026-04-20", "2026-04-21", "2026-04-22", "2026-04-23", "2026-04-24", "2026-04-27", "2026-04-28", "2026-04-29", "2026-04-30", "2026-05-01", "2026-05-04", "2026-05-05", "2026-05-06", "2026-05-07", "2026-05-08", "2026-05-11", "2026-05-12", "2026-05-13", "2026-05-14", "2026-05-15", "2026-05-18", "2026-05-19", "2026-05-20", "2026-05-21", "2026-05-22", "2026-05-26", "2026-05-27", "2026-05-28", "2026-05-29", "2026-06-01", "2026-06-02", "2026-06-03", "2026-06-04", "2026-06-05", "2026-06-08", "2026-06-09", "2026-06-10", "2026-06-11", "2026-06-12", "2026-06-15"],portNAV=[100815.52, 101126.97, 101292.65, 101051.15, 101985.1, 101883.89, 101347.97, 101004.31, 100664.52, 99882.2, 99977.68, 101125.28, 101241.35, 100856.49, 102232.36, 102669.08, 103770.47, 103484.9, 102546.71, 102531.14, 105501.78, 105236.72, 105236.72, 107025.25, 108103.68, 105349.62, 106483.08, 109932.51, 109142.74, 110025.85, 109720.02, 108100.11, 106285.24, 105276.29, 105834.21, 106563.35, 106082.49, 110351.73, 110100.09, 111061.07, 110251.05, 112871.1, 112902.95, 113682.35, 114051.74, 107957.01, 108881.57, 108463.18, 106544.29, 108741.48, 109469.25, 109694.21],spyNAV=[100815.52, 100906.3, 101383.27, 101427.88, 104011.2, 104611.26, 104542.02, 105563.65, 106849.93, 107693.08, 107957.72, 109262.46, 109043.98, 108330.06, 109427.09, 109002.43, 109847.13, 110036.38, 109500.94, 109484.02, 110573.35, 110879.53, 110473.34, 111359.58, 112907.41, 112561.23, 113490.54, 113749.03, 113576.71, 114212.15, 115113.77, 113729.03, 113649.02, 112892.03, 114049.06, 114275.23, 114724.5, 115486.11, 115466.11, 116103.09, 116392.35, 116709.3, 116867.78, 116047.7, 116486.21, 113479.77, 113736.72, 113402.84, 111614.98, 113512.08, 114125.99, NaN],startNAV=100815.52;
 const ANNOTATIONS={
   "regime0": {
     "type": "box",
@@ -1157,8 +1157,8 @@ function animateNum(el,end,prefix,suffix,decimals){
   requestAnimationFrame(go);
 }
 window.addEventListener('load',()=>{
-  animateNum(document.getElementById('nav-ctr'),109749.02,'$','',0);
-  animateNum(document.getElementById('ret-ctr'),8.8600,'+','%',2);
+  animateNum(document.getElementById('nav-ctr'),109694.21,'$','',0);
+  animateNum(document.getElementById('ret-ctr'),8.8100,'+','%',2);
   animateNum(document.getElementById('alpha-ctr'),nan,'-','%',2);
   animateNum(document.getElementById('spy-ctr'),nan,'-','%',2);
 });
