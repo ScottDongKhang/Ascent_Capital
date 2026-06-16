@@ -5,7 +5,7 @@
 ![Status](https://img.shields.io/badge/status-live%20paper%20trading-informational)
 ![AI PM](https://img.shields.io/badge/AI%20PM-Level%201%20Analyst%20%E2%80%93%205%25%20authority-blueviolet)
 ![Alpha](https://img.shields.io/badge/alpha%20sleeves-14-orange)
-![OOS Sharpe](https://img.shields.io/badge/OOS%20Sharpe-0.483-green)
+
 
 ### [📊 Live Performance Dashboard →](https://scottdongkhang.github.io/Ascent_Capital)
 > Equity curve vs SPY · Current holdings · Full rebalance debate history · Updates after every daily run.
