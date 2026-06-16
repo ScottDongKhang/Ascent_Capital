@@ -1,11 +1,11 @@
 # Ascent Capital
 
-![Tests](https://img.shields.io/badge/tests-777%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-986%20passing-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.12-blue)
 ![Status](https://img.shields.io/badge/status-live%20paper%20trading-informational)
-![AI PM](https://img.shields.io/badge/AI%20PM-Claude%20Opus%204.6-blueviolet)
+![AI PM](https://img.shields.io/badge/AI%20PM-Level%201%20Analyst%20%E2%80%93%205%25%20authority-blueviolet)
 ![Alpha](https://img.shields.io/badge/alpha%20sleeves-14-orange)
-![OOS Sharpe](https://img.shields.io/badge/OOS%20Sharpe-0.518-green)
+![OOS Sharpe](https://img.shields.io/badge/OOS%20Sharpe-0.483-green)
 
 ### [📊 Live Performance Dashboard →](https://scottdongkhang.github.io/Ascent_Capital)
 > Equity curve vs SPY · Current holdings · Full rebalance debate history · Updates after every daily run.
@@ -59,7 +59,7 @@ The adversarial debate engine makes exactly one falsifiable weight change per re
 |--------|-------|
 | Current NAV | $109,694 |
 | Total Return | +8.81% |
-| Alpha vs SPY | nan% |
+| Alpha vs SPY | -7.1% |
 | Sharpe (Ann.) | 1.887 |
 | Max Drawdown | -6.58% |
 | Days Live | 52 |
@@ -79,6 +79,11 @@ The adversarial debate engine makes exactly one falsifiable weight change per re
 | May 27, 2026 | AI PM two-phase architecture live (Sonnet pre-thesis + Opus synthesis) |
 | May 30, 2026 | Bayesian meta-learner, AI calibration, AI regime blend all wired |
 | Jun 1, 2026 | Causal intelligence — PC-algorithm DAG, regime-causal gate, priced-in filter |
+| Jun 4, 2026 | AI PM promoted to Level 1 — Analyst · 5% authority budget unlocked |
+| Jun 8, 2026 | OpenBB + CBOE/CFTC/Fama-French alpha data · per-ticker memory · StockTwits integration |
+| Jun 10, 2026 | AI PM alpha audit (11 findings) — active-weight blend, honest authority scoring, conviction press |
+| Jun 10, 2026 | First real AI PM blended portfolio · 31 orders · ai_weight=5% · MiroFish alignment 0.82 bullish |
+| Jun 11, 2026 | Inverse-vol tilt + correlation cluster cap · falsifier registry · vol/VIX parity between live and WF |
 
 ---
 
@@ -90,9 +95,9 @@ The adversarial debate engine makes exactly one falsifiable weight change per re
 
 | Metric | Value | Period |
 |--------|------:|--------|
-| CAGR | +12.35% | Jan 2020 – Apr 2026 |
-| Sharpe Ratio | +0.518 | |
-| Alpha vs SPY | +0.68% | |
+| CAGR | +12.61% | Jan 2020 – Apr 2026 |
+| Sharpe Ratio | 0.483 | |
+| Alpha vs SPY | +2.54% | |
 | Max Drawdown | −23.4% | |
 
 These figures reflect the quant system only. The AI PM, debate layer, and self-improve loop require live feedback by design and are not in this backtest.
@@ -355,14 +360,14 @@ Regime propagates through sleeve weights, position size caps, orchestrator base 
 | Factor risk model | ✅ live | FF5+UMD rolling OLS · Ledoit-Wolf shrinkage |
 | 4 specialist agents | ✅ live | US equities · macro · international · alternatives |
 | Multi-agent orchestration | ✅ live | Skill blend · correlation guard · coherence · position cap |
-| AI PM — two-phase | ✅ shadow | Phase 0 (0% weight) · Sonnet pre-thesis + Opus synthesis |
+| AI PM — two-phase | ✅ live | Level 1 — Analyst (5% authority) · Sonnet pre-thesis + Opus synthesis |
 | Adversarial self-play | ✅ live | Sonnet red team attacks before every AI PM submission |
 | Adversarial Intelligence | ✅ live | 3-layer engine · ONE falsifiable change per rebalance · earned authority |
 | Debate layer | ✅ live | 5 agents · 2 rounds · Monte Carlo + weekend scenario injection |
 | AI-Native Learning System | ✅ live | Bayesian meta-learner · AI calibration · AI regime blend |
 | Decision memory | ✅ live | Compounding from May 19 · ML gate at n≥30 |
 | Conviction gate | ✅ live | Rules-based now · logistic regression ready at n≥30 |
-| Earned authority | ✅ live | Phase 0 → 25% after 21 rebalances with Sharpe edge ≥0.05 |
+| Earned authority | ✅ live | Level 1 (5%) → Level 2 (25%) after 21 rebalances with Sharpe edge ≥0.05 |
 | Causal Intelligence | ✅ live | PC-algorithm macro DAG · per-symbol causal graph · regime-causal gate |
 | Monthly investor letter | ✅ live | Auto-generated on first trading day of each month |
 | Anti-hallucination hardening | ✅ live | Anthropic `json_schema` wire-level enforcement on all LLM outputs |
