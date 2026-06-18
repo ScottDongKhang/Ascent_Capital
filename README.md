@@ -57,14 +57,14 @@ The adversarial debate engine makes exactly one falsifiable weight change per re
 <!-- LIVE_STATS_START -->
 | Metric | Value |
 |--------|-------|
-| Current NAV | $108,856 |
-| Total Return | +7.97% |
-| Alpha vs SPY | -6.54% |
-| Sharpe (Ann.) | 1.701 |
+| Current NAV | $108,703 |
+| Total Return | +7.82% |
+| Alpha vs SPY | -5.26% |
+| Sharpe (Ann.) | 1.656 |
 | Max Drawdown | -6.58% |
-| Days Live | 53 |
+| Days Live | 54 |
 | Open Positions | 17 |
-| Last Updated | 2026-06-16 |
+| Last Updated | 2026-06-17 |
 <!-- LIVE_STATS_END -->
 
 *Sharpe standard error over ~47 days is large — not statistically significant. This is tracked honestly, which is why authority is earned over 21 rebalances, not calendar time.*
