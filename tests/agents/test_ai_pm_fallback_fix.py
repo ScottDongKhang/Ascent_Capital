@@ -96,9 +96,12 @@ class TestRejectionDoesNotPollute:
 
         # check_conviction_inflation is imported locally inside the function;
         # patch at its source module.
+        # log_prediction must be stubbed — it uses CALIBRATION_LOG set at import time,
+        # so _REPO_ROOT patching does not protect the production log.
         with patch("agents.ai_pm_agent._REPO_ROOT", tmp_path), \
              patch("ascent.strategy.ai_pm_guardrails.check_conviction_inflation",
-                   return_value={}):
+                   return_value={}), \
+             patch("ascent.strategy.calibration_tracker.log_prediction"):
             ret = _tool_propose_portfolio(inputs, result_store)
 
         assert len(result_store) == 1
@@ -139,7 +142,8 @@ class TestRejectionThenValidResubmission:
         }
         with patch("agents.ai_pm_agent._REPO_ROOT", tmp_path), \
              patch("ascent.strategy.ai_pm_guardrails.check_conviction_inflation",
-                   return_value={}):
+                   return_value={}), \
+             patch("ascent.strategy.calibration_tracker.log_prediction"):
             ret_good = _tool_propose_portfolio(inputs_good, result_store)
 
         assert len(result_store) == 1, f"Expected 1 entry, got {len(result_store)}"

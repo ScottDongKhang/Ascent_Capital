@@ -9,6 +9,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
+import pandas as pd
 import pytest
 
 
@@ -218,3 +219,59 @@ def test_update_outcomes_skips_recent(tmp_path):
     # realized_21d should still be None
     unchanged = [json.loads(l) for l in log_path.read_text().strip().splitlines()]
     assert unchanged[0]["positions"]["AAPL"]["realized_21d"] is None
+
+
+def test_compute_calibration_returns_feeds_update_outcomes(tmp_path):
+    """
+    _compute_calibration_returns must return real symbol returns (not {}) for
+    entries >= 21 days old so that update_outcomes can fill realized_21d and
+    get_calibration_report produces a real IC report.
+    """
+    import importlib
+    import run_all_agents
+    importlib.reload(run_all_agents)
+
+    # Verify the function exists (fails RED before implementation)
+    assert hasattr(run_all_agents, "_compute_calibration_returns"), (
+        "_compute_calibration_returns missing from run_all_agents"
+    )
+
+    tz = "America/New_York"
+    entry_date = date.today() - timedelta(days=22)
+    buy_ts = pd.Timestamp(entry_date.isoformat()).tz_localize(tz)
+    today_ts = pd.Timestamp(date.today().isoformat()).tz_localize(tz)
+
+    log_path = tmp_path / "ai_pm_calibration.jsonl"
+    entry = {
+        "date": entry_date.isoformat(),
+        "positions": {
+            "FAKE1": {"weight": 0.10, "conviction": "high", "rationale": "test", "realized_21d": None},
+            "FAKE2": {"weight": 0.08, "conviction": "medium", "rationale": "test", "realized_21d": None},
+        },
+    }
+    with open(log_path, "w") as f:
+        f.write(json.dumps(entry) + "\n")
+
+    mock_prices = pd.DataFrame({
+        "symbol": ["FAKE1", "FAKE1", "FAKE2", "FAKE2"],
+        "date":   [buy_ts, today_ts, buy_ts, today_ts],
+        "close":  [100.0, 105.0, 200.0, 206.0],
+    })
+
+    with patch("ascent.strategy.calibration_tracker.CALIBRATION_LOG", log_path), \
+         patch("ascent.data.store.parquet.load_parquet", return_value=mock_prices):
+        importlib.reload(run_all_agents)
+        result = run_all_agents._compute_calibration_returns(date.today())
+
+    assert "FAKE1" in result, "FAKE1 missing from returns dict"
+    assert "FAKE2" in result, "FAKE2 missing from returns dict"
+    assert result["FAKE1"] == pytest.approx(0.05, abs=1e-6)
+    assert result["FAKE2"] == pytest.approx(0.03, abs=1e-6)
+
+    # Verify the result integrates with update_outcomes → get_calibration_report
+    with patch("ascent.strategy.calibration_tracker.CALIBRATION_LOG", log_path):
+        from ascent.strategy.calibration_tracker import update_outcomes, get_calibration_report
+        n = update_outcomes(result, date.today().isoformat())
+        assert n == 1, f"Expected 1 entry updated, got {n}"
+        report = get_calibration_report()
+        assert report != "No calibration data yet.", "get_calibration_report still shows no data"

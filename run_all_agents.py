@@ -528,6 +528,80 @@ def _fill_wedge_and_decision_outcomes(as_of_date: str) -> None:
             print(f"[WedgeFill] Could not fill {rb_date_str}: {_re}")
 
 
+def _compute_calibration_returns(today: date) -> dict:
+    """
+    Return {symbol: cumulative_return} for all symbols in calibration log entries
+    that are >= 21 days old and still have unfilled realized_21d.
+    Buy price = first trading-day close on/after the entry date.
+    Sell price = most recent close on/before today.
+    Reads prices_live.parquet. Returns {} on any failure (never raises).
+    """
+    try:
+        import json as _json
+        import pandas as _pd
+        from ascent.strategy.calibration_tracker import CALIBRATION_LOG
+        from ascent.data.store.parquet import load_parquet as _lp
+
+        if not CALIBRATION_LOG.exists():
+            return {}
+
+        entries = []
+        with open(CALIBRATION_LOG) as _f:
+            for _line in _f:
+                _line = _line.strip()
+                if _line:
+                    try:
+                        entries.append(_json.loads(_line))
+                    except Exception:
+                        pass
+
+        symbol_entry_date: dict = {}
+        for _entry in entries:
+            try:
+                _edate = date.fromisoformat(_entry["date"][:10])
+            except Exception:
+                continue
+            if (today - _edate).days < 21:
+                continue
+            _positions = _entry.get("positions", {})
+            if not any(p.get("realized_21d") is None for p in _positions.values()):
+                continue
+            for _sym in _positions:
+                if _sym not in symbol_entry_date or _edate < symbol_entry_date[_sym]:
+                    symbol_entry_date[_sym] = _edate
+
+        if not symbol_entry_date:
+            return {}
+
+        _prices = _lp("prices_live")
+        _prices = _prices[_prices["symbol"].isin(symbol_entry_date)].copy()
+        if _prices.empty:
+            return {}
+
+        if hasattr(_prices["date"].dtype, "tz") and _prices["date"].dtype.tz is not None:
+            _prices["_d"] = _prices["date"].dt.date
+        else:
+            _prices["_d"] = _pd.to_datetime(_prices["date"]).dt.date
+
+        _returns: dict = {}
+        for _sym, _edate in symbol_entry_date.items():
+            _sdf = _prices[_prices["symbol"] == _sym].sort_values("_d")
+            _buy = _sdf[_sdf["_d"] >= _edate]
+            _sell = _sdf[_sdf["_d"] <= today]
+            if _buy.empty or _sell.empty:
+                continue
+            _p0 = float(_buy.iloc[0]["close"])
+            _p1 = float(_sell.iloc[-1]["close"])
+            if _p0 > 0:
+                _returns[_sym] = (_p1 / _p0) - 1
+
+        return _returns
+
+    except Exception as _exc:
+        print(f"[Runner] _compute_calibration_returns failed: {_exc}")
+        return {}
+
+
 def main():
     dry_run             = "--dry-run" in sys.argv
     skip_sector_check   = "--skip-sector-check" in sys.argv
@@ -574,12 +648,15 @@ def main():
     except Exception:
         pass
 
-    # Update calibration outcomes (best-effort)
+    # Update calibration outcomes using real price returns (best-effort)
     try:
+        _cal_returns = _compute_calibration_returns(today)
         from ascent.strategy.calibration_tracker import update_outcomes as _update_cal
-        _update_cal({}, str(date.today()))
-    except Exception:
-        pass
+        n_filled = _update_cal(_cal_returns, str(today))
+        if n_filled:
+            print(f"[Runner] Calibration outcomes filled: {n_filled} entries")
+    except Exception as _cal_e:
+        print(f"[Runner] Calibration outcome fill skipped: {_cal_e}")
 
     # Fill 21d outcomes for alpha wedge + decision memory (best-effort)
     try:
@@ -1119,7 +1196,7 @@ def main():
                     print(f"[Discovery] Candidate: {_discovery.symbol} "
                           f"(conviction={_discovery.conviction_score:.2f})")
                     if not _check_mini_rebalance_cooldown():
-                        _trigger_mini_rebalance(_discovery, merged_weights, today, dry_run)
+                        _trigger_mini_rebalance(_discovery, merged_weights, today, dry_run, agent_outputs)
                     else:
                         print(f"[Discovery] Cooldown active — {_discovery.symbol} queued for next window")
                 else:
@@ -2164,10 +2241,12 @@ def _trigger_mini_rebalance(
     current_weights: dict,
     today,
     dry_run: bool = False,
+    prior_agent_outputs: list | None = None,
 ) -> None:
     """
     Run full us_equities_agent pipeline with the discovered ticker added,
-    pass through debate gate, and execute. Writes cooldown log on completion.
+    re-orchestrate with the other agents' outputs, pass through debate gate,
+    and execute. Writes cooldown log on completion.
     """
     import json as _j
     from pathlib import Path as _P
@@ -2178,12 +2257,32 @@ def _trigger_mini_rebalance(
 
     try:
         from agents.us_equities_agent import run_us_equities_agent
-        new_output = run_us_equities_agent(extra_symbols=[result.symbol])
-        new_weights = new_output.target_weights or {}
+        new_us_output = run_us_equities_agent(extra_symbols=[result.symbol])
 
-        if not new_weights:
-            print("[Discovery] Mini-rebalance: agent returned empty weights — aborting")
+        if not new_us_output.target_weights:
+            print("[Discovery] Mini-rebalance: US equities agent returned empty weights — aborting")
             return
+
+        # Re-orchestrate: replace the US equities slice, keep other agents intact
+        new_weights = current_weights  # fallback if orchestration fails
+        try:
+            from orchestrator.central_intelligence import run_orchestrator
+            if prior_agent_outputs:
+                other_outputs = [ao for ao in prior_agent_outputs
+                                 if getattr(ao, "agent_id", "") != "us_equities"]
+                merged_outputs = other_outputs + [new_us_output]
+            else:
+                merged_outputs = [new_us_output]
+            orchestrated = run_orchestrator(merged_outputs)
+            if orchestrated:
+                new_weights = orchestrated
+                print(f"[Discovery] Re-orchestrated: {len(new_weights)} positions")
+            else:
+                print("[Discovery] Orchestrator returned empty — using US equities weights only")
+                new_weights = new_us_output.target_weights
+        except Exception as _oe:
+            print(f"[Discovery] Orchestration failed ({_oe}) — using US equities weights only")
+            new_weights = new_us_output.target_weights
 
         verdict = {}
         try:
@@ -2191,7 +2290,7 @@ def _trigger_mini_rebalance(
             from ascent.execution.debate_gate import should_run_debate
             portfolio_state = {
                 "date":        today.isoformat(),
-                "us_regime":   str(new_output.regime_signal or "unknown"),
+                "us_regime":   str(new_us_output.regime_signal or "unknown"),
                 "n_positions": len(new_weights),
                 "weights":     new_weights,
                 "trigger":     "discovery",
