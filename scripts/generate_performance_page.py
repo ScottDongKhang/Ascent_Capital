@@ -483,6 +483,116 @@ def _position_reasoning(sym: str, verdict: dict, prethesis: dict) -> dict:
     return {"why": why, "committee": committee, "flagged": flagged}
 
 
+# Seven-stage construction pipeline. Copy here is the confidentiality-audited
+# source of truth — it shows WHAT each stage does and the public guardrails,
+# and seals every tunable (sleeve identities/weights, params, thresholds, tilts).
+_CONSTRUCTION_STAGES = [
+    {"n": "01", "name": "Universe &amp; Data", "kind": "visible",
+     "desc": "Live prices and macro across a multi-asset universe, joined <b>point-in-time</b> so no decision sees data it couldn't have had.",
+     "tail": '<span class="openchip">Visible</span>',
+     "chips": [("Yahoo · live", "now"), ("Macro · FRED", ""), ("Point-in-time joins", "")],
+     "note": None,
+     "more": "Survivorship-hardened: each rebalance rebuilds history using only the universe that existed on that date."},
+    {"n": "02", "name": "Signals", "kind": "sealed",
+     "desc": "A <b>multi-sleeve alpha model</b> scores every candidate on several independent return drivers, then renormalizes over whatever loaded cleanly.",
+     "tail": '<span class="sealchip"><span class="lk">▤</span> Sealed</span>',
+     "chips": [("5 sleeves", ""), ("cross-sectional", ""), ("walk-forward validated", "")],
+     "note": "▤ Sleeve identities, weights &amp; parameters — sealed by design.",
+     "more": "What the sleeves are, how they're weighted, and their parameters are the core of the edge."},
+    {"n": "03", "name": "Conviction Ranking", "kind": "sealed",
+     "desc": "Sleeve scores combine into a single cross-sectional ranking — the order in which names earn capital.",
+     "tail": '<span class="thru">~120 scored</span><span class="sealchip"><span class="lk">▤</span> Blend sealed</span>',
+     "chips": [],
+     "note": "▤ Blend weights — sealed.",
+     "more": "The combiner only blends sleeves that loaded successfully and renormalizes, so a missing data feed degrades gracefully rather than silently zeroing a name."},
+    {"n": "04", "name": "Construction", "kind": "mixed",
+     "desc": "Top names are selected under <b>sector and single-name caps</b>, then risk-balanced — down-weighting the volatile, capping correlated clusters.",
+     "tail": '<span class="thru num">30 → {n_held}</span><span class="sealchip"><span class="lk">▤</span> Tilts sealed</span>',
+     "chips": [("Max 10% / name", "cap"), ("1 per sector", "cap"), ("Cluster cap 20%", "cap"), ("inverse-vol tilt", "")],
+     "note": "▤ Tilt strengths &amp; redistribution rule — sealed.",
+     "more": "The hard caps are public guardrails. The tilt strengths that shape weights between them are not."},
+    {"n": "05", "name": "Regime Overlay", "kind": "sealed",
+     "desc": "A <b>hidden-state model</b> reads the market and scales gross exposure — leaning in when conditions are calm, cutting when they turn.",
+     "tail": '<span class="thru">{regime} · {exposure}</span><span class="sealchip"><span class="lk">▤</span> Thresholds sealed</span>',
+     "chips": [("Now · {regime}", "now"), ("3-state HMM", ""), ("vol-targeted", "")],
+     "note": "▤ Regime thresholds &amp; exposure curve — sealed.",
+     "more": "The current state and its effect on exposure are shown. The transition thresholds that trigger a cut are what make it work."},
+    {"n": "06", "name": "Adversarial Gate", "kind": "visible",
+     "desc": "Before any order moves, <b>four AI agents debate the proposed book</b> and a judge rules — proceed, reduce, or halt. Advisory by design; it never writes signals.",
+     "tail": '<span class="thru">{verdict}</span><span class="openchip">Visible</span>',
+     "chips": [],
+     "note": None,
+     "more": "This is the layer shown in full on the page — see <i>The latest verdict</i> for the exchange. The committee can trim or halt, but it cannot reach into the model."},
+    {"n": "07", "name": "AI PM &amp; Execution", "kind": "visible",
+     "desc": "An <b>AI PM</b> tilts the book within an authority budget it has earned on verified results; approved orders route to the broker, gated by caps and a kill switch.",
+     "tail": '<span class="thru">{authority}</span><span class="openchip">Visible</span>',
+     "chips": [("{auth_chip}", "now"), ("&gt;2% NAV needs approval", ""), ("kill switch 15%", "")],
+     "note": None,
+     "more": "The AI PM's influence is transparent and bounded — its current budget, its picks, and its track record are all on the page."},
+]
+
+
+def _construction_section_html(regime_label: str, verdict: dict, authority: dict,
+                               n_held: int, universe_n: int) -> str:
+    """Data-driven 'How the book is built' section. Never raises; seals all tunables."""
+    regime = _esc(regime_label or "—")
+    v = (verdict or {}).get("verdict") or {}
+    rec = str(v.get("recommendation") or "—").replace("_", " ")
+    conf = v.get("confidence")
+    verdict_tail = f"{_esc(rec.title())}" + (f" · {conf:.2f}" if isinstance(conf, (int, float)) else "")
+    lvl = (authority or {}).get("level", 0)
+    title = _esc((authority or {}).get("title", "Shadow"))
+    ai_pct = (authority or {}).get("ai_weight", 0.0) * 100
+    authority_tail = f"{ai_pct:.0f}% authority" if lvl else "Shadow"
+    auth_chip = f"Level {lvl} · {title} · {ai_pct:.0f}%" if lvl else "Shadow Mode"
+    exposure = "full exposure" if regime_label in ("calm_bull", "euphoric") else "scaled exposure"
+
+    uni = f"~{int(round(universe_n / 50.0) * 50)}" if universe_n else "—"
+    funnel = [
+        ("Universe", uni, 100), ("Scored", "~120", 62), ("Candidates", "30", 34),
+        ("Constructed", str(n_held), 22), ("Held live", str(n_held), 22),
+    ]
+    fn_html = ""
+    for i, (lbl, val, w) in enumerate(funnel):
+        arrow = '<span class="fnarrow">›</span>' if i < len(funnel) - 1 else ""
+        fn_html += (f'<div class="fn"><div class="fnum num">{val}</div>'
+                    f'<div class="fnl">{lbl}</div>'
+                    f'<div class="fnbar" data-w="{w}"></div>{arrow}</div>')
+
+    subst = {"n_held": n_held, "regime": regime, "exposure": exposure,
+             "verdict": verdict_tail, "authority": authority_tail, "auth_chip": auth_chip}
+    stages_html = ""
+    for s in _CONSTRUCTION_STAGES:
+        cls = {"visible": "open-stage", "sealed": "sealed", "mixed": ""}[s["kind"]]
+        tail = s["tail"].format(**subst)
+        chips = "".join(
+            f'<span class="chip {c.format(**subst) if "{" in c else c}">{t.format(**subst)}</span>'
+            for (t, c) in s["chips"])
+        chips_html = f'<div class="chips">{chips}</div>' if chips else ""
+        note = f'<div class="sealednote">{s["note"]}</div>' if s["note"] else ""
+        stages_html += (
+            f'<div class="stage {cls}"><div class="spine"><div class="snum">{s["n"]}</div>'
+            f'<div class="sdot"></div><div class="sline"></div></div>'
+            f'<div class="body"><div class="srow"><span class="sname">{s["name"]} '
+            f'<span class="scar">▶</span></span><span class="stail">{tail}</span></div>'
+            f'<p class="sdesc">{s["desc"]}</p>'
+            f'<div class="exp"><div class="ei"><div class="more">{chips_html}'
+            f'<p>{s["more"]}</p>{note}</div></div></div></div></div>')
+
+    return (
+        '<div class="sec rev"><div class="sec-h"><h2>How the book is built</h2>'
+        '<span class="sec-dateline">Data → live order · one daily loop</span></div>'
+        '<p class="sec-lede">Every position travels the same chain — from a universe of '
+        'hundreds to the names actually held. The visible layers are shown in full; the '
+        'model at the core is sealed.</p>'
+        f'<div class="funnel">{fn_html}</div>'
+        f'<div class="pipe">{stages_html}</div>'
+        '<div class="endcap">The quant engine proposes, the committee disposes, the AI PM '
+        'tilts within its budget — and a name only reaches the book after clearing every '
+        'stage. <b>What you can see is the whole process. What stays sealed is the model.</b>'
+        '</div></div>')
+
+
 # ── Stats ─────────────────────────────────────────────────────────────────────
 
 def compute_stats(records: list[dict], spy: dict[str, float]) -> dict:

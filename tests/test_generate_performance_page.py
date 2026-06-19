@@ -10,6 +10,8 @@ from scripts.generate_performance_page import (
     _redaction_label,
     _REDACTION_LABELS,
     _position_reasoning,
+    _construction_section_html,
+    _CONSTRUCTION_STAGES,
 )
 
 
@@ -63,3 +65,17 @@ def test_position_reasoning_conviction_and_flag():
     zzz = _position_reasoning("ZZZ", verdict, prethesis)
     assert zzz["why"] and zzz["flagged"] is False
     assert "No adversarial flag" in zzz["committee"]
+
+
+def test_construction_section_renders_and_is_sealed():
+    html = _construction_section_html(
+        "calm_bull",
+        {"verdict": {"recommendation": "proceed", "confidence": 0.62}},
+        {"level": 1, "title": "Analyst", "ai_weight": 0.05}, 17, 500)
+    assert "How the book is built" in html
+    assert "Sealed" in html and "calm_bull" in html
+    for banned in ("0.70", "sleeve_weight", "DEFAULT_ALPHA_WEIGHTS", "trend=", "0.45"):
+        assert banned not in html
+    # never raises on empty inputs
+    assert _construction_section_html("", {}, {}, 0, 0)
+    assert len(_CONSTRUCTION_STAGES) == 7
