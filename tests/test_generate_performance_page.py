@@ -4,7 +4,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from scripts.generate_performance_page import compute_stats
+from scripts.generate_performance_page import (
+    compute_stats,
+    _sparkline_paths,
+)
 
 
 def test_compute_stats_spy_alpha_ignores_trailing_nan():
@@ -19,3 +22,21 @@ def test_compute_stats_spy_alpha_ignores_trailing_nan():
     assert s["spy_return"] is not None and math.isfinite(s["spy_return"])
     assert s["alpha"] is not None and math.isfinite(s["alpha"])
     assert s["spy_return"] == 5.0  # (105000/100000 - 1) * 100
+
+
+def test_sparkline_paths_basic_and_missing(tmp_path, monkeypatch):
+    import pandas as pd
+    import scripts.generate_performance_page as g
+    df = pd.DataFrame({
+        "symbol": ["AAA"] * 4 + ["BBB"] * 1,
+        "date":   ["2026-06-01", "2026-06-02", "2026-06-03", "2026-06-04", "2026-06-04"],
+        "close":  [10.0, 11.0, 9.0, 12.0, 50.0],
+    })
+    p = tmp_path / "prices_live.parquet"
+    df.to_parquet(p)
+    monkeypatch.setattr(g, "PRICES_LIVE_PATH", str(p), raising=False)
+    out = _sparkline_paths(["AAA", "BBB", "ZZZ"])
+    assert "AAA" in out and out["AAA"]["d"].startswith("M")
+    assert out["AAA"]["up"] is True            # 12 >= 10
+    assert "BBB" not in out                     # only 1 point
+    assert "ZZZ" not in out                     # absent symbol

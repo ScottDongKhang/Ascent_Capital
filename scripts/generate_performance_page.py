@@ -32,6 +32,7 @@ PAPER_BASE   = "https://paper-api.alpaca.markets"
 LIVE_START   = date(2026, 4, 1)
 DOCS_DIR     = Path("docs")
 OUTPUT_PATH  = DOCS_DIR / "index.html"
+PRICES_LIVE_PATH = "data_cache/prices_live.parquet"
 
 
 # ── Alpaca helpers ────────────────────────────────────────────────────────────
@@ -426,6 +427,32 @@ def load_latest_thesis() -> dict:
             return json.load(f)
     except Exception:
         return {}
+
+
+# ── Construction / book reasoning helpers ─────────────────────────────────────
+
+def _sparkline_paths(symbols: list[str], n: int = 30) -> dict[str, dict]:
+    """Last-n close series per symbol → 64x20 inline-SVG path string."""
+    try:
+        df = pd.read_parquet(PRICES_LIVE_PATH, columns=["symbol", "date", "close"])
+    except Exception:
+        return {}
+    out: dict[str, dict] = {}
+    W, H = 64, 20
+    want = set(symbols)
+    for sym, grp in df[df["symbol"].isin(want)].groupby("symbol"):
+        ys = grp.sort_values("date")["close"].dropna().tail(n).tolist()
+        if len(ys) < 2:
+            continue
+        lo, hi = min(ys), max(ys)
+        rng = (hi - lo) or 1.0
+        pts = []
+        for i, y in enumerate(ys):
+            x = round(i * (W - 2) / (len(ys) - 1) + 1, 1)
+            yy = round(2 + (1 - (y - lo) / rng) * (H - 4), 1)
+            pts.append(f"{x},{yy}")
+        out[str(sym)] = {"d": "M" + " L".join(pts), "up": ys[-1] >= ys[0]}
+    return out
 
 
 # ── Stats ─────────────────────────────────────────────────────────────────────
