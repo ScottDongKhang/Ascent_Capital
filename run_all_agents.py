@@ -2019,17 +2019,28 @@ def _log_holdings(today):
                 _cf_syms = list(set(_as_w) | set(_a_w or {}) | set(_d_w or {}))
                 try:
                     import yfinance as _yf
-                    _raw = _yf.download(_cf_syms, period="5d", auto_adjust=True, progress=False)
+                    _raw = _yf.download(_cf_syms, period="7d", auto_adjust=True, progress=False)
                     if not _raw.empty and len(_raw) >= 2:
                         _cls = _raw["Close"] if isinstance(_raw.columns, pd.MultiIndex) else _raw
                         for _sym in _cf_syms:
                             if _sym in _cls.columns:
-                                _cf_prices[_sym] = {
-                                    "prev": float(_cls[_sym].iloc[-2]),
-                                    "curr": float(_cls[_sym].iloc[-1]),
-                                }
+                                # Use the last two NON-NaN closes — yfinance returns a
+                                # trailing all-NaN row for today's unpublished bar, which
+                                # otherwise makes every track NaN/0.0 and freezes A★/D.
+                                _ser = _cls[_sym].dropna()
+                                if len(_ser) >= 2:
+                                    _cf_prices[_sym] = {
+                                        "prev": float(_ser.iloc[-2]),
+                                        "curr": float(_ser.iloc[-1]),
+                                    }
                 except Exception as _pfe:
-                    pass  # price fetch failure — tracks computed without individual prices
+                    print(f"[Runner] Counterfactual price fetch failed: {_pfe}")
+                # Visible warning: empty prices → Track A★/D record None (skipped),
+                # not a fabricated 0.0. Silent freeze here is what produced the
+                # fictional -11.6pp 'AI PM cost'.
+                if _as_w and not _cf_prices:
+                    print(f"[Runner] WARNING: counterfactual priced 0/{len(_cf_syms)} "
+                          f"snapshot symbols — Track A★/D will record None for {today}")
             _cf_record = cf_score_daily(
                 run_date=today,
                 quant_star_weights=_as_w or None,

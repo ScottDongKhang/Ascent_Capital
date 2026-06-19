@@ -93,14 +93,32 @@ def snapshot_ai_pm(run_date: date, weights: Dict[str, float]) -> None:
 
 # ── Daily scoring ──────────────────────────────────────────────────────────────
 
-def _portfolio_return(weights: Dict[str, float], prices: Dict[str, dict]) -> float:
-    """Compute weighted portfolio return. Handles signed weights (longs + shorts)."""
+def _portfolio_return(weights: Dict[str, float], prices: Dict[str, dict]) -> Optional[float]:
+    """Compute weighted portfolio return. Handles signed weights (longs + shorts).
+
+    Returns None when NONE of the weighted symbols could be priced — this
+    distinguishes "no price data this day" (e.g. the daily yfinance fetch failed)
+    from a genuinely flat 0.0 return. Returning 0.0 in the no-data case freezes
+    the track at its last cumulative value while other tracks keep accruing,
+    which silently corrupts every cross-track comparison.
+    """
+    import math
     ret = 0.0
+    priced = 0
     for sym, w in weights.items():
         p = prices.get(sym)
-        if p and p.get("prev", 0) > 0:
-            price_ret = (p["curr"] - p["prev"]) / p["prev"]
-            ret += w * price_ret  # short (negative w) × positive return = negative contribution
+        if not p:
+            continue
+        prev, curr = p.get("prev", 0), p.get("curr", float("nan"))
+        # Skip NaN prices: yfinance period='5d' returns a trailing all-NaN row
+        # for today's unpublished bar; a single NaN must not poison the track.
+        if prev is None or curr is None or prev <= 0 or math.isnan(prev) or math.isnan(curr):
+            continue
+        price_ret = (curr - prev) / prev
+        ret += w * price_ret  # short (negative w) × positive return = negative contribution
+        priced += 1
+    if priced == 0:
+        return None
     return ret
 
 
@@ -127,11 +145,29 @@ def score_daily(
         "track_d_return":     round(d_ret, 6)     if d_ret     is not None else None,
     }
 
-    DAILY_LOG.parent.mkdir(parents=True, exist_ok=True)
-    with open(DAILY_LOG, "a") as f:
-        f.write(json.dumps(record) + "\n")
-
+    _upsert_daily(record)
     return record
+
+
+def _upsert_daily(record: dict) -> None:
+    """Write one row per date (last-wins). Reruns on the same day REPLACE the
+    prior row instead of appending — otherwise get_cumulative_returns multiplies
+    every rerun into the product (the June-10 overnight rerun wrote ~9 rows)."""
+    DAILY_LOG.parent.mkdir(parents=True, exist_ok=True)
+    date_str = record["date"]
+    rows = []
+    if DAILY_LOG.exists():
+        for line in DAILY_LOG.read_text().splitlines():
+            try:
+                r = json.loads(line)
+            except Exception:
+                continue
+            if r.get("date") != date_str:
+                rows.append(r)
+    rows.append(record)
+    with open(DAILY_LOG, "w") as f:
+        for r in rows:
+            f.write(json.dumps(r) + "\n")
 
 
 # ── Loaders ────────────────────────────────────────────────────────────────────
@@ -173,27 +209,62 @@ def load_daily_records() -> list:
 
 # ── Reporting ─────────────────────────────────────────────────────────────────
 
+def _cumret_over(records: list, key: str) -> Optional[float]:
+    """Cumulative return over the days where `key` is non-None. None days are
+    skipped, not treated as 0.0. Returns None if the track has no valid day."""
+    days = [r for r in records if r.get(key) is not None]
+    if not days:
+        return None
+    v = 1.0
+    for r in days:
+        v *= (1 + r[key])
+    return round((v - 1) * 100, 3)
+
+
+def _common_window(records: list, key_a: str, key_b: str) -> list:
+    return [r for r in records if r.get(key_a) is not None and r.get(key_b) is not None]
+
+
+def _common_window_diff(records: list, key_a: str, key_b: str) -> Optional[float]:
+    """Difference (cum A − cum B) computed ONLY over days where BOTH tracks have
+    data. Comparing two tracks cumulated over disjoint windows is meaningless —
+    this is what produced the fictional −11.6pp 'AI PM cost' (A★ frozen on
+    2026-06-04 while B kept accruing through 2026-06-18). Callers should also
+    read the matching n_common_* count: a 1–2 day overlap is noise, not signal."""
+    common = _common_window(records, key_a, key_b)
+    if not common:
+        return None
+    va = vb = 1.0
+    for r in common:
+        va *= (1 + r[key_a])
+        vb *= (1 + r[key_b])
+    return round((va - vb) * 100, 3)
+
+
 def get_cumulative_returns() -> dict:
-    """Compute cumulative returns for all tracks since AI PM went live."""
+    """Compute cumulative returns for all tracks since AI PM went live.
+
+    Each track is cumulated only over its own non-None days; cross-track
+    comparisons (B−A★, D−A★) use only the common window where both have data.
+    """
     records = load_daily_records()
     if not records:
         return {}
-
-    def cumret(key):
-        v = 1.0
-        for r in records:
-            v *= (1 + r.get(key, 0.0))
-        return round((v - 1) * 100, 3)
 
     return {
         "n_days":      len(records),
         "start_date":  records[0]["date"],
         "end_date":    records[-1]["date"],
-        "track_astar": cumret("track_astar_return"),
-        "track_a":     cumret("track_a_return"),
-        "track_b":     cumret("track_b_return"),
-        "track_c":     cumret("track_c_return"),
-        "track_d":     cumret("track_d_return"),
+        "track_astar": _cumret_over(records, "track_astar_return"),
+        "track_a":     _cumret_over(records, "track_a_return"),
+        "track_b":     _cumret_over(records, "track_b_return"),
+        "track_c":     _cumret_over(records, "track_c_return"),
+        "track_d":     _cumret_over(records, "track_d_return"),
+        # Honest apples-to-apples comparisons (common window only):
+        "ai_value_add_b_vs_astar": _common_window_diff(records, "track_b_return", "track_astar_return"),
+        "ai_signal_d_vs_astar":    _common_window_diff(records, "track_d_return", "track_astar_return"),
+        "n_common_b_astar": len(_common_window(records, "track_b_return", "track_astar_return")),
+        "n_common_d_astar": len(_common_window(records, "track_d_return", "track_astar_return")),
     }
 
 
@@ -202,11 +273,15 @@ def print_cumulative_report() -> None:
     if not c:
         print("[Counterfactual] No data yet")
         return
+    def _f(v):
+        return f"{v:+.2f}%" if v is not None else "  n/a"
+    def _fp(v):
+        return f"{v:+.2f}pp" if v is not None else "n/a (no common window)"
     print(f"[Counterfactual] Since AI PM live ({c['start_date']} → {c['end_date']}, {c['n_days']} days):")
-    print(f"  Track A★ (Pure Quant):    {c['track_astar']:+.2f}%")
-    print(f"  Track A  (Quant+P1):      {c['track_a']:+.2f}%")
-    print(f"  Track B  (Actual):        {c['track_b']:+.2f}%")
-    print(f"  Track C  (SPY):           {c['track_c']:+.2f}%")
-    print(f"  Track D  (Pure AI PM):    {c['track_d']:+.2f}%")
-    print(f"  AI value add  (B−A★): {c['track_b'] - c['track_astar']:+.2f}pp vs pure quant")
-    print(f"  AI signal     (D−A★): {c['track_d'] - c['track_astar']:+.2f}pp — full authority estimate")
+    print(f"  Track A★ (Pure Quant):    {_f(c['track_astar'])}")
+    print(f"  Track A  (Quant+P1):      {_f(c['track_a'])}")
+    print(f"  Track B  (Actual):        {_f(c['track_b'])}")
+    print(f"  Track C  (SPY):           {_f(c['track_c'])}")
+    print(f"  Track D  (Pure AI PM):    {_f(c['track_d'])}")
+    print(f"  AI value add  (B−A★): {_fp(c['ai_value_add_b_vs_astar'])} vs pure quant ({c['n_common_b_astar']} common days)")
+    print(f"  AI signal     (D−A★): {_fp(c['ai_signal_d_vs_astar'])} — full authority estimate ({c['n_common_d_astar']} common days)")

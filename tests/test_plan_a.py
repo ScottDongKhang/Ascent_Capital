@@ -35,8 +35,13 @@ def test_holdings_log_has_benchmark(tmp_path, monkeypatch):
     })
     mock_acct = {"equity": "101000", "last_equity": "100000", "cash": "0"}
 
+    # The counterfactual DAILY_LOG is an absolute _REPO-based path computed at
+    # import time, so monkeypatch.chdir does NOT sandbox it — redirect it to
+    # tmp_path explicitly or _log_holdings pollutes the real production log.
     with patch("ascent.execution.alpaca_broker.get_positions", return_value=mock_pos), \
          patch("ascent.execution.alpaca_broker.get_account", return_value=mock_acct), \
+         patch("ascent.monitoring.ai_pm_counterfactual.DAILY_LOG",
+               tmp_path / "logs" / "counterfactual_daily.jsonl"), \
          patch("yfinance.download") as mock_dl:
 
         dates = pd.date_range("2026-04-14", periods=2, freq="B")

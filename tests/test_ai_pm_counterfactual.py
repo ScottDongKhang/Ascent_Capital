@@ -145,6 +145,99 @@ def test_score_daily_returns_none_for_missing_quant_star_weights():
     assert record["track_d_return"] is not None
 
 
+def test_score_daily_is_idempotent_per_date():
+    """Re-running score_daily for the same date must REPLACE, not append.
+
+    Regression for the June-10 rerun bug: the overnight rerun executed the
+    pipeline ~9 times and each call appended another row, all of which
+    get_cumulative_returns multiplied into the cumulative product."""
+    from ascent.monitoring.ai_pm_counterfactual import score_daily
+    with tempfile.TemporaryDirectory() as tmp:
+        log_path = Path(tmp) / "cf_daily.jsonl"
+        with patch("ascent.monitoring.ai_pm_counterfactual.DAILY_LOG", log_path):
+            for b in (-0.02, -0.01, 0.005):  # three reruns, final is 0.005
+                score_daily(
+                    run_date=date(2026, 6, 10),
+                    quant_star_weights={"AAPL": 1.0},
+                    quant_weights={"AAPL": 1.0},
+                    ai_pm_weights={"AAPL": 1.0},
+                    track_b_return=b,
+                    spy_return=0.001,
+                    prices={"AAPL": {"prev": 100.0, "curr": 100.0}},
+                )
+            lines = log_path.read_text().strip().splitlines()
+    assert len(lines) == 1, f"Expected 1 row after 3 same-date reruns, got {len(lines)}"
+    assert abs(json.loads(lines[0])["track_b_return"] - 0.005) < 1e-9  # last wins
+
+
+def test_portfolio_return_skips_nan_prices():
+    """yfinance period='5d' returns a trailing all-NaN row (today's unpublished bar);
+    a single NaN price must not poison the whole track. If ALL prices are NaN the
+    track is unpriced → None (skipped), not NaN/0.0 (frozen)."""
+    from ascent.monitoring.ai_pm_counterfactual import _portfolio_return
+    nan = float("nan")
+    # one NaN, one good → return uses only the good leg
+    r = _portfolio_return(
+        {"AAPL": 0.5, "MSFT": 0.5},
+        {"AAPL": {"prev": 100.0, "curr": 102.0}, "MSFT": {"prev": 200.0, "curr": nan}},
+    )
+    assert r is not None and abs(r - 0.5 * 0.02) < 1e-9
+    # all NaN → None
+    r2 = _portfolio_return(
+        {"AAPL": 0.5, "MSFT": 0.5},
+        {"AAPL": {"prev": 100.0, "curr": nan}, "MSFT": {"prev": 200.0, "curr": nan}},
+    )
+    assert r2 is None
+
+
+def test_score_daily_none_when_weights_present_but_no_prices():
+    """The freeze bug: snapshot weights exist but the price fetch failed, so prices={}.
+    Track returns must be None (skipped), NOT a fabricated 0.0 that freezes the track."""
+    from ascent.monitoring.ai_pm_counterfactual import score_daily
+    with tempfile.TemporaryDirectory() as tmp:
+        log_path = Path(tmp) / "cf_daily.jsonl"
+        with patch("ascent.monitoring.ai_pm_counterfactual.DAILY_LOG", log_path):
+            rec = score_daily(
+                run_date=date(2026, 6, 11),
+                quant_star_weights={"AAPL": 0.5, "MSFT": 0.5},
+                quant_weights={"AAPL": 0.5, "MSFT": 0.5},
+                ai_pm_weights={"AAPL": 0.6, "MSFT": 0.4},
+                track_b_return=0.01,
+                spy_return=0.005,
+                prices={},  # fetch failed
+            )
+    assert rec["track_astar_return"] is None
+    assert rec["track_d_return"] is None
+    assert rec["track_b_return"] == 0.01  # Track B from Alpaca still real
+
+
+def test_cumulative_skips_none_and_compares_common_window():
+    """get_cumulative_returns must (a) not crash on None days, (b) cumulate each
+    track only over its own non-None days, and (c) difference B/D vs A* only over
+    days where BOTH have data."""
+    from ascent.monitoring import ai_pm_counterfactual as cf
+    with tempfile.TemporaryDirectory() as tmp:
+        log_path = Path(tmp) / "cf_daily.jsonl"
+        recs = [
+            # A* has data both days; D only day 2; B only day 1
+            {"date": "2026-06-10", "track_astar_return": 0.02, "track_a_return": None,
+             "track_b_return": 0.01, "track_c_return": 0.0, "track_d_return": None},
+            {"date": "2026-06-11", "track_astar_return": 0.03, "track_a_return": None,
+             "track_b_return": None, "track_c_return": 0.0, "track_d_return": 0.01},
+        ]
+        log_path.write_text("\n".join(json.dumps(r) for r in recs) + "\n")
+        with patch("ascent.monitoring.ai_pm_counterfactual.DAILY_LOG", log_path):
+            c = cf.get_cumulative_returns()
+    # standalone cumret over each track's own non-None days
+    assert abs(c["track_astar"] - round(((1.02 * 1.03) - 1) * 100, 3)) < 1e-6
+    assert abs(c["track_d"] - 1.0) < 1e-6  # only day 2: +1%
+    # common-window diffs must only use overlapping days
+    # D vs A*: only 2026-06-11 overlaps → 0.01 - 0.03 = -2.0pp
+    assert abs(c["ai_signal_d_vs_astar"] - (-2.0)) < 1e-6
+    # B vs A*: only 2026-06-10 overlaps → 0.01 - 0.02 = -1.0pp
+    assert abs(c["ai_value_add_b_vs_astar"] - (-1.0)) < 1e-6
+
+
 def test_update_authority_none_inputs_skip_buffer_append():
     """update_authority(None, None) must not modify track_d_returns or track_astar_returns buffers."""
     from ascent.strategy.earned_authority import update_authority, _save_state, get_state

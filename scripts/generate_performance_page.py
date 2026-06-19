@@ -621,13 +621,21 @@ def _counterfactual_chart_html(cfdata: list) -> str:
     spy    = cumulative("track_c_return")
     ai_pm  = cumulative("track_d_return")
 
-    d_val  = ai_pm[-1]  if ai_pm  else 0
-    as_val = astar[-1]  if astar  else 0
-    b_val  = actual[-1] if actual else 0
-    sq     = round(d_val - as_val, 2)
-    impact = round(b_val - as_val, 2)
-    sq_color  = "#3fb950" if sq >= 0 else "#f85149"
-    imp_color = "#3fb950" if impact >= 0 else "#f85149"
+    # Headline diffs MUST come from the common-window comparison, not from
+    # subtracting two tracks each cumulated over its own (disjoint) window —
+    # the latter is what produced the fictional "AI PM cost -11.6pp" (A★ data
+    # ends 2026-06-04, Track B data only really starts in June, so the full-
+    # window difference compares non-overlapping periods).
+    from ascent.monitoring.ai_pm_counterfactual import get_cumulative_returns
+    _cum = get_cumulative_returns() or {}
+    sq          = _cum.get("ai_signal_d_vs_astar")
+    impact      = _cum.get("ai_value_add_b_vs_astar")
+    n_sq        = _cum.get("n_common_d_astar", 0)
+    n_impact    = _cum.get("n_common_b_astar", 0)
+    sq_color  = "#8b949e" if sq is None else ("#3fb950" if sq >= 0 else "#f85149")
+    imp_color = "#8b949e" if impact is None else ("#3fb950" if impact >= 0 else "#f85149")
+    _sq_txt   = "n/a" if sq is None else f"{'+' if sq>=0 else ''}{sq:.2f}pp ({n_sq}d)"
+    _imp_txt  = "n/a" if impact is None or n_impact < 5 else f"{'+' if impact>=0 else ''}{impact:.2f}pp ({n_impact}d)"
 
     # Shadow period: leading stretch where the AI PM track produced no returns
     # (tracks logged, no capital). Annotate it so the flat segment reads as
@@ -644,8 +652,8 @@ def _counterfactual_chart_html(cfdata: list) -> str:
 
     return f"""
 <div style="font-size:12px;color:#8b949e;margin-bottom:8px">
-  AI signal quality (D−A★): <span style="color:{sq_color}">{'+'if sq>=0 else ''}{sq:.2f}pp</span> since live &nbsp;|&nbsp;
-  Actual portfolio impact: <span style="color:{imp_color}">{'+'if impact>=0 else ''}{impact:.2f}pp</span> at current weight
+  AI signal quality (D−A★): <span style="color:{sq_color}">{_sq_txt}</span> common window &nbsp;|&nbsp;
+  Actual portfolio impact (B−A★): <span style="color:{imp_color}">{_imp_txt}</span> common window
 </div>
 <div style="position:relative;height:230px"><canvas id="cfChart"></canvas></div>
 <script>

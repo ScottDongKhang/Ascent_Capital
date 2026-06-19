@@ -104,6 +104,20 @@ One step at a time. Verify existing logic before proposing fixes. `ast.parse` af
 
 > Full history archived to `docs/session_log_archive.md`.
 
+### 2026-06-18 (AI PM "−11.63pp alpha destruction" investigation — measurement artifact, not real)
+- ROOT CAUSE: the "AI PM cost −11.63pp vs quant" headline is a **measurement artifact in the counterfactual layer**, not real alpha destruction. The only honest signal (Track D vs A★ over the 12 days both have genuine data, May 19–Jun 4) is **−2.33pp** — pure-AI-PM is modestly *defensive* in calm_bull, giving up upside, n=12 (too few to disable on).
+- Five bugs found & fixed in `ascent/monitoring/ai_pm_counterfactual.py` + the daily scoring block in `run_all_agents.py`:
+  1. **`score_daily` appended unconditionally** → the Jun-10 overnight rerun wrote ~9 duplicate same-date rows; `get_cumulative_returns` multiplied every one into the product. Fixed: `_upsert_daily()` (last-wins per date).
+  2. **Track A★/D froze at 0.0 after Jun 4** while Track B kept accruing → cross-track diff compared disjoint windows. Mechanism: `_portfolio_return` returned 0.0 when no symbol could be priced. Fixed: returns `None` when 0 symbols priced (None = skipped, not frozen).
+  3. **NaN poisoning** — yfinance `period="5d"` returns a trailing all-NaN row (today's unpublished bar); one NaN `curr` NaN'd the whole track. Fixed: `_portfolio_return` skips NaN; daily fetch uses `period="7d"` + `dropna()` last-2 closes. Verified A★/D now produce real returns going forward.
+  4. **`get_cumulative_returns` compared tracks cumulated over disjoint windows.** Fixed: each track cumulates over its own non-None days; B−A★ and D−A★ use the common window only, and the report now prints the common-day count (B−A★ = 1 common day → flagged noise; D−A★ = 12 days → real).
+  5. **Test leak** — `tests/test_plan_a.py::test_holdings_log_has_benchmark` called `_log_holdings` whose counterfactual `DAILY_LOG` is an absolute `_REPO` path that `monkeypatch.chdir` does NOT sandbox → every test run wrote a placeholder `2026-04-16` row (b=0.01/c=0.005) to the **real** log (and pre-fix, 0.0/0.0 pairs to the real `earned_authority.json` via `update_authority`). Fixed: patch `DAILY_LOG` to tmp in the test.
+- `blend()` math confirmed NOT a drag source: 5% active-weight budget → max single-position delta ~±1.5pp, total added turnover capped at 5pp (~sub-bp cost). Judge verdicts (May 27/Jun 10/Jun 15) all `proceed` + one ~1pp trim — not over-conservative, not the drag.
+- Data repairs (backups `.bak-2026-06-18`): `logs/counterfactual_daily.jsonl` deduped 59→37 rows, exact-0.0 across all tracks → None (missing-data sentinel). `data_cache/earned_authority.json` track buffers stripped of 6 fabricated trailing 0.0/0.0 pairs (15→9 honest obs, matches shadow log).
+- Tests: +5 in `tests/test_ai_pm_counterfactual.py` (idempotent upsert, None-on-no-prices, NaN-skip, common-window diff), test_plan_a isolation fixed. 16/16 local pass. Full suite 977 passed / 13 failed — all 13 pre-existing (wf_framework + test_new_ingest/openbb drift), none touch changed modules.
+- Files: `ascent/monitoring/ai_pm_counterfactual.py`, `run_all_agents.py`, `tests/test_ai_pm_counterfactual.py`, `tests/test_plan_a.py`, `logs/counterfactual_daily.jsonl`, `data_cache/earned_authority.json`.
+- Open: B vs A★ stays uncomparable until both record real values over a common window (≈Jun 19 onward, now that the freeze is fixed). The dashboard headline (`scripts/generate_performance_page.py`) likely still reads the old uncorrected cumulative — verify it picks up the new `n_common_*`-annotated numbers. AI PM calm_bull defensiveness (−2.33pp/12d) is worth watching at the Jun 24 rebalance but n is too small to disable the layer.
+
 ### 2026-06-11 (next-phase improvements implemented — all 3 workstreams + repairs)
 - Implemented `docs/superpowers/specs/2026-06-10-alpha-sharpe-ainative-spec.md` in full.
 - **C3 profiles**: `backfill_missing_profiles()` + `check_book_sector_coverage()` in `ascent/data/ingest/supplementary.py`; coverage guard wired into daily runner. Live book now 100% sector-labeled (was 78.8%); 59 more universe symbols backfilled. Also fixed `_get_portfolio_symbols()` — it always returned [] (read payload keys instead of nested `weights`), so alt-data collection had been getting an empty portfolio list.
@@ -241,6 +255,12 @@ What the debate layer can now catch that it couldn't before: a portfolio that pa
 - `build_alpha_stack(return_breakdown=True)` → signal quality in `AgentOutput.metadata`. Pre-thesis alpha floor in `ascent/main.py`. Phase 1 writes `data_cache/ai_prethesis_latest.json`.
 - Honest WF OOS baseline: Sharpe 0.483. Multi-asset/long-short all scored worse — current config is the ceiling.
 - Files: `earned_authority.py`, `ai_pm_guardrails.py`, `ai_pm_counterfactual.py`, `ai_pm_perf_feedback.py`, `ascent/alpha/stack.py`, `ascent/main.py`, `agents/us_equities_agent.py`, `agents/ai_pm_agent.py`, `run_all_agents.py`.
+
+### 2026-06-17 (AI PM calibration learning loop fix)
+- `_compute_calibration_returns()` added to `run_all_agents.py`: reads `prices_live.parquet`, computes cumulative returns since entry date for symbols in calibration log entries ≥21 days old with null `realized_21d`. Replaces the empty-dict call that silently no-opped every daily run since May 18.
+- May 18 + May 19 entries (17 positions each) now fully filled. `get_calibration_report()` produces IC = +0.25 [Calibrated] for first time.
+- Files: `run_all_agents.py`, `tests/test_calibration_tracker.py`, `tests/agents/test_ai_pm_fallback_fix.py`.
+- Open: nothing.
 
 ### 2026-06-03 (WF OOS framework + signal fixes)
 - WF framework at `ascent/research/wf_framework/`. Fundamental sleeve disabled. KMLM overweight fixed. IC gate tightened (-0.010 → -0.005). `_log_holdings` day_return now from Alpaca `last_equity`.
