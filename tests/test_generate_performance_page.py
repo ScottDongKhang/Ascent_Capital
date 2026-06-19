@@ -79,3 +79,49 @@ def test_construction_section_renders_and_is_sealed():
     # never raises on empty inputs
     assert _construction_section_html("", {}, {}, 0, 0)
     assert len(_CONSTRUCTION_STAGES) == 7
+
+
+# Tokens that would betray the strategy edge — must never reach the rendered HTML.
+_EDGE_DENYLIST = [
+    "DEFAULT_ALPHA_WEIGHTS", "sleeve_weight", "trend=", "meanrev", "statarb",
+    "regime_threshold", "tilt_strength", "hysteresis", "0.70 corr", "inverse_vol_clip",
+]
+
+
+def _build_sample_sections():
+    import scripts.generate_performance_page as g
+    verdict = {"date": "2026-06-15", "verdict": {
+        "recommendation": "proceed", "confidence": 0.62,
+        "key_risks": ["BYD earnings imminent at 7.2% weight — unhedgeable binary."]},
+        "arguments": {"bull": "OKTA leads conviction. Momentum is strong.",
+                      "bear": "BYD is the weakest link. Earnings binary.",
+                      "devils_advocate": "The book is concave. Turkey problem.",
+                      "regime_specialist": "Misaligned. Only 55% risk-on."}}
+    prethesis = {"high_conviction_names": [{"symbol": "IFRA", "reason": "AI build-out."}]}
+    positions = [{"symbol": "IFRA", "weight": 10.0, "unrealized_plpc": 2.1,
+                  "current_price": 50.0, "market_value": 11000.0},
+                 {"symbol": "BYD", "weight": 7.2, "unrealized_plpc": -1.3,
+                  "current_price": 40.0, "market_value": 7900.0}]
+    return (g._construction_section_html("calm_bull", verdict,
+            {"level": 1, "title": "Analyst", "ai_weight": 0.05}, 2, 500)
+            + g._verdict_section_html(verdict)
+            + g._book_section_html(positions, verdict, prethesis))
+
+
+def test_sections_seal_edge_and_have_structure():
+    html = _build_sample_sections()
+    for banned in _EDGE_DENYLIST:
+        assert banned not in html, f"edge leak: {banned}"
+    for sect in ["How the book is built", "The latest verdict", "The book",
+                 "sealed by design", "Sealed"]:
+        assert sect in html, f"missing: {sect}"
+
+
+def test_committed_page_seals_edge_if_present():
+    page = Path(__file__).parent.parent / "docs" / "index.html"
+    if not page.exists():
+        return
+    html = page.read_text()
+    for banned in _EDGE_DENYLIST:
+        assert banned not in html, f"edge leak in docs/index.html: {banned}"
+    assert "nan%" not in html
