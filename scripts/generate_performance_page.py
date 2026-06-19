@@ -1617,9 +1617,8 @@ def build_html(
     raw_verdict = _load_latest_raw_verdict()
     prethesis   = _load_prethesis()
     try:
-        from ascent.config import get_config
-        _cfg = get_config()
-        universe_n = len(getattr(getattr(_cfg, "universe", None), "symbols", []) or [])
+        with open("ascent/config/us_equity_universe.json") as _uf:
+            universe_n = len(json.load(_uf).get("symbols", []) or [])
     except Exception:
         universe_n = 0
     universe_n = universe_n or 500
