@@ -455,6 +455,34 @@ def _sparkline_paths(symbols: list[str], n: int = 30) -> dict[str, dict]:
     return out
 
 
+_REDACTION_LABELS = [
+    "Sleeve attribution", "Entry signal", "Risk weighting", "Cluster cap",
+    "Regime threshold", "Correlation guard", "Exposure rule",
+]
+
+
+def _redaction_label(sym: str) -> str:
+    return _REDACTION_LABELS[sum(ord(c) for c in sym) % len(_REDACTION_LABELS)]
+
+
+def _position_reasoning(sym: str, verdict: dict, prethesis: dict) -> dict:
+    """Qualitative-only reasoning per holding. Never emits model internals."""
+    why = "Held on the composite cross-sectional ranking."
+    for n in (prethesis or {}).get("high_conviction_names", []) or []:
+        if isinstance(n, dict) and n.get("symbol") == sym and n.get("reason"):
+            why = _esc(str(n["reason"]).split(". ")[0].rstrip(".") + ".")
+            break
+    risks = ((verdict or {}).get("verdict") or {}).get("key_risks") or []
+    hit = next((r for r in risks if sym in str(r)), None)
+    if hit:
+        committee = f"<span class='whyflag'><b>Flagged.</b></span> {_esc(str(hit))}"
+        flagged = True
+    else:
+        committee = "No adversarial flag this cycle."
+        flagged = False
+    return {"why": why, "committee": committee, "flagged": flagged}
+
+
 # ── Stats ─────────────────────────────────────────────────────────────────────
 
 def compute_stats(records: list[dict], spy: dict[str, float]) -> dict:

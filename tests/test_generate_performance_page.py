@@ -7,6 +7,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from scripts.generate_performance_page import (
     compute_stats,
     _sparkline_paths,
+    _redaction_label,
+    _REDACTION_LABELS,
+    _position_reasoning,
 )
 
 
@@ -40,3 +43,23 @@ def test_sparkline_paths_basic_and_missing(tmp_path, monkeypatch):
     assert out["AAA"]["up"] is True            # 12 >= 10
     assert "BBB" not in out                     # only 1 point
     assert "ZZZ" not in out                     # absent symbol
+
+
+def test_redaction_label_deterministic_and_in_set():
+    assert _redaction_label("IFRA") == _redaction_label("IFRA")   # deterministic
+    assert _redaction_label("IFRA") in _REDACTION_LABELS
+
+
+def test_position_reasoning_conviction_and_flag():
+    prethesis = {"high_conviction_names": [
+        {"symbol": "IFRA", "reason": "AI data-center build-out beneficiary."}]}
+    verdict = {"verdict": {"key_risks": [
+        "BYD earnings imminent at 7.2% weight — unhedgeable binary."]}}
+    ifra = _position_reasoning("IFRA", verdict, prethesis)
+    assert "build-out" in ifra["why"]
+    assert ifra["flagged"] is False
+    byd = _position_reasoning("BYD", verdict, prethesis)
+    assert byd["flagged"] is True and "BYD" in byd["committee"]
+    zzz = _position_reasoning("ZZZ", verdict, prethesis)
+    assert zzz["why"] and zzz["flagged"] is False
+    assert "No adversarial flag" in zzz["committee"]
