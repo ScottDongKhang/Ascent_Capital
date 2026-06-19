@@ -15,6 +15,7 @@ import glob
 import json
 import math
 import os
+import re
 import statistics
 import subprocess
 import sys
@@ -719,12 +720,12 @@ def _earned_authority_html(auth: dict, feedback: dict = None) -> str:
 
     alert_html = ""
     if stuck:
-        alert_html += '<div style="background:#d29922;color:#0d1117;padding:6px 12px;border-radius:6px;margin-bottom:8px;font-size:12px">⚠ AI PM stuck at this level 63+ days — review promotion gates</div>'
+        alert_html += '<div style="background:#cba569;color:#100e09;padding:6px 12px;border-radius:6px;margin-bottom:8px;font-size:12px">⚠ AI PM stuck at this level 63+ days — review promotion gates</div>'
     if cooldown:
         cd_rem = feedback.get("cooldown_days_remaining", 0)
-        alert_html += f'<div style="background:#58a6ff33;color:#58a6ff;padding:6px 12px;border-radius:6px;margin-bottom:8px;font-size:12px">❄ Cooldown active — {cd_rem} trading days remaining</div>'
+        alert_html += f'<div style="background:#cba56933;color:#cba569;padding:6px 12px;border-radius:6px;margin-bottom:8px;font-size:12px">❄ Cooldown active — {cd_rem} trading days remaining</div>'
 
-    edge_color = "#3fb950" if edge >= 0 else "#f85149"
+    edge_color = "#6aa97f" if edge >= 0 else "#c47b6e"
     hit  = feedback.get("hit_rate_21d", 0)
     pf   = feedback.get("profit_factor", 0)
     n_ev = feedback.get("n_decisions_evaluated", 0)
@@ -760,11 +761,11 @@ def _promotion_gates_html(feedback: dict) -> str:
         val    = g.get("value", "—")
         thr    = g.get("threshold", "")
         icon   = "✓" if passed else "✗"
-        color  = "#3fb950" if passed else "#f85149"
+        color  = "#6aa97f" if passed else "#c47b6e"
         thr_str = f" / need {thr}" if thr else ""
-        rows += (f'<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #21262d">'
+        rows += (f'<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #1b180f">'
                  f'<span style="color:{color}">{icon} {label}</span>'
-                 f'<span style="color:#8b949e;font-size:12px">{val}{thr_str}</span></div>')
+                 f'<span style="color:#857e70;font-size:12px">{val}{thr_str}</span></div>')
     return f'<div style="font-size:13px">{rows}</div>'
 
 
@@ -805,8 +806,8 @@ def _counterfactual_chart_html(cfdata: list) -> str:
     impact      = _cum.get("ai_value_add_b_vs_astar")
     n_sq        = _cum.get("n_common_d_astar", 0)
     n_impact    = _cum.get("n_common_b_astar", 0)
-    sq_color  = "#8b949e" if sq is None else ("#3fb950" if sq >= 0 else "#f85149")
-    imp_color = "#8b949e" if impact is None else ("#3fb950" if impact >= 0 else "#f85149")
+    sq_color  = "#857e70" if sq is None else ("#6aa97f" if sq >= 0 else "#c47b6e")
+    imp_color = "#857e70" if impact is None else ("#6aa97f" if impact >= 0 else "#c47b6e")
     _sq_txt   = "n/a" if sq is None else f"{'+' if sq>=0 else ''}{sq:.2f}pp ({n_sq}d)"
     _imp_txt  = "n/a" if impact is None or n_impact < 5 else f"{'+' if impact>=0 else ''}{impact:.2f}pp ({n_impact}d)"
 
@@ -824,7 +825,7 @@ def _counterfactual_chart_html(cfdata: list) -> str:
         shadow_js = json.dumps({"start": dates[0], "end": dates[-1]})
 
     return f"""
-<div style="font-size:12px;color:#8b949e;margin-bottom:8px">
+<div style="font-size:12px;color:#857e70;margin-bottom:8px">
   AI signal quality (D−A★): <span style="color:{sq_color}">{_sq_txt}</span> common window &nbsp;|&nbsp;
   Actual portfolio impact (B−A★): <span style="color:{imp_color}">{_imp_txt}</span> common window
 </div>
@@ -839,7 +840,7 @@ def _counterfactual_chart_html(cfdata: list) -> str:
     anns.shadow = {{type:'box', xMin:shadow.start, xMax:shadow.end,
       backgroundColor:'rgba(139,148,158,0.06)', borderWidth:0,
       label:{{display:true, content:'SHADOW PERIOD — tracks scored, no capital',
-        position:{{x:'center', y:'start'}}, color:'#6e7681',
+        position:{{x:'center', y:'start'}}, color:'#6a6457',
         font:{{size:9, weight:'600'}}, backgroundColor:'rgba(13,17,23,0.85)',
         padding:{{x:5,y:2}}, borderRadius:4, yAdjust:4}}}};
   }}
@@ -848,23 +849,23 @@ def _counterfactual_chart_html(cfdata: list) -> str:
     data: {{
       labels: {json.dumps(dates)},
       datasets: [
-        {{label:'Pure Quant (A★)', data:{json.dumps(astar)},  borderColor:'#8b949e', borderDash:[4,3], pointRadius:0, borderWidth:1.5, fill:false, tension:0.25}},
-        {{label:'Actual (B)',       data:{json.dumps(actual)}, borderColor:'#3fb950', pointRadius:0,    borderWidth:2,   fill:false, tension:0.25}},
-        {{label:'SPY (C)',          data:{json.dumps(spy)},    borderColor:'#58a6ff', borderDash:[4,3], pointRadius:0, borderWidth:1.5, fill:false, tension:0.25}},
-        {{label:'Pure AI PM (D)',   data:{json.dumps(ai_pm)},  borderColor:'#d29922', pointRadius:0,    borderWidth:2,   fill:false, tension:0.25}},
+        {{label:'Pure Quant (A★)', data:{json.dumps(astar)},  borderColor:'#857e70', borderDash:[4,3], pointRadius:0, borderWidth:1.5, fill:false, tension:0.25}},
+        {{label:'Actual (B)',       data:{json.dumps(actual)}, borderColor:'#6aa97f', pointRadius:0,    borderWidth:2,   fill:false, tension:0.25}},
+        {{label:'SPY (C)',          data:{json.dumps(spy)},    borderColor:'#cba569', borderDash:[4,3], pointRadius:0, borderWidth:1.5, fill:false, tension:0.25}},
+        {{label:'Pure AI PM (D)',   data:{json.dumps(ai_pm)},  borderColor:'#cba569', pointRadius:0,    borderWidth:2,   fill:false, tension:0.25}},
       ]
     }},
     options:{{responsive:true, maintainAspectRatio:false, interaction:{{mode:'index',intersect:false}},
       plugins:{{
-        legend:{{position:'bottom', labels:{{color:'#8b949e', boxWidth:10, boxHeight:2, font:{{size:10}}, padding:10}}}},
-        tooltip:{{backgroundColor:'#1c2128', borderColor:'#30363d', borderWidth:1, titleColor:'#8b949e',
-          bodyColor:'#e6edf3', cornerRadius:10, padding:12, boxPadding:4, usePointStyle:true,
+        legend:{{position:'bottom', labels:{{color:'#857e70', boxWidth:10, boxHeight:2, font:{{size:10}}, padding:10}}}},
+        tooltip:{{backgroundColor:'#1c2128', borderColor:'#262219', borderWidth:1, titleColor:'#857e70',
+          bodyColor:'#f3f0e9', cornerRadius:10, padding:12, boxPadding:4, usePointStyle:true,
           callbacks:{{label:function(c){{return ' '+c.dataset.label+': '+(c.raw>=0?'+':'')+c.raw.toFixed(2)+'%';}}}}}},
         annotation:{{annotations:anns}}
       }},
       scales:{{
-        x:{{ticks:{{color:'#6e7681', maxTicksLimit:8, maxRotation:0, font:{{size:10}}}}, grid:{{color:'#1b212a'}}}},
-        y:{{ticks:{{color:'#6e7681', font:{{size:10}}, callback:function(v){{return (v>=0?'+':'')+v.toFixed(1)+'%';}}}}, grid:{{color:'#1b212a'}}}}
+        x:{{ticks:{{color:'#6a6457', maxTicksLimit:8, maxRotation:0, font:{{size:10}}}}, grid:{{color:'#1b180f'}}}},
+        y:{{ticks:{{color:'#6a6457', font:{{size:10}}, callback:function(v){{return (v>=0?'+':'')+v.toFixed(1)+'%';}}}}, grid:{{color:'#1b180f'}}}}
       }}
     }}
   }});
@@ -887,7 +888,7 @@ def _override_scorecard_html(decisions: list, feedback: dict) -> str:
         r10   = dec.get("outcome_10d")
         r21   = dec.get("outcome_21d")
         verd  = dec.get("verdict", "pending")
-        vc    = {"win":"#3fb950","miss":"#f85149","fade":"#d29922","early":"#58a6ff"}.get(verd,"#8b949e")
+        vc    = {"win":"#6aa97f","miss":"#c47b6e","fade":"#cba569","early":"#cba569"}.get(verd,"#857e70")
         fmt   = lambda v: f"{v:+.2%}" if v is not None else "—"
         rows += (f'<tr><td>{dec.get("date","")[:10]}</td><td><b>{sym}</b></td>'
                  f'<td>{ov_t}</td><td>{ai_w:.1%}</td><td>{qt_w:.1%}</td>'
@@ -899,18 +900,18 @@ def _override_scorecard_html(decisions: list, feedback: dict) -> str:
     fade_rate = feedback.get("fade_rate", 0)
 
     return f"""
-<div style="font-size:11px;color:#8b949e;margin-bottom:6px">
-  Win rate: <b style="color:#e6edf3">{win_rate:.0%}</b> &nbsp;·&nbsp;
-  Avg incremental α (10d): <b style="color:#e6edf3">{avg_alpha:+.3%}</b> &nbsp;·&nbsp;
-  Fade rate: <b style="color:#e6edf3">{fade_rate:.0%}</b>
+<div style="font-size:11px;color:#857e70;margin-bottom:6px">
+  Win rate: <b style="color:#f3f0e9">{win_rate:.0%}</b> &nbsp;·&nbsp;
+  Avg incremental α (10d): <b style="color:#f3f0e9">{avg_alpha:+.3%}</b> &nbsp;·&nbsp;
+  Fade rate: <b style="color:#f3f0e9">{fade_rate:.0%}</b>
 </div>
 <div style="overflow-x:auto">
 <table style="width:100%;font-size:11px;border-collapse:collapse">
-  <thead><tr style="color:#8b949e">
+  <thead><tr style="color:#857e70">
     <th>Date</th><th>Symbol</th><th>Type</th><th>AI%</th><th>Quant%</th>
     <th>+5d</th><th>+10d</th><th>+21d</th><th>Result</th>
   </tr></thead>
-  <tbody style="color:#e6edf3">{rows}</tbody>
+  <tbody style="color:#f3f0e9">{rows}</tbody>
 </table></div>"""
 
 
@@ -999,11 +1000,11 @@ def _timeline_html(verdicts: list) -> str:
         ev_type = ev.get("type","rebalance")
         verdict = ev.get("verdict")
         if ev_type == "milestone":
-            color, icon = "#58a6ff", "★"
+            color, icon = "#cba569", "★"
         elif ev_type == "debate_only":
-            color, icon = "#6e7681", "◌"
+            color, icon = "#6a6457", "◌"
         else:
-            color = VERDICT_COLORS.get(verdict,"#8b949e")
+            color = VERDICT_COLORS.get(verdict,"#857e70")
             icon  = {"proceed":"✓","reduce_size":"↓","halt_and_review":"✗"}.get(verdict,"↻")
 
         badge = ev["label"].split("—")[-1].strip() if "—" in ev["label"] else ev["label"]
@@ -1018,11 +1019,11 @@ def _timeline_html(verdicts: list) -> str:
         oc_html = ""
         if outcome is not None:
             oc = outcome*100
-            oc_html = f'<div class="outcome" style="color:{"#3fb950" if oc>=0 else "#f85149"}">14d: {"+" if oc>=0 else ""}{oc:.2f}%</div>'
+            oc_html = f'<div class="outcome" style="color:{"#6aa97f" if oc>=0 else "#c47b6e"}">14d: {"+" if oc>=0 else ""}{oc:.2f}%</div>'
 
         html += f"""
 <div class="tl-item">
-  <div class="tl-dot" style="background:{color};color:#0d1117">{icon}</div>
+  <div class="tl-dot" style="background:{color};color:#100e09">{icon}</div>
   <div class="tl-body">
     <div class="tl-meta"><span class="tl-date">{ev['date']}</span>
       <span class="tl-badge" style="border-color:{color};color:{color}">{badge}</span>
@@ -1055,6 +1056,424 @@ def _positions_html(positions: list) -> str:
       <thead><tr><th>Symbol</th><th>Weight</th><th>Value</th><th>Price</th><th>Unrealized</th></tr></thead>
       <tbody>{rows}</tbody>
     </table>"""
+
+
+# ── Editorial section builders (verdict + book) ───────────────────────────────
+
+def _load_latest_raw_verdict() -> dict:
+    for f in reversed(sorted(glob.glob("outputs/debate_log/verdict_*.json"))):
+        if Path(f).stem.replace("verdict_", "") in EXCLUDE_VERDICT_DATES:
+            continue
+        try:
+            with open(f) as fh:
+                return json.load(fh)
+        except Exception:
+            continue
+    return {}
+
+
+def _load_prethesis() -> dict:
+    try:
+        with open("data_cache/ai_prethesis_latest.json") as fh:
+            return json.load(fh)
+    except Exception:
+        return {}
+
+
+def _excerpt(text, n: int = 2, limit: int = 300) -> str:
+    t = re.sub(r"[#*_`>•🐂🐻😈⚖🦃⚠️🐻➡️]", " ", str(text or ""))
+    t = re.sub(r"\s+", " ", t).strip()
+    parts = re.split(r"(?<=[.!?])\s+", t)
+    out = " ".join(parts[:n]).strip()
+    if len(out) > limit:
+        out = out[:limit].rsplit(" ", 1)[0] + "…"
+    return out
+
+
+def _verdict_section_html(raw: dict) -> str:
+    v = (raw or {}).get("verdict") or {}
+    args = (raw or {}).get("arguments") or {}
+    if not args:
+        return ('<div class="sec rev"><div class="sec-h"><h2>The latest verdict</h2></div>'
+                '<p class="empty">No debate on record yet.</p></div>')
+    rec = str(v.get("recommendation") or "—")
+    rec_cls = {"proceed": "up", "reduce_size": "gold", "halt_and_review": "dn"}.get(rec, "up")
+    conf = v.get("confidence")
+    conf_pct = int(round((conf or 0) * 100))
+    conf_disp = f"{conf:.2f}" if isinstance(conf, (int, float)) else "—"
+    date = _esc(raw.get("date") or raw.get("data_as_of") or "")
+
+    voices = [
+        ("bull", "bull", "Bull", "Druckenmiller lens"),
+        ("bear", "bear", "Bear", "Burry lens"),
+        ("devils_advocate", "devil", "Devil's Advocate", "Taleb lens"),
+        ("regime_specialist", "regime", "Regime Specialist", "Posture"),
+    ]
+    vhtml = ""
+    for key, cls, label, lens in voices:
+        main = _excerpt(args.get(key, ""), 2)
+        if not main:
+            continue
+        reb = _excerpt(args.get(key + "_rebuttal", ""), 2)
+        reb_html = (f'<div class="exp" data-grp="debate"><div class="exp-inner"><div class="more">'
+                    f'<span class="ml">Rebuttal · Round 2</span>{_esc(reb)}</div></div></div>') if reb else ""
+        vhtml += (f'<div class="voice {cls}"><div class="who"><span>{label}</span><span>{lens}</span></div>'
+                  f'<p>{_esc(main)}</p>{reb_html}</div>')
+
+    risks = v.get("key_risks") or []
+    risks_html = "".join(
+        f'<div class="risk"><div class="n">{i + 1:02d}</div><p>{_esc(str(r))}</p></div>'
+        for i, r in enumerate(risks[:3]))
+    risks_block = (f'<div class="risks"><div class="lbl">Key risks the judge weighed</div>'
+                   f'{risks_html}</div>') if risks_html else ""
+
+    synth = v.get("rationale") or v.get("summary") or ""
+    if not synth:
+        head = f"{rec.replace('_', ' ').title()} at {conf_disp}." if conf_disp != "—" else f"{rec.replace('_', ' ').title()}."
+        synth = (head + " The committee's interventions are logged as monitored risks; "
+                 "registered falsifiers will trim the book automatically if they trigger.")
+
+    has_reb = 'data-grp="debate"' in vhtml
+    rebuttal_btn = ('<button class="showmore" data-grp="debate"><span class="car">▶</span>'
+                    '<span class="txt-closed">Read the round-two rebuttals</span>'
+                    '<span class="txt-open">Collapse the exchange</span></button>') if has_reb else ""
+    badge = _esc(rec.replace("_", " ").title())
+    return (f'<div class="sec rev"><div class="sec-h"><h2>The latest verdict</h2>'
+            f'<span class="sec-dateline">Rebalance · {date}</span></div>'
+            f'<p class="sec-lede">Four agents argued the book. This is what they said, and what '
+            f'the judge ruled — before a single order moved.</p>'
+            f'<div class="verdict-strip"><span class="vbadge {rec_cls}">{badge}</span>'
+            f'<div class="vmeter"><span class="mt">Conviction</span>'
+            f'<span class="meter"><i data-w="{conf_pct}"></i></span>'
+            f'<span class="vconf num">{conf_disp}</span></div></div>'
+            f'<div class="voices">{vhtml}</div>{rebuttal_btn}'
+            f'<div class="judge"><div class="jl">Judge · Synthesis</div><p>{_esc(synth)}</p></div>'
+            f'{risks_block}</div>')
+
+
+def _book_section_html(positions: list, raw: dict, prethesis: dict) -> str:
+    if not positions:
+        return ('<div class="sec rev"><div class="sec-h"><h2>The book</h2></div>'
+                '<p class="empty">Position data unavailable.</p></div>')
+    syms = [p["symbol"] for p in positions]
+    spark = _sparkline_paths(syms)
+    maxw = max((p["weight"] for p in positions), default=10) or 10
+    rows, ribbon = "", ""
+    for p in positions:
+        sym, w, pl = p["symbol"], p["weight"], p["unrealized_plpc"]
+        sk = spark.get(sym)
+        if sk:
+            col = "#6aa97f" if sk["up"] else "#c47b6e"
+            spark_svg = (f'<svg class="spark" viewBox="0 0 64 20" preserveAspectRatio="none">'
+                         f'<path d="{sk["d"]}" fill="none" stroke="{col}" stroke-width="1.3"/></svg>')
+        else:
+            spark_svg = '<span class="spark"></span>'
+        pl_cls = "up" if pl >= 0 else "dn"
+        pl_s = "+" if pl >= 0 else ""
+        r = _position_reasoning(sym, raw, prethesis)
+        bw = round(w / maxw * 100)
+        rows += (f'<div class="row"><div class="row-main">'
+                 f'<span class="bsym">{_esc(sym)}</span>{spark_svg}'
+                 f'<span class="wbar"><i data-w="{bw}"></i></span>'
+                 f'<span class="bpct num">{w:.1f}</span>'
+                 f'<span class="bpl num {pl_cls}">{pl_s}{pl:.1f}%</span>'
+                 f'<span class="rcar">▶</span></div>'
+                 f'<div class="exp"><div class="exp-inner"><div class="whybox">'
+                 f'<div class="whyblk"><div class="wl">Why it\'s here</div><p>{r["why"]}</p></div>'
+                 f'<div class="whyblk"><div class="wl">What the committee said</div>'
+                 f'<p>{r["committee"]}</p></div>'
+                 f'<div class="redact"><span class="rl">{_redaction_label(sym)}</span>'
+                 f'<span class="bars"><b></b><b></b><b></b><b></b><b></b></span>'
+                 f'<span class="lock">▤ Sealed</span></div></div></div></div></div>')
+        ribbon += f'<i style="flex:{w}" title="{_esc(sym)} · {w:.1f}%"></i>'
+    return (f'<div class="sec rev"><div class="sec-h"><h2>The book</h2>'
+            f'<span class="sec-dateline">{len(positions)} positions · tap any name</span></div>'
+            f'<p class="sec-lede">Every position carries a reason. Open one to read the case the '
+            f'system made — and see where the model stays sealed.</p>'
+            f'<div class="ribbon" id="ribbon">{ribbon}</div>'
+            f'<div class="ribbon-cap"><span>Concentration · widest band = largest position</span>'
+            f'<span>{len(positions)} names · 100% invested</span></div>'
+            f'<div class="book" id="book"><div class="bhead"><span>Symbol</span><span>30-day</span>'
+            f'<span>Weight</span><span class="r">%</span><span class="r">P/L</span><span></span></div>'
+            f'{rows}</div>'
+            f'<p class="edge-note">Reasoning shown is qualitative. Signal weights, sleeve '
+            f'attribution, and regime thresholds are sealed by design.</p></div>')
+
+
+# ── Editorial design system (plain strings — braces not f-parsed) ─────────────
+
+_EDITORIAL_CSS = """
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0c0b0a;--ink:#f3f0e9;--txt:#b9b3a7;--mut:#857e70;--faint:#6a6457;
+--rule:#262219;--rule2:#1b180f;--gold:#cba569;--gold-d:#a8854c;--up:#6aa97f;--dn:#c47b6e;--seal:#8a7f6d;
+--serif:'Source Serif 4',Georgia,serif;--mono:'IBM Plex Mono',ui-monospace,monospace;--sans:Inter,-apple-system,BlinkMacSystemFont,sans-serif}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--txt);font-family:var(--sans);line-height:1.6;-webkit-font-smoothing:antialiased;font-size:15px}
+a{color:var(--gold);text-decoration:none}
+.num{font-variant-numeric:tabular-nums}
+.wrap{max-width:1080px;margin:0 auto;padding:0 40px 30px}
+.lbl{font-family:var(--mono);font-size:10.5px;letter-spacing:1.6px;text-transform:uppercase;color:var(--mut)}
+.up{color:var(--up)}.dn{color:var(--dn)}
+.empty{color:var(--faint);font-size:14px;font-family:var(--serif);font-style:italic;padding:10px 0}
+.rev{opacity:0;transform:translateY(14px);transition:opacity .7s cubic-bezier(.22,.61,.36,1),transform .7s cubic-bezier(.22,.61,.36,1)}
+.rev.in{opacity:1;transform:none}
+@media(prefers-reduced-motion:reduce){.rev{opacity:1;transform:none;transition:none}}
+.mast{padding:30px 0 22px;display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid var(--rule)}
+.mast .name{font-family:var(--serif);font-size:23px;font-weight:600;letter-spacing:.2px;color:var(--ink)}
+.mast .name b{color:var(--gold);font-weight:600}
+.mast .meta{font-family:var(--mono);font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--mut);display:flex;align-items:center;gap:10px}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--up);display:inline-block;animation:pulse 2.4s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+@media(prefers-reduced-motion:reduce){.dot{animation:none}}
+.lede{padding:42px 0 28px}
+.lede .nav{font-family:var(--serif);font-size:clamp(54px,8vw,82px);font-weight:500;letter-spacing:-2px;line-height:.95;color:var(--ink)}
+.lede .navlbl{margin-bottom:14px}
+.figs{display:flex;gap:0;margin-top:32px;flex-wrap:wrap}
+.fig{padding-right:40px;margin-right:40px;border-right:1px solid var(--rule)}
+.fig:last-child{border:none;margin:0;padding:0}
+.fig .fl{margin-bottom:9px}
+.fig .fv{font-family:var(--serif);font-size:30px;font-weight:500;letter-spacing:-.5px;line-height:1}
+.fig .fv.sm{font-size:22px}
+.chart{padding:8px 0 30px}
+.chart-frame{position:relative;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);padding:22px 0 12px}
+.chart-wrap{position:relative;height:380px}
+.chart-wrap.short{height:190px}
+.cap{display:flex;justify-content:space-between;align-items:baseline;margin-top:14px;flex-wrap:wrap;gap:10px}
+.cap .leg{display:flex;gap:22px;font-family:var(--mono);font-size:11px;letter-spacing:.5px;color:var(--mut)}
+.cap .leg i{font-style:normal}
+.swatch{display:inline-block;width:16px;height:0;border-top:2px solid var(--gold);vertical-align:middle;margin-right:7px}
+.swatch.s2{border-top:1.25px dashed #5c574a}
+.cap .hon{font-family:var(--mono);font-size:11px;color:var(--faint);letter-spacing:.3px;text-align:right;max-width:460px;line-height:1.5}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:26px;margin-top:8px}
+@media(max-width:760px){.grid2{grid-template-columns:1fr}}
+.mini-h{font-family:var(--mono);font-size:10.5px;letter-spacing:1.4px;text-transform:uppercase;color:var(--mut);margin-bottom:10px}
+.bar{display:grid;grid-template-columns:repeat(6,1fr);border-bottom:1px solid var(--rule)}
+.bar .b{padding:18px 0}
+.bar .b+.b{padding-left:20px}
+.bar .bl{margin-bottom:8px}
+.bar .bv{font-family:var(--serif);font-size:21px;font-weight:500;letter-spacing:-.3px}
+.sec{padding:54px 0 0}
+.sec-h{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:6px}
+.sec-h h2{font-family:var(--serif);font-size:30px;font-weight:500;letter-spacing:-.5px;color:var(--ink)}
+.sec-dateline{font-family:var(--mono);font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--gold-d)}
+.sec-lede{font-family:var(--serif);font-style:italic;font-size:18px;color:#a39c8e;max-width:700px;margin:4px 0 28px;line-height:1.45}
+.verdict-strip{display:flex;align-items:center;gap:20px;padding:18px 0;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);margin-bottom:26px;flex-wrap:wrap}
+.vbadge{font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:2px;text-transform:uppercase;padding:5px 13px;border-radius:2px;border:1px solid}
+.vbadge.up{color:var(--up);border-color:#4a6b54}.vbadge.gold{color:var(--gold);border-color:#4a3c22}.vbadge.dn{color:var(--dn);border-color:#7a3a32}
+.vmeter{display:flex;align-items:center;gap:12px}
+.vmeter .mt{font-family:var(--mono);font-size:10px;letter-spacing:1.4px;text-transform:uppercase;color:var(--mut)}
+.meter{width:140px;height:5px;background:var(--rule);position:relative;overflow:hidden}
+.meter i{position:absolute;left:0;top:0;bottom:0;width:0;background:linear-gradient(90deg,var(--gold-d),var(--gold));transition:width 1.1s cubic-bezier(.22,.61,.36,1)}
+.vconf{font-family:var(--serif);font-size:20px;color:var(--ink)}
+.voices{columns:2;column-gap:46px}
+@media(max-width:760px){.voices{columns:1}}
+.voice{break-inside:avoid;border-top:2px solid;padding:14px 0 22px}
+.voice.bull{border-color:#4a6b54}.voice.bear{border-color:#8a4a40}.voice.devil{border-color:#9a7b3f}.voice.regime{border-color:#4a5e7a}
+.voice .who{font-family:var(--mono);font-size:11px;letter-spacing:1.6px;text-transform:uppercase;margin-bottom:8px;display:flex;justify-content:space-between}
+.voice.bull .who{color:var(--up)}.voice.bear .who{color:#c47b6e}.voice.devil .who{color:var(--gold)}.voice.regime .who{color:#7b93b8}
+.voice .who span:last-child{color:var(--faint);letter-spacing:1px}
+.voice p{font-family:var(--serif);font-size:16px;line-height:1.5;color:#c5bfb2}
+.voice p b{color:var(--ink);font-weight:600}
+.voice .more{font-family:var(--serif);font-size:15px;line-height:1.5;color:#a8a294;margin-top:12px;padding-top:12px;border-top:1px solid var(--rule2)}
+.voice .more .ml{font-family:var(--mono);font-size:9.5px;letter-spacing:1.2px;text-transform:uppercase;color:var(--faint);display:block;margin-bottom:6px}
+.judge{margin-top:22px;padding:20px 22px;border:1px solid var(--rule);border-left:2px solid var(--gold);background:#100e09}
+.judge .jl{font-family:var(--mono);font-size:10px;letter-spacing:1.6px;text-transform:uppercase;color:var(--gold-d);margin-bottom:9px}
+.judge p{font-family:var(--serif);font-size:17px;line-height:1.5;color:#d4cdbf}
+.exp{display:grid;grid-template-rows:0fr;transition:grid-template-rows .42s cubic-bezier(.22,.61,.36,1)}
+.exp>.exp-inner{overflow:hidden;min-height:0}
+.exp.open{grid-template-rows:1fr}
+@media(prefers-reduced-motion:reduce){.exp{transition:none}}
+.showmore{display:inline-flex;align-items:center;gap:9px;margin-top:24px;background:none;border:1px solid var(--rule);color:var(--txt);font-family:var(--mono);font-size:11px;letter-spacing:1.5px;text-transform:uppercase;padding:10px 16px;border-radius:2px;cursor:pointer;transition:border-color .25s,color .25s}
+.showmore:hover{border-color:var(--gold-d);color:var(--gold)}
+.showmore .car{font-size:9px;transition:transform .35s cubic-bezier(.22,.61,.36,1);color:var(--gold)}
+.showmore.open .car{transform:rotate(90deg)}
+.showmore .txt-open{display:none}.showmore.open .txt-open{display:inline}.showmore.open .txt-closed{display:none}
+.risks{margin-top:26px;border-top:1px solid var(--rule);padding-top:20px}
+.risks .lbl{margin-bottom:14px}
+.risk{display:flex;gap:14px;padding:11px 0;border-bottom:1px solid var(--rule2)}
+.risk:last-child{border:none}
+.risk .n{font-family:var(--mono);font-size:12px;color:var(--gold-d);flex-shrink:0;padding-top:2px}
+.risk p{font-family:var(--serif);font-size:15.5px;color:#bbb4a6;line-height:1.45}
+.whyflag{color:var(--dn)}
+.funnel{display:flex;align-items:stretch;gap:0;margin-bottom:36px;border:1px solid var(--rule);background:#100e09}
+.fn{flex:1;padding:16px 18px;border-right:1px solid var(--rule);position:relative;text-align:center}
+.fn:last-child{border-right:none}
+.fn .fnum{font-family:var(--serif);font-size:26px;font-weight:500;color:var(--ink);letter-spacing:-.5px;line-height:1}
+.fn .fnl{font-family:var(--mono);font-size:9.5px;letter-spacing:1px;text-transform:uppercase;color:var(--mut);margin-top:7px}
+.fn .fnbar{height:3px;margin-top:11px;background:var(--gold);opacity:.7;margin-left:auto;margin-right:auto;width:0;transition:width 1s cubic-bezier(.22,.61,.36,1)}
+.fn .fnarrow{position:absolute;right:-7px;top:50%;transform:translateY(-50%);color:var(--rule);font-size:13px;z-index:2;background:var(--bg);padding:2px 0}
+@media(max-width:760px){.funnel{flex-wrap:wrap}.fn{flex:1 1 33%;border-bottom:1px solid var(--rule)}.fn .fnarrow{display:none}}
+.pipe{position:relative;margin-left:8px}
+.stage{display:grid;grid-template-columns:54px 1fr;position:relative}
+.stage .snum{font-family:var(--mono);font-size:11px;color:var(--faint);padding-top:20px;letter-spacing:1px}
+.stage .spine{position:relative}
+.stage .sdot{position:absolute;left:0;top:23px;width:9px;height:9px;border-radius:50%;background:var(--rule);border:1px solid var(--faint)}
+.stage.sealed .sdot{background:#1c1810;border-color:var(--seal)}
+.stage.open-stage .sdot{background:var(--gold);border-color:var(--gold)}
+.stage .sline{position:absolute;left:4px;top:30px;bottom:-6px;width:1px;background:var(--rule)}
+.stage:last-child .sline{display:none}
+.stage .body{padding:16px 0 26px;border-bottom:1px solid var(--rule2);cursor:pointer}
+.stage:last-child .body{border-bottom:none}
+.stage .srow{display:flex;align-items:baseline;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.stage .sname{font-family:var(--serif);font-size:21px;font-weight:500;color:var(--ink);letter-spacing:-.2px}
+.stage .stail{display:flex;align-items:center;gap:12px;margin-left:auto}
+.thru{font-family:var(--mono);font-size:12px;color:var(--txt);letter-spacing:.5px}
+.sealchip{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:var(--seal);border:1px solid #312a1d;padding:4px 9px;border-radius:2px;background:repeating-linear-gradient(45deg,#15120b,#15120b 5px,#100e08 5px,#100e08 10px)}
+.sealchip .lk{color:var(--gold-d)}
+.openchip{font-family:var(--mono);font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:var(--up);border:1px solid #33493a;padding:4px 9px;border-radius:2px}
+.sdesc{font-family:var(--serif);font-size:16px;line-height:1.5;color:#bdb6a9;margin-top:9px;max-width:680px}
+.sdesc b{color:var(--ink);font-weight:600}
+.scar{font-family:var(--mono);font-size:9px;color:var(--faint);transition:transform .35s;display:inline-block;margin-left:2px}
+.stage.on .scar{transform:rotate(90deg);color:var(--gold)}
+.stage.on .exp{grid-template-rows:1fr}
+.stage .more{padding-top:14px}
+.stage .more .chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.chip{font-family:var(--mono);font-size:11px;letter-spacing:.5px;color:#b3aa99;border:1px solid #2b2619;padding:5px 10px;border-radius:2px}
+.chip.now{color:var(--up);border-color:#33493a}
+.chip.cap{color:var(--gold);border-color:#4a3c22}
+.stage .more p{font-family:var(--serif);font-size:15px;line-height:1.55;color:#a8a294;max-width:640px}
+.sealednote{font-family:var(--mono);font-size:10.5px;color:var(--seal);letter-spacing:.4px;margin-top:10px}
+.endcap{margin-top:34px;padding:18px 20px;border:1px solid var(--rule);border-left:2px solid var(--gold);background:#100e09;font-family:var(--serif);font-size:16px;color:#c5bfb2;line-height:1.5}
+.endcap b{color:var(--ink)}
+.ribbon{display:flex;height:34px;margin:2px 0 8px;border:1px solid var(--rule);background:var(--rule2)}
+.ribbon i{height:100%;border-right:1px solid #0c0b0a;background:var(--gold);opacity:.28;transition:opacity .25s;position:relative}
+.ribbon i:last-child{border-right:none}
+.ribbon i:hover{opacity:.9}
+.ribbon i[data-on="1"]{opacity:.55}
+.ribbon-cap{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;letter-spacing:.8px;color:var(--faint);text-transform:uppercase;margin-bottom:22px}
+.book{border-top:1px solid var(--rule)}
+.bhead,.row-main{display:grid;grid-template-columns:78px 72px 1fr 56px 70px 20px;gap:14px;align-items:center}
+.bhead{padding:0 0 12px;font-family:var(--mono);font-size:10px;letter-spacing:1.4px;text-transform:uppercase;color:var(--mut);border-bottom:1px solid var(--rule)}
+.bhead .r{text-align:right}
+.row{border-bottom:1px solid var(--rule2)}
+.row-main{padding:12px 0;cursor:pointer;transition:background .22s;position:relative}
+.row-main:hover{background:#15130c}
+.row-main::before{content:'';position:absolute;left:-40px;top:0;bottom:0;width:2px;background:var(--gold);transform:scaleY(0);transition:transform .3s}
+.row.open .row-main::before,.row-main:hover::before{transform:scaleY(1)}
+.bsym{font-family:var(--mono);font-size:14px;font-weight:600;color:var(--ink);letter-spacing:.5px}
+.spark{width:64px;height:20px;display:block}
+.wbar{height:5px;background:var(--rule);position:relative;overflow:hidden}
+.wbar i{position:absolute;left:0;top:0;bottom:0;background:var(--gold);opacity:.85;width:0;transition:width .9s cubic-bezier(.22,.61,.36,1)}
+.bpct{font-family:var(--mono);font-size:13px;color:var(--txt);text-align:right}
+.bpl{font-family:var(--mono);font-size:12px;text-align:right}
+.rcar{font-family:var(--mono);font-size:10px;color:var(--faint);text-align:center;transition:transform .35s cubic-bezier(.22,.61,.36,1)}
+.row.open .rcar{transform:rotate(90deg);color:var(--gold)}
+.whybox{padding:4px 0 22px 0;display:grid;grid-template-columns:1fr 1fr;gap:30px}
+@media(max-width:680px){.whybox{grid-template-columns:1fr;gap:16px}}
+.whyblk .wl{font-family:var(--mono);font-size:9.5px;letter-spacing:1.3px;text-transform:uppercase;color:var(--faint);margin-bottom:7px}
+.whyblk p{font-family:var(--serif);font-size:15px;line-height:1.5;color:#bbb4a6}
+.whyblk p b{color:var(--ink);font-weight:600}
+.redact{grid-column:1/-1;display:flex;align-items:center;gap:14px;margin-top:4px;padding-top:14px;border-top:1px solid var(--rule2)}
+.redact .rl{font-family:var(--mono);font-size:9.5px;letter-spacing:1.3px;text-transform:uppercase;color:var(--faint);white-space:nowrap}
+.bars{display:flex;gap:5px;flex:1}
+.bars b{height:11px;flex:1;max-width:46px;background:repeating-linear-gradient(45deg,#2a2519,#2a2519 4px,#211d12 4px,#211d12 8px);border-radius:1px}
+.redact .lock{font-family:var(--mono);font-size:10px;letter-spacing:1px;color:var(--gold-d);text-transform:uppercase;white-space:nowrap}
+.edge-note{font-family:var(--mono);font-size:10px;color:var(--faint);letter-spacing:.4px;margin-top:18px;opacity:.8}
+.ai-section{margin-top:0}
+.ai-header{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:6px}
+.ai-phase-chip{font-family:var(--mono);font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:var(--gold);border:1px solid #4a3c22;border-radius:2px;padding:5px 12px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;margin-top:8px}
+@media(max-width:900px){.grid3{grid-template-columns:1fr 1fr}}
+@media(max-width:640px){.grid3{grid-template-columns:1fr}}
+.ai-card{background:#100e09;border:1px solid var(--rule);border-radius:3px;padding:18px 20px}
+.ai-card h3{font-family:var(--mono);font-size:10.5px;letter-spacing:1.3px;text-transform:uppercase;color:var(--gold-d);margin-bottom:14px}
+.phase-steps{display:flex;align-items:center;margin-bottom:12px}
+.ph-step{text-align:center;flex-shrink:0}
+.ph-dot{width:11px;height:11px;border-radius:50%;background:var(--rule);border:1px solid var(--faint);margin:0 auto 4px}
+.ph-step.ph-active .ph-dot{background:var(--gold);border-color:var(--gold)}
+.ph-step.ph-done .ph-dot{background:var(--up);border-color:var(--up)}
+.ph-name{font-size:10px;color:var(--faint);font-family:var(--mono)}
+.ph-step.ph-active .ph-name{color:var(--gold)}
+.ph-line{flex:1;height:1px;background:var(--rule);margin:0 4px 14px}
+.ph-line.ph-done{background:var(--up)}
+.phase-progress-bar{height:5px;background:var(--rule);border-radius:0;margin-bottom:8px;overflow:hidden}
+.phase-fill{height:100%;background:linear-gradient(90deg,var(--gold-d),var(--gold))}
+.phase-detail{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10.5px;color:var(--faint);margin-bottom:14px}
+.auth-stats{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:10px}
+.auth-stat{text-align:center}
+.as-val{font-family:var(--serif);font-size:18px;font-weight:500;margin-bottom:2px;color:var(--ink)}
+.as-lbl{font-size:9.5px;color:var(--faint);font-family:var(--mono);letter-spacing:.5px}
+.auth-note{font-size:11px;color:var(--faint);line-height:1.5;border-top:1px solid var(--rule2);padding-top:10px;margin-top:4px}
+.alloc-chart-wrap{position:relative;height:150px;margin-bottom:8px}
+.alloc-note{font-size:11px;color:var(--faint);text-align:center;font-family:var(--mono)}
+.thesis-meta{font-size:11px;color:var(--faint);margin-bottom:8px;font-family:var(--mono)}
+.thesis-mv{font-size:13px;color:var(--txt);line-height:1.6;margin-bottom:10px;font-family:var(--serif)}
+.override-section{margin-bottom:10px}
+.ov-header{font-family:var(--mono);font-size:10px;color:var(--gold-d);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.override-row{display:flex;flex-wrap:wrap;gap:4px;align-items:baseline;border-left:2px solid #4a3c22;padding-left:8px;margin-bottom:6px}
+.ov-sym{font-weight:600;color:var(--gold);font-family:var(--mono);font-size:12px}
+.ov-action{font-size:11px;color:var(--gold)}
+.ov-type{font-size:10px;color:var(--faint);background:var(--rule);padding:1px 5px;border-radius:3px;font-family:var(--mono)}
+.ov-reason{font-size:11px;color:var(--faint);width:100%;line-height:1.5}
+.thesis-risks{font-size:11px;color:var(--faint);padding-left:14px;margin-bottom:8px}
+.thesis-wrong{font-size:11px;color:var(--faint);border-top:1px solid var(--rule2);padding-top:8px;line-height:1.5}
+.timeline{display:flex;flex-direction:column;max-height:520px;overflow-y:auto;padding-right:4px;scrollbar-width:thin;scrollbar-color:var(--rule) transparent}
+.tl-item{display:flex;gap:12px;padding-bottom:18px;position:relative}
+.tl-item:not(:last-child)::after{content:'';position:absolute;left:13px;top:28px;bottom:0;width:1px;background:var(--rule)}
+.tl-dot{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0}
+.tl-body{flex:1;padding-top:2px}
+.tl-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px}
+.tl-date{font-size:11px;color:var(--mut);font-family:var(--mono)}
+.tl-badge{font-size:10px;font-weight:600;border:1px solid;border-radius:2px;padding:1px 7px}
+.tl-pos{font-size:11px;color:var(--faint)}
+.tl-label{font-size:13px;font-weight:600;color:var(--txt);margin-bottom:3px}
+.tl-reason{font-size:12px;color:var(--mut);line-height:1.55;margin-bottom:5px;font-family:var(--serif)}
+.risks li,.tl-body .risks{font-size:11px;color:var(--faint)}
+.outcome,.oc-pill{font-size:12px;font-weight:600}
+footer{margin:64px 0 50px;padding-top:22px;border-top:1px solid var(--rule);display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;font-family:var(--mono);font-size:11px;letter-spacing:.5px;color:var(--faint)}
+footer a{color:var(--gold-d)}
+"""
+
+_PAGE_JS = """
+Chart.register(window['chartjs-plugin-annotation']);
+const REDUCED=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+// count-up
+function countUp(el){
+  const to=+el.dataset.to,dec=+(el.dataset.dec||0),pre=el.dataset.prefix||"",suf=el.dataset.suffix||"";
+  const fmt=v=>pre+v.toLocaleString(undefined,{minimumFractionDigits:dec,maximumFractionDigits:dec})+suf;
+  if(REDUCED){el.textContent=fmt(to);return;}
+  const dur=1500,t0=performance.now();
+  (function go(t){const p=Math.min((t-t0)/dur,1),e=1-Math.pow(1-p,3);el.textContent=fmt(to*e);if(p<1)requestAnimationFrame(go);})(t0);
+}
+document.querySelectorAll('.count').forEach(countUp);
+// disclosures
+document.querySelectorAll('.row .row-main').forEach((m,i)=>m.addEventListener('click',()=>{
+  const r=m.parentElement;r.classList.toggle('open');
+  const rib=document.getElementById('ribbon');const seg=rib?rib.children[i]:null;
+  if(seg)seg.dataset.on=r.classList.contains('open')?'1':'0';
+}));
+document.querySelectorAll('.stage .body').forEach(b=>b.addEventListener('click',()=>b.closest('.stage').classList.toggle('on')));
+document.querySelectorAll('.showmore').forEach(btn=>btn.addEventListener('click',()=>{
+  const g=btn.dataset.grp,open=!btn.classList.contains('open');btn.classList.toggle('open',open);
+  document.querySelectorAll('.exp[data-grp="'+g+'"]').forEach(e=>e.classList.toggle('open',open));
+}));
+// reveal + bar fills
+function fillBars(s){s.querySelectorAll('.wbar i,.meter i,.fnbar').forEach(i=>i.style.width=i.dataset.w+'%');}
+if('IntersectionObserver' in window && !REDUCED){
+  const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');fillBars(e.target);io.unobserve(e.target);}}),{threshold:.1});
+  document.querySelectorAll('.rev').forEach(el=>io.observe(el));
+}else{document.querySelectorAll('.rev').forEach(el=>el.classList.add('in'));fillBars(document);}
+// charts
+const TT={backgroundColor:'#15120b',borderColor:'#262219',borderWidth:1,titleColor:'#857e70',bodyColor:'#f3f0e9',padding:11,cornerRadius:3,boxPadding:5,usePointStyle:true,titleFont:{weight:'600',size:11,family:"'IBM Plex Mono'"},bodyFont:{size:12},bodySpacing:5,caretSize:0,displayColors:true};
+const AX={ticks:{color:'#6a6457',maxTicksLimit:9,maxRotation:0,font:{size:10,family:"'IBM Plex Mono'"}},grid:{color:'#1b180f'}};
+function navGradient(ctx){const a=ctx.chart.chartArea;if(!a)return'rgba(203,165,105,0.05)';const g=ctx.chart.ctx.createLinearGradient(0,a.top,0,a.bottom);g.addColorStop(0,'rgba(203,165,105,0.16)');g.addColorStop(.6,'rgba(203,165,105,0.04)');g.addColorStop(1,'rgba(203,165,105,0)');return g;}
+const endGlow={id:'endGlow',afterDatasetsDraw(c){const m=c.getDatasetMeta(0);const p=m.data[m.data.length-1];if(!p)return;const x=p.x,y=p.y;if(!isFinite(x)||!isFinite(y))return;const g=c.ctx;g.save();g.fillStyle='#cba569';g.beginPath();g.arc(x,y,3,0,Math.PI*2);g.fill();g.strokeStyle='#0c0b0a';g.lineWidth=1.5;g.stroke();g.restore();}};
+const STEP=1200/Math.max(dates.length,1);
+const prevY=ctx=>{if(ctx.index===0)return ctx.chart.scales.y.getPixelForValue(startNAV);const d=ctx.chart.getDatasetMeta(ctx.datasetIndex).data[ctx.index-1];return d?d.getProps(['y'],true).y:ctx.chart.scales.y.getPixelForValue(startNAV);};
+const drawOn=REDUCED?undefined:{x:{type:'number',easing:'linear',duration:STEP,from:NaN,delay(ctx){if(ctx.type!=='data'||ctx.xStarted)return 0;ctx.xStarted=true;return ctx.index*STEP;}},y:{type:'number',easing:'linear',duration:STEP,from:prevY,delay(ctx){if(ctx.type!=='data'||ctx.yStarted)return 0;ctx.yStarted=true;return ctx.index*STEP;}}};
+new Chart(document.getElementById('equityChart'),{type:'line',data:{labels:dates,datasets:[
+  {label:'Ascent',data:portNAV,borderColor:'#cba569',backgroundColor:navGradient,borderWidth:2,pointRadius:0,pointHoverRadius:4,pointHoverBackgroundColor:'#cba569',fill:true,tension:0.28},
+  {label:'SPY',data:spyNAV,borderColor:'#5c574a',backgroundColor:'transparent',borderWidth:1.25,pointRadius:0,pointHoverRadius:4,borderDash:[2,5],fill:false,tension:0.28}
+]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},animation:drawOn,
+  plugins:{legend:{display:false},tooltip:{...TT,callbacks:{label:ctx=>{const v=ctx.raw;if(!v)return'';const r=((v-startNAV)/startNAV*100),s=r>=0?'+':'';return ' '+ctx.dataset.label+': $'+v.toLocaleString('en-US',{maximumFractionDigits:0})+' ('+s+r.toFixed(2)+'%)';}}},annotation:{annotations:ANNOTATIONS}},
+  scales:{x:AX,y:{...AX,ticks:{...AX.ticks,callback:v=>'$'+Math.round(v).toLocaleString('en-US')}}}},plugins:[endGlow]});
+const dd=[];let pk=portNAV[0];portNAV.forEach(v=>{pk=Math.max(pk,v);dd.push(+((v-pk)/pk*100).toFixed(3));});
+new Chart(document.getElementById('ddChart'),{type:'bar',data:{labels:dates,datasets:[{label:'Drawdown',data:dd,backgroundColor:dd.map(v=>v<-2?'rgba(196,123,110,0.8)':'rgba(196,123,110,0.4)'),borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:false},tooltip:{...TT,callbacks:{label:ctx=>'Drawdown: '+ctx.raw.toFixed(2)+'%'}}},scales:{x:{...AX,ticks:{...AX.ticks,maxTicksLimit:6}},y:{...AX,ticks:{...AX.ticks,callback:v=>v.toFixed(1)+'%'}}}}});
+const ca=[];let cp=0,cs=0;for(let i=0;i<portNAV.length;i++){if(i>0){cp+=(portNAV[i]-portNAV[i-1])/portNAV[i-1]*100;const sv=spyNAV[i],sp=spyNAV[i-1];if(sv&&sp)cs+=(sv-sp)/sp*100;}ca.push(+(cp-cs).toFixed(3));}
+new Chart(document.getElementById('alphaChart'),{type:'bar',data:{labels:dates,datasets:[{label:'Cum. Alpha',data:ca,backgroundColor:ca.map(v=>v>=0?'rgba(106,169,127,0.7)':'rgba(196,123,110,0.6)'),borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:false},tooltip:{...TT,callbacks:{label:ctx=>'Cum. Alpha: '+(ctx.raw>=0?'+':'')+ctx.raw.toFixed(2)+'%'}},annotation:{annotations:{z:{type:'line',yMin:0,yMax:0,borderColor:'#262219',borderWidth:1}}}},scales:{x:{...AX,ticks:{...AX.ticks,maxTicksLimit:6}},y:{...AX,ticks:{...AX.ticks,callback:v=>(v>=0?'+':'')+v.toFixed(1)+'%'}}}}});
+const ael=document.getElementById('allocChart');
+if(ael)new Chart(ael,{type:'doughnut',data:{labels:['US Equities','International','Macro','Alternatives'],datasets:[{data:ALLOC,backgroundColor:['#cba569','#6aa97f','#a8854c','#857e70'],borderWidth:0,hoverOffset:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{color:'#857e70',font:{size:11,family:"'IBM Plex Mono'"},boxWidth:10,padding:8}},tooltip:{...TT,callbacks:{label:ctx=>ctx.label+': '+ctx.raw+'%'}}},cutout:'66%'}});
+"""
 
 
 # ── Full page builder ─────────────────────────────────────────────────────────
@@ -1191,384 +1610,127 @@ def build_html(
     spy_js         = json.dumps(spy)
     annotations_js = json.dumps(annotations, indent=2)
     start_nav_js   = json.dumps(round(base, 2))
+    alloc_js       = json.dumps([allocation["us_equities"], allocation["international"],
+                                 allocation["macro"], allocation["alternatives"]])
+
+    # ── New editorial sections ────────────────────────────────────────────────
+    raw_verdict = _load_latest_raw_verdict()
+    prethesis   = _load_prethesis()
+    try:
+        from ascent.config import get_config
+        _cfg = get_config()
+        universe_n = len(getattr(getattr(_cfg, "universe", None), "symbols", []) or [])
+    except Exception:
+        universe_n = 0
+    universe_n = universe_n or 500
+
+    construction_html    = _construction_section_html(regime_class, raw_verdict, authority,
+                                                       len(positions), universe_n)
+    verdict_section_html = _verdict_section_html(raw_verdict)
+    book_html            = _book_section_html(positions, raw_verdict, prethesis)
+
+    # Lede display strings (editorial up/down colors, sign-aware)
+    ret_sign = "+" if (tr or 0) >= 0 else "−"
+    ret_abs  = abs(tr or 0)
+    ret_col  = "#6aa97f" if (tr or 0) >= 0 else "#c47b6e"
+    spy_str  = f"{spy_r:+.2f}%" if isinstance(spy_r, (int, float)) else "N/A"
+    alph_str = f"{alph:+.2f}%" if isinstance(alph, (int, float)) else "N/A"
+    alph_col = "#6aa97f" if (alph or 0) >= 0 else "#c47b6e"
+    regime_title = regime_label.title()
+    since_str = LIVE_START.strftime("%b %-d %Y")
+    js_prelude = (f"const dates={dates_js},portNAV={port_js},spyNAV={spy_js},"
+                  f"startNAV={start_nav_js};\nconst ANNOTATIONS={annotations_js};\n"
+                  f"const ALLOC={alloc_js};")
 
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Ascent Capital — Autonomous Multi-Agent Investment System</title>
-<meta name="description" content="An autonomous, multi-agent investment system — regime-aware quant engine gated by an adversarial AI debate committee, with an AI PM earning allocative authority through verified performance. Live paper trading.">
+<title>Ascent Capital</title>
+<meta name="description" content="Ascent Capital — an autonomous multi-agent investment system. Live paper trading.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;1,8..60,400;1,8..60,500&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;450;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
-<style>
-*{{box-sizing:border-box;margin:0;padding:0}}
-body{{background:#0d1117;color:#e6edf3;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;line-height:1.5}}
-a{{color:#58a6ff;text-decoration:none}}
-.num{{font-variant-numeric:tabular-nums}}
-.wrap{{max-width:1300px;margin:0 auto;padding:0 24px 80px}}
-.kicker{{font-size:11px;font-weight:700;color:#6e7681;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:6px}}
-.jsfx .fx{{opacity:0;transform:translateY(10px);transition:opacity .55s ease,transform .55s ease}}
-.jsfx .fx.in{{opacity:1;transform:none}}
-@media(prefers-reduced-motion:reduce){{.jsfx .fx{{opacity:1;transform:none;transition:none}}}}
-.hero{{background:radial-gradient(1200px 420px at 18% -10%,#16202e 0%,#0d1117 55%),linear-gradient(135deg,#0d1117 0%,#11161d 60%,#0d1117 100%);border-bottom:1px solid #21262d;padding:52px 24px 44px;margin:0 0 36px}}
-.hero-inner{{display:grid;grid-template-columns:1fr auto;gap:36px;align-items:start;max-width:1300px;margin:0 auto}}
-@media(max-width:760px){{.hero-inner{{grid-template-columns:1fr;gap:20px}}.regime-ring{{justify-self:start;align-self:start}}}}
-.hero-top{{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px}}
-.hero-brand h1{{font-size:34px;font-weight:800;letter-spacing:-1px}}
-.hero-brand h1 em{{color:#58a6ff;font-style:normal}}
-.hero-pitch{{color:#c9d1d9;font-size:16px;line-height:1.55;max-width:760px;margin-bottom:10px;font-weight:500}}
-.hero-sub{{color:#6e7681;font-size:12.5px;max-width:720px;margin-bottom:4px}}
-.live-pill{{display:inline-flex;align-items:center;gap:6px;background:#3fb95011;border:1px solid #3fb95033;color:#3fb950;border-radius:20px;padding:4px 12px;font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;white-space:nowrap}}
-.live-pill::before{{content:'';width:6px;height:6px;border-radius:50%;background:#3fb950;animation:pulse 1.6s infinite}}
-@keyframes pulse{{0%,100%{{opacity:1}}50%{{opacity:.3}}}}
-.hero-numbers{{display:flex;gap:0;margin-top:30px;flex-wrap:wrap;align-items:flex-end}}
-.hn{{padding:0 28px 0 0;border-right:1px solid #21262d;margin-right:28px;margin-top:10px}}
-.hn:last-child{{border-right:none;margin-right:0}}
-.hn-label{{font-size:11px;color:#6e7681;text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px;display:flex;align-items:center;gap:8px}}
-.hn-val{{font-size:24px;font-weight:700;letter-spacing:-0.5px;font-variant-numeric:tabular-nums}}
-.hn-val.main{{font-size:clamp(42px,5.5vw,56px);font-weight:800;letter-spacing:-1.5px;line-height:1.05;color:#e6edf3}}
-.fresh{{font-size:10px;font-weight:600;color:#3fb950;background:#3fb9500d;border:1px solid #3fb95026;border-radius:10px;padding:1px 8px;letter-spacing:.4px;text-transform:none;white-space:nowrap}}
-.regime-ring{{text-align:center;background:#161b22;border:2px solid #30363d;border-radius:16px;padding:20px 28px;min-width:150px;align-self:center}}
-.regime-ring.calm_bull{{border-color:#3fb95066;background:#3fb95008;animation:ringGlow 3.2s ease-in-out infinite}}
-.regime-ring.stressed{{border-color:#d2992266;background:#d2992208}}
-.regime-ring.crisis{{border-color:#f8514966;background:#f8514908}}
-.regime-ring.neutral{{border-color:#58a6ff66;background:#58a6ff08}}
-@keyframes ringGlow{{0%,100%{{box-shadow:0 0 0 rgba(63,185,80,0)}}50%{{box-shadow:0 0 22px rgba(63,185,80,0.13)}}}}
-@media(prefers-reduced-motion:reduce){{.regime-ring.calm_bull{{animation:none}}}}
-.regime-name{{font-size:16px;font-weight:700;text-transform:uppercase;letter-spacing:1px}}
-.regime-ring.calm_bull .regime-name{{color:#3fb950}}
-.regime-ring.stressed  .regime-name{{color:#d29922}}
-.regime-ring.crisis    .regime-name{{color:#f85149}}
-.regime-ring.neutral   .regime-name{{color:#58a6ff}}
-.regime-sub{{font-size:10px;color:#6e7681;text-transform:uppercase;letter-spacing:.5px;margin-top:4px}}
-.stats{{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:24px}}
-.stat-card{{background:#161b22;border:1px solid #30363d;border-radius:10px;padding:14px 16px}}
-.stat-label{{font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}}
-.stat-value{{font-size:21px;font-weight:700;font-variant-numeric:tabular-nums}}
-.stat-note{{font-size:10px;color:#6e7681;margin-top:3px}}
-.chart-card,.card{{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:20px 24px;margin-bottom:24px}}
-.chart-card h2,.card h2{{font-size:15px;font-weight:600;color:#8b949e;margin-bottom:14px}}
-.arch{{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:24px 28px;margin-bottom:24px}}
-.arch-head{{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:18px}}
-.arch-head h2{{font-size:16px;font-weight:700;color:#e6edf3}}
-.arch-head span{{font-size:12px;color:#6e7681}}
-.arch-flow{{display:flex;align-items:stretch;gap:10px;flex-wrap:nowrap}}
-.arch-node{{flex:1;min-width:0;background:#0d1117;border:1px solid #21262d;border-radius:10px;padding:14px 14px 12px;text-align:center;position:relative;transition:border-color .25s}}
-.arch-node:hover{{border-color:#58a6ff44}}
-.arch-node.ai{{border-color:#a78bfa33}}
-.arch-node.ai:hover{{border-color:#a78bfa66}}
-.an-icon{{font-size:18px;margin-bottom:6px;opacity:.85}}
-.an-name{{font-size:13px;font-weight:700;color:#e6edf3;margin-bottom:4px;white-space:nowrap}}
-.an-sub{{font-size:10.5px;color:#6e7681;line-height:1.45}}
-.an-tag{{position:absolute;top:-8px;right:8px;font-size:9px;font-weight:700;letter-spacing:.5px;color:#a78bfa;background:#0d1117;border:1px solid #a78bfa44;border-radius:8px;padding:0 6px;text-transform:uppercase}}
-.arch-arrow{{display:flex;align-items:center;color:#30363d;font-size:16px;flex-shrink:0;user-select:none}}
-.arch-note{{font-size:11.5px;color:#6e7681;margin-top:14px;line-height:1.55;border-top:1px solid #21262d;padding-top:12px}}
-@media(max-width:900px){{.arch-flow{{flex-direction:column}}.arch-arrow{{justify-content:center;transform:rotate(90deg);height:14px}}.an-name{{white-space:normal}}}}
-.chart-title-row{{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}}
-.chart-title-row h2{{margin-bottom:0}}
-.regime-chip{{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:3px 10px;border-radius:12px;border:1px solid}}
-.regime-chip.calm_bull{{color:#3fb950;border-color:#3fb95044}}
-.regime-chip.stressed{{color:#d29922;border-color:#d2992244}}
-.regime-chip.neutral{{color:#58a6ff;border-color:#58a6ff44}}
-.legend{{display:flex;gap:16px;margin-bottom:10px;flex-wrap:wrap}}
-.leg{{display:flex;align-items:center;gap:6px;font-size:12px;color:#8b949e}}
-.leg-dot{{width:9px;height:9px;border-radius:50%}}
-.leg-dash{{width:18px;height:2px;background:repeating-linear-gradient(90deg,#6b7280 0,#6b7280 5px,transparent 5px,transparent 9px)}}
-.chart-wrap{{position:relative;height:390px}}
-.chart-wrap.short{{height:200px}}
-.chart-note{{font-size:11px;color:#6e7681;margin-top:10px;line-height:1.5}}
-.grid2{{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px}}
-@media(max-width:900px){{.grid2{{grid-template-columns:1fr}}}}
-table{{width:100%;border-collapse:collapse;font-size:13px}}
-thead th{{text-align:left;color:#6e7681;font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.4px;padding:6px 0;border-bottom:1px solid #21262d}}
-tbody td{{padding:9px 0;border-bottom:1px solid #1a1f27;vertical-align:middle}}
-tbody tr:last-child td{{border-bottom:none}}
-.sym{{font-weight:700;color:#58a6ff;font-family:'SF Mono',Menlo,monospace;font-size:13px}}
-.timeline{{display:flex;flex-direction:column;max-height:520px;overflow-y:auto;padding-right:4px;scrollbar-width:thin;scrollbar-color:#30363d transparent}}
-.tl-item{{display:flex;gap:12px;padding-bottom:18px;position:relative}}
-.tl-item:not(:last-child)::after{{content:'';position:absolute;left:13px;top:28px;bottom:0;width:1px;background:#21262d}}
-.tl-dot{{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0}}
-.tl-body{{flex:1;padding-top:2px}}
-.tl-meta{{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px}}
-.tl-date{{font-size:11px;color:#8b949e;font-family:monospace}}
-.tl-badge{{font-size:10px;font-weight:600;border:1px solid;border-radius:10px;padding:1px 7px}}
-.tl-pos{{font-size:11px;color:#6e7681}}
-.tl-label{{font-size:13px;font-weight:600;color:#c9d1d9;margin-bottom:3px}}
-.tl-reason{{font-size:12px;color:#8b949e;line-height:1.55;margin-bottom:5px}}
-.risks{{font-size:11px;color:#6e7681;padding-left:14px;margin-bottom:5px}}
-.outcome,.oc-pill{{font-size:12px;font-weight:600}}
-.ai-section{{background:linear-gradient(135deg,#161b22,#0d1117);border:1px solid #30363d;border-left:3px solid #a78bfa55;border-radius:12px;padding:28px;margin-bottom:24px}}
-.ai-header{{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px}}
-.ai-header-left{{display:flex;align-items:center;gap:16px}}
-.ai-glyph{{font-size:28px;opacity:.8}}
-.ai-header h2{{font-size:18px;font-weight:700;color:#e6edf3;margin-bottom:4px}}
-.ai-header p{{font-size:13px;color:#8b949e}}
-.ai-phase-chip{{background:#a78bfa11;border:1px solid #a78bfa44;color:#a78bfa;border-radius:20px;padding:5px 14px;font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase}}
-.grid3{{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:20px}}
-@media(max-width:1100px){{.grid3{{grid-template-columns:1fr 1fr}}}}
-@media(max-width:700px){{.grid3{{grid-template-columns:1fr}}}}
-.ai-card{{background:#0d1117;border:1px solid #21262d;border-radius:10px;padding:18px 20px}}
-.ai-card h3{{font-size:13px;font-weight:600;color:#a78bfa;text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px}}
-.phase-steps{{display:flex;align-items:center;margin-bottom:12px}}
-.ph-step{{text-align:center;flex-shrink:0}}
-.ph-dot{{width:12px;height:12px;border-radius:50%;background:#21262d;border:2px solid #30363d;margin:0 auto 4px}}
-.ph-step.ph-active .ph-dot{{background:#a78bfa;border-color:#a78bfa;box-shadow:0 0 8px #a78bfa66}}
-.ph-step.ph-done .ph-dot{{background:#3fb950;border-color:#3fb950}}
-.ph-name{{font-size:10px;color:#6e7681}}
-.ph-step.ph-active .ph-name{{color:#a78bfa;font-weight:600}}
-.ph-line{{flex:1;height:2px;background:#21262d;margin:0 4px;margin-bottom:14px}}
-.ph-line.ph-done{{background:#3fb950}}
-.phase-progress-bar{{height:6px;background:#21262d;border-radius:3px;margin-bottom:8px;overflow:hidden}}
-.phase-fill{{height:100%;background:linear-gradient(90deg,#a78bfa,#818cf8);border-radius:3px}}
-.phase-detail{{display:flex;justify-content:space-between;font-size:11px;color:#6e7681;margin-bottom:14px}}
-.auth-stats{{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:10px}}
-.auth-stat{{text-align:center}}
-.as-val{{font-size:15px;font-weight:700;margin-bottom:2px}}
-.as-lbl{{font-size:10px;color:#6e7681}}
-.auth-note{{font-size:11px;color:#6e7681;line-height:1.5;border-top:1px solid #21262d;padding-top:10px;margin-top:4px}}
-.alloc-chart-wrap{{position:relative;height:150px;margin-bottom:8px}}
-.alloc-note{{font-size:11px;color:#6e7681;text-align:center}}
-.thesis-meta{{font-size:11px;color:#6e7681;margin-bottom:8px}}
-.thesis-mv{{font-size:12px;color:#8b949e;line-height:1.6;margin-bottom:10px}}
-.override-section{{margin-bottom:10px}}
-.ov-header{{font-size:11px;color:#a78bfa;font-weight:600;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px}}
-.override-row{{display:flex;flex-wrap:wrap;gap:4px;align-items:baseline;border-left:2px solid #a78bfa33;padding-left:8px;margin-bottom:6px}}
-.ov-sym{{font-weight:700;color:#58a6ff;font-family:monospace;font-size:12px}}
-.ov-action{{font-size:11px;color:#d29922}}
-.ov-type{{font-size:10px;color:#6e7681;background:#21262d;padding:1px 5px;border-radius:4px}}
-.ov-reason{{font-size:11px;color:#6e7681;width:100%;line-height:1.5}}
-.thesis-risks{{font-size:11px;color:#6e7681;padding-left:14px;margin-bottom:8px}}
-.thesis-wrong{{font-size:11px;color:#6e7681;border-top:1px solid #21262d;padding-top:8px;line-height:1.5}}
-.debate-intro{{font-size:12px;color:#8b949e;margin-bottom:16px;line-height:1.5}}
-.debate-item{{border:1px solid #21262d;border-radius:8px;margin-bottom:8px;overflow:hidden}}
-.debate-summary{{display:flex;align-items:center;gap:10px;padding:12px 16px;cursor:pointer;list-style:none;user-select:none;flex-wrap:wrap}}
-.debate-summary::-webkit-details-marker{{display:none}}
-.debate-item[open] .di-caret{{transform:rotate(90deg)}}
-.di-caret{{color:#6e7681;transition:transform .2s;font-size:10px;margin-left:auto}}
-.di-date{{font-size:12px;color:#8b949e;font-family:monospace}}
-.di-verdict{{font-size:11px;font-weight:600;border:1px solid;border-radius:10px;padding:1px 8px}}
-.di-meta{{font-size:11px;color:#6e7681}}
-.debate-body{{padding:0 16px 16px;display:grid;grid-template-columns:1fr 1fr;gap:10px}}
-@media(max-width:700px){{.debate-body{{grid-template-columns:1fr}}}}
-.agent-blk{{border-radius:6px;padding:12px;font-size:12px;line-height:1.6}}
-.agent-blk .ab-label{{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px}}
-.agent-blk.bull{{background:#3fb95010;border:1px solid #3fb95022}}.agent-blk.bull .ab-label{{color:#3fb950}}
-.agent-blk.bear{{background:#f8514910;border:1px solid #f8514922}}.agent-blk.bear .ab-label{{color:#f85149}}
-.agent-blk.devil{{background:#d2992210;border:1px solid #d2992222}}.agent-blk.devil .ab-label{{color:#d29922}}
-.agent-blk.judge{{background:#58a6ff10;border:1px solid #58a6ff22;grid-column:1/-1}}.agent-blk.judge .ab-label{{color:#58a6ff}}
-.ab-text{{color:#8b949e}}
-.debate-risks{{font-size:11px;color:#6e7681;padding-left:14px;margin-top:8px}}
-.empty{{color:#6e7681;font-size:13px;padding:8px 0}}
-footer{{text-align:center;color:#30363d;font-size:12px;margin-top:40px;padding-top:20px;border-top:1px solid #21262d}}
-</style>
+<style>{_EDITORIAL_CSS}</style>
 </head>
 <body>
-<div class="hero">
-  <div class="hero-inner">
-    <div>
-      <div class="hero-brand">
-        <div class="hero-top">
-          <h1>Ascent <em>Capital</em></h1>
-          <div class="live-pill">Paper Trading · Live</div>
-        </div>
-        <p class="hero-pitch">An autonomous, multi-agent investment system — a regime-aware quant engine gated by an adversarial AI debate committee, with an AI PM earning allocative authority through verified performance.</p>
-        <p class="hero-sub">Runs daily on live market data and executes through the Alpaca paper API. Built and operated by one person. Not a backtest — and not live capital.</p>
-      </div>
-      <div class="hero-numbers">
-        <div class="hn"><div class="hn-label">Net Asset Value <span class="fresh">Updated {generated_at}</span></div><div class="hn-val main" id="nav-ctr">${nav:,.0f}</div></div>
-        <div class="hn"><div class="hn-label">Portfolio Return</div><div class="hn-val" id="ret-ctr" style="color:{_pct_color(tr)}">{_fmt_pct(tr)}</div></div>
-        <div class="hn"><div class="hn-label">Alpha vs SPY</div><div class="hn-val" id="alpha-ctr" style="color:{_pct_color(alph)}">{_fmt_pct(alph)}</div></div>
-        <div class="hn"><div class="hn-label">SPY Return</div><div class="hn-val" id="spy-ctr" style="color:{_pct_color(spy_r)}">{_fmt_pct(spy_r)}</div></div>
-        <div class="hn"><div class="hn-label">Trading Days</div><div class="hn-val">{n_days}</div></div>
-      </div>
-    </div>
-    <div class="regime-ring {regime_class}"><div class="regime-name">{regime_label}</div><div class="regime-sub">Current Regime</div></div>
-  </div>
-</div>
 <div class="wrap">
-<div class="stats">
-  <div class="stat-card"><div class="stat-label">Sharpe (Ann.) ⚠</div><div class="stat-value">{sharpe}</div><div class="stat-note">{sharpe_se_str} SE · N={n_days} days — unreliable at this sample size</div></div>
-  <div class="stat-card"><div class="stat-label">Max Drawdown</div><div class="stat-value" style="color:{_pct_color(stats.get('max_drawdown'))}">{_fmt_pct(stats.get('max_drawdown'),False)}</div></div>
-  <div class="stat-card"><div class="stat-label">Best Day</div><div class="stat-value" style="color:#3fb950">{_fmt_pct(stats.get('best_day'))}</div></div>
-  <div class="stat-card"><div class="stat-label">Worst Day</div><div class="stat-value" style="color:#f85149">{_fmt_pct(stats.get('worst_day'),False)}</div></div>
-  <div class="stat-card"><div class="stat-label">Start NAV</div><div class="stat-value">${base:,.0f}</div></div>
-</div>
-<div class="chart-card fx">
-  <div class="chart-title-row">
-    <div><div class="kicker">Performance</div><h2 style="margin-bottom:0">Equity Curve — Portfolio vs SPY</h2></div>
-    <div class="regime-chip {regime_class}">{regime_label}</div>
+  <div class="mast">
+    <div class="name">Ascent <b>Capital</b></div>
+    <div class="meta"><span class="dot"></span> Paper · Live &nbsp;·&nbsp; {generated_at}</div>
   </div>
-  <div class="legend">
-    <div class="leg"><div class="leg-dot" style="background:#58a6ff"></div>Ascent Capital</div>
-    <div class="leg"><div class="leg-dash"></div>SPY</div>
-    <div class="leg"><div class="leg-dot" style="background:#3fb950"></div>✓ Proceed</div>
-    <div class="leg"><div class="leg-dot" style="background:#d29922"></div>↓ Reduce Size</div>
-    <div class="leg"><div class="leg-dot" style="background:#f85149"></div>✗ Halt &amp; Review</div>
-  </div>
-  <div class="chart-wrap"><canvas id="equityChart"></canvas></div>
-  <p class="chart-note">⚠ Sharpe annualized from {n_days} trading days (SE {sharpe_se_str}) — not statistically significant. Walk-forward OOS Sharpe (0.518, 2020–2026) is the rigorous number. Live since April 1, 2026.</p>
-</div>
-<div class="grid2 fx">
-  <div class="chart-card" style="margin-bottom:0"><h2>Drawdown from Peak</h2><div class="chart-wrap short"><canvas id="ddChart"></canvas></div></div>
-  <div class="chart-card" style="margin-bottom:0"><h2>Cumulative Alpha vs SPY</h2><div class="chart-wrap short"><canvas id="alphaChart"></canvas></div></div>
-</div>
-<div style="margin-bottom:24px"></div>
-<div class="arch fx">
-  <div class="arch-head">
-    <div><div class="kicker">System Architecture</div><h2>One autonomous daily loop</h2></div>
-    <span>every position passes the full chain before capital moves</span>
-  </div>
-  <div class="arch-flow">
-    <div class="arch-node"><div class="an-icon">▦</div><div class="an-name">Quant Engine</div><div class="an-sub">4 specialist agents · multi-sleeve alpha · walk-forward validated</div></div>
-    <div class="arch-arrow">›</div>
-    <div class="arch-node"><div class="an-icon">◍</div><div class="an-name">Regime Model</div><div class="an-sub">hidden-state market detection · scales exposure to conditions</div></div>
-    <div class="arch-arrow">›</div>
-    <div class="arch-node ai"><div class="an-tag">LLM</div><div class="an-icon">⚖</div><div class="an-name">AI Debate</div><div class="an-sub">bull · bear · devil's advocate · judge — can trim or halt any trade</div></div>
-    <div class="arch-arrow">›</div>
-    <div class="arch-node ai"><div class="an-tag">LLM</div><div class="an-icon">⬡</div><div class="an-name">AI PM</div><div class="an-sub">independent thesis before quant runs · authority earned by results</div></div>
-    <div class="arch-arrow">›</div>
-    <div class="arch-node"><div class="an-icon">⇄</div><div class="an-name">Execution</div><div class="an-sub">position caps · kill switch · Alpaca paper API</div></div>
-  </div>
-  <p class="arch-note">The quant engine proposes; the debate committee disposes. The AI PM forms its own thesis before seeing quant output and can tilt the book only within an authority budget it has earned — verified on out-of-sample results, never granted.</p>
-</div>
-<div class="ai-section fx">
-  <div class="ai-header">
-    <div class="ai-header-left">
-      <div class="ai-glyph">⚖</div>
-      <div><h2>Decision Process — Adversarial Debate</h2><p>Before any order is placed, four AI agents argue the book — and the judge's verdict gates execution.</p></div>
+
+  <div class="lede rev">
+    <div class="lbl navlbl">Net Asset Value</div>
+    <div class="nav num count" data-to="{nav}" data-prefix="$" data-dec="0">${nav:,.0f}</div>
+    <div class="figs">
+      <div class="fig"><div class="lbl fl">Return</div><div class="fv num count" data-to="{ret_abs}" data-prefix="{ret_sign}" data-suffix="%" data-dec="2" style="color:{ret_col}">{ret_sign}{ret_abs:.2f}%</div></div>
+      <div class="fig"><div class="lbl fl">SPY</div><div class="fv num" style="color:#a39c8e">{spy_str}</div></div>
+      <div class="fig"><div class="lbl fl">Alpha</div><div class="fv num" style="color:{alph_col}">{alph_str}</div></div>
+      <div class="fig"><div class="lbl fl">Sharpe</div><div class="fv sm num">{sharpe}</div></div>
+      <div class="fig"><div class="lbl fl">Regime</div><div class="fv sm" style="color:var(--up)">{regime_title}</div></div>
     </div>
   </div>
-  <div style="background:#0d1117;border:1px solid #21262d;border-radius:10px;padding:18px 20px">
-    <p class="debate-intro">Bull and bear argue from different evidence; the devil's advocate attacks portfolio convexity; a judge synthesizes a verdict — proceed, reduce size, or halt. Interventions are tracked and scored. Click any row to read the full debate.</p>
-    {debate_html}
-  </div>
-</div>
-<div class="ai-section fx">
-  <div class="ai-header">
-    <div class="ai-header-left">
-      <div class="ai-glyph">⬡</div>
-      <div><h2>AI Portfolio Manager — Earned Authority</h2><p>The AI PM's influence on the book is a budget it earns: promoted on verified out-of-sample results, demoted on misses.</p></div>
+
+  <div class="chart rev">
+    <div class="chart-frame"><div class="chart-wrap"><canvas id="equityChart"></canvas></div></div>
+    <div class="cap">
+      <div class="leg"><i><span class="swatch"></span>Ascent</i><i><span class="swatch s2"></span>SPY</i></div>
+      <div class="hon">Sharpe annualized from {n_days} sessions (SE {sharpe_se_str}) — not significant at this sample. Walk-forward OOS Sharpe 0.518 (2020–2026) is the rigorous figure. Live since {since_str}.</div>
     </div>
-    <div class="ai-phase-chip">{phase_chip}</div>
   </div>
-  <div class="grid3">
-    <div class="ai-card"><h3>Earned Authority</h3>{auth_html}</div>
-    <div class="ai-card"><h3>Capital Allocation</h3><div class="alloc-chart-wrap"><canvas id="allocChart"></canvas></div><p class="alloc-note">{alloc_note}</p></div>
-    <div class="ai-card"><h3>Latest AI PM Decision</h3>{thesis_html}</div>
+
+  <div class="bar">
+    <div class="b"><div class="lbl bl">Max Drawdown</div><div class="bv num" style="color:#c47b6e">{_fmt_pct(stats.get('max_drawdown'),False)}</div></div>
+    <div class="b"><div class="lbl bl">Best Day</div><div class="bv num" style="color:#6aa97f">{_fmt_pct(stats.get('best_day'))}</div></div>
+    <div class="b"><div class="lbl bl">Worst Day</div><div class="bv num" style="color:#c47b6e">{_fmt_pct(stats.get('worst_day'),False)}</div></div>
+    <div class="b"><div class="lbl bl">Start NAV</div><div class="bv num">${base:,.0f}</div></div>
+    <div class="b"><div class="lbl bl">Sessions</div><div class="bv num">{n_days}</div></div>
+    <div class="b"><div class="lbl bl">Since</div><div class="bv num" style="font-size:17px">{since_str}</div></div>
   </div>
-  <div class="grid3" style="margin-top:16px">
-    <div class="ai-card"><h3>Promotion Gates</h3>{gates_html}</div>
-    <div class="ai-card" style="grid-column:span 2"><h3>Four-Track Counterfactual (A★ / Actual / SPY / Pure AI PM)</h3>{cf_chart_html}</div>
+
+  {construction_html}
+
+  {verdict_section_html}
+
+  <div class="sec rev">
+    <div class="grid2">
+      <div><div class="mini-h">Drawdown from peak</div><div class="chart-wrap short"><canvas id="ddChart"></canvas></div></div>
+      <div><div class="mini-h">Cumulative alpha vs SPY</div><div class="chart-wrap short"><canvas id="alphaChart"></canvas></div></div>
+    </div>
   </div>
-  <div class="ai-card" style="margin-top:16px"><h3>Override Scorecard</h3>{scorecard_html}</div>
-</div>
-<div class="grid2 fx">
-  <div class="card"><h2>Current Holdings</h2>{pos_html}</div>
-  <div class="card"><h2>Event Timeline</h2><div class="timeline">{tl_html}</div></div>
-</div>
-<footer>Updated {generated_at} &nbsp;·&nbsp; Alpaca paper API + Yahoo Finance &nbsp;·&nbsp; Paper trading — performance is not indicative of live-capital results &nbsp;·&nbsp; <a href="https://github.com/ScottDongKhang/Ascent_Capital">Source on GitHub</a></footer>
+
+  <div class="sec rev ai-section">
+    <div class="sec-h"><h2>The AI desk</h2><span class="ai-phase-chip">{phase_chip}</span></div>
+    <p class="sec-lede">It forms its own thesis before the quant engine runs — and may tilt the book only within a budget it has earned on verified results.</p>
+    <div class="grid3">
+      <div class="ai-card"><h3>Earned Authority</h3>{auth_html}</div>
+      <div class="ai-card"><h3>Capital Allocation</h3><div class="alloc-chart-wrap"><canvas id="allocChart"></canvas></div><p class="alloc-note">{alloc_note}</p></div>
+      <div class="ai-card"><h3>Latest AI PM Decision</h3>{thesis_html}</div>
+    </div>
+    <div class="grid3" style="margin-top:18px">
+      <div class="ai-card"><h3>Promotion Gates</h3>{gates_html}</div>
+      <div class="ai-card" style="grid-column:span 2"><h3>Four-Track Counterfactual</h3>{cf_chart_html}</div>
+    </div>
+    <div class="ai-card" style="margin-top:18px"><h3>Override Scorecard</h3>{scorecard_html}</div>
+  </div>
+
+  {book_html}
+
+  <div class="sec rev">
+    <div class="sec-h"><h2>Event timeline</h2></div>
+    <div class="timeline">{tl_html}</div>
+  </div>
+
+  <footer>
+    <span>Alpaca paper API · Yahoo Finance · updated {generated_at}</span>
+    <span>Paper trading — not indicative of live-capital results · <a href="https://github.com/ScottDongKhang/Ascent_Capital">Source on GitHub</a></span>
+  </footer>
 </div>
 <script>
-Chart.register(window['chartjs-plugin-annotation']);
-const dates={dates_js},portNAV={port_js},spyNAV={spy_js},startNAV={start_nav_js};
-const ANNOTATIONS={annotations_js};
-const REDUCED=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-function animateNum(el,end,prefix,suffix,decimals){{
-  const dur=1600,t0=performance.now();
-  const go=t=>{{const p=Math.min((t-t0)/dur,1),e=1-Math.pow(1-p,3),v=end*e;
-    el.textContent=prefix+(decimals?v.toFixed(decimals):Math.round(v).toLocaleString('en-US'))+suffix;
-    if(p<1)requestAnimationFrame(go);}};
-  requestAnimationFrame(go);
-}}
-window.addEventListener('load',()=>{{
-  animateNum(document.getElementById('nav-ctr'),{nav},'$','',0);
-  animateNum(document.getElementById('ret-ctr'),{abs(tr or 0):.4f},'{'+' if (tr or 0)>=0 else '-'}','%',2);
-  animateNum(document.getElementById('alpha-ctr'),{abs(alph or 0):.4f},'{'+' if (alph or 0)>=0 else '-'}','%',2);
-  animateNum(document.getElementById('spy-ctr'),{abs(spy_r or 0):.4f},'{'+' if (spy_r or 0)>=0 else '-'}','%',2);
-}});
-// Section fade-in on scroll. Scoped behind .jsfx so content is never hidden
-// when JS or IntersectionObserver is unavailable; respects reduced motion.
-if('IntersectionObserver' in window && !REDUCED){{
-  document.documentElement.classList.add('jsfx');
-  const io=new IntersectionObserver(es=>es.forEach(e=>{{if(e.isIntersecting){{e.target.classList.add('in');io.unobserve(e.target);}}}}),{{threshold:.07}});
-  document.querySelectorAll('.fx').forEach(el=>io.observe(el));
-}}
-const TT={{backgroundColor:'#1c2128',borderColor:'#30363d',borderWidth:1,titleColor:'#8b949e',bodyColor:'#e6edf3',
-  padding:12,cornerRadius:10,boxPadding:5,usePointStyle:true,titleFont:{{weight:'600',size:11}},bodyFont:{{size:12}},
-  bodySpacing:5,caretSize:0,displayColors:true}};
-const SX={{ticks:{{color:'#6e7681',maxTicksLimit:9,maxRotation:0,font:{{size:10.5}}}},grid:{{color:'#1b212a'}}}};
-const SY={{ticks:{{color:'#6e7681',font:{{size:10.5}}}},grid:{{color:'#1b212a'}}}};
-// Gradient fill under the portfolio line (rebuilt per layout to track chart area)
-function navGradient(ctx){{
-  const a=ctx.chart.chartArea;
-  if(!a)return 'rgba(88,166,255,0.05)';
-  const g=ctx.chart.ctx.createLinearGradient(0,a.top,0,a.bottom);
-  g.addColorStop(0,'rgba(88,166,255,0.26)');g.addColorStop(.55,'rgba(88,166,255,0.07)');g.addColorStop(1,'rgba(88,166,255,0)');
-  return g;
-}}
-// Soft glow dot on the live endpoint of the portfolio series
-const endGlow={{id:'endGlow',afterDatasetsDraw(c){{
-  const m=c.getDatasetMeta(0);const p=m.data[m.data.length-1];if(!p)return;
-  const x=p.x,y=p.y;
-  if(!isFinite(x)||!isFinite(y))return;  // mid draw-on animation
-  const g=c.ctx;g.save();
-  const r=g.createRadialGradient(x,y,0,x,y,13);
-  r.addColorStop(0,'rgba(88,166,255,0.5)');r.addColorStop(1,'rgba(88,166,255,0)');
-  g.fillStyle=r;g.beginPath();g.arc(x,y,13,0,Math.PI*2);g.fill();
-  g.fillStyle='#58a6ff';g.beginPath();g.arc(x,y,3.5,0,Math.PI*2);g.fill();
-  g.strokeStyle='#0d1117';g.lineWidth=1.5;g.stroke();g.restore();
-}}}};
-// Progressive left-to-right draw on load (~1.2s, Chart.js delayed-point pattern)
-const STEP=1200/Math.max(dates.length,1);
-const prevY=ctx=>{{
-  if(ctx.index===0)return ctx.chart.scales.y.getPixelForValue(startNAV);
-  const d=ctx.chart.getDatasetMeta(ctx.datasetIndex).data[ctx.index-1];
-  return d?d.getProps(['y'],true).y:ctx.chart.scales.y.getPixelForValue(startNAV);
-}};
-const drawOn=REDUCED?undefined:{{
-  x:{{type:'number',easing:'linear',duration:STEP,from:NaN,
-     delay(ctx){{if(ctx.type!=='data'||ctx.xStarted)return 0;ctx.xStarted=true;return ctx.index*STEP;}}}},
-  y:{{type:'number',easing:'linear',duration:STEP,from:prevY,
-     delay(ctx){{if(ctx.type!=='data'||ctx.yStarted)return 0;ctx.yStarted=true;return ctx.index*STEP;}}}}
-}};
-new Chart(document.getElementById('equityChart'),{{type:'line',data:{{labels:dates,datasets:[
-  {{label:'Ascent Capital',data:portNAV,borderColor:'#58a6ff',backgroundColor:navGradient,borderWidth:2.5,pointRadius:0,pointHoverRadius:5,pointHoverBackgroundColor:'#58a6ff',fill:true,tension:0.3}},
-  {{label:'SPY',data:spyNAV,borderColor:'#6b7280',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,pointHoverRadius:4,pointHoverBackgroundColor:'#6b7280',borderDash:[6,4],fill:false,tension:0.3}},
-]}},options:{{responsive:true,maintainAspectRatio:false,interaction:{{mode:'index',intersect:false}},
-  animation:drawOn,
-  plugins:{{legend:{{display:false}},tooltip:{{...TT,callbacks:{{label:ctx=>{{
-    const v=ctx.raw;if(!v)return'';const r=((v-startNAV)/startNAV*100),s=r>=0?'+':'';
-    return ` ${{ctx.dataset.label}}: $${{v.toLocaleString('en-US',{{maximumFractionDigits:0}})}} (${{s}}${{r.toFixed(2)}}%)`;
-  }}}}}},annotation:{{annotations:ANNOTATIONS}}}},
-  scales:{{x:SX,y:{{...SY,ticks:{{...SY.ticks,callback:v=>'$'+Math.round(v).toLocaleString('en-US')}}}}}}
-}},plugins:[endGlow]}});
-const dd=[];let pk=portNAV[0];
-portNAV.forEach(v=>{{pk=Math.max(pk,v);dd.push(+((v-pk)/pk*100).toFixed(3));}});
-new Chart(document.getElementById('ddChart'),{{type:'bar',data:{{labels:dates,datasets:[{{
-  label:'Drawdown',data:dd,backgroundColor:dd.map(v=>v<-2?'rgba(248,81,73,0.75)':'rgba(248,81,73,0.4)'),borderWidth:0,borderRadius:1,
-}}]}},options:{{responsive:true,maintainAspectRatio:false,interaction:{{mode:'index',intersect:false}},
-  plugins:{{legend:{{display:false}},tooltip:{{...TT,callbacks:{{label:ctx=>`Drawdown: ${{ctx.raw.toFixed(2)}}%`}}}}}},
-  scales:{{x:{{...SX,ticks:{{...SX.ticks,maxTicksLimit:6}}}},y:{{...SY,ticks:{{...SY.ticks,callback:v=>v.toFixed(1)+'%'}}}}}}
-}}}});
-const ca=[];let cp=0,cs=0;
-for(let i=0;i<portNAV.length;i++){{
-  if(i>0){{cp+=(portNAV[i]-portNAV[i-1])/portNAV[i-1]*100;const sv=spyNAV[i],sp=spyNAV[i-1];if(sv&&sp)cs+=(sv-sp)/sp*100;}}
-  ca.push(+(cp-cs).toFixed(3));
-}}
-new Chart(document.getElementById('alphaChart'),{{type:'bar',data:{{labels:dates,datasets:[{{
-  label:'Cum. Alpha',data:ca,backgroundColor:ca.map(v=>v>=0?'rgba(63,185,80,0.7)':'rgba(248,81,73,0.6)'),borderWidth:0,borderRadius:1,
-}}]}},options:{{responsive:true,maintainAspectRatio:false,interaction:{{mode:'index',intersect:false}},
-  plugins:{{legend:{{display:false}},tooltip:{{...TT,callbacks:{{label:ctx=>`Cum. Alpha: ${{ctx.raw>=0?'+':''}}${{ctx.raw.toFixed(2)}}%`}}}},
-    annotation:{{annotations:{{z:{{type:'line',yMin:0,yMax:0,borderColor:'#30363d',borderWidth:1}}}}}}}},
-  scales:{{x:{{...SX,ticks:{{...SX.ticks,maxTicksLimit:6}}}},y:{{...SY,ticks:{{...SY.ticks,callback:v=>(v>=0?'+':'')+v.toFixed(1)+'%'}}}}}}
-}}}});
-new Chart(document.getElementById('allocChart'),{{type:'doughnut',data:{{
-  labels:['US Equities','International','Macro','Alternatives'],
-  datasets:[{{data:[{allocation['us_equities']},{allocation['international']},{allocation['macro']},{allocation['alternatives']}],backgroundColor:['#58a6ff','#3fb950','#a78bfa','#d29922'],borderWidth:0,hoverOffset:4}}]
-}},options:{{responsive:true,maintainAspectRatio:false,
-  plugins:{{legend:{{position:'right',labels:{{color:'#8b949e',font:{{size:11}},boxWidth:10,padding:8}}}},
-    tooltip:{{...TT,callbacks:{{label:ctx=>`${{ctx.label}}: ${{ctx.raw}}%`}}}}}},cutout:'65%'
-}}}});
+{js_prelude}
+{_PAGE_JS}
 </script></body></html>"""
 
 
