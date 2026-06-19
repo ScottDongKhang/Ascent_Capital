@@ -452,8 +452,16 @@ def compute_stats(records: list[dict], spy: dict[str, float]) -> dict:
         std = statistics.stdev(daily)
         sharpe = (mu / std * math.sqrt(252)) if std > 0 else 0.0
 
-    spy_base = spy.get(dates[0])
-    spy_cur  = spy.get(dates[-1])
+    def _finite_spy(date_list, forward):
+        seq = date_list if forward else list(reversed(date_list))
+        for d in seq:
+            v = spy.get(d)
+            if v is not None and math.isfinite(v):
+                return v
+        return None
+
+    spy_base = _finite_spy(dates, forward=True)
+    spy_cur  = _finite_spy(dates, forward=False)
     spy_ret  = ((spy_cur / spy_base - 1) * 100) if (spy_base and spy_cur) else None
     alpha    = (total_ret - spy_ret) if spy_ret is not None else None
 
