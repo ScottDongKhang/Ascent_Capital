@@ -149,6 +149,40 @@ def score_daily(
     return record
 
 
+def backfill_track_b(history: Dict[str, float]) -> int:
+    """Overwrite track_b_return with Alpaca's SETTLED daily return for every date the
+    published 1D portfolio-history bar covers.
+
+    The value the runner writes at run time is unreliable: it derives Track B from
+    (equity − last_equity)/last_equity, but Alpaca often hasn't marked the account
+    intraday, so equity == last_equity → a fake 0.0 (and the June-18 repair nulled
+    those to None). Alpaca's 1D portfolio-history bar only settles after ~17:00 PT —
+    after our daily run — and is the source of truth. Each run we replay it over the
+    log so every settled day carries the real number; today's unsettled row is not in
+    `history`, so it is left as-is and self-heals on the next run.
+
+    Returns the number of rows changed (idempotent: re-running with the same history
+    is a no-op)."""
+    if not history or not DAILY_LOG.exists():
+        return 0
+    rows, changed = [], 0
+    for line in DAILY_LOG.read_text().splitlines():
+        try:
+            r = json.loads(line)
+        except Exception:
+            continue
+        d = r.get("date")
+        if d in history and r.get("track_b_return") != history[d]:
+            r["track_b_return"] = history[d]
+            changed += 1
+        rows.append(r)
+    if changed:
+        with open(DAILY_LOG, "w") as f:
+            for r in rows:
+                f.write(json.dumps(r) + "\n")
+    return changed
+
+
 def _upsert_daily(record: dict) -> None:
     """Write one row per date (last-wins). Reruns on the same day REPLACE the
     prior row instead of appending — otherwise get_cumulative_returns multiplies

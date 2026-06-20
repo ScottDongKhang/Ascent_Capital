@@ -157,6 +157,22 @@ def llm_fundamental_alpha(
     if fundamentals_df is None or fundamentals_df.empty:
         return pd.Series(dtype=float)
 
+    # Auto-convert raw accounting columns to ratio columns if needed
+    raw_cols = {"gross_profit", "total_assets", "net_income", "op_cashflow"}
+    ratio_cols = {"gross_profitability", "accruals", "asset_growth"}
+    if not ratio_cols.issubset(fundamentals_df.columns) and raw_cols.issubset(fundamentals_df.columns):
+        fundamentals_df = fundamentals_df.copy()
+        fundamentals_df["date"] = pd.to_datetime(fundamentals_df["date"])
+        rows = []
+        for symbol, grp in fundamentals_df.groupby("symbol"):
+            grp = grp.sort_values("date").copy()
+            ta = grp["total_assets"].replace(0, float("nan"))
+            grp["gross_profitability"] = grp["gross_profit"] / ta
+            grp["accruals"] = (grp["net_income"] - grp["op_cashflow"]) / ta
+            grp["asset_growth"] = ta / ta.shift(4) - 1
+            rows.append(grp)
+        fundamentals_df = pd.concat(rows, ignore_index=True) if rows else fundamentals_df
+
     required  = {"gross_profitability", "accruals", "asset_growth"}
     available = required.intersection(fundamentals_df.columns)
     if len(available) < 2:

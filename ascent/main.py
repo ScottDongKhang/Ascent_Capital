@@ -374,6 +374,8 @@ def run_pipeline(
                             return pd.DataFrame()
                         def save_for_intel(self, dashboard_dir="dashboard"):
                             pass  # already saved by _refresh_regime()
+                        def blend_with_ai(self, *args, **kwargs):
+                            pass  # JSON-loaded engine has no HMM state to blend into
 
                     regime_engine    = _JsonRegimeEngine()
                     _regime_from_json = True
@@ -661,7 +663,9 @@ def run_pipeline(
     llm_alpha_latest = None
     try:
         from ascent.alpha.llm_fundamental import llm_fundamental_alpha
-        _llm_df = llm_fundamental_alpha(features)
+        from ascent.data.store.parquet import has_data as _hd_llm, load_parquet as _lp_llm
+        _fund_raw = _lp_llm("fundamentals") if _hd_llm("fundamentals") else None
+        _llm_df = llm_fundamental_alpha(_fund_raw)
         if not _llm_df.empty:
             llm_alpha_latest = _llm_df.iloc[-1].dropna()
     except Exception:

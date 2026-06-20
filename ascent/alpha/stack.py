@@ -314,9 +314,23 @@ def build_alpha_stack(features, alpha_weights=None, regime_signal=None, agent_id
             from ascent.data.store.parquet import has_data as _hd, load_parquet as _lp
             _fund_df = _lp("fundamentals") if _hd("fundamentals") else None
             _llm_fund = llm_fundamental_alpha(_fund_df)
+            # llm_fundamental_alpha returns a cross-sectional (per-symbol) snapshot
+            # Series, unlike the date×symbol DataFrames the blend/_cs_normalize expect.
+            # Broadcast it across the price panel's dates so it integrates like the
+            # other fundamentals-derived sleeves (cf. fundamental_alpha).
+            if isinstance(_llm_fund, pd.Series):
+                _close = features.get("close")
+                if _close is not None and not _close.empty and not _llm_fund.empty:
+                    _row = _llm_fund.reindex(_close.columns).to_numpy(dtype=float)
+                    _llm_fund = pd.DataFrame(
+                        np.tile(_row, (len(_close.index), 1)),
+                        index=_close.index, columns=_close.columns,
+                    )
+                else:
+                    _llm_fund = pd.DataFrame()
             if not _llm_fund.empty:
                 alphas["llm_fundamental"] = _llm_fund
-                log.info("[Stack] LLM fundamental sleeve: %d symbols", len(_llm_fund))
+                log.info("[Stack] LLM fundamental sleeve: %d symbols", _llm_fund.shape[1])
             else:
                 log.debug("[Stack] LLM fundamental sleeve returned empty — cache absent or API unavailable")
         except Exception as _e:

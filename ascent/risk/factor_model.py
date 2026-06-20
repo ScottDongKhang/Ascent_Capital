@@ -36,12 +36,15 @@ def _load_prices_wide() -> pd.DataFrame:
         if isinstance(df.columns, pd.MultiIndex):
             return df["Close"].sort_index()
         if "close" in df.columns and "symbol" in df.columns:
-            return df.pivot_table(index="date", columns="symbol", values="close").sort_index()
-        if "symbol" in df.columns:
+            wide = df.pivot_table(index="date", columns="symbol", values="close").sort_index()
+        elif "symbol" in df.columns:
             val_col = next((c for c in ("close", "Close", "adj_close") if c in df.columns), None)
-            if val_col:
-                return df.pivot_table(index="date", columns="symbol", values=val_col).sort_index()
-        return df.sort_index()
+            wide = df.pivot_table(index="date", columns="symbol", values=val_col).sort_index() if val_col else df.sort_index()
+        else:
+            wide = df.sort_index()
+        if getattr(wide.index, "tz", None) is not None:
+            wide.index = wide.index.tz_localize(None)
+        return wide
     except Exception as exc:
         log.warning("[FactorModel] Price load failed: %s", exc)
         return pd.DataFrame()

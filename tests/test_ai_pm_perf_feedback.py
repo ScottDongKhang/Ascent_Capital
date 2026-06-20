@@ -65,6 +65,39 @@ def test_confidence_label():
     assert _confidence(n=20) == "high"
 
 
+def test_sortino_skips_none_sentinels():
+    """A None missing-data sentinel in the returns buffer must not poison the
+    reduction (regression: sum([float, None]) -> TypeError)."""
+    from ascent.strategy.ai_pm_perf_feedback import _sortino
+    rets = [0.01, None, -0.02, 0.005, None, 0.003, -0.001]
+    # Should not raise; computes over the 5 real values.
+    val = _sortino(rets)
+    assert isinstance(val, float)
+
+
+def test_compute_feedback_survives_none_track_returns():
+    """Daily counterfactual rows carry explicit None for missing-data days; compute_feedback
+    must not crash on them (regression for the float+NoneType authority-update failure)."""
+    import ascent.strategy.ai_pm_perf_feedback as fb_mod
+    with tempfile.TemporaryDirectory() as tmp:
+        fb_path  = Path(tmp) / "feedback.json"
+        dec_path = Path(tmp) / "decisions.jsonl"
+        cf_path  = Path(tmp) / "cf_daily.jsonl"
+        dec_path.write_text("")
+        # Mix of real and None track returns, exactly as written by the counterfactual.
+        rows = [
+            {"date": "2026-06-17", "track_d_return": 0.001,  "track_astar_return": 0.002},
+            {"date": "2026-06-18", "track_d_return": None,   "track_astar_return": None},
+            {"date": "2026-06-19", "track_d_return": -0.0025,"track_astar_return": 0.0028},
+        ]
+        cf_path.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+        with patch.object(fb_mod, "FEEDBACK_PATH", fb_path):
+            with patch.object(fb_mod, "DECISION_LOG", dec_path):
+                with patch.object(fb_mod, "DAILY_LOG", cf_path):
+                    fb = fb_mod.compute_feedback()  # must not raise
+        assert "level" in fb
+
+
 def test_stuck_alert_in_feedback():
     import ascent.strategy.ai_pm_perf_feedback as fb_mod
     fake_state = {

@@ -277,3 +277,39 @@ def test_update_authority_none_inputs_skip_buffer_append():
         assert result["track_astar_returns"] == [0.002, 0.001, 0.002], (
             f"Buffer was mutated with None input: {result['track_astar_returns']}"
         )
+
+
+def test_backfill_track_b_overwrites_provisional_and_fills_none():
+    """Track B same-day value is unreliable (equity==last_equity → fake 0.0, or None);
+    backfill must overwrite it with Alpaca's settled daily return for every date the
+    published bar covers, and leave dates Alpaca doesn't have (e.g. today) untouched."""
+    from ascent.monitoring.ai_pm_counterfactual import backfill_track_b
+    with tempfile.TemporaryDirectory() as tmp:
+        log_path = Path(tmp) / "cf_daily.jsonl"
+        rows = [
+            {"date": "2026-06-17", "track_astar_return": 0.01, "track_b_return": 0.0},    # provisional 0.0
+            {"date": "2026-06-18", "track_astar_return": 0.02, "track_b_return": None},   # missing
+            {"date": "2026-06-19", "track_astar_return": 0.03, "track_b_return": 0.0},    # today, not yet settled
+        ]
+        log_path.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+        # Alpaca published settled bars through yesterday only.
+        history = {"2026-06-17": 0.012, "2026-06-18": -0.004}
+        with patch("ascent.monitoring.ai_pm_counterfactual.DAILY_LOG", log_path):
+            changed = backfill_track_b(history)
+            out = [json.loads(l) for l in log_path.read_text().splitlines()]
+        by_date = {r["date"]: r["track_b_return"] for r in out}
+        assert changed == 2
+        assert by_date["2026-06-17"] == 0.012   # provisional 0.0 overwritten with settled
+        assert by_date["2026-06-18"] == -0.004  # None filled
+        assert by_date["2026-06-19"] == 0.0     # today untouched (not in history)
+        # Other fields preserved
+        assert {r["date"]: r["track_astar_return"] for r in out}["2026-06-18"] == 0.02
+
+
+def test_backfill_track_b_noops_on_empty_history():
+    from ascent.monitoring.ai_pm_counterfactual import backfill_track_b
+    with tempfile.TemporaryDirectory() as tmp:
+        log_path = Path(tmp) / "cf_daily.jsonl"
+        log_path.write_text(json.dumps({"date": "2026-06-17", "track_b_return": 0.0}) + "\n")
+        with patch("ascent.monitoring.ai_pm_counterfactual.DAILY_LOG", log_path):
+            assert backfill_track_b({}) == 0

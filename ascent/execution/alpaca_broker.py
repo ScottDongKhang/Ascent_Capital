@@ -72,6 +72,37 @@ def get_portfolio_value() -> float:
     return float(acct["equity"])
 
 
+def get_portfolio_history(period: str = "6M") -> dict:
+    """Return {date_iso: settled_day_return} from Alpaca's published 1D portfolio-history
+    bars. These bars settle only after ~17:00 PT — after the daily run — so the series
+    ends at the previous trading day. This is the authoritative source for Track B,
+    unlike the same-day (equity − last_equity)/last_equity estimate which reads 0.0
+    before the account is marked. Returns {} on any failure (caller skips backfill)."""
+    from datetime import datetime
+    try:
+        r = requests.get(
+            f"{ALPACA_BASE_URL}/account/portfolio/history",
+            headers=_headers(),
+            params={"period": period, "timeframe": "1D", "extended_hours": "false"},
+            timeout=15,
+        )
+        r.raise_for_status()
+        data = r.json()
+        out, prev_eq = {}, None
+        for ts, eq in zip(data.get("timestamp", []), data.get("equity", [])):
+            if eq is None or eq == 0:
+                prev_eq = eq
+                continue
+            d = datetime.fromtimestamp(ts).date().isoformat()
+            if prev_eq and prev_eq > 0:
+                out[d] = round(eq / prev_eq - 1, 6)
+            prev_eq = eq
+        return out
+    except Exception as exc:
+        print(f"[Alpaca] portfolio history fetch failed: {exc}")
+        return {}
+
+
 def submit_order(symbol: str, qty: float, side: str, order_type: str = "market") -> dict:
     """
     Submit a paper order to Alpaca. Retries up to 3× on rate-limit or timeout.

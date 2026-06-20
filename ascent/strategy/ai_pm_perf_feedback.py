@@ -52,6 +52,9 @@ def _is_fade(outcome_10d: Optional[float], outcome_21d: Optional[float]) -> bool
 
 def _sortino(returns: List[float]) -> float:
     """Annualised Sortino ratio. Returns 0 if n < 5."""
+    # Defensive: drop None sentinels so a single missing-data day can't poison the
+    # whole reduction (sum([float, None]) -> TypeError).
+    returns = [r for r in returns if r is not None]
     if len(returns) < 5:
         return 0.0
     mean = sum(returns) / len(returns)
@@ -196,8 +199,13 @@ def compute_feedback() -> dict:
     pending   = [s for s in scored if s.get("outcome_10d") is None]
 
     # ── Sortino on Track D vs Track A★ ──────────────────────────────────────
-    d_rets  = [r.get("track_d_return", 0.0)     for r in daily[-21:]]
-    as_rets = [r.get("track_astar_return", 0.0) for r in daily[-21:]]
+    # Daily records carry explicit None for missing-data days (the counterfactual
+    # missing-price sentinel). The key is present-but-None, so .get(key, 0.0) would
+    # NOT substitute the default — skip those days entirely rather than treat a
+    # missing return as a real 0.0 (consistent with the counterfactual's non-None
+    # cumulation).
+    d_rets  = [r["track_d_return"]     for r in daily[-21:] if r.get("track_d_return")     is not None]
+    as_rets = [r["track_astar_return"] for r in daily[-21:] if r.get("track_astar_return") is not None]
     sortino_d  = _sortino(d_rets)
     sortino_as = _sortino(as_rets)
     n_days = len(d_rets)

@@ -31,7 +31,7 @@ from ascent.strategy.thesis_formatter import format_thesis
 from ascent.monitoring.ai_pm_counterfactual import (
     snapshot_quant_star, snapshot_quant, snapshot_ai_pm,
     score_daily as cf_score_daily, load_snapshots as cf_load_snapshots,
-    print_cumulative_report as cf_print_report,
+    print_cumulative_report as cf_print_report, backfill_track_b as cf_backfill_track_b,
 )
 from ascent.strategy.ai_pm_perf_feedback import compute_feedback as compute_ai_feedback
 
@@ -2019,6 +2019,7 @@ def _log_holdings(today):
                 _cf_syms = list(set(_as_w) | set(_a_w or {}) | set(_d_w or {}))
                 try:
                     import yfinance as _yf
+                    import pandas as pd
                     _raw = _yf.download(_cf_syms, period="7d", auto_adjust=True, progress=False)
                     if not _raw.empty and len(_raw) >= 2:
                         _cls = _raw["Close"] if isinstance(_raw.columns, pd.MultiIndex) else _raw
@@ -2050,6 +2051,16 @@ def _log_holdings(today):
                 spy_return=spy_ret,
                 prices=_cf_prices,
             )
+            # Replay Alpaca's SETTLED 1D bars over the log so every prior day carries
+            # the real Track B return (the same-day value above is unreliable until the
+            # account is marked ~17:00 PT). Self-heals today's row on the next run.
+            try:
+                from ascent.execution.alpaca_broker import get_portfolio_history as _gph
+                _n_bf = cf_backfill_track_b(_gph())
+                if _n_bf:
+                    print(f"[Runner] Track B backfilled {_n_bf} day(s) from Alpaca settled bars")
+            except Exception as _bfe:
+                print(f"[Runner] Track B backfill skipped: {_bfe}")
             cf_print_report()
         except Exception as _cfe:
             print(f"[Runner] Counterfactual scoring skipped: {_cfe}")
@@ -2089,9 +2100,17 @@ def _log_holdings(today):
 
     # ── Regenerate GitHub Pages dashboard ─────────────────────────────────────
     try:
+        import os as _os
+        _repo_root = str(Path(__file__).resolve().parent)
+        # The generator lazily imports `ascent` (counterfactual chart). Running it as
+        # `python scripts/...py` puts scripts/ on sys.path, not the repo root, so the
+        # import fails unless the repo root is on PYTHONPATH. Make this independent of
+        # the ambient environment (launchd sets it; a manual run does not).
+        _env = {**_os.environ, "PYTHONPATH": _repo_root + _os.pathsep + _os.environ.get("PYTHONPATH", "")}
         result = subprocess.run(
             [sys.executable, "scripts/generate_performance_page.py", "--push"],
             capture_output=True, text=True, timeout=120,
+            cwd=_repo_root, env=_env,
         )
         if result.returncode == 0:
             print("[Dashboard] GitHub Pages updated and pushed.")
