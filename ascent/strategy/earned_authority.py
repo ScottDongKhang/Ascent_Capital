@@ -109,6 +109,36 @@ def _save_state(state: dict) -> None:
     STATE_PATH.write_text(json.dumps(state, indent=2))
 
 
+def rebuild_buffers_from_counterfactual() -> int:
+    """Reconcile the Track D / Track A★ rolling buffers to the counterfactual log —
+    the single source of truth for D-vs-A★.
+
+    The buffers drive Sortino-based promotion/demotion, but they drifted: they were
+    seeded from a different source (the shadow log, with its own A★ series and a
+    duplicated entry) and update_authority only appends on days where BOTH tracks are
+    non-null, so the bad seed was never reconciled. This rebuilds both buffers from the
+    log's common-window — the (track_d, track_astar) pairs where both are non-null, in
+    date order, last 63 — so the buffer always matches what get_cumulative_returns
+    reports. Idempotent. Returns the number of common-window observations written."""
+    from ascent.monitoring.ai_pm_counterfactual import load_daily_records
+    d_buf, as_buf = [], []
+    for r in load_daily_records():
+        d, a = r.get("track_d_return"), r.get("track_astar_return")
+        if d is None or a is None:
+            continue
+        d_buf.append(float(d))
+        as_buf.append(float(a))
+    d_buf, as_buf = d_buf[-63:], as_buf[-63:]
+    state = get_state()
+    state["track_d_returns"]     = d_buf
+    state["track_astar_returns"] = as_buf
+    state["ai_returns_21d"]      = d_buf[-21:]
+    state["quant_returns_21d"]   = as_buf[-21:]
+    _save_state(state)
+    log.info("[EarnedAuthority] Buffers rebuilt from counterfactual log: %d common-window obs", len(d_buf))
+    return len(d_buf)
+
+
 def update_authority(
     track_d_return: Optional[float],
     track_astar_return: Optional[float],

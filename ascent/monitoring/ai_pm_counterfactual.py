@@ -183,6 +183,90 @@ def backfill_track_b(history: Dict[str, float]) -> int:
     return changed
 
 
+def _load_snapshot_asof(path: Path, on_date: str) -> Dict[str, float]:
+    """Return the weights from the latest snapshot in `path` dated on/before `on_date`.
+
+    A★/A/D are frozen at each rebalance and held until the next one, so the snapshot
+    that applies to a given calendar day is the most recent one with date <= that day —
+    the same convention load_snapshots() uses for "today" (it just takes the last)."""
+    if not path.exists():
+        return {}
+    best = None
+    for line in path.read_text().splitlines():
+        try:
+            snap = json.loads(line)
+        except Exception:
+            continue
+        if snap.get("date", "") <= on_date:
+            if best is None or snap["date"] >= best["date"]:
+                best = snap
+    return best.get("weights", {}) if best else {}
+
+
+def _return_from_closes(weights: Dict[str, float], on_date: str,
+                        closes: Dict[str, Dict[str, float]]) -> Optional[float]:
+    """Fixed-weight daily return for `weights` on `on_date`, priced from historical
+    closes {symbol: {date: close}}. prev = the most recent close strictly before
+    on_date. Mirrors _portfolio_return: returns None when no symbol can be priced
+    (so a missing-data day records None, never a fabricated 0.0)."""
+    import math
+    ret, priced = 0.0, 0
+    for sym, w in weights.items():
+        series = closes.get(sym)
+        if not series:
+            continue
+        curr = series.get(on_date)
+        prevs = [d for d in series if d < on_date]
+        if curr is None or not prevs:
+            continue
+        prev = series[max(prevs)]
+        if prev is None or prev <= 0 or math.isnan(prev) or math.isnan(curr):
+            continue
+        ret += w * (curr - prev) / prev
+        priced += 1
+    return ret if priced else None
+
+
+def backfill_astar_d(closes: Dict[str, Dict[str, float]]) -> int:
+    """Heal Track A★ / A / D rows that recorded None — the missing analog of
+    backfill_track_b. Track B self-heals from Alpaca's settled bars; A★/A/D never did,
+    so rows left None by the pre-June-19 freeze/NaN-poisoning bugs stayed None forever,
+    starving the AI PM evaluation window. This recomputes each null track for every day
+    from the as-of snapshot weights + historical closes {symbol: {date: close}}.
+
+    Idempotent and conservative: only fills rows currently None (never overwrites a
+    real computed value). Returns the number of (row, track) cells filled."""
+    if not closes or not DAILY_LOG.exists():
+        return 0
+    track_to_path = {
+        "track_astar_return": QUANT_STAR_LOG,
+        "track_a_return":     QUANT_LOG,
+        "track_d_return":     AI_PM_LOG,
+    }
+    rows, changed = [], 0
+    for line in DAILY_LOG.read_text().splitlines():
+        try:
+            r = json.loads(line)
+        except Exception:
+            continue
+        d = r.get("date")
+        for track, path in track_to_path.items():
+            if d and r.get(track) is None:
+                w = _load_snapshot_asof(path, d)
+                if not w:
+                    continue
+                val = _return_from_closes(w, d, closes)
+                if val is not None:
+                    r[track] = round(val, 6)
+                    changed += 1
+        rows.append(r)
+    if changed:
+        with open(DAILY_LOG, "w") as f:
+            for r in rows:
+                f.write(json.dumps(r) + "\n")
+    return changed
+
+
 def _upsert_daily(record: dict) -> None:
     """Write one row per date (last-wins). Reruns on the same day REPLACE the
     prior row instead of appending — otherwise get_cumulative_returns multiplies

@@ -313,3 +313,58 @@ def test_backfill_track_b_noops_on_empty_history():
         log_path.write_text(json.dumps({"date": "2026-06-17", "track_b_return": 0.0}) + "\n")
         with patch("ascent.monitoring.ai_pm_counterfactual.DAILY_LOG", log_path):
             assert backfill_track_b({}) == 0
+
+
+# ── backfill_astar_d (heal historical A★/A/D nulls) ──────────────────────────
+
+def test_backfill_astar_d_fills_null_rows_from_snapshots():
+    """A★/A/D rows that recorded None (pre-fix freeze / failed fetch) must be
+    healed by recomputing from the as-of snapshot weights + historical closes —
+    the missing analog of backfill_track_b. Idempotent: only fills None."""
+    import ascent.monitoring.ai_pm_counterfactual as cf
+    with tempfile.TemporaryDirectory() as tmp:
+        daily = Path(tmp) / "daily.jsonl"
+        star  = Path(tmp) / "star.jsonl"
+        aipm  = Path(tmp) / "ai.jsonl"
+        quant = Path(tmp) / "quant.jsonl"
+        # Snapshot active from 06-15 onward
+        star.write_text(json.dumps({"date": "2026-06-15", "weights": {"AAA": 0.5, "BBB": 0.5}}) + "\n")
+        aipm.write_text(json.dumps({"date": "2026-06-15", "weights": {"AAA": 1.0}}) + "\n")
+        quant.write_text(json.dumps({"date": "2026-06-15", "weights": {"AAA": 0.5, "BBB": 0.5}}) + "\n")
+        # One null row to heal, one already-good row to leave alone
+        daily.write_text(
+            json.dumps({"date": "2026-06-16", "track_astar_return": None, "track_a_return": None,
+                        "track_b_return": 0.01, "track_c_return": 0.0, "track_d_return": None}) + "\n" +
+            json.dumps({"date": "2026-06-17", "track_astar_return": 0.009, "track_a_return": 0.009,
+                        "track_b_return": 0.0, "track_c_return": 0.0, "track_d_return": 0.02}) + "\n"
+        )
+        # Historical closes: AAA +2% on 06-16, BBB -1% on 06-16
+        closes = {
+            "AAA": {"2026-06-15": 100.0, "2026-06-16": 102.0, "2026-06-17": 102.0},
+            "BBB": {"2026-06-15": 50.0,  "2026-06-16": 49.5,  "2026-06-17": 49.5},
+        }
+        with patch.object(cf, "DAILY_LOG", daily), patch.object(cf, "QUANT_STAR_LOG", star), \
+             patch.object(cf, "AI_PM_LOG", aipm), patch.object(cf, "QUANT_LOG", quant):
+            changed = cf.backfill_astar_d(closes)
+            out = {r["date"]: r for r in (json.loads(l) for l in daily.read_text().splitlines())}
+        # 06-16 A★ = 0.5*0.02 + 0.5*(-0.01) = 0.005 ; D = 1.0*0.02 = 0.02
+        assert changed >= 1
+        assert abs(out["2026-06-16"]["track_astar_return"] - 0.005) < 1e-6
+        assert abs(out["2026-06-16"]["track_d_return"] - 0.02) < 1e-6
+        # already-good row untouched
+        assert out["2026-06-17"]["track_astar_return"] == 0.009
+
+
+def test_backfill_astar_d_idempotent_and_skips_unpriceable():
+    import ascent.monitoring.ai_pm_counterfactual as cf
+    with tempfile.TemporaryDirectory() as tmp:
+        daily = Path(tmp) / "daily.jsonl"
+        star  = Path(tmp) / "star.jsonl"
+        star.write_text(json.dumps({"date": "2026-06-15", "weights": {"AAA": 1.0}}) + "\n")
+        daily.write_text(json.dumps({"date": "2026-06-16", "track_astar_return": None,
+                                     "track_b_return": 0.0, "track_c_return": 0.0}) + "\n")
+        # No close data for AAA on 06-16 → cannot price → stays None, no crash
+        with patch.object(cf, "DAILY_LOG", daily), patch.object(cf, "QUANT_STAR_LOG", star), \
+             patch.object(cf, "AI_PM_LOG", Path(tmp)/"x.jsonl"), patch.object(cf, "QUANT_LOG", Path(tmp)/"y.jsonl"):
+            assert cf.backfill_astar_d({"AAA": {"2026-06-15": 100.0}}) == 0  # no prior+curr pair
+            assert cf.backfill_astar_d({}) == 0

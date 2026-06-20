@@ -211,3 +211,40 @@ def test_check_conviction_inflation():
     result = check_conviction_inflation(proposals)
     high_count = sum(1 for v in result.values() if v == "high")
     assert high_count <= max(1, int(len(proposals) * 0.40) + 1)
+
+
+# ── rebuild_buffers_from_counterfactual (kill shadow-log/duplicate contamination) ──
+
+def test_rebuild_buffers_from_counterfactual_uses_common_window():
+    """The authority buffer drives Sortino promotion/demotion. It drifted because it
+    was seeded from a different source (shadow log) than the counterfactual log and
+    only appended on non-null days. Rebuilding from the log's common-window (both
+    track_d AND track_astar non-null) pairs makes the buffer match the single source
+    of truth: no duplicates, A★ series consistent with the log."""
+    import ascent.strategy.earned_authority as ea
+    with tempfile.TemporaryDirectory() as tmp:
+        state_p = Path(tmp) / "earned_authority.json"
+        # Corrupted starting buffer (duplicate + mismatched A★) — what we're repairing
+        state_p.write_text(json.dumps({
+            "level": 1, "title": "Analyst", "ai_weight": 0.05,
+            "track_d_returns":     [0.001, 0.001, 0.05],     # has a fabricated duplicate
+            "track_astar_returns": [0.053, 0.013, 0.0028],   # shadow-log A★, not log A★
+        }))
+        cf_log = Path(tmp) / "counterfactual_daily.jsonl"
+        cf_log.write_text("\n".join(json.dumps(r) for r in [
+            {"date": "2026-06-01", "track_d_return": 0.010, "track_astar_return": 0.012},
+            {"date": "2026-06-02", "track_d_return": None,  "track_astar_return": 0.005},  # skip (D null)
+            {"date": "2026-06-03", "track_d_return": -0.004, "track_astar_return": 0.002},
+            {"date": "2026-06-04", "track_d_return": 0.003,  "track_astar_return": None},  # skip (A★ null)
+            {"date": "2026-06-05", "track_d_return": 0.006,  "track_astar_return": 0.001},
+        ]) + "\n")
+        with patch.object(ea, "STATE_PATH", state_p), \
+             patch("ascent.monitoring.ai_pm_counterfactual.DAILY_LOG", cf_log):
+            n = ea.rebuild_buffers_from_counterfactual()
+            state = json.loads(state_p.read_text())
+        assert n == 3  # three common-window days
+        assert state["track_d_returns"]     == [0.010, -0.004, 0.006]
+        assert state["track_astar_returns"] == [0.012, 0.002, 0.001]
+        # legacy mirrors kept in sync
+        assert state["ai_returns_21d"]    == [0.010, -0.004, 0.006]
+        assert state["quant_returns_21d"] == [0.012, 0.002, 0.001]

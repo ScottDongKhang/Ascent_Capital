@@ -26,7 +26,7 @@ from ascent.portfolio.optimizer import SectorDataError
 from agents.ai_pm_agent import run_ai_pm, run_ai_pm_prethesis, AIPMResult, AIPreThesis
 from ascent.risk.pm_risk_validator import validate as validate_pm_proposal
 from memory.regime_memory import log_episode, update_outcomes
-from ascent.strategy.earned_authority import blend as authority_blend, update_authority, get_state as get_authority_state
+from ascent.strategy.earned_authority import blend as authority_blend, update_authority, get_state as get_authority_state, rebuild_buffers_from_counterfactual
 from ascent.strategy.thesis_formatter import format_thesis
 from ascent.monitoring.ai_pm_counterfactual import (
     snapshot_quant_star, snapshot_quant, snapshot_ai_pm,
@@ -2061,6 +2061,37 @@ def _log_holdings(today):
                     print(f"[Runner] Track B backfilled {_n_bf} day(s) from Alpaca settled bars")
             except Exception as _bfe:
                 print(f"[Runner] Track B backfill skipped: {_bfe}")
+            # Heal any null Track A★/A/D rows from history — the analog of the Track B
+            # backfill above. A★/D were left None by the pre-Jun-19 freeze/NaN bugs and,
+            # unlike Track B, never self-healed → the AI-PM evaluation window was starved.
+            # Recompute from as-of snapshots + ~45d of historical closes (idempotent).
+            try:
+                from ascent.monitoring.ai_pm_counterfactual import (
+                    backfill_astar_d as _cf_backfill_asd,
+                    QUANT_STAR_LOG as _QSL, QUANT_LOG as _QL, AI_PM_LOG as _AIL,
+                )
+                _snap_syms = set()
+                for _sp in (_QSL, _QL, _AIL):
+                    if _sp.exists():
+                        for _ln in _sp.read_text().splitlines():
+                            try: _snap_syms |= set(json.loads(_ln).get("weights", {}))
+                            except Exception: pass
+                if _snap_syms:
+                    import yfinance as _yf2, pandas as _pd2
+                    _hraw = _yf2.download(sorted(_snap_syms), period="45d",
+                                          auto_adjust=True, progress=False)
+                    if not _hraw.empty:
+                        _hcls = _hraw["Close"] if isinstance(_hraw.columns, _pd2.MultiIndex) else _hraw
+                        _hcloses = {}
+                        for _s in _snap_syms:
+                            if _s in _hcls.columns:
+                                _hser = _hcls[_s].dropna()
+                                _hcloses[_s] = {_d.strftime("%Y-%m-%d"): float(_v) for _d, _v in _hser.items()}
+                        _n_asd = _cf_backfill_asd(_hcloses)
+                        if _n_asd:
+                            print(f"[Runner] Track A★/A/D backfilled {_n_asd} cell(s) from history")
+            except Exception as _asde:
+                print(f"[Runner] Track A★/A/D backfill skipped: {_asde}")
             cf_print_report()
         except Exception as _cfe:
             print(f"[Runner] Counterfactual scoring skipped: {_cfe}")
@@ -2083,6 +2114,16 @@ def _log_holdings(today):
                 )
             else:
                 print("[Runner] Authority update skipped — no Track D snapshot yet")
+            # Final word on the buffer: reconcile it to the (now-healed) counterfactual
+            # log. This runs AFTER update_authority's append so today is not double-counted,
+            # and it repairs any historical drift (the shadow-log seed + duplicate that the
+            # incremental append left in place). Promotion/demotion ran above on today's
+            # values; this just keeps the persisted Sortino window matching the log.
+            try:
+                _n_rb = rebuild_buffers_from_counterfactual()
+                print(f"[Runner] Authority buffer reconciled to counterfactual log ({_n_rb} obs)")
+            except Exception as _rbe:
+                print(f"[Runner] Authority buffer reconcile skipped: {_rbe}")
         except Exception as _fbe:
             print(f"[Runner] Feedback/authority update skipped: {_fbe}")
 

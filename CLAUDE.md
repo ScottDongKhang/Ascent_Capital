@@ -90,12 +90,13 @@ One step at a time. Verify existing logic before proposing fixes. `ast.parse` af
 
 ---
 
-## Current state (as of 2026-06-11)
+## Current state (as of 2026-06-20)
 
-- **AI PM**: Level 1 (Analyst, 5% authority budget). Day 1: June 4. Next rebalance June 24. First real blended portfolio applied June 10 late rerun (force-seal → blend at ai_weight=5%, 31 orders). `data_cache/earned_authority.json` buffer has fabricated 0.0/0.0 pairs Jun 4-9 that should be stripped manually before June 24.
-- **Regime**: calm_bull. **Tests**: 928 passing, 6 pre-existing failures in `test_wf_framework`.
+- **AI PM**: Level 1 (Analyst, 5% authority budget). Day 1: June 4. Next rebalance June 24. Authority buffer rebuilt clean from the counterfactual log (22 honest paired obs; old shadow-log seed + duplicate `0.00124` removed). **Honest standalone AI PM signal: D−A★ = −6.06pp over 22 common days** (was a corrupted −2.89pp/13d — the truncated window hid the Jun 10–18 run-up where pure-AI-PM lagged most). Modestly value-subtracting in calm_bull; ~rounding-error at 5% authority (B−A★ defensive multi-agent drag, not AI-PM, is the SPY gap). n still smallish — worth watching at Jun 24, not yet a disable signal.
+- **No alpha vs SPY is structural, not failure**: pure quant (A★ +12.55%) lags SPY (C +16.61%) by ~4pp; the actual book lags the same ~4pp. Cause = ~22% defensive non-equity sleeves + 200MA cut + 15% vol-target overlay costing beta in an equity-only bull. WF OOS confirms positive *risk-adjusted* alpha; raw-return lag vs a 100%-equity index is by design.
+- **Counterfactual measurement now self-heals**: `backfill_astar_d()` (analog of `backfill_track_b`) recomputes null Track A★/A/D rows from as-of snapshots + 45d history; `rebuild_buffers_from_counterfactual()` reconciles the authority Sortino buffer to the log each run. Both wired into the daily path.
+- **Regime**: calm_bull. **Tests**: 70 AI-PM-related passing (incl. 3 new); WF framework 6 pre-existing failures unchanged.
 - **WF OOS baseline**: Sharpe 0.483, CAGR +12.61%, true alpha +2.54% vs SPY.
-- **Live perf**: +8.8% portfolio vs +15.9% SPY (Apr 1 – Jun 3). Judge structural bias (reduction-only) was the primary driver — now fixed.
 - **GitHub Pages**: `https://scottdongkhang.github.io/Ascent_Capital` — auto-updated after every daily run.
 
 ---
@@ -103,6 +104,16 @@ One step at a time. Verify existing logic before proposing fixes. `ast.parse` af
 ## Session log
 
 > Full history archived to `docs/session_log_archive.md`.
+
+### 2026-06-20 (AI PM / "no alpha" investigation — measurement repair + self-heal, honest signal now −6pp)
+- Investigated "AI PM poor performance" + "Ascent makes no alpha." TWO separate causes, neither what the dashboard implied.
+- **No-alpha-vs-SPY is structural, not failure**: recomputed tracks — pure quant (A★ +12.55%) lags SPY (C +16.61%) by ~4pp, and the actual book lags the SAME ~4pp. AI PM (5% authority) is not the driver. Cause = ~22% defensive non-equity sleeves (PDBC/EWJ/EFA/EWC/LQD/SGOV/KMLM) + 200MA cut + 15% vol-target overlay costing beta in an equity-only bull. WF OOS confirms positive risk-adjusted alpha; raw-return lag is by design.
+- **AI PM could not be honestly evaluated — measurement was broken two ways, both masking a STRONGER signal**: (1) Track A★/A/D recorded `null` Jun 8–18 (un-healed pre-Jun-19 freeze/NaN damage; Track B self-heals via `backfill_track_b` but A★/A/D had NO analog → starved eval window). (2) `earned_authority.json` buffer was a Frankenstein — 9 obs seeded Jun 11 from the *shadow log* (different A★ series + duplicated `0.00124`) + 1 from the counterfactual log; `update_authority` only appends on non-null days so the bad seed never reconciled. The Sortino promotion/demotion engine was scoring on corrupted data.
+- FIX (TDD, 3 new tests): `ai_pm_counterfactual.backfill_astar_d(closes)` — recomputes null A★/A/D from as-of snapshot weights (`_load_snapshot_asof`) + historical closes (`_return_from_closes`), idempotent, fills None only. `earned_authority.rebuild_buffers_from_counterfactual()` — reconciles both rolling buffers to the log's common-window pairs (single source of truth). Both wired into the daily run: backfill next to `backfill_track_b`; buffer reconcile AFTER `update_authority` so today isn't double-counted.
+- One-time repair (backups `logs/counterfactual_daily.jsonl.bak-astar-*`, `data_cache/earned_authority.json.bak-rebuild-*`): healed 25 null cells (Jun 8–18 fully real; residual nulls are April/early-May pre-AI-PM where D legitimately never existed). Buffer rebuilt to 22 clean paired obs, duplicate gone, A★ now matches log exactly.
+- **Healing CHANGED the verdict**: honest standalone AI PM signal D−A★ = **−6.06pp over 22 days** (was a corrupted −2.89pp/13d). The truncated window hid the Jun 10–18 run-up where pure-AI-PM gave up upside AND took more downside. Real, modestly value-subtracting in calm_bull; n still smallish — watch at Jun 24, not yet a disable signal.
+- Files: `ascent/monitoring/ai_pm_counterfactual.py`, `ascent/strategy/earned_authority.py`, `run_all_agents.py`, `tests/test_ai_pm_counterfactual.py`, `tests/test_ai_pm_authority.py`. 70 AI-PM-related tests pass.
+- Open: dashboard headline (`scripts/generate_performance_page.py`) should be verified to surface the corrected −6.06pp/22d D−A★, not the stale cumulative. Going forward A★/A/D + buffer self-heal each run.
 
 ### 2026-06-19 (Track B trace + fix — the "actual gave up 11pp of quant" gap was a measurement artifact)
 - Traced why Track B (actual book) showed +0.58% vs Track A★ (pure quant) +11.35% over the live window. ROOT CAUSE: a disjoint-window artifact (same disease class as Jun 18, only half-fixed). Track B had real data on only 12 of 38 days, A★ on 21 — **only 2 days overlapped**, so the per-track cumulative headline compared different calendars. The honest common-window diff was −4.02pp over n=2 (noise), contaminated further by today's Track B = 0.0.
