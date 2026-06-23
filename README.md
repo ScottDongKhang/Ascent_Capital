@@ -67,7 +67,14 @@ The adversarial debate engine makes exactly one falsifiable weight change per re
 | Last Updated | 2026-06-22 |
 <!-- LIVE_STATS_END -->
 
-*Sharpe standard error over ~47 days is large — not statistically significant. This is tracked honestly, which is why authority is earned over 21 rebalances, not calendar time.*
+*Sharpe standard error over ~62 days is large — not statistically significant. This is tracked honestly, which is why authority is earned over 21 rebalances, not calendar time.*
+
+> **Source of truth:** the only reconciled, source-cited figures live in
+> [`CURRENT_VERIFIED_NUMBERS.md`](CURRENT_VERIFIED_NUMBERS.md). The auto-generated table
+> above is dashboard-computed; note the **Sharpe (1.794) is not independently verifiable**
+> (the underlying daily-return series has an Alpaca-settlement issue) — only the
+> **equity-based total return (+8.82%)** is solid. The book trails SPY (~+13%) by ~5pp,
+> which is structural, not an AI-layer effect.
 
 | Date | Event |
 |------|-------|
@@ -89,18 +96,46 @@ The adversarial debate engine makes exactly one falsifiable weight change per re
 
 ## Walk-Forward Out-of-Sample Results
 
-> Survivorship bias eliminated · fold-local regime fit · CPCV C(6,2) = 15 folds · no look-ahead
+> Survivorship bias eliminated · fold-local regime fit · rolling 252d-IS / 63d-OOS, 21 folds (21d purge + 5d embargo) · no look-ahead
 
 `walk_forward_runner.py` calls `get_universe_on_date()` on every fold — symbols excluded if outside their validity window at the decision point. Regime engine fitted on training slice only.
 
-| Metric | Value | Period |
-|--------|------:|--------|
-| CAGR | +12.61% | Jan 2020 – Apr 2026 |
-| Sharpe Ratio | 0.483 | |
-| Alpha vs SPY | +2.54% | |
-| Max Drawdown | −23.4% | |
+> **Verified clean re-run (2026-06-22).** Single source of truth: `CURRENT_VERIFIED_NUMBERS.md`.
 
-These figures reflect the quant system only. The AI PM, debate layer, and self-improve loop require live feedback by design and are not in this backtest.
+| Metric (OOS) | Value |
+|---|---|
+| Sharpe ratio | **0.41** |
+| CAGR | **+10.3%** |
+| Excess CAGR vs SPY | **+1.0pp** (strategy 10.4% − SPY 9.4%, same window) |
+| Max drawdown | **−32.9%** |
+| Beta vs SPY | 0.73 |
+| Win rate | 50.2% |
+| OOS window | 2021-01-08 → 2026-01-14 (1134 days, 21 folds) |
+| Walk-forward efficiency | **−0.65 (overfit flag — see caveat)** |
+
+> Source artifact: `outputs/wf_results/wf_report_clean_2026-06-22.json`, computed on a
+> freshly re-fetched single-source price cache (yfinance, adjusted, 936 symbols, **zero
+> duplicate rows, zero implausible price jumps**) with the LLM alpha sleeves
+> (`llm_fundamental`, `narrative`) zeroed. Sharpe and CAGR were independently re-derived
+> from the equity curve (0.417 / +10.4%) and match.
+>
+> **Honest caveats — read before citing:**
+> - **Walk-forward efficiency is negative (−0.65):** the in-sample parameter optimizer adds
+>   no out-of-sample value; fixed params would do as well. The Sharpe above is the realistic
+>   OOS figure *after* that penalty, but the overfit flag is real and disclosed.
+> - This is a **modest** risk-adjusted edge (Sharpe ~0.4) and a **thin** +1pp/yr excess return
+>   over SPY at lower beta (0.73, defensive) — a single backtest, **not a live track record**.
+> - The engine's reported Sortino (0.04) is **miscomputed** (a known bug, also wrong in the old
+>   artifact); the correct value is ~0.68. Do not cite the engine Sortino field.
+> - This replaces the earlier "Sharpe 0.483 / CAGR +12.61%" figures, which came from a
+>   **corrupted** price cache (~59% duplicate rows + 10×-type errors in 12 symbols) that
+>   inflated the result; the old README also showed a −23.4% drawdown and +2.54% alpha that
+>   **matched no saved artifact**. See `AUDIT_DATA_INTEGRITY.md`.
+>
+> **System separation:** this walk-forward record reflects the **pure quant engine only**.
+> The AI-native layer (debate, AI PM, counterfactual scoring) has been live since
+> **2026-06-04** — about **2.5 weeks**, with **one completed scheduled rebalance (June 10)**
+> — and has **no multi-year track record**. Do not attribute any backtest figure to the AI layer.
 
 ---
 

@@ -49,9 +49,20 @@ def save_parquet(df: pd.DataFrame, name: str) -> None:
         ]
         if not id_cols:
             id_cols = [c for c in old.columns if c not in ("known_time", "source")]
-        df = pd.concat([old, df], ignore_index=True).drop_duplicates(
-            subset=id_cols, keep="last"
-        )
+        combined = pd.concat([old, df], ignore_index=True)
+        # Build the dedup key with any datetime `date` column normalised to its
+        # CALENDAR DAY. Different fetches store the same bar at different intraday
+        # timestamps / tz offsets (the cache keeps `date` at 19:00 ET), so a raw
+        # (symbol, date) match never fired and every save appended duplicate rows
+        # (audit 2026-06-22: prices_live had ~59% duplicates). Normalising the key
+        # collapses those without mutating the stored `date` values.
+        key = combined[id_cols].copy()
+        if "date" in key.columns and pd.api.types.is_datetime64_any_dtype(key["date"]):
+            _d = key["date"].dt.normalize()
+            if isinstance(key["date"].dtype, pd.DatetimeTZDtype):
+                _d = _d.dt.tz_localize(None)
+            key["date"] = _d
+        df = combined[~key.duplicated(keep="last")]
     df.to_parquet(path, index=False)
     log.info("[cache] saved %s  rows=%d", name, len(df))
 

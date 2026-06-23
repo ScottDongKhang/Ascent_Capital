@@ -1,0 +1,27 @@
+{
+  "cagr": 0.10303551382424092,
+  "volatility": 0.2348480552849147,
+  "sharpe": 0.41182170759086417,
+  "sortino": 0.0419568443709231,
+  "max_drawdown": -0.32868673433025536,
+  "win_rate": 0.5017636684303352,
+  "wfe": -0.6534893352380273,
+  "n_folds": 21,
+  "n_oos_days": 1134,
+  "alpha": 0.02242842899285264,
+  "beta": 0.7334852472434038,
+  "_meta": {
+    "source_cache": "prices_live_clean_refetch.parquet (yfinance auto_adjust=True, single source)",
+    "llm_disabled": true,
+    "alpha_overrides": {
+      "llm_fundamental": 0.0,
+      "narrative": 0.0
+    },
+    "oos_window": "2021-01-08 -> 2026-01-14",
+    "oos_years": 5.016,
+    "spy_cagr_same_window": 0.094122,
+    "strat_cagr_recomputed": 0.104245,
+    "excess_cagr_vs_spy": 0.010124,
+    "n_symbols": 936
+  }
+}
