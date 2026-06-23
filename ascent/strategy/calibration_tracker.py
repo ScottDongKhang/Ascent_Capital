@@ -54,6 +54,26 @@ def _derive_conviction(symbol: str, thesis: dict) -> str:
     return "quant_agreed"
 
 
+def _thesis_has_reasoning(thesis: dict) -> bool:
+    """True if the thesis carries any AI reasoning — a real Phase-2 decision.
+
+    A genuine AI PM decision always contributes reasoning via quant_overrides
+    (AI explicitly diverged) and/or non-empty position_rationale entries. An
+    off-calendar / daily-view stub (default top-N names, empty thesis) carries
+    none, and must not pollute the calibration ledger.
+    """
+    if thesis.get("quant_overrides"):
+        return True
+    rationale = thesis.get("position_rationale")
+    if isinstance(rationale, dict):
+        for v in rationale.values():
+            if isinstance(v, str) and v.strip():
+                return True
+            if isinstance(v, dict) and v:
+                return True
+    return False
+
+
 def _read_log() -> list:
     """Read all entries from the calibration log. Returns [] on any error."""
     if not CALIBRATION_LOG.exists():
@@ -103,6 +123,14 @@ def log_prediction(
         existing_dates = {e.get("date") for e in entries}
         if run_date in existing_dates:
             log.debug("[CalibrationTracker] Entry for %s already exists — skipping", run_date)
+            return
+
+        # Stub-pollution guard: only log real AI PM decisions. A thesis with no
+        # AI reasoning (no overrides, no rationale) is an off-calendar / daily-view
+        # non-decision and must not enter the calibration ledger.
+        if not _thesis_has_reasoning(thesis):
+            log.info("[CalibrationTracker] Skipping non-decision entry for %s "
+                     "(empty thesis — no AI reasoning)", run_date)
             return
 
         positions = {}

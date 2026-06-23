@@ -41,7 +41,7 @@ def _write_entry(log_path: Path, run_date: str, positions: dict) -> None:
 def test_log_prediction_creates_file(tmp_path):
     log_path = tmp_path / "ai_pm_calibration.jsonl"
     portfolio = {"AAPL": 0.05, "MSFT": 0.04}
-    thesis = _make_thesis()
+    thesis = _make_thesis(rationale={"AAPL": "real decision rationale"})
 
     with patch("ascent.strategy.calibration_tracker.CALIBRATION_LOG", log_path):
         from ascent.strategy.calibration_tracker import log_prediction
@@ -65,7 +65,7 @@ def test_log_prediction_creates_file(tmp_path):
 def test_log_prediction_deduplicates(tmp_path):
     log_path = tmp_path / "ai_pm_calibration.jsonl"
     portfolio = {"AAPL": 0.05}
-    thesis = _make_thesis()
+    thesis = _make_thesis(rationale={"AAPL": "real decision rationale"})
 
     with patch("ascent.strategy.calibration_tracker.CALIBRATION_LOG", log_path):
         from ascent.strategy.calibration_tracker import log_prediction
@@ -275,3 +275,61 @@ def test_compute_calibration_returns_feeds_update_outcomes(tmp_path):
         assert n == 1, f"Expected 1 entry updated, got {n}"
         report = get_calibration_report()
         assert report != "No calibration data yet.", "get_calibration_report still shows no data"
+
+
+# ── A: Stub-pollution guard (non-decision entries must not be logged) ────────────
+#
+# Off-calendar / daily-view days were writing degenerate entries into the
+# production calibration log (e.g. AAPL/MSFT/NVDA at default weights, empty
+# thesis, all conviction "quant_agreed", null rationale). Those are NOT AI PM
+# decisions — a real Phase-2 decision always carries AI reasoning in the thesis
+# (position_rationale and/or quant_overrides). log_prediction must refuse an
+# entry whose thesis contributes zero AI reasoning, so the calibration record
+# stays a clean ledger of real decisions.
+
+def test_log_prediction_skips_empty_thesis_stub(tmp_path):
+    """A degenerate book with an empty thesis (no rationale, no overrides) is a
+    non-decision and must NOT be written to the calibration log."""
+    log_path = tmp_path / "ai_pm_calibration.jsonl"
+    portfolio = {"AAPL": 0.10, "MSFT": 0.10, "NVDA": 0.08}  # the observed stub signature
+    thesis = _make_thesis()  # empty: no overrides, no rationale, no agreement
+
+    with patch("ascent.strategy.calibration_tracker.CALIBRATION_LOG", log_path):
+        from ascent.strategy.calibration_tracker import log_prediction
+        log_prediction("2026-06-23", portfolio, thesis)
+
+    assert not log_path.exists() or log_path.read_text().strip() == "", (
+        "Empty-thesis stub must not be logged"
+    )
+
+
+def test_log_prediction_logs_real_decision_with_rationale(tmp_path):
+    """A genuine AI PM decision (thesis carries rationale) must still be logged."""
+    log_path = tmp_path / "ai_pm_calibration.jsonl"
+    portfolio = {"STLD": 0.09, "HAE": 0.09, "MGM": 0.07}
+    thesis = _make_thesis(rationale={"STLD": "AMPLIFY — steel infra thesis, 93% earnings growth"})
+
+    with patch("ascent.strategy.calibration_tracker.CALIBRATION_LOG", log_path):
+        from ascent.strategy.calibration_tracker import log_prediction
+        log_prediction("2026-06-10", portfolio, thesis)
+
+    assert log_path.exists()
+    entries = [json.loads(l) for l in log_path.read_text().strip().splitlines()]
+    assert len(entries) == 1
+    assert "STLD" in entries[0]["positions"]
+
+
+def test_log_prediction_logs_override_only_decision(tmp_path):
+    """A decision whose AI reasoning lives in quant_overrides (not position_rationale)
+    is still a real decision and must be logged."""
+    log_path = tmp_path / "ai_pm_calibration.jsonl"
+    portfolio = {"EWY": 0.08}
+    thesis = _make_thesis(overrides=[{"symbol": "EWY", "ai_action": "increase", "reason": "AI/semi cycle"}])
+
+    with patch("ascent.strategy.calibration_tracker.CALIBRATION_LOG", log_path):
+        from ascent.strategy.calibration_tracker import log_prediction
+        log_prediction("2026-06-11", portfolio, thesis)
+
+    assert log_path.exists()
+    entries = [json.loads(l) for l in log_path.read_text().strip().splitlines()]
+    assert len(entries) == 1
