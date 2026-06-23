@@ -1188,19 +1188,23 @@ def main():
 
         # Ticker discovery — surface a new candidate from today's Exa news
         try:
-            from ascent.strategy.ticker_discovery import run_discovery as _run_discovery
-            _current_universe = list((merged_weights or {}).keys())
-            if _news_context and _current_universe:
-                _discovery = _run_discovery(_news_context, _current_universe)
-                if _discovery:
-                    print(f"[Discovery] Candidate: {_discovery.symbol} "
-                          f"(conviction={_discovery.conviction_score:.2f})")
-                    if not _check_mini_rebalance_cooldown():
-                        _trigger_mini_rebalance(_discovery, merged_weights, today, dry_run, agent_outputs)
+            if _is_near_scheduled_rebalance(today):
+                print("[Discovery] Skipped — within 3 trading days of a scheduled "
+                      "rebalance (it will recompute the book anyway)")
+            else:
+                from ascent.strategy.ticker_discovery import run_discovery as _run_discovery
+                _current_universe = list((merged_weights or {}).keys())
+                if _news_context and _current_universe:
+                    _discovery = _run_discovery(_news_context, _current_universe)
+                    if _discovery:
+                        print(f"[Discovery] Candidate: {_discovery.symbol} "
+                              f"(conviction={_discovery.conviction_score:.2f})")
+                        if not _check_mini_rebalance_cooldown():
+                            _trigger_mini_rebalance(_discovery, merged_weights, today, dry_run, agent_outputs)
+                        else:
+                            print(f"[Discovery] Cooldown active — {_discovery.symbol} queued for next window")
                     else:
-                        print(f"[Discovery] Cooldown active — {_discovery.symbol} queued for next window")
-                else:
-                    print("[Discovery] No high-conviction candidate found today")
+                        print("[Discovery] No high-conviction candidate found today")
         except Exception as _disc_e:
             print(f"[Discovery] Skipped: {_disc_e}")
 
@@ -2161,6 +2165,80 @@ def _log_holdings(today):
         print(f"[Dashboard] Skipped ({e})")
 
 
+def _is_near_scheduled_rebalance(today, window: int = 3, cal_path=None) -> bool:
+    """
+    Returns True if the next scheduled rebalance is within `window` trading days
+    of `today` (inclusive). Off-calendar discovery must be suppressed in this
+    window — the scheduled rebalance recomputes the whole book anyway, so an
+    intra-period full rotation just ahead of it is pure churn.
+
+    Returns False when no future rebalance is on the calendar, or the calendar
+    file is missing/unreadable (fail-open: a missing calendar should not block
+    discovery entirely).
+    """
+    from pathlib import Path as _P
+    import pandas as _pd
+
+    path = _P(cal_path) if cal_path is not None else _P("rebalance_calendar.csv")
+    if not path.exists():
+        return False
+    try:
+        cal = _pd.read_csv(path)
+        today_ts = _pd.Timestamp(today)
+        future = [
+            _pd.Timestamp(d) for d in cal["rebalance_date"]
+            if _pd.Timestamp(d) > today_ts
+        ]
+        if not future:
+            return False
+        next_reb = min(future)
+        # trading days strictly between today and the next rebalance, inclusive
+        trading_days = len(_pd.bdate_range(today_ts, next_reb)) - 1
+        return trading_days <= window
+    except Exception:
+        return False
+
+
+def _insert_candidate_weights(
+    current_weights: dict,
+    symbol: str,
+    max_weight: float = 0.10,
+    target_weight: float | None = None,
+) -> dict:
+    """
+    Add `symbol` to the book and trim existing holdings PRO-RATA to make room —
+    without re-ranking or re-optimizing the rest of the portfolio.
+
+    The candidate takes an equal-weight slot (1/(n+1)) by default; existing
+    weights keep their relative ordering, scaled down to fit. The max-weight cap
+    is then enforced via the same water-fill routine the optimizer uses, so the
+    result satisfies the system's standing invariant (all weights <= max_weight,
+    sum == 1.0).
+
+    No-op (returns a copy of the input) if `symbol` is already held.
+    """
+    import pandas as _pd
+    from ascent.portfolio.optimizer import _water_fill_cap
+
+    if symbol in current_weights:
+        return dict(current_weights)
+    if not current_weights:
+        return {symbol: 1.0}
+
+    n = len(current_weights)
+    if target_weight is None:
+        target_weight = 1.0 / (n + 1)
+    target_weight = min(target_weight, max_weight)
+
+    # Existing weights sum to ~1.0; give the candidate a score that renormalizes
+    # to `target_weight`, leaving the rest pro-rata. s/(1+s) = t  ->  s = t/(1-t).
+    scores = _pd.Series(current_weights, dtype=float)
+    scores = scores / scores.sum()
+    scores[symbol] = target_weight / (1.0 - target_weight)
+    capped = _water_fill_cap(scores, max_weight)
+    return {k: float(v) for k, v in capped.items()}
+
+
 def _check_mini_rebalance_cooldown() -> bool:
     """Returns True if a mini-rebalance ran < 5 trading days ago (cooldown active)."""
     import json as _j
@@ -2315,9 +2393,15 @@ def _trigger_mini_rebalance(
     prior_agent_outputs: list | None = None,
 ) -> None:
     """
-    Run full us_equities_agent pipeline with the discovered ticker added,
-    re-orchestrate with the other agents' outputs, pass through debate gate,
-    and execute. Writes cooldown log on completion.
+    ADD-ONLY mini-rebalance: insert the discovered ticker into the existing book
+    and trim the rest pro-rata (NO full re-optimization of every holding), pass
+    the resulting book through the debate gate, and execute. Writes cooldown log
+    on completion.
+
+    Rationale: re-running the full us_equities agent + orchestrator here churned
+    the entire book for a single candidate (and could even drop the candidate it
+    was triggered by). Add-only keeps discovery to what it claims to be — adding
+    one name — and confines turnover to that insertion.
     """
     import json as _j
     from pathlib import Path as _P
@@ -2327,33 +2411,35 @@ def _trigger_mini_rebalance(
     print(f"[Discovery] Catalyst: {result.catalyst_snippet}")
 
     try:
-        from agents.us_equities_agent import run_us_equities_agent
-        new_us_output = run_us_equities_agent(extra_symbols=[result.symbol])
-
-        if not new_us_output.target_weights:
-            print("[Discovery] Mini-rebalance: US equities agent returned empty weights — aborting")
+        if not current_weights:
+            print("[Discovery] Mini-rebalance: current book is empty — aborting")
+            return
+        if result.symbol in current_weights:
+            print(f"[Discovery] {result.symbol} already held — nothing to add, aborting")
             return
 
-        # Re-orchestrate: replace the US equities slice, keep other agents intact
-        new_weights = current_weights  # fallback if orchestration fails
         try:
-            from orchestrator.central_intelligence import run_orchestrator
-            if prior_agent_outputs:
-                other_outputs = [ao for ao in prior_agent_outputs
-                                 if getattr(ao, "agent_id", "") != "us_equities"]
-                merged_outputs = other_outputs + [new_us_output]
-            else:
-                merged_outputs = [new_us_output]
-            orchestrated = run_orchestrator(merged_outputs)
-            if orchestrated:
-                new_weights = orchestrated
-                print(f"[Discovery] Re-orchestrated: {len(new_weights)} positions")
-            else:
-                print("[Discovery] Orchestrator returned empty — using US equities weights only")
-                new_weights = new_us_output.target_weights
-        except Exception as _oe:
-            print(f"[Discovery] Orchestration failed ({_oe}) — using US equities weights only")
-            new_weights = new_us_output.target_weights
+            from ascent.config.settings import get_config
+            _max_w = float(get_config().backtest.max_weight)
+        except Exception:
+            _max_w = 0.10
+
+        # Add-only insertion: candidate gets an equal-weight slot, the rest of the
+        # book is trimmed pro-rata (relative ordering preserved), max-weight cap
+        # enforced via the optimizer's water-fill routine.
+        new_weights = _insert_candidate_weights(current_weights, result.symbol, max_weight=_max_w)
+        print(f"[Discovery] Add-only insertion: {result.symbol} @ "
+              f"{new_weights.get(result.symbol, 0.0) * 100:.1f}% — "
+              f"{len(new_weights)} positions (was {len(current_weights)})")
+
+        # Regime label for the debate context (no agent re-run); read from the
+        # us_equities output already computed this cycle if available.
+        _regime = "unknown"
+        if prior_agent_outputs:
+            for _ao in prior_agent_outputs:
+                if getattr(_ao, "agent_id", "") == "us_equities":
+                    _regime = str(getattr(_ao, "regime_signal", None) or "unknown")
+                    break
 
         verdict = {}
         try:
@@ -2361,7 +2447,7 @@ def _trigger_mini_rebalance(
             from ascent.execution.debate_gate import should_run_debate
             portfolio_state = {
                 "date":        today.isoformat(),
-                "us_regime":   str(new_us_output.regime_signal or "unknown"),
+                "us_regime":   _regime,
                 "n_positions": len(new_weights),
                 "weights":     new_weights,
                 "trigger":     "discovery",
