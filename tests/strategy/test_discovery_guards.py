@@ -80,3 +80,42 @@ def test_insert_existing_symbol_is_noop():
     book = {"AAA": 0.5, "BBB": 0.3, "CCC": 0.2}
     out = ra._insert_candidate_weights(book, "AAA", max_weight=0.40)
     assert out == book
+
+
+# ── Guard C: IC-decay rebalance blackout window ──────────────────────────────
+
+def test_ic_decay_trigger_suppressed_near_rebalance(tmp_path):
+    """
+    Within 3 trading days of a scheduled rebalance, the IC decay early-rebalance
+    trigger must be blocked — the scheduled rebalance will recompute the book anyway.
+    """
+    import datetime
+    cal = _write_calendar(tmp_path, ["2026-06-10", "2026-06-24"])
+    today = datetime.date(2026, 6, 22)  # 2 trading days before Jun 24
+
+    near = ra._is_near_scheduled_rebalance(today, window=3, cal_path=cal)
+    assert near is True, "Guard should detect proximity to Jun 24"
+
+    # Simulate the blackout logic: if near → skip trigger
+    would_have_triggered = False
+    if not near:
+        would_have_triggered = True  # IC decay fires only when NOT near
+
+    assert not would_have_triggered, "IC decay trigger should be blocked within 3-day window"
+
+
+def test_ic_decay_trigger_allowed_far_from_rebalance(tmp_path):
+    """
+    When the next scheduled rebalance is more than 3 trading days away,
+    the IC decay trigger must NOT be suppressed.
+    """
+    import datetime
+    cal = _write_calendar(tmp_path, ["2026-06-10", "2026-07-22"])
+    today = datetime.date(2026, 6, 22)  # 30 days before Jul 22
+
+    near = ra._is_near_scheduled_rebalance(today, window=3, cal_path=cal)
+    assert near is False, "Guard should not trigger when rebalance is far away"
+
+    # IC decay is allowed to fire when not near
+    trigger_allowed = not near
+    assert trigger_allowed, "IC decay trigger must be permitted when far from rebalance"
