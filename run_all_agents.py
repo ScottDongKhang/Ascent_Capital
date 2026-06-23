@@ -2123,18 +2123,22 @@ def _log_holdings(today):
                 )
             else:
                 print("[Runner] Authority update skipped — no Track D snapshot yet")
-            # Final word on the buffer: reconcile it to the (now-healed) counterfactual
-            # log. This runs AFTER update_authority's append so today is not double-counted,
-            # and it repairs any historical drift (the shadow-log seed + duplicate that the
-            # incremental append left in place). Promotion/demotion ran above on today's
-            # values; this just keeps the persisted Sortino window matching the log.
-            try:
-                _n_rb = rebuild_buffers_from_counterfactual()
-                print(f"[Runner] Authority buffer reconciled to counterfactual log ({_n_rb} obs)")
-            except Exception as _rbe:
-                print(f"[Runner] Authority buffer reconcile skipped: {_rbe}")
         except Exception as _fbe:
             print(f"[Runner] Feedback/authority update skipped: {_fbe}")
+
+        # Reconcile the authority buffer to the counterfactual log — the single
+        # source of truth for the Track D / A★ rolling window. This runs in its OWN
+        # try, INDEPENDENT of the feedback block above: rebuild only reads the
+        # counterfactual log, so a failure in compute_ai_feedback() or
+        # get_authority_state() must NOT prevent the buffers from being populated.
+        # (Bug fixed 2026-06-23: it was nested inside the feedback try, so the
+        # buffers went empty whenever feedback threw — freezing the earned-authority
+        # ladder at Level 1 with empty Track D/A★ buffers despite a healthy log.)
+        try:
+            _n_rb = rebuild_buffers_from_counterfactual()
+            print(f"[Runner] Authority buffer reconciled to counterfactual log ({_n_rb} obs)")
+        except Exception as _rbe:
+            print(f"[Runner] Authority buffer reconcile skipped: {_rbe}")
 
         # Score any ticker memory entries now old enough (10d+)
         try:
