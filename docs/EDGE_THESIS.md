@@ -108,6 +108,30 @@ holding-period regimes large funds can't exploit.**
   the test-#2 risk overlay) aggregates many weak signals. That is fragile and worth
   remembering.
 
+  **EXTENSION — test #4 (2026-06-23): genuinely small/micro-cap names, SURVIVORSHIP-
+  BIASED screen.** Fetched 110 currently-listed small/micro-cap tickers via yfinance;
+  **18 had already delisted** (NKLA, FSR, GOEV, RIDE, CSPR… — the losers), leaving 56
+  survivors. Momentum IC on the survivors:
+
+  | pool (survivor-biased) | momentum IC | t vs 0 |
+  |---|---|---|
+  | all 56 survivors | 0.099 | 3.26 |
+  | small (<$2B, 35) | 0.095 | 3.24 |
+  | micro (<$500M, 21) | 0.075 | 2.06 |
+  | large-cap (test #3, clean) | 0.0095 | 0.32 |
+
+  Apparent momentum IC is **~10× higher** in small/micro names and significant
+  (t=3.3). **But this is INCONCLUSIVE, not a wedge.** The screen is currently-listed
+  only; the 18 delisted losers we watched drop out are exactly what survivorship bias
+  removes, and removing losers is what makes momentum look predictive. The result
+  lands precisely where the bias would put it. **Honest reading: small/micro-cap
+  momentum is the single most promising lead AND the single least trustworthy number
+  here. The next real step is data acquisition** — a survivorship-free micro-cap
+  source (CRSP / Sharadar / historical Russell Microcap reconstitution) — not another
+  yfinance run. Until then this stays inconclusive. Script:
+  `scripts/edge_tests/edge_test4_microcap_ic.py`; artifact:
+  `outputs/wf_results/edge_test4_microcap_ic.json`.
+
 ## 4. Verdict (as of today)
 
 **There is no undeniable, revolutionary edge here, and claiming one would be
