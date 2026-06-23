@@ -121,3 +121,110 @@ def test_regime_list_schema_detected_as_stale(tmp_path, monkeypatch):
     import run_all_agents
     importlib.reload(run_all_agents)
     assert run_all_agents._is_regime_stale() is True
+
+
+# ── Task 1: International equity cap ─────────────────────────────────────────
+
+def test_intl_equity_cap_fires_on_ewy_efa_overweight():
+    """EWY + EFA combined > 15% must be trimmed to exactly 15%."""
+    from orchestrator.central_intelligence import _cap_intl_equity
+    weights = {
+        "EWY": 0.10, "EFA": 0.10,   # 20% intl — over cap
+        "AAPL": 0.40, "MSFT": 0.40,
+    }
+    result = _cap_intl_equity(weights)
+    intl_total = result.get("EWY", 0) + result.get("EFA", 0)
+    assert intl_total <= 0.151, f"Intl {intl_total:.1%} exceeds 15%"
+    assert abs(sum(result.values()) - 1.0) < 0.001
+
+
+def test_intl_equity_cap_noop_when_under():
+    """Cap must be a no-op when international equity is already under 15%."""
+    from orchestrator.central_intelligence import _cap_intl_equity
+    weights = {"EWY": 0.05, "EFA": 0.05, "AAPL": 0.50, "MSFT": 0.40}
+    result = _cap_intl_equity(weights)
+    assert abs(result["EWY"] - 0.05) < 0.0001
+    assert abs(result["EFA"] - 0.05) < 0.0001
+
+
+def test_intl_equity_cap_catches_ewy_alone():
+    """EWY alone at 20% must be capped to 15%."""
+    from orchestrator.central_intelligence import _cap_intl_equity
+    weights = {"EWY": 0.20, "AAPL": 0.50, "MSFT": 0.30}
+    result = _cap_intl_equity(weights)
+    assert result.get("EWY", 0) <= 0.151
+    assert abs(sum(result.values()) - 1.0) < 0.001
+
+
+def test_intl_equity_cap_freed_weight_goes_to_domestic():
+    """Freed weight from intl trim must flow to non-intl names."""
+    from orchestrator.central_intelligence import _cap_intl_equity
+    weights = {"EWY": 0.12, "EEM": 0.10, "AAPL": 0.40, "MSFT": 0.38}
+    result = _cap_intl_equity(weights)
+    # EEM is in em_equity bucket → also caught; AAPL+MSFT must gain
+    assert result.get("AAPL", 0) > 0.40
+
+
+# ── Task 2: Macro-equity regime divergence penalty ───────────────────────────
+
+from datetime import date
+import pandas as pd
+from ascent.config.types import AgentOutput
+
+
+def _make_agent_output(agent_id, regime):
+    return AgentOutput(
+        agent_id=agent_id,
+        as_of_date=date.today(),
+        target_weights={"SPY": 0.50, "TLT": 0.50},
+        regime_signal=regime,
+        alpha_scores=pd.DataFrame(),
+        skill_score=None,
+        metadata={},
+    )
+
+
+def test_macro_divergence_scales_down_when_macro_stressed():
+    """When macro=stressed and equity=calm_bull, merged weights should sum to ~0.90."""
+    from orchestrator.central_intelligence import run_orchestrator
+    outputs = [
+        _make_agent_output("us_equities", "calm_bull"),
+        _make_agent_output("macro", "stressed"),
+    ]
+    merged = run_orchestrator(outputs)
+    total = sum(merged.values())
+    assert total <= 0.91, f"Expected ~0.90 total after divergence penalty, got {total:.3f}"
+    assert total >= 0.85, f"Total {total:.3f} dropped too far — expected ~0.90"
+
+
+def test_macro_divergence_no_penalty_when_regimes_agree():
+    """When macro and equity both calm_bull, merged weights should sum to ~1.0."""
+    from orchestrator.central_intelligence import run_orchestrator
+    outputs = [
+        _make_agent_output("us_equities", "calm_bull"),
+        _make_agent_output("macro", "calm_bull"),
+    ]
+    merged = run_orchestrator(outputs)
+    total = sum(merged.values())
+    assert total >= 0.98, f"Expected ~1.0 (no penalty), got {total:.3f}"
+
+
+def test_macro_divergence_no_penalty_when_macro_not_present():
+    """If macro agent is absent, no penalty should apply."""
+    from orchestrator.central_intelligence import run_orchestrator
+    outputs = [_make_agent_output("us_equities", "calm_bull")]
+    merged = run_orchestrator(outputs)
+    total = sum(merged.values())
+    assert total >= 0.98, f"Expected ~1.0 with no macro agent, got {total:.3f}"
+
+
+def test_macro_divergence_no_penalty_when_equity_also_stressed():
+    """When both macro and equity are stressed, no divergence — no penalty."""
+    from orchestrator.central_intelligence import run_orchestrator
+    outputs = [
+        _make_agent_output("us_equities", "stressed"),
+        _make_agent_output("macro", "stressed"),
+    ]
+    merged = run_orchestrator(outputs)
+    total = sum(merged.values())
+    assert total >= 0.98, f"Expected ~1.0 (same regime), got {total:.3f}"
