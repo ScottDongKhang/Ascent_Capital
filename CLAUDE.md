@@ -105,6 +105,14 @@ One step at a time. Verify existing logic before proposing fixes. `ast.parse` af
 
 > Full history archived to `docs/session_log_archive.md`.
 
+### 2026-06-22 (daily run + discovery churn fix — two guards on the off-calendar mini-rebalance)
+- Ran `run_all_agents.py` (non-rebalance). Clean exit; **but** the off-calendar **discovery** path fired: INDY (India ETF, conviction 0.82) tripped a mini-rebalance → **32-order full-book rotation 2 trading days before the Jun 24 scheduled rebalance**. INDY did not even survive into the final book — the re-optimization dropped it. Counterfactual now D−A★ = −6.52pp/23d, B−A★ = −5.27pp/31d.
+- ROOT CAUSE (two design flaws): (1) `_trigger_mini_rebalance` re-ran the FULL us_equities agent + orchestrator → recomputed every weight (full rotation) for one candidate, not an "add one name"; could even discard the triggering ticker. (2) discovery had no rebalance-calendar awareness → churned the book right before a scheduled rebalance that recomputes it anyway (pure cost).
+- FIX (TDD, 8 new tests, user chose "both guards"): (A) `_is_near_scheduled_rebalance(today, window=3, cal_path)` — reads `rebalance_calendar.csv`, suppresses discovery within 3 trading days of the next scheduled rebalance (fail-open if calendar missing). Wired at the discovery call site. (B) `_insert_candidate_weights(current, symbol, max_weight)` — ADD-ONLY: candidate gets an equal-weight slot (1/(n+1)), existing book trimmed pro-rata (relative order preserved), max-weight cap enforced via the optimizer's `_water_fill_cap`. `_trigger_mini_rebalance` rewritten to use it instead of the full re-run; regime label for debate read from the cycle's existing us_equities `AgentOutput` (no agent re-run).
+- Verified against real data: Jun 22 → guard suppresses (2 days to Jun 24); inserting INDY into the live 19-name book → INDY @ 5.0%, sum 1.0, max 9.5%, only **1 of 19** existing names moves >0.5pp (vs the 32-order rotation that actually executed today).
+- Files: `run_all_agents.py`, `tests/strategy/test_discovery_guards.py` (new). 81 strategy+portfolio tests pass.
+- NOT done: today's 32-order rotation already filled at Alpaca — left to ride into the Jun 24 rebalance (reversing it = more churn). Guards take effect on the next run. Not committed (user hasn't asked).
+
 ### 2026-06-20 (AI PM / "no alpha" investigation — measurement repair + self-heal, honest signal now −6pp)
 - Investigated "AI PM poor performance" + "Ascent makes no alpha." TWO separate causes, neither what the dashboard implied.
 - **No-alpha-vs-SPY is structural, not failure**: recomputed tracks — pure quant (A★ +12.55%) lags SPY (C +16.61%) by ~4pp, and the actual book lags the SAME ~4pp. AI PM (5% authority) is not the driver. Cause = ~22% defensive non-equity sleeves (PDBC/EWJ/EFA/EWC/LQD/SGOV/KMLM) + 200MA cut + 15% vol-target overlay costing beta in an equity-only bull. WF OOS confirms positive risk-adjusted alpha; raw-return lag is by design.
