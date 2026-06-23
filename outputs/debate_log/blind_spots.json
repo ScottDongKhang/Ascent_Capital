@@ -1,80 +1,88 @@
 {
   "patterns": [
     {
-      "pattern": "Defensive allocation systematically misclassified: bull case inflates defensive % by including PDBC, HYG, NEM as safe havens when they correlate heavily in stressed regimes. Actual defensive (BIL+LQD+true hedges) consistently 50-60% lower than claimed.",
+      "pattern": "Defensive allocation systematically miscalculated or misclassified \u2014 bull case inflates true defensive % (19.4% claimed vs. 7.5% actual on 2026-04-15; similar pattern on 2026-06-10), allowing portfolio to remain under-hedged in stressed regimes while appearing adequately protected",
       "frequency": 4,
       "first_seen": "2026-04-04",
-      "last_seen": "2026-06-10",
+      "last_seen": "2026-06-15",
       "severity": "high",
-      "recommendation": "Implement hard defensive classification rule: only BIL, LQD, TLT, GLD, and explicit tail hedges (VIX calls, put spreads) count as defensive. Require quant check to validate defensive % before each debate. Flag any discrepancy >3% between bull claim and quant verification as automatic HALT trigger."
+      "recommendation": "Implement mandatory quant sanity check BEFORE debate begins: classify each position as defensive only if it has negative equity beta AND positive returns in bottom-decile equity drawdown days (use historical stress periods). Flag any discrepancy >5% between bull's claimed defensive % and quant-verified %. Require explicit position-by-position defense of classification."
     },
     {
-      "pattern": "EM/cyclical correlation collapse repeatedly flagged but never acted upon with sufficient force. System identifies 46% correlated liquidation risk, estimates -5% to -7% tail vs. -1.2% Monte Carlo, yet proceeds at 62-88% confidence. Pattern repeats across 2026-04-15, 2026-05-27, 2026-06-10.",
-      "frequency": 3,
-      "first_seen": "2026-04-15",
-      "last_seen": "2026-06-10",
-      "severity": "high",
-      "recommendation": "Create hard rule: if bear/devil's advocate identifies >40% portfolio correlation in stress scenario AND Monte Carlo underestimates tail by >3x, confidence ceiling is 0.55 regardless of regime base rates. Require explicit position-level reduction (not just 'proceed with caution') when this threshold is breached."
-    },
-    {
-      "pattern": "Regime divergence (calm macro + stressed equities) correctly identified as dangerous false comfort in 2026-04-04/04-05, but system reverts to calm_bull base-rate reasoning (72% continuation) by 2026-05-27/06-10, ignoring that regime divergence itself is a transition signal. Assumes regime persistence rather than treating divergence as instability indicator.",
-      "frequency": 3,
-      "first_seen": "2026-04-04",
-      "last_seen": "2026-06-10",
-      "severity": "high",
-      "recommendation": "When regime divergence is flagged (calm macro + stressed equities OR vice versa), reduce regime base-rate weight by 40% and require explicit transition probability assessment. Treat divergence as regime-flip risk, not noise. Add decision rule: if divergence persists >2 weeks, shift confidence ceiling down 0.15 points."
-    },
-    {
-      "pattern": "Contradictory macro positioning (long commodities/inflation + dollar strength) flagged 2026-04-04 as 'fundamental strategic incoherence' but never resolved. Portfolio continues to carry offsetting exposures (21% commodities + 6% UUP) across all subsequent debates without explicit thesis reconciliation or position consolidation.",
+      "pattern": "Correlated liquidation risk in EM/cyclical clusters (EWY+EWZ+EWT+CAT+PDBC+DBB) flagged repeatedly (2026-04-04, 2026-04-05, 2026-04-15, 2026-05-27) but never resolved through position reduction or hedging \u2014 system acknowledges 46% correlation collapse risk but proceeds anyway, treating it as a debate point rather than actionable constraint",
       "frequency": 5,
       "first_seen": "2026-04-04",
-      "last_seen": "2026-06-10",
-      "severity": "medium",
-      "recommendation": "Require explicit macro thesis statement before each debate. If contradictory positions are identified (negative correlation >-0.6), force choice: either consolidate to single thesis or document the hedge rationale with explicit cost-benefit. Flag unresolved contradictions as automatic confidence penalty (-0.15)."
+      "last_seen": "2026-05-27",
+      "severity": "high",
+      "recommendation": "Establish hard rule: if any single correlated cluster exceeds 35% of portfolio AND regime is stressed or unknown, REDUCE_SIZE is mandatory unless cluster is explicitly hedged (e.g., short VIX, long bonds, long gold). Do not allow debate to override this threshold. Track cluster correlation monthly and flag when it exceeds 0.65."
     },
     {
-      "pattern": "Structural decay instruments (USO contango/roll costs) identified as 12.52% unacceptable allocation 2026-04-04, but system never validates whether position was reduced or thesis was revisited. Assumes flagging = resolution without tracking follow-through.",
+      "pattern": "Regime divergence (calm macro + stressed equities) treated as temporary dislocation rather than regime-flip signal \u2014 system correctly identifies the contradiction in 2026-04-04 and 2026-04-05 but then proceeds in 2026-04-12 and 2026-05-27 on assumption that calm_bull will persist, ignoring debrief lesson that 'regime divergence creates dangerous false comfort'",
+      "frequency": 4,
+      "first_seen": "2026-04-04",
+      "last_seen": "2026-06-15",
+      "severity": "high",
+      "recommendation": "When regime divergence is flagged (macro calm, equities stressed), require explicit decision rule: if divergence persists >10 trading days, treat as regime-flip signal and shift to defensive posture automatically. Do not rely on base-rate continuation probability (72% calm_bull) to override structural regime mismatch. Add leading indicator: track equity stress vs. macro surprise index; if divergence widens, reduce risk-on allocation by 25%."
+    },
+    {
+      "pattern": "Overconfidence in Monte Carlo VaR estimates \u2014 system flags that Monte Carlo underestimates tail risk (2026-04-15: -1.2% vs. -3.5-4.2% true tail; 2026-05-27: VaR-99 at -3.31% consumes 79% of drawdown budget) but continues to use these estimates as primary risk constraint, allowing positions to remain oversized relative to true stress scenarios",
+      "frequency": 3,
+      "first_seen": "2026-04-15",
+      "last_seen": "2026-06-15",
+      "severity": "high",
+      "recommendation": "Replace Monte Carlo VaR with historical stress-scenario analysis: for each position cluster, calculate actual drawdown in 3 historical stress periods (2020 COVID, 2018 Q4, 2015 Aug). Use 75th percentile of historical stress as binding constraint, not Monte Carlo. If historical stress exceeds Monte Carlo by >2%, flag as 'model underestimation' and reduce position size by 30%."
+    },
+    {
+      "pattern": "Recency bias in regime assessment \u2014 system switches from STRESSED (2026-04-06, 2026-04-15) to calm_bull (2026-04-12, 2026-05-27, 2026-06-10, 2026-06-15) after single positive outcome (+5.63% on 2026-04-15), then anchors to calm_bull base rate (72%) to justify PROCEED despite repeated position-specific risks (PK -2.10 transcript, BYD binary, AXTA unhedged)",
+      "frequency": 4,
+      "first_seen": "2026-04-12",
+      "last_seen": "2026-06-15",
+      "severity": "high",
+      "recommendation": "Implement regime persistence rule: regime change requires 2 consecutive sessions of supporting evidence, not single outcome. Track regime-switching frequency; if system changes regime >2x per month, flag as 'recency bias' and lock regime for minimum 15 trading days unless structural break occurs (e.g., Fed policy shift, earnings recession signal). Use regime-neutral decision rules for position-specific risks (PK, BYD) independent of macro regime."
+    },
+    {
+      "pattern": "Overcorrection for prior caution \u2014 system explicitly acknowledges over-reducing in 2026-04-15 (REDUCE_SIZE call that preceded +5.6% rally), then uses this as justification to ignore similar warnings in 2026-06-10 and 2026-06-15 ('my own track record shows bias toward over-reducing'), creating false equivalence between different risk scenarios and leading to under-hedging",
+      "frequency": 3,
+      "first_seen": "2026-06-10",
+      "last_seen": "2026-06-15",
+      "severity": "medium",
+      "recommendation": "Separate regime-level decisions from position-level decisions: prior over-caution on regime calls (stressed vs. calm) does NOT justify ignoring position-specific risks (transcript scores, earnings binaries, momentum cliffs). Require independent risk assessment for each: (1) macro regime, (2) portfolio-level concentration, (3) position-level fundamentals. Do not allow one domain's track record to override another."
+    },
+    {
+      "pattern": "Contradictory macro positioning never resolved \u2014 2026-04-04 flags simultaneous long commodities/inflation AND dollar strength as 'negatively correlated' and 'guarantees mediocre returns,' but portfolio maintains both exposures (PDBC, DBA, DBB + UUP) through 2026-06-15 without explicit hedge or thesis reconciliation",
+      "frequency": 3,
+      "first_seen": "2026-04-04",
+      "last_seen": "2026-05-27",
+      "severity": "medium",
+      "recommendation": "For any flagged macro contradiction, require explicit resolution within 5 trading days: either (a) reduce one leg to <5% of portfolio, (b) add explicit hedge (e.g., long commodity-dollar correlation hedge), or (c) document thesis reconciliation with quantified correlation assumption. If unresolved after 5 days, trigger REDUCE_SIZE. Do not allow contradictions to persist as 'diversification.'"
+    },
+    {
+      "pattern": "Structural decay in instruments (USO contango/roll costs) flagged at 12.52% allocation (2026-04-04) but never addressed \u2014 system identifies that USO will 'significantly underperform spot oil' but does not recommend substitution to USL, DBC, or direct futures, allowing structural drag to persist",
       "frequency": 2,
       "first_seen": "2026-04-04",
       "last_seen": "2026-04-05",
       "severity": "medium",
-      "recommendation": "Implement risk-flag persistence tracking: any risk flagged as 'unacceptable' or 'fundamentally flawed' must be explicitly resolved (position reduced, thesis changed, or documented exception) in next debate. If unresolved, escalate to HALT_AND_REVIEW regardless of regime signal."
+      "recommendation": "Create instrument-quality checklist: for any commodity/volatility/inverse ETF, calculate annual decay cost (contango, roll, expense ratio). If decay >1.5% annually, flag as 'structural drag' and recommend substitution or reduction. For USO specifically, require quarterly review of contango curve; if contango >$0.50/barrel, reduce to <5% or substitute to USL/DBC."
     },
     {
-      "pattern": "Parabolic momentum positions (WDC +928%, SATS +505%, VICR +714%) flagged as 'distribution-top characteristics' 2026-05-27 with SATS carrying -0.70 negative earnings signal, but PROCEED verdict issued at 62% confidence. System acknowledges tail risk but defers to regime base rates rather than applying momentum-reversal decision rules.",
-      "frequency": 1,
-      "first_seen": "2026-05-27",
-      "last_seen": "2026-05-27",
-      "severity": "medium",
-      "recommendation": "Create hard rule for parabolic positions: if any single position shows >500% 252-day return AND carries negative fundamental signal (earnings, transcript), require minimum 25% position reduction or explicit documented exception. Do not defer to regime base rates for momentum-reversal risk."
-    },
-    {
-      "pattern": "System exhibits overcorrection bias: acknowledges 'overcaution has been primary drag' (2026-05-27) and explicitly disciplines against 'excessive caution' (2026-06-10), leading to PROCEED at 62% confidence despite flagged tail risks. Confidence floor appears to be regime base rate rather than risk-adjusted threshold.",
+      "pattern": "Momentum cliff risk in parabolic positions (WDC +928%, SATS +505%, VICR +714%) flagged with negative signals (SATS -0.70 transcript) but PROCEED verdict issued anyway (2026-05-27) without position-size reduction or stop-loss implementation",
       "frequency": 2,
       "first_seen": "2026-05-27",
-      "last_seen": "2026-06-10",
-      "severity": "high",
-      "recommendation": "Decouple regime base-rate confidence from risk-adjusted confidence. Create separate tracks: (1) regime continuation probability, (2) portfolio risk-adjusted confidence. Final decision confidence = MIN(regime probability, risk-adjusted confidence). Prevent self-referential bias correction from overriding tail-risk flags."
-    },
-    {
-      "pattern": "Monte Carlo estimates consistently underestimate tail risk by 3-6x (VaR-99 at -3.31% vs. flagged -5% to -7% correlated stress scenarios). System acknowledges discrepancy but proceeds with decisions weighted toward Monte Carlo rather than stress-test estimates.",
-      "frequency": 3,
-      "first_seen": "2026-04-15",
-      "last_seen": "2026-05-27",
-      "severity": "high",
-      "recommendation": "When bear/devil's advocate stress-test estimates exceed Monte Carlo by >2x, weight stress-test estimate at 70% and Monte Carlo at 30% for confidence calculation. Require explicit model-validation debate if discrepancy persists across 2+ sessions. Do not use Monte Carlo as confidence anchor when flagged as unreliable."
-    },
-    {
-      "pattern": "Portfolio complexity (22 positions collapsing to 14 independent bets, potentially fewer in tail) flagged 2026-06-10 but treated as observation rather than actionable risk. System does not implement position-count limits or correlation-based consolidation rules despite acknowledging diversification illusion.",
-      "frequency": 1,
-      "first_seen": "2026-06-10",
-      "last_seen": "2026-06-10",
+      "last_seen": "2026-06-15",
       "severity": "medium",
-      "recommendation": "Implement hard position-count rule: if portfolio >18 positions AND stress-test correlation analysis shows <14 independent bets, require consolidation to 14-16 positions before proceeding. Add quarterly correlation-collapse audit to prevent diversification illusion."
+      "recommendation": "Establish momentum-cliff rule: if position has >500% YTD return AND negative fundamental signal (transcript score <-1.0, earnings miss, analyst downgrade), reduce position by 50% immediately. Do not wait for regime confirmation. Implement trailing stop-loss at 20% below 252-day high for any position with >300% YTD return."
+    },
+    {
+      "pattern": "Portfolio concavity (22 positions collapse to 1 bet: 'global growth continues') acknowledged (2026-06-15) but not addressed \u2014 system estimates -7.7% regime-flip impact but proceeds on calm_bull base rate, treating concavity as debate point rather than sizing constraint",
+      "frequency": 2,
+      "first_seen": "2026-06-15",
+      "last_seen": "2026-06-15",
+      "severity": "medium",
+      "recommendation": "Implement concavity test: run correlation matrix across all positions under 3 stress scenarios (2020 COVID, 2018 Q4, 2015 Aug). If >60% of positions correlate >0.7 in any stress scenario, portfolio is concave. Reduce largest 5 positions by 25% each until concavity metric falls below 50%. Retest monthly."
     }
   ],
-  "summary": "The system exhibits a critical pattern of flagging risks accurately but failing to enforce decision rules proportional to severity. Defensive allocations are systematically misclassified (inflated 50-60% above reality), EM/cyclical correlation collapse is repeatedly identified but deferred to regime base rates, and regime divergence is correctly diagnosed as dangerous but treated as noise rather than transition signal. Monte Carlo estimates are acknowledged as 3-6x underestimating tail risk yet remain confidence anchors. The system shows overcorrection bias\u2014explicitly disciplining against 'overcaution' and deferring to regime continuation probabilities even when stress-test estimates and fundamental contradictions warrant lower confidence. Structural issues (USO decay, parabolic momentum, contradictory macro theses) are flagged but never formally resolved or tracked for follow-through. The core failure is decoupling risk-adjusted confidence from regime base-rate confidence, allowing regime probability to override tail-risk assessment. Decision rules must be hardened: defensive classification must be quant-verified, correlation collapse >40% must cap confidence at 0.55, regime divergence must reduce base-rate weight by 40%, and parabolic positions with negative signals must trigger automatic reductions. Risk flags labeled 'unacceptable' or 'fundamentally flawed' must be explicitly resolved in the next debate or escalated to HALT.",
-  "updated": "2026-06-15",
-  "n_verdicts_analyzed": 7,
+  "summary": "The system exhibits five high-severity systematic blind spots: (1) defensive allocations are chronically miscalculated, allowing portfolios to remain under-hedged while appearing protected; (2) correlated EM/cyclical liquidation risk is flagged repeatedly but never resolved through actual position reduction; (3) regime divergence (calm macro + stressed equities) is correctly identified but treated as temporary rather than a regime-flip signal, leading to repeated over-exposure; (4) Monte Carlo VaR estimates are known to underestimate tail risk by 2-3x but remain the binding constraint; (5) recency bias causes regime switches after single positive outcomes, with prior over-caution used as false justification to ignore similar warnings in new contexts. Additionally, contradictory macro positions (long commodities + long dollar) persist unresolved, structural instrument decay (USO contango) is acknowledged but not addressed, parabolic momentum positions with negative fundamentals are held despite cliff risk, and portfolio concavity (22 positions \u2192 1 bet) is quantified but ignored. The core failure is treating debate flags as intellectual exercises rather than actionable constraints\u2014the system correctly identifies risks but lacks decision rules to enforce resolution, allowing confidence in base-rate continuation probabilities to override structural misalignments.",
+  "updated": "2026-06-22",
+  "n_verdicts_analyzed": 8,
   "n_debriefs_analyzed": 3
 }
