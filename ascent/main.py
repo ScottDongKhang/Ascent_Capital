@@ -95,6 +95,11 @@ def _log_sleeve_ic(features: dict, targets: dict) -> None:
             sleeve_builders["short_interest"] = lambda f: short_interest_alpha(f)
         except Exception:
             pass
+        try:
+            from ascent.alpha.earnings_tone import earnings_tone_alpha
+            sleeve_builders["earnings_tone"] = lambda f: earnings_tone_alpha(f)
+        except Exception:
+            pass
 
         sleeve_ics: dict = {}
         for name, builder in sleeve_builders.items():

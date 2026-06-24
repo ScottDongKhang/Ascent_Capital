@@ -165,7 +165,7 @@ def test_default_alpha_weights_include_fundamental():
     assert "fundamental" in DEFAULT_ALPHA_WEIGHTS
     # fundamental disabled: IC-t=-4.75 across 31 live days makes it an anti-signal
     assert DEFAULT_ALPHA_WEIGHTS["fundamental"] == 0.00
-    assert abs(DEFAULT_ALPHA_WEIGHTS["trend"] - 0.43) < 0.001
+    assert abs(DEFAULT_ALPHA_WEIGHTS["trend"] - 0.41) < 0.001
     assert abs(sum(DEFAULT_ALPHA_WEIGHTS.values()) - 1.0) < 0.01
 
 
