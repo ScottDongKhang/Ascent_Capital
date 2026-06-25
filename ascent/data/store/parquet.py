@@ -33,6 +33,38 @@ def has_data(name: str) -> bool:
     return _cache_path(name).exists()
 
 
+def _calendar_day_key(s: pd.Series) -> pd.Series:
+    """Collapse a `date` column to a comparable per-row calendar day for dedup.
+
+    Handles all three shapes a blended cache produces:
+      - tz-aware datetime64  (the hub stores bars at 19:00 NY)
+      - tz-naive  datetime64  (other ingest sources)
+      - object dtype holding a MIX of tz-aware and tz-naive Timestamps — what
+        pd.concat yields when two fetches disagree on tz. is_datetime64_any_dtype
+        is False for this, so the old code skipped normalization entirely and
+        dedup never fired (the 3-generation blend that bloated prices_live ~3×).
+
+    Strips tz (keeps wall-clock day) and zeroes the time, so the same trading day
+    matches regardless of intraday timestamp / tz / dtype. Stored values are not
+    mutated — only the dedup key.
+    """
+    if pd.api.types.is_datetime64_any_dtype(s):
+        d = s.dt.normalize()
+        if isinstance(s.dtype, pd.DatetimeTZDtype):
+            d = d.dt.tz_localize(None)
+        return d
+
+    def _one(x):
+        if x is None or (not isinstance(x, pd.Timestamp) and pd.isna(x)):
+            return pd.NaT
+        ts = x if isinstance(x, pd.Timestamp) else pd.Timestamp(x)
+        if ts.tzinfo is not None:
+            ts = ts.tz_localize(None)
+        return ts.normalize()
+
+    return s.map(_one)
+
+
 def save_parquet(df: pd.DataFrame, name: str) -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     path = _cache_path(name)
@@ -57,11 +89,8 @@ def save_parquet(df: pd.DataFrame, name: str) -> None:
         # (audit 2026-06-22: prices_live had ~59% duplicates). Normalising the key
         # collapses those without mutating the stored `date` values.
         key = combined[id_cols].copy()
-        if "date" in key.columns and pd.api.types.is_datetime64_any_dtype(key["date"]):
-            _d = key["date"].dt.normalize()
-            if isinstance(key["date"].dtype, pd.DatetimeTZDtype):
-                _d = _d.dt.tz_localize(None)
-            key["date"] = _d
+        if "date" in key.columns:
+            key["date"] = _calendar_day_key(key["date"])
         df = combined[~key.duplicated(keep="last")]
     df.to_parquet(path, index=False)
     log.info("[cache] saved %s  rows=%d", name, len(df))

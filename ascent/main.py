@@ -35,6 +35,29 @@ from ascent.research.evaluation import format_metrics
 _LIVE_STALE_DAYS = 3
 _SIM_STALE_DAYS  = 0
 
+# Cross-sectional winsorization bounds for the IC forward-return target. The IC
+# is a per-date cross-sectional Pearson correlation, which a single data-error
+# outlier (e.g. a ×10 price spike in one symbol) can dominate — that is how one
+# corrupt symbol drove trend IC negative and tripped the gate on 2026-06-24.
+# Clipping each date's returns to its 1st/99th cross-sectional percentile bounds
+# any single symbol's influence; it is a near-no-op on clean data (only the 1%
+# tails move) but neutralizes data-error spikes that sit tens of σ out.
+_IC_WINSOR_LOWER = 0.01
+_IC_WINSOR_UPPER = 0.99
+
+
+def _winsorize_rows(df, lower: float = _IC_WINSOR_LOWER, upper: float = _IC_WINSOR_UPPER):
+    """Clip each row (date / cross-section) to its [lower, upper] percentile band.
+
+    Percentile-based (not σ-based) on purpose: an extreme outlier inflates the
+    standard deviation enough to escape σ-clipping, but percentiles ignore its
+    magnitude, so one corrupt symbol is reliably pulled in. Used to robustify the
+    cross-sectional IC against single-symbol data errors before the gate reads it.
+    """
+    lo = df.quantile(lower, axis=1)
+    hi = df.quantile(upper, axis=1)
+    return df.clip(lower=lo, upper=hi, axis=0)
+
 
 def _log_sleeve_ic(features: dict, targets: dict) -> None:
     """
@@ -48,6 +71,9 @@ def _log_sleeve_ic(features: dict, targets: dict) -> None:
         fwd = targets.get("fwd_ret_21d")
         if fwd is None or fwd.empty:
             return
+        # Robustify against single-symbol data errors before correlating — one
+        # corrupt symbol must not be able to drag a sleeve below the IC gate.
+        fwd = _winsorize_rows(fwd)
 
         sleeve_builders: dict = {}
         try:
