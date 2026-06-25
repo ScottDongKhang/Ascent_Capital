@@ -255,6 +255,14 @@ def extended_thinking_completion(
             time.sleep(2 ** attempt)
 
 
+_FINAL_TURN_NUDGE = (
+    "You have nearly used your entire tool-call budget. This is your FINAL turn — "
+    "do NOT request more tools. Give your final answer now, and if you have a "
+    "submission tool (e.g. propose_portfolio / propose_prethesis) you MUST call it "
+    "this turn. If you see no reason to deviate from the baseline, submit it unchanged."
+)
+
+
 def tool_completion(
     system_prompt: str,
     user_prompt: str,
@@ -344,6 +352,13 @@ def tool_completion(
                     "tool_use_id": block.id,
                     "content":     str(result),
                 })
+            # One round before the budget is exhausted, tell the model this is its
+            # final turn so it finalizes / calls its submission tool instead of
+            # over-grounding into a "[max iterations reached]" non-answer (the AI PM
+            # force-seal path). Appended to the tool-result user turn so roles stay
+            # valid; only fires on the penultimate iteration.
+            if _iteration == max_tool_calls - 1:
+                tool_results.append({"type": "text", "text": _FINAL_TURN_NUDGE})
             messages.append({"role": "user", "content": tool_results})
 
         else:
