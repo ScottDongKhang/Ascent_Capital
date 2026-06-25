@@ -1,0 +1,15 @@
+{
+  "date": "2026-06-10",
+  "verdict_recommendation": "proceed",
+  "verdict_confidence": 0.62,
+  "regime": "calm_bull",
+  "nav_change": 0.002944,
+  "outcome_correctness": "CORRECT",
+  "lesson": "**2026-06-10 Debrief: Correct Verdict Masked a Structural Weakness in Position Design**\n\nThe PROCEED call at 62% confidence was justified by calm_bull base rates (72% continuation) and proved correct (+0.29% outcome), but the debate identified but failed to operationalize a critical flaw: VNO is a structural drag (negative momentum in a momentum-rewarding regime) that should have triggered either an explicit exit rule or a mandatory hedge, not just a risk flag. The judge's self-discipline against over-reducing (citing the 2026-04-15 false alarm) created the opposite error\u2014it suppressed action on a clear, regime-specific mismatch. Next time: when a position contradicts the regime's primary reward signal (momentum in calm_bull) *and* the debate explicitly names it as structural drag, that is a decision trigger for either trim or hedge, not a flag to monitor. The 62% confidence should have been conditional: \"PROCEED *if* VNO is reduced or hedged; HOLD *as-is* only if conviction rises to 75%+.\" The FOMC binary risk on rate-sensitive assets (VNO+VNQ = 10%) was correctly identified but treated as a macro event to survive rather than a position-sizing constraint\u2014in future calm_bull debates, binary",
+  "lesson_tags": [
+    "regime",
+    "concentration",
+    "macro",
+    "confidence"
+  ]
+}

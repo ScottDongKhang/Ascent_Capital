@@ -1,0 +1,55 @@
+{
+  "market_view": "Calm_bull regime driven by three structural tailwinds: (1) EM equities outperforming on weaker USD and AI capex broadening \u2014 EEM up ~28% YTD 2026; (2) US infrastructure spending cycle accelerating \u2014 KNF surging on backlog momentum, PAVE at 1-year highs; (3) AI memory/semiconductor cycle at inflection \u2014 MU guiding Q3 to $33.5B revenue and 81% gross margin. Short-duration bills (BIL) anchor Sharpe via 5%+ carry with near-zero vol. Dollar weakness is the dominant cross-asset signal, benefiting EM and international equities.",
+  "regime_assessment": "Calm_bull confirmed as of 2026-06-24. This regime historically rewards momentum continuation in leading sectors, EM over DM given USD weakness, and quality cyclicals over defensives. Current cycle is AI-capex-driven rather than credit-expansion-driven, concentrating leadership in semis, infrastructure, and select EM. Rate stabilization supports nascent REIT recovery (ARE, VNQ). Utilities with data center exposure (LNT) offer high Sharpe contribution.",
+  "quant_baseline_summary": "Quant signals expected to confirm momentum in EEM, MU, PAVE, KNF, and LNT based on strong 21d/63d/252d price trends. EFA is a mean-reversion candidate near structural support. BIL provides zero-vol carry. ARE and VNQ are early-cycle recovery plays with moderate quant confirmation expected.",
+  "ai_pm_portfolio": {
+    "EEM": 0.1,
+    "MU": 0.08,
+    "PAVE": 0.1,
+    "KNF": 0.07,
+    "BIL": 0.12,
+    "EWT": 0.08,
+    "ARE": 0.06,
+    "EFA": 0.09,
+    "IFRA": 0.08,
+    "LNT": 0.08,
+    "BAX": 0.05,
+    "AMCR": 0.05,
+    "VNQ": 0.04
+  },
+  "quant_agreement": [
+    "EEM",
+    "MU",
+    "PAVE",
+    "KNF",
+    "LNT",
+    "IFRA",
+    "BIL"
+  ],
+  "quant_overrides": [],
+  "position_rationale": {
+    "EEM": "10% \u2014 Core EM exposure. Up ~28% YTD driven by structurally weaker USD, capital reallocation from expensive US equities, and AI capex broadening into EM supply chains. Expected 3-month return: +6-9%. Volatility: medium. Wrong if: DXY breaks above 105 sustained.",
+    "MU": "8% \u2014 AI memory cycle inflection. Q2 2026: $23.86B rev, 74.4% GM; Q3 guide: $33.5B rev, 81% GM. Explosive margin ramp. Capped at 8% due to high single-name vol. Expected 3-month return: +8-14%. Volatility: high. Wrong if: Q3 actual misses $33.5B guide or Q4 guide shows deceleration.",
+    "PAVE": "10% \u2014 Optimal Sharpe expression of infrastructure theme. Diversified ETF at new 1-year highs. Multi-year structural tailwind from government capex. Expected 3-month return: +5-8%. Volatility: medium-low. Wrong if: Federal infrastructure spending cut in budget reconciliation.",
+    "KNF": "7% \u2014 Pure-play US aggregates/construction materials with massive backlog momentum. Direct infrastructure beneficiary. Expected 3-month return: +7-12%. Volatility: high (small/mid-cap). Wrong if: Backlog growth stalls in next quarterly report.",
+    "BIL": "12% \u2014 Sharpe anchor. 5%+ annualized carry with near-zero vol and zero duration risk. Institutional flows strong. Expected 3-month return: ~1.25%. Volatility: very low. Wrong if: Fed cuts rates >100bp rapidly.",
+    "EWT": "8% \u2014 Taiwan/TSMC as AI hardware epicenter. ~20% TSMC weight captures irreplaceable foundry demand. Expected 3-month return: +5-10%. Volatility: medium-high (geopolitical). Wrong if: TSMC cautious guidance or Taiwan Strait escalation.",
+    "ARE": "6% \u2014 Life-science REIT recovery play. Irreplaceable lab real estate in cluster markets. Rate stabilization supports re-rating. Expected 3-month return: +4-7%. Volatility: medium. Wrong if: 10Y yield breaks 5.0% sustained.",
+    "EFA": "9% \u2014 Mean-reversion at structural support ($99-$103). 3.15% trailing yield. Contrarian DM international entry. ECB rate cut catalyst Jul 30. Expected 3-month return: +4-7%. Volatility: medium-low. Wrong if: EFA breaks below $99 on close or ECB turns hawkish.",
+    "IFRA": "8% \u2014 Complementary infrastructure exposure (utilities/energy infra tilt). Diversifies PAVE concentration risk. Expected 3-month return: +4-7%. Volatility: low-medium. Wrong if: Infrastructure spending legislation reversed.",
+    "LNT": "8% \u2014 Regulated utility with data center demand tailwind. Potentially 6% below fair value. Low beta, high Sharpe contribution. Expected 3-month return: +4-6%. Volatility: low. Wrong if: 10Y yield spikes above 5.25% or rate cases rejected.",
+    "BAX": "5% \u2014 Medical instruments with strong 21d (+14.3%) and 63d (+19.7%) momentum. ESG governance enhancements and operational turnaround. Defensive healthcare diversifier. Expected 3-month return: +4-7%. Volatility: medium. Wrong if: Earnings miss or margin compression.",
+    "AMCR": "5% \u2014 Packaging cyclical with 77% revenue growth and 20% margins. Benefiting from consumer recovery. Expected 3-month return: +3-6%. Volatility: medium. Wrong if: Consumer spending decelerates sharply.",
+    "VNQ": "4% \u2014 Broad US REIT exposure as rate fears moderate. Sustainable distribution. Lower-conviction diversifier. Expected 3-month return: +3-5%. Volatility: medium. Wrong if: 10Y yield breaks 5.0%."
+  },
+  "key_risks": [
+    "US CPI re-acceleration (Jun 11 print) forcing Fed hawkishness, strengthening USD and crushing EM/duration trades simultaneously",
+    "Micron earnings miss or cautious Q4 guidance triggering semiconductor sector selloff",
+    "Geopolitical escalation in Taiwan Strait impacting EWT and broader EM sentiment",
+    "10-year Treasury yield spike above 5.0% compressing REIT and utility valuations",
+    "Federal infrastructure spending cuts in budget reconciliation process",
+    "Correlation spike across risk assets in a risk-off event, reducing diversification benefit"
+  ],
+  "what_could_be_wrong": "The biggest risk to this portfolio is that I am overweight a single macro factor \u2014 USD weakness \u2014 which drives EEM, EWT, EFA, and DBB simultaneously. If the dollar reverses sharply (DXY >105) due to hot CPI or Fed hawkishness, the EM/international cluster would draw down 3-5% rapidly while the infrastructure/domestic names provide only partial offset. Additionally, MU earnings tonight are binary \u2014 a miss could cascade into broader semi/tech selling that hits EWT as well, creating correlated losses across two positions totaling 16% of the portfolio.",
+  "as_of_date": "2026-06-24"
+}

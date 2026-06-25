@@ -1,0 +1,706 @@
+{
+  "date": "2026-06-24",
+  "data_as_of": "2026-06-24",
+  "timestamp": "2026-06-24T15:29:17.780421",
+  "portfolio_state": {
+    "date": "2026-06-24",
+    "us_regime": "calm_bull",
+    "macro_regime": "stressed",
+    "n_positions": 17,
+    "allocation": {
+      "alternatives": 0.1,
+      "macro": 0.15,
+      "international": 0.15,
+      "us_equities": 0.6
+    },
+    "weights": {
+      "IFRA": 0.04178748378092226,
+      "DBB": 0.02832519455669539,
+      "UUP": 0.054193499501911824,
+      "EFA": 0.02121154051473212,
+      "PAVE": 0.08147225212739352,
+      "KNF": 0.07616497087552963,
+      "EEM": 0.040881788979435174,
+      "ARE": 0.07599544460029745,
+      "EWY": 0.07613672670326281,
+      "VNQ": 0.026595317684781215,
+      "AMCR": 0.07342656711198159,
+      "TLT": 0.08630759759293716,
+      "BIL": 0.04726429130801834,
+      "BAX": 0.07462624271852342,
+      "MU": 0.07873384836384548,
+      "LNT": 0.07873384836384548,
+      "EWT": 0.03814338521588713
+    },
+    "causal_mechanisms": [],
+    "mirofish_sentiment": null,
+    "_data_as_of": "2026-06-24",
+    "blind_spot_context": "\n=== KNOWN SYSTEM BLIND SPOTS (address these explicitly) ===\n[HIGH] Defensive allocation systematically underestimated in stressed regimes; bull case inflates safe-haven classification (PDBC, HYG, NEM marked defensive when they correlate in stress), creating 7-12% hidden shortfall vs. regime-appropriate levels (flagged 4x)\n  \u2192 Implement objective defensive-asset definition: only BIL, LQD, TLT, GLD, and VIX-linked instruments count as true hedges in stressed regimes. Require quant sanity check to flag any bull claim of defensive allocation >15% and force itemized justification for each position. Block PDBC, HYG, NEM from defensive bucket in all future debates.\n[HIGH] Correlated liquidation cascades in EM/cyclicals (EWY+EWZ+EWT+CAT+TRGP+PDBC+DBB) repeatedly flagged as 3-7% tail risk but never resolved through position reduction; system proceeds despite convergent bear/devil's advocate warnings across 5+ sessions (flagged 5x)\n  \u2192 Establish hard cap: EM+cyclicals combined cannot exceed 25% in stressed regimes or 35% in calm_bull. When correlation risk is flagged in consecutive debates, trigger mandatory reduce_size unless bull provides quantified hedge (e.g., VIX call, bond duration). Do not allow 'calm_bull base rates' to override flagged tail risk without explicit hedge addition.\n[HIGH] Regime divergence (calm macro + stressed equities) treated as temporary dislocation rather than signal of regime transition; system repeatedly proceeds on calm_bull base rates (72%) despite 3-4 consecutive stressed-equity regime flags, then experiences -0.43% to -0.21% drawdowns (flagged 4x)\n  \u2192 Create explicit decision rule: if stressed-equity regime persists >2 consecutive debates while macro remains calm, treat as regime-transition state requiring 15-20% defensive reallocation regardless of calm_bull base rates. Do not allow historical base rates to override current regime signal persistence. Require bull case to explain why stressed equities have not reverted in N days.\n[HIGH] Momentum-driven positions (WDC +928%, SATS +505%, VICR +714%, PK +59.7%) flagged for distribution-top/sentiment-cliff risk but held through FOMC/earnings events; system overweights recent performance and underweights negative transcript signals (-0.70, -2.10) (flagged 3x)\n  \u2192 Implement hard rule: any position with >500% 252-day momentum AND negative earnings transcript score (< -1.0) must be reduced to <3% or hedged with put spread. Do not allow momentum alone to justify holding through binary events (FOMC, earnings). Require explicit fundamental thesis independent of price momentum for positions >5% weight.\n[MEDIUM] Portfolio concavity (22 positions collapsing to 1-2 bets under stress) repeatedly identified but never addressed; system treats diversification count as sufficient without testing correlation structure under regime flip (flagged 3x)\n  \u2192 Require quarterly correlation matrix stress-test: simulate 2008-style regime flip and measure effective independent bets. If portfolio reduces from N positions to <N/2 independent bets under stress, trigger rebalance. Add explicit uncorrelated hedge (long-vol, long-duration bonds, or gold) if concavity ratio exceeds 1.5x.\n[MEDIUM] Contradictory macro positioning (long commodities/inflation + dollar strength, or long EM + defensive allocation) flagged as 'strategic incoherence' in early debates but never resolved; system proceeds despite internal hedging that 'guarantees mediocre returns' (flagged 2x)\n  \u2192 Implement macro-thesis coherence check: require bull case to articulate single macro narrative (inflation, deflation, stagflation, or growth) and flag any position that contradicts it. Do not allow >5% in offsetting hedges (e.g., SEDG/NEE vs. commodities) without explicit tail-risk justification. Force choice: commit to thesis or reduce conviction.\n[MEDIUM] System exhibits recency bias in confidence calibration: after REDUCE_SIZE call in stressed regime returned +5.6%, system explicitly states 'over-caution has been primary drag' and proceeds at 62% confidence despite identical risk flags; confidence level does not adjust for repeated flag patterns (flagged 3x)\n  \u2192 Decouple confidence from recent outcome performance. Implement Bayesian update rule: if same risk pattern (EM correlation, defensive shortfall, regime divergence) appears in N consecutive debates, reduce confidence floor by 10-15% regardless of recent win/loss record. Track false-negative rate (risks flagged but not acted on) separately from false-positive rate.\n[LOW] Structural position weaknesses (VNO -4.5% momentum, BAX -33.9% momentum, AXTA deterioration) identified in debates but treated as 'position-specific' rather than portfolio-quality signals; system does not trigger rebalance for accumulating weak links (flagged 2x)\n  \u2192 Establish position-quality threshold: any holding with <-4% 252-day momentum in calm_bull regime or negative earnings transcript must be reduced to <3% or replaced. Do not allow >2 such positions to accumulate in portfolio. Trigger rebalance if >3 positions fall below quality threshold.\n=== END BLIND SPOTS ===\n",
+    "memory_context": [
+      {
+        "date": "2026-06-10",
+        "recommendation": "proceed",
+        "reasoning": "Calm_bull regime with 72% continuation probability supports proceeding rather than defensive posturing. My own track record shows a bias toward over-reducing (WRONG on reduce_size call in stressed regime that subsequently rallied 5.6%), so I'm disciplining myself against excessive caution. The bull'",
+        "regime": "calm_bull",
+        "key_risks": [
+          "FOMC in 6 days creates binary event risk for rate-sensitive cluster (VNO+VNQ = ~10% combined)",
+          "Portfolio structured as diversified but collapses to fewer independent bets under liquidity stress (22 positions \u2192 14 bets \u2192 potentially fewer in tail)",
+          "VNO is the only negative-momentum position (-4.5% 252-day) in a calm_bull regime that rewards momentum \u2014 structural drag"
+        ]
+      },
+      {
+        "date": "2026-06-22",
+        "recommendation": "proceed",
+        "reasoning": "Calm_bull regime with 72% continuation supports proceeding. The portfolio is reasonably constructed for this environment, and my own track record penalizes over-reaction to bearish arguments (wrongly reduced in stressed regime that returned +5.6%). However, BAX stands out as a clear weak link that n",
+        "regime": "calm_bull",
+        "key_risks": [
+          "BAX -33.9% 252-day momentum at 7.5% weight is an undefended deteriorating position dragging portfolio quality",
+          "Systemic correlation risk: VNQ + HYG + EFA + EM equities cluster into a single global-liquidity bet under stress, reducing effective diversification from 19 to ~14 independent bets",
+          "Portfolio beta at 1.03 means a calm_bull\u2192stressed regime flip (-6.6% estimated) would require ~53 days of average gains to recover, with only 28% probability but severe impact"
+        ]
+      },
+      {
+        "date": "2026-04-06",
+        "recommendation": "reduce_size",
+        "reasoning": "The portfolio is fundamentally misaligned with a stressed equity regime. While the bull case makes reasonable points about defensive equity names and commodity diversification, the weight of evidence from bear, devil's advocate, regime specialist, and even the quant check (only 4.5% defensive) all c",
+        "regime": "stressed",
+        "key_risks": [
+          "Regime divergence trap: calm_bull macro lagging stressed equities creates false comfort \u2014 historically resolves with macro deteriorating, not equities recovering",
+          "Cyclical and EM overexposure (~22% cyclicals + 15.4% EM) amplifies downside in stressed regime with correlated selloff risk",
+          "Insufficient defensive allocation (4.5% vs. 15-25% regime-appropriate level) with no bond duration, minimal gold, and no volatility hedge"
+        ]
+      }
+    ],
+    "scenario_summary": "rates_spike: p5=-1.2% p50=-0.8% | em_risk_off: p5=-0.9% p50=-0.5%",
+    "scenario_results": [
+      {
+        "scenario": "rates_spike",
+        "description": "Rates spike \u2014 TLT -8%, rate-sensitive equities repriced",
+        "portfolio_impact_pct": -0.85,
+        "affected_positions": [
+          {
+            "symbol": "TLT",
+            "weight": 0.0863,
+            "shock": -0.08,
+            "contribution": -0.006905
+          },
+          {
+            "symbol": "VNQ",
+            "weight": 0.0266,
+            "shock": -0.06,
+            "contribution": -0.001596
+          }
+        ],
+        "unaffected_weight_pct": 88.71,
+        "n_affected": 2,
+        "percentiles": {
+          "p5": -1.23,
+          "p25": -1.01,
+          "p50": -0.85,
+          "p75": -0.72,
+          "p95": -0.52
+        },
+        "worst_case": -1.23,
+        "base_case": -0.85,
+        "best_case": -0.52
+      },
+      {
+        "scenario": "em_risk_off",
+        "description": "EM equities -15%, USD +5%, flight to safety",
+        "portfolio_impact_pct": -0.49,
+        "affected_positions": [
+          {
+            "symbol": "EEM",
+            "weight": 0.0409,
+            "shock": -0.15,
+            "contribution": -0.006132
+          },
+          {
+            "symbol": "EWT",
+            "weight": 0.0381,
+            "shock": -0.12,
+            "contribution": -0.004577
+          },
+          {
+            "symbol": "BIL",
+            "weight": 0.0473,
+            "shock": 0.01,
+            "contribution": 0.000473
+          },
+          {
+            "symbol": "TLT",
+            "weight": 0.0863,
+            "shock": 0.03,
+            "contribution": 0.002589
+          },
+          {
+            "symbol": "UUP",
+            "weight": 0.0542,
+            "shock": 0.05,
+            "contribution": 0.00271
+          }
+        ],
+        "unaffected_weight_pct": 73.32,
+        "n_affected": 5,
+        "percentiles": {
+          "p5": -0.93,
+          "p25": -0.67,
+          "p50": -0.5,
+          "p75": -0.33,
+          "p95": -0.06
+        },
+        "worst_case": -0.93,
+        "base_case": -0.5,
+        "best_case": -0.06
+      }
+    ],
+    "catalyst_context": {
+      "upcoming_events": [
+        {
+          "symbol": "ARE",
+          "type": "ex_div",
+          "date": "2026-06-30",
+          "days_away": 6
+        }
+      ],
+      "catalyst_text": "Upcoming catalysts (within 21 days of 2026-06-24):\n  ARE Ex-dividend: 2026-06-30 (6 day(s) away)"
+    },
+    "quant_context": {
+      "portfolio_var_95": -0.017975,
+      "portfolio_var_99": -0.028312,
+      "factor_exposures": {
+        "rates_long": 0.0863,
+        "dollar_long": 0.0542,
+        "commodities": 0.0283,
+        "em_equity": 0.1552,
+        "reits": 0.0266
+      },
+      "sector_concentration": {
+        "unclassified": 0.6494,
+        "em_equity": 0.1552,
+        "rates_long": 0.0863,
+        "dollar_long": 0.0542,
+        "commodities": 0.0283,
+        "reits": 0.0266
+      },
+      "top_correlated_pairs": [
+        {
+          "sym1": "EEM",
+          "sym2": "EWT",
+          "correlation": 0.925
+        },
+        {
+          "sym1": "EEM",
+          "sym2": "EWY",
+          "correlation": 0.922
+        },
+        {
+          "sym1": "IFRA",
+          "sym2": "PAVE",
+          "correlation": 0.874
+        }
+      ],
+      "summary_text": "QUANTITATIVE RISK CONTEXT (pre-computed):\n\nPortfolio VaR (historical simulation, 63 trading days):\n  95th percentile (1-day): -1.80%  (1 in 20 chance of loss >= this)\n  99th percentile (1-day): -2.83%  (1 in 100 chance of loss >= this)\n\nFactor exposures (sum of position weights per factor):\n  em_equity          15.5%\n  rates_long         8.6%\n  dollar_long        5.4%\n  commodities        2.8%\n  reits              2.7%\n\nHigh-correlation pairs (potential double-counting of risk):\n  EEM <-> EWT: 0.93\n  EEM <-> EWY: 0.92\n  IFRA <-> PAVE: 0.87"
+    },
+    "adversarial_engine": {
+      "adversarial_scores": {
+        "TLT": {
+          "short_thesis": "Duration trap: Fed pivot narrative priced in; rising real yields and inflation persistence threaten bond valuations.",
+          "adversarial_score": 0.65,
+          "flagged": true
+        },
+        "PAVE": {
+          "short_thesis": "Infrastructure bill tailwinds fading; execution delays, labor costs, and political uncertainty erode growth thesis.",
+          "adversarial_score": 0.55,
+          "flagged": false
+        },
+        "MU": {
+          "short_thesis": "Memory chip oversupply emerging; AI capex cycle peaks while China competition intensifies margin compression.",
+          "adversarial_score": 0.62,
+          "flagged": true
+        },
+        "LNT": {
+          "short_thesis": "Deteriorating risk trend signals regulatory headwinds; utility rate compression and energy transition capex burden growth.",
+          "adversarial_score": 0.58,
+          "flagged": false
+        },
+        "KNF": {
+          "short_thesis": "Specialty finance exposure to consumer credit stress; rising delinquencies and tightening lending standards ahead.",
+          "adversarial_score": 0.52,
+          "flagged": false
+        },
+        "EWY": {
+          "short_thesis": "South Korea cyclical downturn; semiconductor export weakness, geopolitical tensions, and demographic headwinds persist.",
+          "adversarial_score": 0.6,
+          "flagged": false
+        },
+        "ARE": {
+          "short_thesis": "Negative transcript signals operational deterioration; REIT dividend sustainability at risk amid rising cap rates.",
+          "adversarial_score": 0.68,
+          "flagged": true
+        },
+        "BAX": {
+          "short_thesis": "Severe risk deterioration (-0.50): logistics/transportation facing demand cliff; freight rates collapsing structurally.",
+          "adversarial_score": 0.72,
+          "flagged": true
+        },
+        "AMCR": {
+          "short_thesis": "Dual negative signals: weak transcript (-0.80) and worsening risks (-0.40); packaging demand collapse as consumer spending slows.",
+          "adversarial_score": 0.75,
+          "flagged": true
+        },
+        "UUP": {
+          "short_thesis": "Dollar strength unsustainable; Fed easing cycle imminent, reducing carry advantage and reversing safe-haven flows.",
+          "adversarial_score": 0.54,
+          "flagged": false
+        },
+        "BIL": {
+          "short_thesis": "Money market yields compress as Fed cuts; opportunity cost deteriorates; liquidity trap for capital.",
+          "adversarial_score": 0.48,
+          "flagged": false
+        },
+        "IFRA": {
+          "short_thesis": "Global infrastructure capex cycle peaks; emerging market debt stress and currency volatility threaten returns.",
+          "adversarial_score": 0.53,
+          "flagged": false
+        },
+        "EEM": {
+          "short_thesis": "Emerging markets vulnerable to China slowdown, capital flight, and currency debasement amid geopolitical fragmentation.",
+          "adversarial_score": 0.61,
+          "flagged": true
+        },
+        "EWT": {
+          "short_thesis": "Taiwan concentration risk; negative transcript (-0.80) signals deteriorating fundamentals; geopolitical tail risk escalating.",
+          "adversarial_score": 0.7,
+          "flagged": true
+        },
+        "DBB": {
+          "short_thesis": "Commodity super-cycle narrative exhausted; global growth deceleration and China demand collapse pressure metals.",
+          "adversarial_score": 0.59,
+          "flagged": false
+        },
+        "VNQ": {
+          "short_thesis": "Real estate structural headwinds: cap rate expansion, refinancing cliff, and office vacancy crisis persist.",
+          "adversarial_score": 0.64,
+          "flagged": true
+        },
+        "EFA": {
+          "short_thesis": "Negative transcript (-0.60) signals weakness; Europe stagflation risk, energy crisis legacy, and growth stall.",
+          "adversarial_score": 0.63,
+          "flagged": true
+        }
+      },
+      "sizing_recommendations": {
+        "IFRA": {
+          "position_type": "etf",
+          "optimal_weight": 0.06,
+          "min_weight": 0.03,
+          "max_weight": 0.1,
+          "current_weight": 0.0418,
+          "deviation": -0.0182,
+          "oversized": false,
+          "recommendation": "IFRA size OK [3.0%\u201310.0%] for etf"
+        },
+        "DBB": {
+          "position_type": "etf",
+          "optimal_weight": 0.06,
+          "min_weight": 0.03,
+          "max_weight": 0.1,
+          "current_weight": 0.0283,
+          "deviation": -0.0317,
+          "oversized": false,
+          "recommendation": "DBB below etf minimum (3.0%) in calm_bull"
+        },
+        "UUP": {
+          "position_type": "etf",
+          "optimal_weight": 0.06,
+          "min_weight": 0.03,
+          "max_weight": 0.1,
+          "current_weight": 0.0542,
+          "deviation": -0.0058,
+          "oversized": false,
+          "recommendation": "UUP size OK [3.0%\u201310.0%] for etf"
+        },
+        "EFA": {
+          "position_type": "etf",
+          "optimal_weight": 0.06,
+          "min_weight": 0.03,
+          "max_weight": 0.1,
+          "current_weight": 0.0212,
+          "deviation": -0.0388,
+          "oversized": false,
+          "recommendation": "EFA below etf minimum (3.0%) in calm_bull"
+        },
+        "PAVE": {
+          "position_type": "unknown",
+          "optimal_weight": 0.065,
+          "min_weight": 0.04,
+          "max_weight": 0.1,
+          "current_weight": 0.0815,
+          "deviation": 0.0165,
+          "oversized": false,
+          "recommendation": "PAVE size OK [4.0%\u201310.0%] for unknown"
+        },
+        "KNF": {
+          "position_type": "unknown",
+          "optimal_weight": 0.065,
+          "min_weight": 0.04,
+          "max_weight": 0.1,
+          "current_weight": 0.0762,
+          "deviation": 0.0112,
+          "oversized": false,
+          "recommendation": "KNF size OK [4.0%\u201310.0%] for unknown"
+        },
+        "EEM": {
+          "position_type": "etf",
+          "optimal_weight": 0.06,
+          "min_weight": 0.03,
+          "max_weight": 0.1,
+          "current_weight": 0.0409,
+          "deviation": -0.0191,
+          "oversized": false,
+          "recommendation": "EEM size OK [3.0%\u201310.0%] for etf"
+        },
+        "ARE": {
+          "position_type": "unknown",
+          "optimal_weight": 0.065,
+          "min_weight": 0.04,
+          "max_weight": 0.1,
+          "current_weight": 0.076,
+          "deviation": 0.011,
+          "oversized": false,
+          "recommendation": "ARE size OK [4.0%\u201310.0%] for unknown"
+        },
+        "EWY": {
+          "position_type": "etf",
+          "optimal_weight": 0.06,
+          "min_weight": 0.03,
+          "max_weight": 0.1,
+          "current_weight": 0.0761,
+          "deviation": 0.0161,
+          "oversized": false,
+          "recommendation": "EWY size OK [3.0%\u201310.0%] for etf"
+        },
+        "VNQ": {
+          "position_type": "etf",
+          "optimal_weight": 0.06,
+          "min_weight": 0.03,
+          "max_weight": 0.1,
+          "current_weight": 0.0266,
+          "deviation": -0.0334,
+          "oversized": false,
+          "recommendation": "VNQ below etf minimum (3.0%) in calm_bull"
+        },
+        "AMCR": {
+          "position_type": "unknown",
+          "optimal_weight": 0.065,
+          "min_weight": 0.04,
+          "max_weight": 0.1,
+          "current_weight": 0.0734,
+          "deviation": 0.0084,
+          "oversized": false,
+          "recommendation": "AMCR size OK [4.0%\u201310.0%] for unknown"
+        },
+        "TLT": {
+          "position_type": "etf",
+          "optimal_weight": 0.06,
+          "min_weight": 0.03,
+          "max_weight": 0.1,
+          "current_weight": 0.0863,
+          "deviation": 0.0263,
+          "oversized": false,
+          "recommendation": "TLT size OK [3.0%\u201310.0%] for etf"
+        },
+        "BIL": {
+          "position_type": "etf",
+          "optimal_weight": 0.06,
+          "min_weight": 0.03,
+          "max_weight": 0.1,
+          "current_weight": 0.0473,
+          "deviation": -0.0127,
+          "oversized": false,
+          "recommendation": "BIL size OK [3.0%\u201310.0%] for etf"
+        },
+        "BAX": {
+          "position_type": "unknown",
+          "optimal_weight": 0.065,
+          "min_weight": 0.04,
+          "max_weight": 0.1,
+          "current_weight": 0.0746,
+          "deviation": 0.0096,
+          "oversized": false,
+          "recommendation": "BAX size OK [4.0%\u201310.0%] for unknown"
+        },
+        "MU": {
+          "position_type": "unknown",
+          "optimal_weight": 0.065,
+          "min_weight": 0.04,
+          "max_weight": 0.1,
+          "current_weight": 0.0787,
+          "deviation": 0.0137,
+          "oversized": false,
+          "recommendation": "MU size OK [4.0%\u201310.0%] for unknown"
+        },
+        "LNT": {
+          "position_type": "unknown",
+          "optimal_weight": 0.065,
+          "min_weight": 0.04,
+          "max_weight": 0.1,
+          "current_weight": 0.0787,
+          "deviation": 0.0137,
+          "oversized": false,
+          "recommendation": "LNT size OK [4.0%\u201310.0%] for unknown"
+        },
+        "EWT": {
+          "position_type": "etf",
+          "optimal_weight": 0.06,
+          "min_weight": 0.03,
+          "max_weight": 0.1,
+          "current_weight": 0.0381,
+          "deviation": -0.0219,
+          "oversized": false,
+          "recommendation": "EWT size OK [3.0%\u201310.0%] for etf"
+        }
+      },
+      "coherence": {
+        "n_positions": 17,
+        "n_independent_bets": 11,
+        "narrative_clusters": [
+          {
+            "name": "em_equity",
+            "total_weight": 0.1552,
+            "positions": [
+              {
+                "symbol": "EWY",
+                "weight": 0.0761
+              },
+              {
+                "symbol": "EEM",
+                "weight": 0.0409
+              },
+              {
+                "symbol": "EWT",
+                "weight": 0.0381
+              }
+            ]
+          },
+          {
+            "name": "us_rates",
+            "total_weight": 0.1336,
+            "positions": [
+              {
+                "symbol": "TLT",
+                "weight": 0.0863
+              },
+              {
+                "symbol": "BIL",
+                "weight": 0.0473
+              }
+            ]
+          },
+          {
+            "name": "infrastructure",
+            "total_weight": 0.0815,
+            "positions": [
+              {
+                "symbol": "PAVE",
+                "weight": 0.0815
+              }
+            ]
+          },
+          {
+            "name": "technology",
+            "total_weight": 0.0787,
+            "positions": [
+              {
+                "symbol": "MU",
+                "weight": 0.0787
+              }
+            ]
+          },
+          {
+            "name": "utilities",
+            "total_weight": 0.0787,
+            "positions": [
+              {
+                "symbol": "LNT",
+                "weight": 0.0787
+              }
+            ]
+          },
+          {
+            "name": "basic_materials",
+            "total_weight": 0.0762,
+            "positions": [
+              {
+                "symbol": "KNF",
+                "weight": 0.0762
+              }
+            ]
+          },
+          {
+            "name": "real_estate",
+            "total_weight": 0.076,
+            "positions": [
+              {
+                "symbol": "ARE",
+                "weight": 0.076
+              }
+            ]
+          },
+          {
+            "name": "healthcare",
+            "total_weight": 0.0746,
+            "positions": [
+              {
+                "symbol": "BAX",
+                "weight": 0.0746
+              }
+            ]
+          }
+        ],
+        "dominant_exposure": "em_equity",
+        "largest_cluster_weight": 0.1552,
+        "regime_flip_impact_estimate": "calm_bull\u2192stressed: est -7.7%",
+        "em_weight": 0.1552,
+        "commodity_weight": 0.0283
+      },
+      "top_flags": [
+        {
+          "symbol": "TLT",
+          "reason": "adversarial_thesis: Duration trap: Fed pivot narrative priced in; rising real yields and inflation persistence threaten bond valuations.",
+          "intervention_type": "adversarial_thesis",
+          "current_weight": 0.08630759759293716,
+          "suggested_weight": 0.06,
+          "adversarial_score": 0.65,
+          "priority_score": 0.561
+        },
+        {
+          "symbol": "AMCR",
+          "reason": "adversarial_thesis: Dual negative signals: weak transcript (-0.80) and worsening risks (-0.40); packaging demand collapse as consumer spending slows.",
+          "intervention_type": "adversarial_thesis",
+          "current_weight": 0.07342656711198159,
+          "suggested_weight": 0.05874125368958527,
+          "adversarial_score": 0.75,
+          "priority_score": 0.551
+        },
+        {
+          "symbol": "BAX",
+          "reason": "adversarial_thesis: Severe risk deterioration (-0.50): logistics/transportation facing demand cliff; freight rates collapsing structurally.",
+          "intervention_type": "adversarial_thesis",
+          "current_weight": 0.07462624271852342,
+          "suggested_weight": 0.059700994174818736,
+          "adversarial_score": 0.72,
+          "priority_score": 0.537
+        },
+        {
+          "symbol": "ARE",
+          "reason": "adversarial_thesis: Negative transcript signals operational deterioration; REIT dividend sustainability at risk amid rising cap rates.",
+          "intervention_type": "adversarial_thesis",
+          "current_weight": 0.07599544460029745,
+          "suggested_weight": 0.06079635568023796,
+          "adversarial_score": 0.68,
+          "priority_score": 0.517
+        },
+        {
+          "symbol": "MU",
+          "reason": "adversarial_thesis: Memory chip oversupply emerging; AI capex cycle peaks while China competition intensifies margin compression.",
+          "intervention_type": "adversarial_thesis",
+          "current_weight": 0.07873384836384548,
+          "suggested_weight": 0.06298707869107638,
+          "adversarial_score": 0.62,
+          "priority_score": 0.488
+        }
+      ]
+    }
+  },
+  "arguments": {
+    "bull": "# Bull Case \u2014 Ascent Capital | 2026-06-24\n\n## Regime Tailwinds & Structural Longs\n\nWe're allocated 60% US equities [FROM CONTEXT] with infrastructure and industrials as the spine \u2014 PAVE at 8.1% [FROM CONTEXT] and IFRA at 4.2% [FROM CONTEXT] are direct beneficiaries of multi-year federal spending cycles. These are hard-to-short structurally: contract backlogs don't reverse overnight.\n\n## Asymmetric Setups\n\n**MU at 7.9%** [FROM CONTEXT] \u2014 memory is in a classic upcycle. AI infrastructure demand creates a demand floor that didn't exist in prior cycles. Downside is cyclical; upside is secular re-rating.\n\n**AMCR** (7.3% [FROM CONTEXT]) shows revenue momentum of +0.35 [FROM CONTEXT] \u2014 the only position with confirmed positive SEC revenue signal. Packaging defensiveness plus momentum is a clean asymmetric setup.\n\n**EWY + EWT** (7.6% + 3.8% [FROM CONTEXT]) \u2014 Korea/Taiwan semiconductor exposure compounds the MU thesis internationally.\n\n## Bear/Devil Calibration\n\nIn calm_bull regimes, bear accuracy is only 75% [FROM CONTEXT] \u2014 identical to bull \u2014 meaning over-warnings carry no statistical edge. Don't let symmetric accuracy arguments derail high-conviction longs.\n\n## Bottom Line\n\nInfrastructure + semiconductor + packaging momentum. Ride it until the thesis breaks.",
+    "bear": "---\n\n## \ud83d\udc3b BEAR CASE \u2014 Ascent Capital | 2026-06-24\n\n### Weakest Link: ARE \u2014 Shoot First\n\nARE is the portfolio's most urgent problem. **Three simultaneous failure modes:**\n\n1. **Momentum is broken**: -27.5% 252-day return (computed) \u2014 a downtrend, not a dip.\n2. **Binary event risk in 6 days** [FROM CONTEXT]: earnings in 6 days with an adversarial trim signal already flagged. Negative transcript signals already indicate operational deterioration [FROM CONTEXT].\n3. **REIT sector in a stressed macro regime**: rates still elevated; the adversarial thesis explicitly flags REIT sensitivity [FROM CONTEXT]. Suggested trim to 6.1% [FROM CONTEXT] is a floor, not a target.\n\n---\n\n### Secondary: BAX & AMCR \u2014 Confirmed Downtrends\n\n- **BAX**: -30.6% 252-day (computed). Adversarial score: -0.50 severity [FROM CONTEXT]. Logistics deterioration flagged. Trim to 6.0% [FROM CONTEXT] barely moves the needle on a broken name.\n- **AMCR**: -6.4% 252-day (computed). Dual negative signals: weak transcript score of -0.80 [FROM CONTEXT]. Consumer cyclical at 7.3% [FROM CONTEXT] in a macro stress environment.\n\n> **Three of four flagged names are in confirmed 252-day downtrends. This is not noise.**\n\n---\n\n### Macro Regime Amplifier: Stressed \u2260 Calm\n\nThe US regime reads calm_bull [FROM CONTEXT], but **macro regime is stressed** [FROM CONTEXT]. The stress regime historically produces:\n- **Average drawdown: -12.4%** (computed from regime stats)\n- **38% base rate of escalation to crisis** (computed)\n- Historical analogs: Q4 2018, Q1 2020 onset, Q4 2022 (computed)\n\nPortfolio VaR-95 is **-1.74% daily / -2.65% at 99th percentile** (computed). In a crisis escalation scenario \u2014 a 38% probability \u2014 that VaR is structurally understated.\n\n---\n\n### Sector Concentration Risk\n\n**EM equity is the single largest sector at 15.5%** (computed: EWY + EEM + EWT). This is the top concentration risk in a macro-stressed, dollar-resilient (UUP +8.7% 252d, computed) environment. EM assets are directly exposed to dollar strength and global risk-off rotation.\n\nInfrastructure is **double-counted** across PAVE (8.1%) [FROM CONTEXT] and IFRA (4.2%) [FROM CONTEXT] = effectively **12.3% infrastructure** (computed), masking true concentration.\n\n---\n\n### TLT: Duration Trap Still Live\n\n+4.5% 252-day momentum (computed) is feeble. Fed pivot is priced; rising real yields are not. Adversarial thesis stands [FROM CONTEXT]. Trim to 6.0% [FROM CONTEXT] is correct.\n\n---\n\n### Bottom Line\n\n> **Prioritized trims: ARE (binary event + downtrend + REIT rate risk), BAX (worst momentum at -30.6%), AMCR (-0.80 transcript score). EM concentration at",
+    "devils_advocate": "---\n\n## \u26a0\ufe0f DEVIL'S ADVOCATE VERDICT \u2014 2026-06-24\n\n### THE MOST DANGEROUS BLIND SPOT: **REGIME SCHIZOPHRENIA MASKING A CONCAVE PORTFOLIO**\n\n---\n\n### 1. \ud83e\udd83 TURKEY PROBLEM \u2014 THE REGIME CONTRADICTION IS THE SIGNAL\n\nThe model labels US regime **calm_bull** (72% continuation base rate) while macro regime is simultaneously **stressed**. This is not diversification \u2014 it is **epistemic confusion dressed as stability**. The turkey's neck feels warm right up to the blade. When the macro-stressed regime resolves into the US label, the direction of convergence is asymmetric: stressed rarely resolves upward quietly. It resolves in **dislocations**.\n\n---\n\n### 2. \ud83d\udcd0 CONVEXITY CHECK \u2014 THIS PORTFOLIO IS **CONCAVE**\n\nThe tail asymmetry cannot be formally computed from Monte Carlo (not in context), but the structural evidence is damning:\n\n- **Market beta = +0.928\u03c3** [FROM CONTEXT] \u2014 a near-unhedged long book.\n- **Market bound breach: +0.928 vs. upper bound +0.300** [FROM CONTEXT] \u2014 the model's *own* risk guardrails are violated by **3\u00d7** on the dominant factor. This is not a nuanced overweight; it is a structural breach.\n- **VaR-99 = -2.65% daily** \u2014 annualized, that is roughly **-42% in a sustained crisis tail**. The upside mean return is **+0.163% daily**. The asymmetry is deeply unfavorable: you are collecting pennies against a steamroller.\n- With no options, no short convexity hedge, and no true barbell construction, this portfolio is **concave by design**.\n\n---\n\n### 3. \ud83c\udfaf VIA NEGATIVA \u2014 THE ONE EVENT THE MODEL DOESN'T SEE\n\n> **A simultaneous EM risk-off + USD liquidity squeeze triggered by a Korean Peninsula or Taiwan Strait geopolitical shock.**\n\nHere's why this is the true blind spot:\n\n- **EWY (Korea) + EWT (Taiwan) + EEM** = **15.5% em_equity cluster** [FROM CONTEXT]. These are not decorrelated EM bets \u2014 they are *geographically concentrated* in the single most kinetic geopolitical fault line on Earth in 2026.\n- EWY 252-day momentum: **+177.6%**. EWT: **+92.8%**. EEM: **+43.1%**. These positions are **priced for continuation**, not for stress. Extended momentum is a *fragility accelerant* \u2014 the higher they've run, the more leveraged long positioning sits behind them, and the faster the unwind in a shock.\n- The model's own **em_risk_off worst case = -0.9%** [FROM CONTEXT]. That number is almost certainly a Gaussian-conditioned estimate. A true geopolitical tail \u2014 think KOSPI circuit breakers, TWD flash crash, EM ETF liquidity gaps \u2014 is not in a historical 252-day volatility window. **Fat tails come precisely from what the window cannot see.**\n- **WARNING: EM exposure 15.5% \u2014 single policy/currency event affects entire cluster** [FROM CONTEXT]. The model *already flags this* and then allocates to it anyway.\n\n---\n\n### 4. ",
+    "regime_specialist": "**Regime Assessment: MISALIGNED**\n\n**The Problem:**\nCALM_BULL demands **full deployment into momentum**\u2014yet this portfolio is structurally defensive and fragmented.\n\n**Specific Violations:**\n\n1. **Defensive overweight (18.8%)** contradicts regime playbook. TLT (8.63%) + BIL (4.73%) + LNT (7.87%) = 21.2% in bonds/utilities alone. In a momentum regime, this is dead weight.\n\n2. **Risk-on severely underdeployed (4.1%)**. MU (7.87%) is your only true growth name. Where's the concentration in breadth-leading sectors?\n\n3. **Fragmentation kills momentum edge.** 17 positions dilute conviction. CALM_BULL typically rewards concentrated bets in high-beta, high-momentum names.\n\n4. **Macro stress + CALM_BULL mismatch.** The regime signal says momentum continues, but macro stress suggests hedging\u2014you're caught between both, committing fully to neither.\n\n**Required Fix:**\n- Cut defensive to <8%\n- Consolidate to 8\u201310 positions\n- Overweight MU, EEM, EWT (EM momentum)\n- Eliminate LNT, ARE, BAX (low-momentum drag)\n- Add tech/growth concentration\n\nCurrent sizing reflects fear, not the regime signal.",
+    "quant_sanity": "QUANT SANITY CHECK:\n  \u2713 Clean: 17 positions, sum=1.0000, max=TLT 8.6%, defensive=18.8%, risk-on=4.1%",
+    "bull_rebuttal": "The bear's ARE concern is real but already reflected in the trim signal and the upcoming ex-dividend catalyst is *positive* near-term support, not a binary blowup. BAX is genuinely broken \u2014 concede that.\n\nThe devil's geopolitical tail on EWY/EWT is the strongest argument, but EWY's +177% momentum means positioning is *already* rotating into it \u2014 the unwind requires a catalyst, not just vulnerability. The p5 VaR at -1.80% daily captures normal stress; a Taiwan Strait shock is a separate position-sizing question, not a portfolio rejection.",
+    "bear_rebuttal": "BAX's -33.9% 252-day momentum at 7.46% weight is the number nobody defended. The regime specialist wants to *add* EM concentration while the model already flags EEM\u2194EWT correlation at 0.93 \u2014 that's not diversification, that's 15.5% in one geopolitical bet. The bull cited AMCR's +0.35 revenue signal but ignored its -0.80 transcript score. Consolidating into high-beta names during a **stressed macro regime** isn't conviction \u2014 it's timing risk with no hedge.",
+    "devils_advocate_rebuttal": "**The shared fragility: everyone assumes the *current correlation structure holds*.**\n\nBull prices momentum continuation. Bear prices orderly deterioration. Both implicitly assume EWY/EWT/EEM unwind *sequentially*, not simultaneously. The tail event: a **liquidity cascade** where EM ETF redemptions force indiscriminate selling across PAVE, TLT, *and* VNQ simultaneously \u2014 **correlation goes to 1**, your 17 \"positions\" become 1 position, and VaR-99 of -2.83% becomes quaint. The debate is concave: arguing position weights while the *covariance matrix itself* is the fragile assumption.",
+    "regime_specialist_rebuttal": "**REGIME RISK UNRESOLVED.**\n\nRound 1 identifies the contradiction\u2014calm_bull label vs. macro stress\u2014but doesn't resolve *which regime governs portfolio construction*. \n\n**Missing:** explicit regime transition probability. If stressed escalates to crisis (38% base rate flagged), does calm_bull positioning survive? Portfolio is sized for calm continuation but structurally concave in tail. \n\n**Still unaddressed:** regime-conditional rebalancing triggers. At what signal does calm_bull break?"
+  },
+  "adversarial_engine": {
+    "top_flags": [
+      {
+        "symbol": "TLT",
+        "reason": "adversarial_thesis: Duration trap: Fed pivot narrative priced in; rising real yields and inflation persistence threaten bond valuations.",
+        "intervention_type": "adversarial_thesis",
+        "current_weight": 0.08630759759293716,
+        "suggested_weight": 0.06,
+        "adversarial_score": 0.65,
+        "priority_score": 0.561
+      },
+      {
+        "symbol": "AMCR",
+        "reason": "adversarial_thesis: Dual negative signals: weak transcript (-0.80) and worsening risks (-0.40); packaging demand collapse as consumer spending slows.",
+        "intervention_type": "adversarial_thesis",
+        "current_weight": 0.07342656711198159,
+        "suggested_weight": 0.05874125368958527,
+        "adversarial_score": 0.75,
+        "priority_score": 0.551
+      },
+      {
+        "symbol": "BAX",
+        "reason": "adversarial_thesis: Severe risk deterioration (-0.50): logistics/transportation facing demand cliff; freight rates collapsing structurally.",
+        "intervention_type": "adversarial_thesis",
+        "current_weight": 0.07462624271852342,
+        "suggested_weight": 0.059700994174818736,
+        "adversarial_score": 0.72,
+        "priority_score": 0.537
+      },
+      {
+        "symbol": "ARE",
+        "reason": "adversarial_thesis: Negative transcript signals operational deterioration; REIT dividend sustainability at risk amid rising cap rates.",
+        "intervention_type": "adversarial_thesis",
+        "current_weight": 0.07599544460029745,
+        "suggested_weight": 0.06079635568023796,
+        "adversarial_score": 0.68,
+        "priority_score": 0.517
+      },
+      {
+        "symbol": "MU",
+        "reason": "adversarial_thesis: Memory chip oversupply emerging; AI capex cycle peaks while China competition intensifies margin compression.",
+        "intervention_type": "adversarial_thesis",
+        "current_weight": 0.07873384836384548,
+        "suggested_weight": 0.06298707869107638,
+        "adversarial_score": 0.62,
+        "priority_score": 0.488
+      }
+    ],
+    "n_independent_bets": 11,
+    "dominant_exposure": "em_equity"
+  },
+  "verdict": {
+    "confidence": 0.58,
+    "recommendation": "proceed",
+    "key_risks": [
+      "Market beta at 0.928 breaches upper bound of 0.300 by 3x \u2014 portfolio is structurally unhedged long",
+      "EM equity cluster (EWY+EWT+EEM) at 15.5% concentrated on a single geopolitical fault line with correlation ~0.93",
+      "Macro regime reads stressed with 38% escalation probability while US label reads calm_bull \u2014 regime convergence direction is asymmetrically negative"
+    ],
+    "reasoning": "Calm_bull regime has a 72% continuation base rate, and my own track record shows I destroyed alpha by over-reducing on April 15 (+5.6% missed). The portfolio has real structural issues \u2014 the beta breach is alarming and EM concentration is a latent fragility \u2014 but these are not new developments and don't warrant broad trimming today. The single clearest intervention is BAX: the bull explicitly conceded it is 'genuinely broken,' it carries the worst 252-day momentum in the portfolio at -30.6%, has a -0.50 risk deterioration score, and the adversarial thesis on logistics demand collapse is structurally credible. No agent defended this position. Trimming by the maximum allowed 1% is the highest-consensus, lowest-regret intervention available.",
+    "position_changes": [
+      {
+        "symbol": "BAX",
+        "current_weight": 0.074626,
+        "new_weight": 0.0646,
+        "intervention_type": "adversarial_thesis",
+        "reason": "Bull explicitly conceded BAX is 'genuinely broken.' Worst portfolio momentum at -30.6% 252-day return. Adversarial score 0.72 with -0.50 risk deterioration flagging structural logistics demand collapse. No agent defended this position across two rounds.",
+        "prediction": "BAX underperforms equal-weighted portfolio by >1.5% over next 10 trading days as logistics/freight structural deterioration continues without catalyst for reversal"
+      }
+    ],
+    "disagreement_score": 0.8522,
+    "pairwise_similarities": {
+      "bull_bear": 0.1491,
+      "bull_devil": 0.1554,
+      "bear_devil": 0.139
+    }
+  },
+  "outcome_scored": false
+}
