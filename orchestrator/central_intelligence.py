@@ -48,7 +48,8 @@ FACTOR_BUCKETS = {
     "managed_futures": {"KMLM", "DBMF", "CTA", "WTMF"},
     "vol_long":        {"VIXY", "VXX", "UVXY"},
     "vol_short":       {"SVXY", "SVOL"},
-    "em_equity":       {"EEM", "VWO", "EWT", "EWZ", "AAXJ"},
+    "em_equity":       {"EEM", "VWO", "EWT", "EWZ", "AAXJ", "EWY"},
+    "dev_intl_equity": {"EFA", "EWJ", "EWC", "EWG", "EWU", "VEA", "IEFA"},
     "us_tech":         {"QQQ", "XLK", "FTEC"},
     "us_defensive":    {"XLU", "XLP", "XLV", "NEE", "WMT", "MRK"},
     "reits":           {"VNQ", "IYR", "SCHH"},
@@ -70,8 +71,14 @@ FACTOR_CONTRADICTIONS = [
 EM_COMMODITY_CAP = 0.20
 EM_COMMODITY_BUCKETS = {"em_equity", "commodities", "gold", "managed_futures"}
 
+# International equity hard cap (EM + developed international)
+# EWY, EFA, EEM etc. — capped together to limit single-region tail exposure.
+INTL_EQUITY_CAP = 0.15
+INTL_EQUITY_BUCKETS = {"em_equity", "dev_intl_equity"}
+
 
 MAX_POSITION_WEIGHT = 0.10  # hard cap per symbol after all blending
+MACRO_DIVERGENCE_SCALE = 0.90  # gross exposure reduction when macro says stressed/crisis but equity says calm_bull
 
 
 def _cap_positions(weights: Dict[str, float], max_w: float = MAX_POSITION_WEIGHT) -> Dict[str, float]:
@@ -139,6 +146,44 @@ def _cap_em_commodity(weights: Dict[str, float]) -> Dict[str, float]:
         result = {s: round(w / total, 6) for s, w in result.items()}
 
     return result
+
+def _cap_intl_equity(weights: Dict[str, float]) -> Dict[str, float]:
+    """
+    Hard cap: sum of symbols in em_equity + dev_intl_equity <= 15%.
+    Trims international equity proportionally; redistributes freed weight to domestic.
+    """
+    intl_syms = set()
+    for bucket_name in INTL_EQUITY_BUCKETS:
+        intl_syms.update(FACTOR_BUCKETS.get(bucket_name, set()))
+
+    intl_weight    = sum(w for s, w in weights.items() if s in intl_syms)
+    non_intl_syms  = {s for s in weights if s not in intl_syms}
+    non_intl_total = sum(weights.get(s, 0) for s in non_intl_syms)
+
+    if intl_weight <= INTL_EQUITY_CAP + 1e-6:
+        return dict(weights)
+
+    scale  = INTL_EQUITY_CAP / intl_weight
+    result = {}
+    freed  = 0.0
+    for sym, w in weights.items():
+        if sym in intl_syms:
+            new_w        = w * scale
+            freed       += w - new_w
+            result[sym]  = new_w
+        else:
+            result[sym] = w
+
+    if non_intl_total > 0 and freed > 0:
+        for sym in non_intl_syms:
+            result[sym] = result[sym] + freed * (result[sym] / non_intl_total)
+
+    total = sum(result.values())
+    if total > 0:
+        result = {s: round(w / total, 6) for s, w in result.items()}
+
+    return result
+
 
 FACTOR_WEIGHT_THRESHOLD    = 0.08  # agent must have >8% in a bucket to be considered exposed
 PARTIAL_CONFLICT_THRESHOLD = 0.06  # both sides must exceed 6% in merged portfolio to trigger
@@ -519,6 +564,15 @@ def merge_agent_outputs(
     if abs(em_before - em_after) > 0.005:
         print(f"[Orchestrator] EM+commodity cap applied: {em_before:.1%} → {em_after:.1%}")
 
+    # Hard cap international equity (EM + developed) to 15%
+    intl_before = sum(w for s, w in merged.items()
+                      if any(s in FACTOR_BUCKETS.get(b, set()) for b in INTL_EQUITY_BUCKETS))
+    merged = _cap_intl_equity(merged)
+    intl_after = sum(w for s, w in merged.items()
+                     if any(s in FACTOR_BUCKETS.get(b, set()) for b in INTL_EQUITY_BUCKETS))
+    if abs(intl_before - intl_after) > 0.005:
+        print(f"[Orchestrator] Intl equity cap applied: {intl_before:.1%} → {intl_after:.1%}")
+
     # Per-position cap — prevent multi-agent overlap pushing any name above max_weight
     overcapped = {s: w for s, w in merged.items() if w > MAX_POSITION_WEIGHT}
     if overcapped:
@@ -742,6 +796,21 @@ def run_orchestrator(agent_outputs: List[AgentOutput]) -> Dict[str, float]:
     if overcapped_final:
         print(f"[Orchestrator] Final position cap: {', '.join(f'{s} {w:.1%}→{MAX_POSITION_WEIGHT:.0%}' for s, w in overcapped_final.items())}")
         merged = _cap_positions(merged)
+
+    # Macro-equity regime divergence: when macro says stressed/crisis but equity says
+    # calm_bull, reduce gross exposure — macro regime tends to lead equity in stress.
+    # Weights intentionally sum to <1.0 (implicit cash); do NOT renormalize.
+    macro_regime = next(
+        (ao.regime_signal for ao in agent_outputs if ao.agent_id == "macro"),
+        None,
+    )
+    if (macro_regime in {"stressed", "crisis"}
+            and us_regime not in {"stressed", "crisis"}):
+        merged = {sym: round(w * MACRO_DIVERGENCE_SCALE, 6) for sym, w in merged.items()}
+        print(
+            f"[Orchestrator] Macro-equity divergence: macro={macro_regime}, "
+            f"equity={us_regime} — scaling to {MACRO_DIVERGENCE_SCALE:.0%} gross exposure"
+        )
 
     # Print summary
     print(f"\n[Orchestrator] Final portfolio — {len(merged)} positions:")

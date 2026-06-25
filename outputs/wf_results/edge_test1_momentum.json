@@ -1,0 +1,33 @@
+{
+  "FULL": {
+    "sharpe": 0.48617084843164965,
+    "cagr": 0.1254066382770167,
+    "alpha": 0.04616649173434058,
+    "beta": 0.7087942586431214,
+    "max_drawdown": -0.3644481626654294,
+    "volatility": 0.254744840158689,
+    "win_rate": 0.5141093474426808,
+    "wfe": -0.49780704122334685,
+    "n_folds": 21,
+    "n_oos_days": 1134,
+    "_seconds": 526.9
+  },
+  "TREND": {
+    "sharpe": 0.4269330073274193,
+    "cagr": 0.10727274750943172,
+    "alpha": 0.027478798577026696,
+    "beta": 0.7187975840342684,
+    "max_drawdown": -0.32649352219458305,
+    "volatility": 0.23839794468033337,
+    "win_rate": 0.5079365079365079,
+    "wfe": 0.9850176807469232,
+    "n_folds": 21,
+    "n_oos_days": 1134,
+    "_seconds": 77.7
+  },
+  "_verdict": {
+    "sharpe_full_minus_trend": 0.05923784110423036,
+    "alpha_full_minus_trend": 0.018687693157313882,
+    "reading": "FULL adds value over momentum alone"
+  }
+}

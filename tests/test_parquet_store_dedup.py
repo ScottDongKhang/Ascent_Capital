@@ -63,3 +63,30 @@ def test_tz_naive_dates_still_dedup(store):
     store.save_parquet(b, "t_p3")
     out = store.load_parquet("t_p3")
     assert len(out) == 1 and out["close"].iloc[0] == 2.0
+
+
+def test_mixed_tzaware_and_naive_across_fetches_collapses(store):
+    """The production failure: an existing on-disk row is tz-AWARE and a later
+    fetch writes the same calendar day tz-NAIVE (different ingest source). After
+    pd.concat the `date` column is object dtype (pandas cannot mix aware+naive in
+    one datetime column), so is_datetime64_any_dtype is False and the normalize
+    branch is skipped — dedup never fires and the row accumulates. This is the
+    3-generation blend that bloated prices_live ~3× and let the bad KLAC copy
+    survive. Both rows are the same (symbol, calendar-day) → must collapse to 1."""
+    ny = "America/New_York"
+    aware = pd.DataFrame({
+        "symbol": ["KLAC"],
+        "date": [pd.Timestamp("2024-06-03 19:00", tz=ny)],
+        "close": [240.0],
+    })
+    naive = pd.DataFrame({
+        "symbol": ["KLAC"],
+        "date": [pd.Timestamp("2024-06-03 00:00")],  # tz-naive, same calendar day
+        "close": [241.0],
+    })
+    store.save_parquet(aware, "t_p4")
+    store.save_parquet(naive, "t_p4")
+    out = store.load_parquet("t_p4")
+    klac = out[out["symbol"] == "KLAC"]
+    assert len(klac) == 1, f"expected 1 row per calendar day, got {len(klac)}"
+    assert klac["close"].iloc[0] == 241.0  # keep="last"

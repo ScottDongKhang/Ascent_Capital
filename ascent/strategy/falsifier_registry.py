@@ -46,6 +46,50 @@ _EXPIRY_DAYS  = 14  # calendar ≈ one 10-business-day holding period
 _JUDGE_REL_THRESHOLD = -0.03
 
 
+def _parse_json_objects(text: str) -> list:
+    """Tolerantly extract top-level JSON objects from an LLM response.
+
+    Both Haiku calls here used json.loads(text[start:end]) on the whole array, so
+    a single missing comma OR a response truncated at max_tokens discarded EVERY
+    object and silently dropped the registry to news watches (2026-06-24 run:
+    "Expecting ',' delimiter: line 99 column 73"). This scans for balanced
+    top-level {...} spans and parses each independently: a malformed object is
+    skipped, a truncated trailing object is dropped, and the well-formed ones
+    survive. The surrounding code already keys results by "i", so per-item loss
+    degrades gracefully (missing index → its own fallback).
+    """
+    objs: list = []
+    depth = 0
+    start: Optional[int] = None
+    in_str = False
+    esc = False
+    for i, ch in enumerate(text):
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}":
+            if depth > 0:
+                depth -= 1
+                if depth == 0 and start is not None:
+                    try:
+                        objs.append(json.loads(text[start:i + 1]))
+                    except Exception:
+                        pass
+                    start = None
+    return objs
+
+
 # ── Registry I/O ───────────────────────────────────────────────────────────────
 
 def _load_registry() -> dict:
@@ -168,12 +212,11 @@ For each item return one JSON object:
 Return ONLY a JSON array, no other text."""
 
         resp = client.messages.create(
-            model=HAIKU_MODEL, max_tokens=800,
+            model=HAIKU_MODEL, max_tokens=2000,
             messages=[{"role": "user", "content": prompt}],
         )
         text = resp.content[0].text.strip() if resp.content else "[]"
-        start, end = text.find("["), text.rfind("]") + 1
-        parsed = json.loads(text[start:end]) if start >= 0 and end > 0 else []
+        parsed = _parse_json_objects(text)
 
         by_index = {int(p["i"]): p for p in parsed if isinstance(p, dict) and "i" in p}
         out = []
@@ -367,12 +410,11 @@ def _check_news_batch(batch: list, news_context: dict) -> list:
             "containing every index."
         )
         resp = client.messages.create(
-            model=HAIKU_MODEL, max_tokens=500,
+            model=HAIKU_MODEL, max_tokens=1500,
             messages=[{"role": "user", "content": prompt}],
         )
         text = resp.content[0].text.strip() if resp.content else "[]"
-        start, end = text.find("["), text.rfind("]") + 1
-        parsed = json.loads(text[start:end]) if start >= 0 and end > 0 else []
+        parsed = _parse_json_objects(text)
         fired = []
         idx_map = {i: f for i, f, _ in items}
         for p in parsed:

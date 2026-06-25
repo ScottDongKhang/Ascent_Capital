@@ -14,7 +14,7 @@ from ascent.alpha.ml_sleeve import build_ml_alpha, build_ml_alpha_cpcv
 log = logging.getLogger(__name__)
 
 DEFAULT_ALPHA_WEIGHTS = {
-    "trend":           0.43,   # increased: absorbs fundamental(0.05) — only confirmed-positive sleeve
+    "trend":           0.41,   # 0.43 - 0.02 donated to earnings_tone (IC-gated, unvalidated)
     "meanrev":         0.05,
     "volatility":      0.05,
     "statarb":         0.15,
@@ -28,6 +28,7 @@ DEFAULT_ALPHA_WEIGHTS = {
     "short_interest":  0.02,
     "altdata":         0.00,   # zero until first source passes IC gate
     "narrative":       0.03,   # activate narrative alpha
+    "earnings_tone":   0.02,   # IC-gated; offline panel built weekly; no floor (unvalidated)
 }
 
 IC_GATE_THRESHOLD = -0.005  # tightened from -0.010: fundamental IC=-0.008 recently evaded the gate
@@ -36,25 +37,25 @@ DEFAULT_ALPHA_WEIGHTS_BY_REGIME = {
     "calm_bull": {
         **DEFAULT_ALPHA_WEIGHTS,
         "statarb":     0.00,
-        "trend":       0.58,   # absorbs statarb(0.15)
+        "trend":       0.56,   # absorbs statarb(0.15); trend base 0.41+0.15=0.56
     },
     "stressed": {
         **DEFAULT_ALPHA_WEIGHTS,
         "fundamental": 0.08,   # restored: quality premium works in risk-off regimes
-        "trend":       0.35,   # live IC only covers calm_bull; no stressed evidence to zero it
+        "trend":       0.33,   # 0.41 - 0.08 (donated to fundamental)
         # statarb kept at 0.15 — sector-residual mean reversion works in high-dispersion regimes
     },
     "crisis": {
         **DEFAULT_ALPHA_WEIGHTS,
         "fundamental": 0.08,   # restored: flight-to-quality in crisis
-        "trend":       0.30,
+        "trend":       0.28,   # 0.41 - 0.08 (fundamental) - 0.05 (volatility boost)
         "volatility":  0.10,
         # statarb kept at 0.15 — sector dispersion is highest in crisis
     },
     "euphoric": {
         **DEFAULT_ALPHA_WEIGHTS,
         "statarb":     0.00,
-        "trend":       0.58,   # same logic as calm_bull
+        "trend":       0.56,   # same logic as calm_bull
     },
     "uncertain": {
         **DEFAULT_ALPHA_WEIGHTS,
@@ -387,6 +388,17 @@ def build_alpha_stack(features, alpha_weights=None, regime_signal=None, agent_id
                 log.debug("[Stack] altdata sleeve returned empty — no validated sources")
         except Exception as exc:
             log.warning("[Stack] altdata sleeve failed: %s", exc)
+    # Earnings-tone alpha — offline panel built weekly; parquet read only in hot path
+    try:
+        from ascent.alpha.earnings_tone import earnings_tone_alpha
+        et = earnings_tone_alpha(features)
+        if et is not None and not et.empty:
+            alphas["earnings_tone"] = et
+            log.info("[Stack] earnings_tone sleeve loaded shape=%s", et.shape)
+        else:
+            log.debug("[Stack] earnings_tone sleeve returned empty — cache absent or no data")
+    except Exception as exc:
+        log.warning("[Stack] earnings_tone sleeve failed: %s", exc)
     # Narrative alpha — 0% weight until narrative cache has ≥30 days history
     try:
         from ascent.alpha.narrative_alpha import build_narrative_alpha

@@ -1,0 +1,32 @@
+{
+  "_warning": "SURVIVORSHIP-BIASED (currently-listed only) \u2014 upper bound, not citable",
+  "n_pool": 56,
+  "n_small": 35,
+  "n_micro": 21,
+  "POOL_all_survivors": {
+    "mean_ic": 0.09907743057134841,
+    "std": 0.2231823528765847,
+    "n_months": 54,
+    "t_vs_0": 3.2622088637092994
+  },
+  "SMALL_<2B": {
+    "mean_ic": 0.09456658174106346,
+    "std": 0.21423695678541835,
+    "n_months": 54,
+    "t_vs_0": 3.243696262220731
+  },
+  "MICRO_<500M": {
+    "mean_ic": 0.0750306297476109,
+    "std": 0.26500634275288876,
+    "n_months": 53,
+    "t_vs_0": 2.061200588447323
+  },
+  "_reference_largecap_ic_test3": {
+    "mean_ic": 0.0095,
+    "t_vs_0": 0.32
+  },
+  "_verdict": {
+    "small_minus_largecap_ic": 0.0851,
+    "reading": "INCONCLUSIVE wedge signal (but survivorship bias inflates it \u2014 needs clean data)"
+  }
+}

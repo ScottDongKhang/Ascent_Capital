@@ -35,7 +35,7 @@ ACTIVE_CONFIG_PATH = Path("data_cache/active_alpha_config.json")
 
 # Match current stack.py defaults exactly
 DEFAULT_ALPHA_WEIGHTS = {
-    "trend":           0.43,   # increased: absorbs fundamental(0.05) — only confirmed-positive sleeve
+    "trend":           0.41,   # 0.43 - 0.02 donated to earnings_tone
     "meanrev":         0.05,
     "statarb":         0.15,
     "ml":              0.10,
@@ -49,6 +49,7 @@ DEFAULT_ALPHA_WEIGHTS = {
     "short_interest":  0.02,
     "altdata":         0.00,   # zero until first source passes IC gate
     "narrative":       0.03,   # activate narrative alpha
+    "earnings_tone":   0.02,   # IC-gated; no floor (unvalidated — must remain prunable)
 }
 
 PERTURB_RANGE  = 0.10   # max +/- 10% per sleeve per variant

@@ -814,24 +814,29 @@ def main():
             pass
 
     # Early rebalance trigger: IC decay ≥30% since last rebalance after ≥5 bdays
+    # Suppressed within 3 trading days of a scheduled rebalance — the scheduled
+    # rebalance will recompute the book anyway; an early rotation is pure churn.
     if not is_rebalance:
-        try:
-            from ascent.monitoring.rebalance_trigger import is_triggered, check_ic_decay_trigger
-            from ascent.monitoring.signal_health import compute_signal_health
-            if is_triggered():
-                print("[Runner] Early rebalance triggered — IC decay flag detected.")
-                is_rebalance = True
-            else:
-                _current_ics = {
-                    s: d.get("ic_5d_avg", 0.0)
-                    for s, d in compute_signal_health(today.isoformat()).items()
-                }
-                triggered = check_ic_decay_trigger(today.isoformat(), _current_ics)
-                if triggered:
-                    print("[Runner] IC decay triggered early rebalance.")
+        if _is_near_scheduled_rebalance(today, cal_path=cal_path):
+            print("[Runner] Early rebalance trigger suppressed — within 3 trading days of scheduled rebalance")
+        else:
+            try:
+                from ascent.monitoring.rebalance_trigger import is_triggered, check_ic_decay_trigger
+                from ascent.monitoring.signal_health import compute_signal_health
+                if is_triggered():
+                    print("[Runner] Early rebalance triggered — IC decay flag detected.")
                     is_rebalance = True
-        except Exception as _te:
-            print(f"[Runner] Rebalance trigger check skipped: {_te}")
+                else:
+                    _current_ics = {
+                        s: d.get("ic_5d_avg", 0.0)
+                        for s, d in compute_signal_health(today.isoformat()).items()
+                    }
+                    triggered = check_ic_decay_trigger(today.isoformat(), _current_ics)
+                    if triggered:
+                        print("[Runner] IC decay triggered early rebalance.")
+                        is_rebalance = True
+            except Exception as _te:
+                print(f"[Runner] Rebalance trigger check skipped: {_te}")
 
     if is_rebalance:
         try:
@@ -2118,18 +2123,22 @@ def _log_holdings(today):
                 )
             else:
                 print("[Runner] Authority update skipped — no Track D snapshot yet")
-            # Final word on the buffer: reconcile it to the (now-healed) counterfactual
-            # log. This runs AFTER update_authority's append so today is not double-counted,
-            # and it repairs any historical drift (the shadow-log seed + duplicate that the
-            # incremental append left in place). Promotion/demotion ran above on today's
-            # values; this just keeps the persisted Sortino window matching the log.
-            try:
-                _n_rb = rebuild_buffers_from_counterfactual()
-                print(f"[Runner] Authority buffer reconciled to counterfactual log ({_n_rb} obs)")
-            except Exception as _rbe:
-                print(f"[Runner] Authority buffer reconcile skipped: {_rbe}")
         except Exception as _fbe:
             print(f"[Runner] Feedback/authority update skipped: {_fbe}")
+
+        # Reconcile the authority buffer to the counterfactual log — the single
+        # source of truth for the Track D / A★ rolling window. This runs in its OWN
+        # try, INDEPENDENT of the feedback block above: rebuild only reads the
+        # counterfactual log, so a failure in compute_ai_feedback() or
+        # get_authority_state() must NOT prevent the buffers from being populated.
+        # (Bug fixed 2026-06-23: it was nested inside the feedback try, so the
+        # buffers went empty whenever feedback threw — freezing the earned-authority
+        # ladder at Level 1 with empty Track D/A★ buffers despite a healthy log.)
+        try:
+            _n_rb = rebuild_buffers_from_counterfactual()
+            print(f"[Runner] Authority buffer reconciled to counterfactual log ({_n_rb} obs)")
+        except Exception as _rbe:
+            print(f"[Runner] Authority buffer reconcile skipped: {_rbe}")
 
         # Score any ticker memory entries now old enough (10d+)
         try:
