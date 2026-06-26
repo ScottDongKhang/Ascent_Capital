@@ -123,6 +123,25 @@ def _portfolio_return(weights: Dict[str, float], prices: Dict[str, dict]) -> Opt
     return ret
 
 
+def _delta_portfolio_return(
+    ai_pm_weights: Dict[str, float],
+    quant_star_weights: Dict[str, float],
+    prices: Dict[str, dict],
+) -> Optional[float]:
+    """Return of the normalized delta portfolio: long where D overweights A★, short where D underweights.
+    One-way deviation normalized to 1.0. Returns None when no symbol can be priced, 0.0 when D == A★."""
+    all_syms = set(ai_pm_weights) | set(quant_star_weights)
+    deltas = {
+        s: ai_pm_weights.get(s, 0.0) - quant_star_weights.get(s, 0.0)
+        for s in all_syms
+    }
+    one_way = sum(abs(d) for d in deltas.values()) / 2.0
+    if one_way < 1e-6:
+        return 0.0  # D identical to A★ — no active bet
+    normalized = {s: d / one_way for s, d in deltas.items() if abs(d) > 1e-9}
+    return _portfolio_return(normalized, prices)
+
+
 def score_daily(
     run_date: date,
     quant_star_weights: Optional[Dict[str, float]],
@@ -137,14 +156,19 @@ def score_daily(
     astar_ret = _portfolio_return(quant_star_weights, prices) if quant_star_weights else None
     a_ret     = _portfolio_return(quant_weights, prices)      if quant_weights     else None
     d_ret     = _portfolio_return(ai_pm_weights, prices)      if ai_pm_weights     else None
+    delta_ret = (
+        _delta_portfolio_return(ai_pm_weights, quant_star_weights, prices)
+        if ai_pm_weights and quant_star_weights else None
+    )
 
     record = {
         "date":                  run_date.isoformat(),
-        "track_astar_return":    round(astar_ret, 6) if astar_ret is not None else None,
-        "track_a_return":        round(a_ret, 6)     if a_ret     is not None else None,
+        "track_astar_return":    round(astar_ret, 6)  if astar_ret  is not None else None,
+        "track_a_return":        round(a_ret, 6)      if a_ret      is not None else None,
         "track_b_return":        round(float(track_b_return), 6),
         "track_c_return":        round(float(spy_return), 6),
-        "track_d_return":        round(d_ret, 6)     if d_ret     is not None else None,
+        "track_d_return":        round(d_ret, 6)      if d_ret      is not None else None,
+        "track_delta_return":    round(delta_ret, 6)  if delta_ret  is not None else None,
         "track_d_force_sealed":  force_sealed,
     }
 
@@ -381,11 +405,15 @@ def get_cumulative_returns() -> dict:
         "track_b":     _cumret_over(records, "track_b_return"),
         "track_c":     _cumret_over(records, "track_c_return"),
         "track_d":     _cumret_over(records, "track_d_return"),
+        "track_delta": _cumret_over(records, "track_delta_return"),
         # Honest apples-to-apples comparisons (common window only):
-        "ai_value_add_b_vs_astar": _common_window_diff(records, "track_b_return", "track_astar_return"),
-        "ai_signal_d_vs_astar":    _common_window_diff(records, "track_d_return", "track_astar_return"),
-        "n_common_b_astar": len(_common_window(records, "track_b_return", "track_astar_return")),
-        "n_common_d_astar": len(_common_window(records, "track_d_return", "track_astar_return")),
+        "ai_value_add_b_vs_astar":  _common_window_diff(records, "track_b_return", "track_astar_return"),
+        "ai_signal_d_vs_astar":     _common_window_diff(records, "track_d_return", "track_astar_return"),
+        "ai_signal_delta":          _common_window_diff(records, "track_delta_return", "track_astar_return"),
+        "n_common_b_astar":  len(_common_window(records, "track_b_return", "track_astar_return")),
+        "n_common_d_astar":  len(_common_window(records, "track_d_return", "track_astar_return")),
+        "n_delta_days":      sum(1 for r in records if r.get("track_delta_return") is not None),
+        "n_delta_zero":      sum(1 for r in records if r.get("track_delta_return") == 0.0),
     }
 
 
@@ -404,5 +432,7 @@ def print_cumulative_report() -> None:
     print(f"  Track B  (Actual):        {_f(c['track_b'])}")
     print(f"  Track C  (SPY):           {_f(c['track_c'])}")
     print(f"  Track D  (Pure AI PM):    {_f(c['track_d'])}")
+    print(f"  Track Δ  (AI Active Bet): {_f(c['track_delta'])}  "
+          f"({c.get('n_delta_days', 0)} days, {c.get('n_delta_zero', 0)} zero-divergence)")
     print(f"  AI value add  (B−A★): {_fp(c['ai_value_add_b_vs_astar'])} vs pure quant ({c['n_common_b_astar']} common days)")
     print(f"  AI signal     (D−A★): {_fp(c['ai_signal_d_vs_astar'])} — full authority estimate ({c['n_common_d_astar']} common days)")
