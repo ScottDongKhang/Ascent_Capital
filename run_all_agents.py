@@ -1724,7 +1724,7 @@ def main():
         print("[Runner] Halted — agents ran, weights updated, execution skipped.")
         print("[Runner] Create execution/halt_override.json to resume.")
         try:
-            _log_holdings(today)
+            _log_holdings(today, force_sealed=_ai_pm_force_sealed)
         except Exception as e:
             print(f"[Runner] Holdings log skipped: {e}")
         _log_run(today, merged_weights, agent_outputs, dry_run)
@@ -1780,7 +1780,7 @@ def main():
             print("[Runner] DEBATE VERDICT: halt_and_review — skipping execution")
             print("[Runner] Review at outputs/debate_log/")
             try:
-                _log_holdings(today)
+                _log_holdings(today, force_sealed=_ai_pm_force_sealed)
             except Exception as e:
                 print(f"[Runner] Holdings log skipped: {e}")
             _log_run(today, merged_weights, agent_outputs, dry_run)

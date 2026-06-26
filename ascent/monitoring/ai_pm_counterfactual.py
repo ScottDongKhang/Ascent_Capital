@@ -409,7 +409,6 @@ def get_cumulative_returns() -> dict:
         # Honest apples-to-apples comparisons (common window only):
         "ai_value_add_b_vs_astar":  _common_window_diff(records, "track_b_return", "track_astar_return"),
         "ai_signal_d_vs_astar":     _common_window_diff(records, "track_d_return", "track_astar_return"),
-        "ai_signal_delta":          _common_window_diff(records, "track_delta_return", "track_astar_return"),
         "n_common_b_astar":  len(_common_window(records, "track_b_return", "track_astar_return")),
         "n_common_d_astar":  len(_common_window(records, "track_d_return", "track_astar_return")),
         "n_delta_days":      sum(1 for r in records if r.get("track_delta_return") is not None),

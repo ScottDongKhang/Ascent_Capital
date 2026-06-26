@@ -2691,7 +2691,10 @@ def run_ai_pm(
 
         if result_store_v2 and not result_store_v2[-1].fallback and result_store_v2[-1].portfolio:
             log.info("[AIPMAgent] AI PM revised portfolio after red team critique")
-            return result_store_v2[-1]
+            rev = result_store_v2[-1]
+            if _phase2_force_sealed:
+                rev.force_sealed = True
+            return rev
         else:
             log.info("[AIPMAgent] AI PM revision fallback/empty — using initial proposal")
 
