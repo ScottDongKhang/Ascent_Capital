@@ -1888,7 +1888,7 @@ def main():
 
     # ── Step 6: Log the run ───────────────────────────────────────────────────
     try:
-        _log_holdings(today)
+        _log_holdings(today, force_sealed=_ai_pm_force_sealed)
     except Exception as e:
         print(f"[Runner] Holdings log skipped: {e}")
     _log_run(today, merged_weights, agent_outputs, dry_run)
@@ -1966,7 +1966,7 @@ def _log_run(today, merged_weights, agent_outputs, dry_run):
     print(f"[Runner] Done.\n")
 
 
-def _log_holdings(today):
+def _log_holdings(today, force_sealed: bool = False):
     log_path = Path("logs/holdings_log.jsonl")
     log_path.parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -2061,7 +2061,7 @@ def _log_holdings(today):
                 track_b_return=day_ret,
                 spy_return=spy_ret,
                 prices=_cf_prices,
-                force_sealed=_ai_pm_force_sealed,
+                force_sealed=force_sealed,
             )
             # Replay Alpaca's SETTLED 1D bars over the log so every prior day carries
             # the real Track B return (the same-day value above is unreliable until the
