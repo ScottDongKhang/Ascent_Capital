@@ -316,6 +316,7 @@ class AIPMResult:
     thesis: Dict[str, Any]
     fallback: bool = False
     tool_failures: List[str] = field(default_factory=list)
+    force_sealed: bool = False
 
 
 @dataclass

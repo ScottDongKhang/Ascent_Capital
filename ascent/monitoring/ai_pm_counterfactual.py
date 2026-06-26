@@ -69,7 +69,7 @@ def snapshot_quant(run_date: date, weights: Dict[str, float]) -> None:
         log.info("[Counterfactual] Track A snapshot: %d positions", len(weights))
 
 
-def snapshot_ai_pm(run_date: date, weights: Dict[str, float]) -> None:
+def snapshot_ai_pm(run_date: date, weights: Dict[str, float], force_sealed: bool = False) -> None:
     """Track D: AI PM proposed portfolio, normalized to sum=1.0 (longs only for normalisation).
     Handles signed weights — shorts preserved, longs renormalized.
     Call this AFTER Phase 2 completes on rebalance days."""
@@ -83,8 +83,9 @@ def snapshot_ai_pm(run_date: date, weights: Dict[str, float]) -> None:
 
     normalized = {**longs, **shorts}
     written = _idempotent_write(AI_PM_LOG, run_date.isoformat(), {
-        "date":    run_date.isoformat(),
-        "weights": {k: round(v, 6) for k, v in normalized.items()},
+        "date":         run_date.isoformat(),
+        "weights":      {k: round(v, 6) for k, v in normalized.items()},
+        "force_sealed": force_sealed,
     })
     if written:
         log.info("[Counterfactual] Track D snapshot: %d longs, %d shorts",

@@ -368,3 +368,33 @@ def test_backfill_astar_d_idempotent_and_skips_unpriceable():
              patch.object(cf, "AI_PM_LOG", Path(tmp)/"x.jsonl"), patch.object(cf, "QUANT_LOG", Path(tmp)/"y.jsonl"):
             assert cf.backfill_astar_d({"AAA": {"2026-06-15": 100.0}}) == 0  # no prior+curr pair
             assert cf.backfill_astar_d({}) == 0
+
+
+# ── Task 1: force_sealed tagging ──────────────────────────────────────────────
+
+def test_snapshot_ai_pm_writes_force_sealed_false_by_default():
+    from ascent.monitoring.ai_pm_counterfactual import snapshot_ai_pm, AI_PM_LOG
+    with tempfile.TemporaryDirectory() as tmp:
+        log_path = Path(tmp) / "ai_snapshots.jsonl"
+        with patch("ascent.monitoring.ai_pm_counterfactual.AI_PM_LOG", log_path):
+            snapshot_ai_pm(date(2026, 6, 25), {"AAPL": 0.6, "MSFT": 0.4})
+        entry = json.loads(log_path.read_text().strip())
+    assert entry.get("force_sealed") == False
+
+
+def test_snapshot_ai_pm_writes_force_sealed_true():
+    from ascent.monitoring.ai_pm_counterfactual import snapshot_ai_pm, AI_PM_LOG
+    with tempfile.TemporaryDirectory() as tmp:
+        log_path = Path(tmp) / "ai_snapshots.jsonl"
+        with patch("ascent.monitoring.ai_pm_counterfactual.AI_PM_LOG", log_path):
+            snapshot_ai_pm(date(2026, 6, 25), {"AAPL": 0.6, "MSFT": 0.4}, force_sealed=True)
+        entry = json.loads(log_path.read_text().strip())
+    assert entry.get("force_sealed") == True
+
+
+def test_aipm_result_has_force_sealed_field():
+    from agents.ai_pm_agent import AIPMResult
+    r = AIPMResult(portfolio={}, thesis={})
+    assert r.force_sealed == False
+    r2 = AIPMResult(portfolio={}, thesis={}, force_sealed=True)
+    assert r2.force_sealed == True
