@@ -398,3 +398,17 @@ def test_aipm_result_has_force_sealed_field():
     assert r.force_sealed == False
     r2 = AIPMResult(portfolio={}, thesis={}, force_sealed=True)
     assert r2.force_sealed == True
+
+
+def test_run_ai_pm_fallback_result_is_not_force_sealed():
+    """Fallback result (portfolio={}) should not be marked force_sealed — it means no snapshot was taken."""
+    from agents.ai_pm_agent import AIPMResult
+    r = AIPMResult(portfolio={}, thesis={}, fallback=True)
+    assert r.force_sealed == False
+
+
+def test_aipm_result_force_sealed_defaults_false():
+    """Normal result should default to not force_sealed."""
+    from agents.ai_pm_agent import AIPMResult
+    r = AIPMResult(portfolio={"AAPL": 0.5}, thesis={"market_view": "bullish"})
+    assert r.force_sealed == False
