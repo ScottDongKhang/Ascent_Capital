@@ -126,6 +126,9 @@ def rebuild_buffers_from_counterfactual() -> int:
         d, a = r.get("track_d_return"), r.get("track_astar_return")
         if d is None or a is None:
             continue
+        if r.get("track_d_force_sealed", False):
+            log.debug("[EarnedAuthority] Skipping force-sealed day %s from Sortino buffer", r.get("date"))
+            continue
         d_buf.append(float(d))
         as_buf.append(float(a))
     d_buf, as_buf = d_buf[-63:], as_buf[-63:]

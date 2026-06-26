@@ -1390,6 +1390,7 @@ def main():
         except Exception:
             pass
 
+        _ai_pm_force_sealed = False
         try:
             print("[Runner] AI PM Phase 2 — synthesising pre-thesis with quant validation...")
             ai_pm_result = run_ai_pm(
@@ -1417,7 +1418,8 @@ def main():
 
                 # Track D: snapshot pure AI PM portfolio (diagnostic)
                 try:
-                    snapshot_ai_pm(today, dict(ai_pm_result.portfolio))
+                    _ai_pm_force_sealed = ai_pm_result.force_sealed
+                    snapshot_ai_pm(today, dict(ai_pm_result.portfolio), force_sealed=_ai_pm_force_sealed)
                 except Exception as _td_e:
                     print(f"[Runner] Track D snapshot skipped: {_td_e}")
 
@@ -2059,6 +2061,7 @@ def _log_holdings(today):
                 track_b_return=day_ret,
                 spy_return=spy_ret,
                 prices=_cf_prices,
+                force_sealed=_ai_pm_force_sealed,
             )
             # Replay Alpaca's SETTLED 1D bars over the log so every prior day carries
             # the real Track B return (the same-day value above is unreliable until the

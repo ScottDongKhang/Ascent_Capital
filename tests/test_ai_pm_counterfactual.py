@@ -412,3 +412,48 @@ def test_aipm_result_force_sealed_defaults_false():
     from agents.ai_pm_agent import AIPMResult
     r = AIPMResult(portfolio={"AAPL": 0.5}, thesis={"market_view": "bullish"})
     assert r.force_sealed == False
+
+
+def test_score_daily_writes_track_d_force_sealed_false():
+    from ascent.monitoring.ai_pm_counterfactual import score_daily, DAILY_LOG
+    import tempfile, json
+    from datetime import date
+    from pathlib import Path
+    from unittest.mock import patch
+    with tempfile.TemporaryDirectory() as tmp:
+        log_path = Path(tmp) / "daily.jsonl"
+        with patch("ascent.monitoring.ai_pm_counterfactual.DAILY_LOG", log_path):
+            score_daily(
+                run_date=date(2026, 6, 25),
+                quant_star_weights={"AAPL": 0.5, "MSFT": 0.5},
+                quant_weights={"AAPL": 0.5, "MSFT": 0.5},
+                ai_pm_weights={"AAPL": 0.6, "MSFT": 0.4},
+                track_b_return=0.01,
+                spy_return=0.005,
+                prices={"AAPL": {"prev": 100.0, "curr": 101.0}, "MSFT": {"prev": 200.0, "curr": 201.0}},
+            )
+        entry = json.loads(log_path.read_text().strip())
+    assert entry.get("track_d_force_sealed") == False
+
+
+def test_score_daily_writes_track_d_force_sealed_true():
+    from ascent.monitoring.ai_pm_counterfactual import score_daily, DAILY_LOG
+    import tempfile, json
+    from datetime import date
+    from pathlib import Path
+    from unittest.mock import patch
+    with tempfile.TemporaryDirectory() as tmp:
+        log_path = Path(tmp) / "daily.jsonl"
+        with patch("ascent.monitoring.ai_pm_counterfactual.DAILY_LOG", log_path):
+            score_daily(
+                run_date=date(2026, 6, 25),
+                quant_star_weights={"AAPL": 0.5, "MSFT": 0.5},
+                quant_weights={"AAPL": 0.5, "MSFT": 0.5},
+                ai_pm_weights={"AAPL": 0.6, "MSFT": 0.4},
+                track_b_return=0.01,
+                spy_return=0.005,
+                prices={"AAPL": {"prev": 100.0, "curr": 101.0}, "MSFT": {"prev": 200.0, "curr": 201.0}},
+                force_sealed=True,
+            )
+        entry = json.loads(log_path.read_text().strip())
+    assert entry.get("track_d_force_sealed") == True

@@ -131,6 +131,7 @@ def score_daily(
     track_b_return: float,
     spy_return: float,
     prices: Dict[str, dict],
+    force_sealed: bool = False,
 ) -> dict:
     """Compute all five track daily returns and append to DAILY_LOG."""
     astar_ret = _portfolio_return(quant_star_weights, prices) if quant_star_weights else None
@@ -138,12 +139,13 @@ def score_daily(
     d_ret     = _portfolio_return(ai_pm_weights, prices)      if ai_pm_weights     else None
 
     record = {
-        "date":               run_date.isoformat(),
-        "track_astar_return": round(astar_ret, 6) if astar_ret is not None else None,
-        "track_a_return":     round(a_ret, 6)     if a_ret     is not None else None,
-        "track_b_return":     round(float(track_b_return), 6),
-        "track_c_return":     round(float(spy_return), 6),
-        "track_d_return":     round(d_ret, 6)     if d_ret     is not None else None,
+        "date":                  run_date.isoformat(),
+        "track_astar_return":    round(astar_ret, 6) if astar_ret is not None else None,
+        "track_a_return":        round(a_ret, 6)     if a_ret     is not None else None,
+        "track_b_return":        round(float(track_b_return), 6),
+        "track_c_return":        round(float(spy_return), 6),
+        "track_d_return":        round(d_ret, 6)     if d_ret     is not None else None,
+        "track_d_force_sealed":  force_sealed,
     }
 
     _upsert_daily(record)
