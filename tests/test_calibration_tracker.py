@@ -333,3 +333,101 @@ def test_log_prediction_logs_override_only_decision(tmp_path):
     assert log_path.exists()
     entries = [json.loads(l) for l in log_path.read_text().strip().splitlines()]
     assert len(entries) == 1
+
+
+# ── Task 5: Per-rebalance cross-sectional IC ───────────────────────────────────
+
+
+def test_get_per_rebalance_ic_returns_empty_when_all_same_conviction():
+    """If every position has the same conviction level, IC is undefined — returns []."""
+    from ascent.strategy.calibration_tracker import get_per_rebalance_ic, CALIBRATION_LOG
+    import tempfile, json
+    from pathlib import Path
+    from unittest.mock import patch
+
+    entry = {
+        "date": "2026-06-10",
+        "positions": {
+            "AAPL": {"weight": 0.1, "conviction": "quant_agreed", "realized_21d": 0.02},
+            "MSFT": {"weight": 0.1, "conviction": "quant_agreed", "realized_21d": 0.01},
+            "GOOG": {"weight": 0.1, "conviction": "quant_agreed", "realized_21d": -0.01},
+        }
+    }
+    with tempfile.TemporaryDirectory() as tmp:
+        log_path = Path(tmp) / "calibration.jsonl"
+        log_path.write_text(json.dumps(entry) + "\n")
+        with patch("ascent.strategy.calibration_tracker.CALIBRATION_LOG", log_path):
+            result = get_per_rebalance_ic()
+    assert result == []
+
+
+def test_get_per_rebalance_ic_positive_when_high_conviction_wins():
+    """High conviction position outperforms → positive IC for that rebalance."""
+    from ascent.strategy.calibration_tracker import get_per_rebalance_ic, CALIBRATION_LOG
+    import tempfile, json
+    from pathlib import Path
+    from unittest.mock import patch
+
+    entry = {
+        "date": "2026-06-10",
+        "positions": {
+            "AAPL": {"weight": 0.2, "conviction": "high",          "realized_21d": 0.05},
+            "MSFT": {"weight": 0.1, "conviction": "medium",        "realized_21d": 0.02},
+            "GOOG": {"weight": 0.1, "conviction": "quant_agreed",  "realized_21d": 0.01},
+            "AMZN": {"weight": 0.1, "conviction": "quant_agreed",  "realized_21d": -0.01},
+        }
+    }
+    with tempfile.TemporaryDirectory() as tmp:
+        log_path = Path(tmp) / "calibration.jsonl"
+        log_path.write_text(json.dumps(entry) + "\n")
+        with patch("ascent.strategy.calibration_tracker.CALIBRATION_LOG", log_path):
+            result = get_per_rebalance_ic()
+    assert len(result) == 1
+    assert result[0]["date"] == "2026-06-10"
+    assert result[0]["ic"] > 0
+    assert result[0]["n_conviction_levels"] >= 2
+
+
+def test_get_per_rebalance_ic_skips_entry_without_realized_outcomes():
+    """Entry where no position has realized_21d is excluded entirely."""
+    from ascent.strategy.calibration_tracker import get_per_rebalance_ic, CALIBRATION_LOG
+    import tempfile, json
+    from pathlib import Path
+    from unittest.mock import patch
+
+    entry = {
+        "date": "2026-06-10",
+        "positions": {
+            "AAPL": {"weight": 0.2, "conviction": "high",         "realized_21d": None},
+            "MSFT": {"weight": 0.1, "conviction": "quant_agreed", "realized_21d": None},
+        }
+    }
+    with tempfile.TemporaryDirectory() as tmp:
+        log_path = Path(tmp) / "calibration.jsonl"
+        log_path.write_text(json.dumps(entry) + "\n")
+        with patch("ascent.strategy.calibration_tracker.CALIBRATION_LOG", log_path):
+            result = get_per_rebalance_ic()
+    assert result == []
+
+
+def test_calibration_report_includes_per_rebalance_section():
+    """get_calibration_report() contains per-rebalance IC section when data exists."""
+    from ascent.strategy.calibration_tracker import get_calibration_report, CALIBRATION_LOG
+    import tempfile, json
+    from pathlib import Path
+    from unittest.mock import patch
+
+    entry = {
+        "date": "2026-06-10",
+        "positions": {
+            "AAPL": {"weight": 0.2, "conviction": "high",          "realized_21d": 0.05},
+            "MSFT": {"weight": 0.1, "conviction": "medium",        "realized_21d": 0.02},
+            "GOOG": {"weight": 0.1, "conviction": "quant_agreed",  "realized_21d": -0.01},
+        }
+    }
+    with tempfile.TemporaryDirectory() as tmp:
+        log_path = Path(tmp) / "calibration.jsonl"
+        log_path.write_text(json.dumps(entry) + "\n")
+        with patch("ascent.strategy.calibration_tracker.CALIBRATION_LOG", log_path):
+            report = get_calibration_report()
+    assert "per-rebalance" in report.lower() or "Per-rebalance" in report

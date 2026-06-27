@@ -316,6 +316,7 @@ class AIPMResult:
     thesis: Dict[str, Any]
     fallback: bool = False
     tool_failures: List[str] = field(default_factory=list)
+    force_sealed: bool = False
 
 
 @dataclass
@@ -2588,6 +2589,7 @@ def run_ai_pm(
     # use tool_choice to hard-force the submission. The executor keeps the
     # validation gates (feedback_acknowledged / prethesis_disposition) intact —
     # a gate rejection gets one retry with the rejection text fed back.
+    _phase2_force_sealed = False
     if not result_store:
         log.warning("[AIPMAgent] Phase 2: main pass exhausted without sealing — running force-seal pass")
         try:
@@ -2626,6 +2628,7 @@ def run_ai_pm(
                         break
                 if result_store:
                     print("[AIPMAgent] Phase 2: force-seal succeeded")
+                    _phase2_force_sealed = True
                     break
                 if not _rejection:
                     break
@@ -2649,6 +2652,8 @@ def run_ai_pm(
 
     # ── Red team adversarial self-play ────────────────────────────────────────
     initial_result = result_store[-1]
+    if _phase2_force_sealed:
+        initial_result.force_sealed = True
 
     from agents.red_team_agent import run_red_team
     regime_str = _get_current_regime()
@@ -2686,7 +2691,10 @@ def run_ai_pm(
 
         if result_store_v2 and not result_store_v2[-1].fallback and result_store_v2[-1].portfolio:
             log.info("[AIPMAgent] AI PM revised portfolio after red team critique")
-            return result_store_v2[-1]
+            rev = result_store_v2[-1]
+            if _phase2_force_sealed:
+                rev.force_sealed = True
+            return rev
         else:
             log.info("[AIPMAgent] AI PM revision fallback/empty — using initial proposal")
 

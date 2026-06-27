@@ -248,3 +248,78 @@ def test_rebuild_buffers_from_counterfactual_uses_common_window():
         # legacy mirrors kept in sync
         assert state["ai_returns_21d"]    == [0.010, -0.004, 0.006]
         assert state["quant_returns_21d"] == [0.012, 0.002, 0.001]
+
+
+def test_rebuild_buffers_excludes_force_sealed_days():
+    import json, tempfile
+    from pathlib import Path
+    from unittest.mock import patch
+    import ascent.strategy.earned_authority as ea
+    import ascent.monitoring.ai_pm_counterfactual as cf
+
+    with tempfile.TemporaryDirectory() as tmp:
+        daily_log = Path(tmp) / "counterfactual_daily.jsonl"
+        state_path = Path(tmp) / "earned_authority.json"
+
+        rows = [
+            {"date": "2026-06-10", "track_d_return": 0.01,  "track_astar_return": 0.005, "track_d_force_sealed": False},
+            {"date": "2026-06-11", "track_d_return": 0.02,  "track_astar_return": 0.015, "track_d_force_sealed": False},
+            {"date": "2026-06-12", "track_d_return": 0.03,  "track_astar_return": 0.010, "track_d_force_sealed": True},
+        ]
+        daily_log.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+        state_path.write_text(json.dumps({
+            "level": 1, "title": "Analyst", "ai_weight": 0.05,
+            "phase": 1, "level_start_date": "2026-06-01",
+            "days_at_level": 0, "days_stuck": 0,
+            "in_cooldown": False, "cooldown_until": None,
+            "auto_revert_count": 0, "last_updated": "2026-06-09",
+            "track_d_returns": [], "track_astar_returns": [],
+            "ai_returns_21d": [], "quant_returns_21d": [],
+            "disable_sleeve_priors": False,
+        }))
+
+        with patch.object(cf, "DAILY_LOG", daily_log):
+            with patch.object(ea, "STATE_PATH", state_path):
+                n = ea.rebuild_buffers_from_counterfactual()
+
+        state = json.loads(state_path.read_text())
+
+    assert n == 2, f"Expected 2 non-force-sealed obs, got {n}"
+    assert state["track_d_returns"] == [0.01, 0.02]
+    assert state["track_astar_returns"] == [0.005, 0.015]
+
+
+def test_rebuild_buffers_includes_days_without_force_sealed_field():
+    """Old log records without track_d_force_sealed should be treated as not force-sealed."""
+    import json, tempfile
+    from pathlib import Path
+    from unittest.mock import patch
+    import ascent.strategy.earned_authority as ea
+    import ascent.monitoring.ai_pm_counterfactual as cf
+
+    with tempfile.TemporaryDirectory() as tmp:
+        daily_log = Path(tmp) / "counterfactual_daily.jsonl"
+        state_path = Path(tmp) / "earned_authority.json"
+
+        # Old-format records without the field
+        rows = [
+            {"date": "2026-06-10", "track_d_return": 0.01, "track_astar_return": 0.005},
+            {"date": "2026-06-11", "track_d_return": 0.02, "track_astar_return": 0.015},
+        ]
+        daily_log.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+        state_path.write_text(json.dumps({
+            "level": 1, "title": "Analyst", "ai_weight": 0.05,
+            "phase": 1, "level_start_date": "2026-06-01",
+            "days_at_level": 0, "days_stuck": 0,
+            "in_cooldown": False, "cooldown_until": None,
+            "auto_revert_count": 0, "last_updated": "2026-06-09",
+            "track_d_returns": [], "track_astar_returns": [],
+            "ai_returns_21d": [], "quant_returns_21d": [],
+            "disable_sleeve_priors": False,
+        }))
+
+        with patch.object(cf, "DAILY_LOG", daily_log):
+            with patch.object(ea, "STATE_PATH", state_path):
+                n = ea.rebuild_buffers_from_counterfactual()
+
+    assert n == 2, f"Old records without field should be included; got {n}"

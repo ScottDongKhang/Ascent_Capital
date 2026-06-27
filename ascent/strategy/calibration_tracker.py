@@ -334,8 +334,83 @@ def get_calibration_report(n_rebalances: int = 10) -> str:
             else:
                 lines.append(f"    {level} (0 positions): no data")
 
+        # ── Per-rebalance cross-sectional IC ──────────────────────────────────
+        per_rb = get_per_rebalance_ic(n_rebalances=n_rebalances)
+        lines.append("")
+        lines.append("  Per-rebalance cross-sectional IC (conviction → 21d within each date):")
+        if not per_rb:
+            lines.append("    No rebalances yet with multiple conviction levels and realized outcomes.")
+        else:
+            for rb in per_rb:
+                interpretation = "✓" if rb["ic"] >= 0.10 else ("~" if rb["ic"] >= 0 else "✗")
+                lines.append(
+                    f"    {rb['date']}: IC {rb['ic']:+.3f} {interpretation}  "
+                    f"({rb['n_positions']} positions, {rb['n_conviction_levels']} conviction levels)"
+                )
+            if len(per_rb) > 1:
+                avg_ic = sum(r["ic"] for r in per_rb) / len(per_rb)
+                lines.append(f"    Average per-rebalance IC: {avg_ic:+.3f}")
+
         return "\n".join(lines)
 
     except Exception as exc:
         log.warning("[CalibrationTracker] get_calibration_report failed: %s", exc)
         return f"Calibration report unavailable: {exc}"
+
+
+def get_per_rebalance_ic(n_rebalances: int = 10) -> list:
+    """Spearman IC of conviction_order → realized_21d within each rebalance.
+
+    Returns one dict per rebalance entry that has (a) at least one realized outcome
+    and (b) at least 2 distinct conviction levels. Entries where all positions share
+    the same conviction level are skipped — IC is undefined there.
+
+    Each result: {"date": str, "ic": float, "n_positions": int, "n_conviction_levels": int}
+    Never raises.
+    """
+    try:
+        from scipy.stats import spearmanr
+    except ImportError:
+        return []
+
+    try:
+        entries = _read_log()
+        entries_with_outcomes = [
+            e for e in entries
+            if any(pos.get("realized_21d") is not None for pos in e.get("positions", {}).values())
+        ][-n_rebalances:]
+
+        results = []
+        for entry in entries_with_outcomes:
+            convictions, returns = [], []
+            for pos in entry.get("positions", {}).values():
+                r21 = pos.get("realized_21d")
+                if r21 is None:
+                    continue
+                conviction = pos.get("conviction", "quant_agreed")
+                convictions.append(CONVICTION_ORDER.get(conviction, 0))
+                returns.append(float(r21))
+
+            if len(convictions) < 3:
+                continue
+            if len(set(convictions)) < 2:
+                continue  # all same conviction level — IC undefined
+
+            try:
+                corr, _ = spearmanr(convictions, returns)
+                if corr != corr:  # NaN check
+                    continue
+                results.append({
+                    "date":               entry["date"],
+                    "ic":                 round(float(corr), 3),
+                    "n_positions":        len(convictions),
+                    "n_conviction_levels": len(set(convictions)),
+                })
+            except Exception:
+                continue
+
+        return results
+
+    except Exception as exc:
+        log.warning("[CalibrationTracker] get_per_rebalance_ic failed: %s", exc)
+        return []

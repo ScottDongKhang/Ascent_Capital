@@ -368,3 +368,170 @@ def test_backfill_astar_d_idempotent_and_skips_unpriceable():
              patch.object(cf, "AI_PM_LOG", Path(tmp)/"x.jsonl"), patch.object(cf, "QUANT_LOG", Path(tmp)/"y.jsonl"):
             assert cf.backfill_astar_d({"AAA": {"2026-06-15": 100.0}}) == 0  # no prior+curr pair
             assert cf.backfill_astar_d({}) == 0
+
+
+# ── Task 1: force_sealed tagging ──────────────────────────────────────────────
+
+def test_snapshot_ai_pm_writes_force_sealed_false_by_default():
+    from ascent.monitoring.ai_pm_counterfactual import snapshot_ai_pm, AI_PM_LOG
+    with tempfile.TemporaryDirectory() as tmp:
+        log_path = Path(tmp) / "ai_snapshots.jsonl"
+        with patch("ascent.monitoring.ai_pm_counterfactual.AI_PM_LOG", log_path):
+            snapshot_ai_pm(date(2026, 6, 25), {"AAPL": 0.6, "MSFT": 0.4})
+        entry = json.loads(log_path.read_text().strip())
+    assert entry.get("force_sealed") == False
+
+
+def test_snapshot_ai_pm_writes_force_sealed_true():
+    from ascent.monitoring.ai_pm_counterfactual import snapshot_ai_pm, AI_PM_LOG
+    with tempfile.TemporaryDirectory() as tmp:
+        log_path = Path(tmp) / "ai_snapshots.jsonl"
+        with patch("ascent.monitoring.ai_pm_counterfactual.AI_PM_LOG", log_path):
+            snapshot_ai_pm(date(2026, 6, 25), {"AAPL": 0.6, "MSFT": 0.4}, force_sealed=True)
+        entry = json.loads(log_path.read_text().strip())
+    assert entry.get("force_sealed") == True
+
+
+def test_aipm_result_has_force_sealed_field():
+    from agents.ai_pm_agent import AIPMResult
+    r = AIPMResult(portfolio={}, thesis={})
+    assert r.force_sealed == False
+    r2 = AIPMResult(portfolio={}, thesis={}, force_sealed=True)
+    assert r2.force_sealed == True
+
+
+def test_run_ai_pm_fallback_result_is_not_force_sealed():
+    """Fallback result (portfolio={}) should not be marked force_sealed — it means no snapshot was taken."""
+    from agents.ai_pm_agent import AIPMResult
+    r = AIPMResult(portfolio={}, thesis={}, fallback=True)
+    assert r.force_sealed == False
+
+
+def test_aipm_result_force_sealed_defaults_false():
+    """Normal result should default to not force_sealed."""
+    from agents.ai_pm_agent import AIPMResult
+    r = AIPMResult(portfolio={"AAPL": 0.5}, thesis={"market_view": "bullish"})
+    assert r.force_sealed == False
+
+
+def test_score_daily_writes_track_d_force_sealed_false():
+    from ascent.monitoring.ai_pm_counterfactual import score_daily, DAILY_LOG
+    import tempfile, json
+    from datetime import date
+    from pathlib import Path
+    from unittest.mock import patch
+    with tempfile.TemporaryDirectory() as tmp:
+        log_path = Path(tmp) / "daily.jsonl"
+        with patch("ascent.monitoring.ai_pm_counterfactual.DAILY_LOG", log_path):
+            score_daily(
+                run_date=date(2026, 6, 25),
+                quant_star_weights={"AAPL": 0.5, "MSFT": 0.5},
+                quant_weights={"AAPL": 0.5, "MSFT": 0.5},
+                ai_pm_weights={"AAPL": 0.6, "MSFT": 0.4},
+                track_b_return=0.01,
+                spy_return=0.005,
+                prices={"AAPL": {"prev": 100.0, "curr": 101.0}, "MSFT": {"prev": 200.0, "curr": 201.0}},
+            )
+        entry = json.loads(log_path.read_text().strip())
+    assert entry.get("track_d_force_sealed") == False
+
+
+def test_score_daily_writes_track_d_force_sealed_true():
+    from ascent.monitoring.ai_pm_counterfactual import score_daily, DAILY_LOG
+    import tempfile, json
+    from datetime import date
+    from pathlib import Path
+    from unittest.mock import patch
+    with tempfile.TemporaryDirectory() as tmp:
+        log_path = Path(tmp) / "daily.jsonl"
+        with patch("ascent.monitoring.ai_pm_counterfactual.DAILY_LOG", log_path):
+            score_daily(
+                run_date=date(2026, 6, 25),
+                quant_star_weights={"AAPL": 0.5, "MSFT": 0.5},
+                quant_weights={"AAPL": 0.5, "MSFT": 0.5},
+                ai_pm_weights={"AAPL": 0.6, "MSFT": 0.4},
+                track_b_return=0.01,
+                spy_return=0.005,
+                prices={"AAPL": {"prev": 100.0, "curr": 101.0}, "MSFT": {"prev": 200.0, "curr": 201.0}},
+                force_sealed=True,
+            )
+        entry = json.loads(log_path.read_text().strip())
+    assert entry.get("track_d_force_sealed") == True
+
+
+# ── Task 4: Track Δ delta portfolio ───────────────────────────────────────────
+
+def test_delta_portfolio_return_positive_when_ai_overweight_wins():
+    """AI PM overweights AAPL vs A★. AAPL goes up. Delta return should be positive."""
+    from ascent.monitoring.ai_pm_counterfactual import _delta_portfolio_return
+    ai_pm   = {"AAPL": 0.7, "MSFT": 0.3}   # overweight AAPL vs A★
+    astar   = {"AAPL": 0.5, "MSFT": 0.5}
+    prices  = {
+        "AAPL": {"prev": 100.0, "curr": 102.0},   # +2%
+        "MSFT": {"prev": 200.0, "curr": 200.0},   # flat
+    }
+    result = _delta_portfolio_return(ai_pm, astar, prices)
+    assert result is not None
+    assert result > 0
+
+
+def test_delta_portfolio_return_zero_when_ai_equals_astar():
+    """When D == A★, delta return is 0.0 (no divergence to score)."""
+    from ascent.monitoring.ai_pm_counterfactual import _delta_portfolio_return
+    weights = {"AAPL": 0.5, "MSFT": 0.5}
+    prices  = {"AAPL": {"prev": 100.0, "curr": 102.0}, "MSFT": {"prev": 200.0, "curr": 201.0}}
+    result = _delta_portfolio_return(weights, weights, prices)
+    assert result == 0.0
+
+
+def test_delta_portfolio_return_none_when_no_prices():
+    """Returns None when no symbols can be priced."""
+    from ascent.monitoring.ai_pm_counterfactual import _delta_portfolio_return
+    result = _delta_portfolio_return({"AAPL": 0.7}, {"AAPL": 0.5}, {})
+    assert result is None
+
+
+def test_score_daily_includes_track_delta():
+    """score_daily() writes track_delta_return to the daily log."""
+    from ascent.monitoring.ai_pm_counterfactual import score_daily, DAILY_LOG
+    import tempfile, json
+    from datetime import date
+    from pathlib import Path
+    from unittest.mock import patch
+    with tempfile.TemporaryDirectory() as tmp:
+        log_path = Path(tmp) / "daily.jsonl"
+        with patch("ascent.monitoring.ai_pm_counterfactual.DAILY_LOG", log_path):
+            score_daily(
+                run_date=date(2026, 6, 25),
+                quant_star_weights={"AAPL": 0.5, "MSFT": 0.5},
+                quant_weights={"AAPL": 0.5, "MSFT": 0.5},
+                ai_pm_weights={"AAPL": 0.7, "MSFT": 0.3},
+                track_b_return=0.01,
+                spy_return=0.005,
+                prices={
+                    "AAPL": {"prev": 100.0, "curr": 102.0},
+                    "MSFT": {"prev": 200.0, "curr": 199.0},
+                },
+            )
+        entry = json.loads(log_path.read_text().strip())
+    assert "track_delta_return" in entry
+
+
+def test_get_cumulative_returns_includes_delta():
+    """get_cumulative_returns() includes track_delta key."""
+    from ascent.monitoring.ai_pm_counterfactual import get_cumulative_returns, DAILY_LOG
+    import tempfile, json
+    from pathlib import Path
+    from unittest.mock import patch
+    rows = [
+        {"date": "2026-06-10", "track_b_return": 0.01, "track_astar_return": 0.005,
+         "track_a_return": 0.007, "track_c_return": 0.003, "track_d_return": 0.012,
+         "track_delta_return": 0.008},
+    ]
+    with tempfile.TemporaryDirectory() as tmp:
+        log_path = Path(tmp) / "daily.jsonl"
+        log_path.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+        with patch("ascent.monitoring.ai_pm_counterfactual.DAILY_LOG", log_path):
+            c = get_cumulative_returns()
+    assert "track_delta" in c
+    assert c["track_delta"] is not None
