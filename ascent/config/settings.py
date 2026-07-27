@@ -167,6 +167,12 @@ class BacktestConfig:
     # Santa-Clara 2015, Moreira & Muir 2017). See
     # docs/superpowers/plans/2026-07-27-strategy-own-vol-targeting.md.
     vol_target_reference: str = "spy"
+    # Momentum-crash overlay (Daniel & Moskowitz 2016). Cuts exposure when
+    # the market has declined over ~2y AND is rebounding — the state in which
+    # momentum crashes cluster. DISABLED by default; see
+    # docs/superpowers/plans/2026-07-27-momentum-crash-indicator.md.
+    momentum_crash_overlay_enabled: bool = False
+    momentum_crash_multiplier: float = 0.50
 
 
 @dataclass

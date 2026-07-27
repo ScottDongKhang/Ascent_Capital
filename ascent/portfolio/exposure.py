@@ -8,9 +8,12 @@ through this module. Research and production previously carried separate
 implementations and silently diverged (research had vol targeting, production
 didn't; production had a VIX gate on the 200MA cut, research didn't).
 
-Two overlays, applied in order:
-  1. ma_filter_scale()  — SPY < 200d MA (VIX-confirmed when VIX available) → ×0.70
-  2. vol_target_scale() — scale toward target portfolio vol using trailing SPY vol
+Three overlays, applied in order:
+  1. ma_filter_scale()      — SPY < 200d MA (VIX-confirmed when VIX available) → ×0.70
+  2. vol_target_scale()     — scale toward target portfolio vol using trailing SPY vol
+     (or the strategy's own realized vol — see `vol_reference`)
+  3. momentum_crash_scale() — 2y decline + rebound (Daniel & Moskowitz) → ×0.50
+     (disabled by default)
 
 All computations are causal: only data strictly before (vol) or up to (MA)
 each decision date is used.
@@ -249,6 +252,8 @@ def apply_exposure_overlays(
     vol_targeting_enabled: bool = True,
     vol_reference: str = "spy",
     close: Optional[pd.DataFrame] = None,
+    crash_overlay_enabled: bool = False,
+    crash_multiplier: float = CRASH_MULTIPLIER,
 ) -> tuple[pd.DataFrame, dict]:
     """
     Apply MA filter then vol targeting to a (dates × symbols) weights frame.
@@ -276,7 +281,7 @@ def apply_exposure_overlays(
 
     if weights.empty:
         return weights, {"ma_cut_dates": 0, "mean_vol_scale": 1.0,
-                         "vol_reference": ref}
+                         "vol_reference": ref, "crash_cut_dates": 0}
 
     dates = weights.index
 
@@ -296,6 +301,13 @@ def apply_exposure_overlays(
 
     combined = ma_scale * v_scale
 
+    if crash_overlay_enabled:
+        c_scale = momentum_crash_scale(spy_close, dates,
+                                       multiplier=crash_multiplier)
+    else:
+        c_scale = pd.Series(1.0, index=dates)
+    combined = combined * c_scale
+
     if rebalance_only and len(weights) > 1:
         changed = weights.diff().abs().sum(axis=1) > 1e-12
         changed.iloc[0] = True
@@ -307,6 +319,7 @@ def apply_exposure_overlays(
         "mean_vol_scale": round(float(v_scale.mean()), 4),
         "min_vol_scale": round(float(v_scale.min()), 4),
         "vol_reference": ref,
+        "crash_cut_dates": int((c_scale < 1.0).sum()),
     }
     return scaled, meta
 

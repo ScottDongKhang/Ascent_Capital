@@ -98,3 +98,48 @@ class TestMomentumCrashScale:
         dupd = pd.concat([spy, spy.iloc[-3:]]).sort_index()
         out = momentum_crash_scale(dupd, pd.Index([spy.index[-1]]))
         assert out.iloc[0] in (0.5, CRASH_MULTIPLIER)
+
+
+from ascent.portfolio.exposure import apply_exposure_overlays
+
+
+class TestCrashOverlayComposition:
+    def _crash_market(self):
+        vals = [100.0]
+        for _ in range(560):
+            vals.append(vals[-1] * 0.999)
+        for _ in range(25):
+            vals.append(vals[-1] * 1.004)
+        idx = pd.bdate_range("2023-01-01", periods=len(vals))
+        return pd.Series(vals, index=idx, dtype=float)
+
+    def test_disabled_by_default_changes_nothing(self):
+        spy = self._crash_market()
+        w = pd.DataFrame(0.5, index=spy.index[-30:], columns=["A", "B"])
+        a, meta_a = apply_exposure_overlays(w, spy)
+        b, _ = apply_exposure_overlays(w, spy, crash_overlay_enabled=False)
+        pd.testing.assert_frame_equal(a, b)
+        assert meta_a["crash_cut_dates"] == 0
+
+    def test_enabled_cuts_exposure_in_the_crash_state(self):
+        spy = self._crash_market()
+        w = pd.DataFrame(0.5, index=spy.index[-30:], columns=["A", "B"])
+        off, _ = apply_exposure_overlays(w, spy, rebalance_only=False)
+        on, meta = apply_exposure_overlays(
+            w, spy, crash_overlay_enabled=True, crash_multiplier=0.5,
+            rebalance_only=False,
+        )
+        assert meta["crash_cut_dates"] > 0
+        assert on.iloc[-1].sum() < off.iloc[-1].sum()
+
+    def test_composes_multiplicatively_with_other_overlays(self):
+        """Halving via the crash overlay must halve the final book."""
+        spy = self._crash_market()
+        w = pd.DataFrame(0.5, index=spy.index[-30:], columns=["A", "B"])
+        off, _ = apply_exposure_overlays(w, spy, rebalance_only=False)
+        on, _ = apply_exposure_overlays(
+            w, spy, crash_overlay_enabled=True, crash_multiplier=0.5,
+            rebalance_only=False,
+        )
+        ratio = on.iloc[-1].sum() / off.iloc[-1].sum()
+        assert ratio == pytest.approx(0.5, rel=1e-9)
