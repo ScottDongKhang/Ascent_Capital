@@ -2420,9 +2420,12 @@ def _apply_stop_loss_to_book(target_weights: dict, today: str) -> tuple:
     Apply the position-level stop-loss to a target book, using entry prices
     from the live Alpaca positions.
 
-    Must be called LAST, after every cap and overlay: _water_fill_cap,
-    enforce_cluster_cap, enforce_risk_budget_cap and apply_exposure_overlays
-    all renormalize and would refill a stopped name.
+    Must be called LAST, after every cap and overlay. Those caps
+    (_water_fill_cap, enforce_cluster_cap, enforce_risk_budget_cap,
+    apply_exposure_overlays) run upstream, in the agents and orchestrator,
+    before `merged_weights` ever reaches this function — they are not invoked
+    here or nearby. They all renormalize and would refill a stopped name, so
+    this call must stay downstream of all of them.
 
     Fail-open: any failure (broker down, missing prices) returns the input
     unchanged. A monitoring failure must never liquidate the book.

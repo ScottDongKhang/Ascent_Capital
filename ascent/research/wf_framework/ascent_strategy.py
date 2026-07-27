@@ -270,10 +270,44 @@ class AscentPortfolioStrategy(PortfolioBaseStrategy):
             except Exception:
                 pass
 
+        # --- Step 3b: Long/short extension ---
+        # Short bottom-N momentum stocks with half the gross of the long side.
+        # Borrow cost handled in execution model via negative weights → turnover.
+        if self.short_n > 0:
+            short_alpha = alpha_at_rebal.multiply(-1)
+            short_raw   = sector_constrained_weighted(
+                short_alpha, n=self.short_n, max_weight=self.max_weight,
+                sector_map=self.sector_map, regime_signal=None,
+            )
+            # Short at 50% gross (100L/50S = net 50% long)
+            short_scaled = short_raw * 0.50
+            # Subtract short weights from portfolio (negative = short)
+            longs  = weights_at_rebal.reindex(columns=weights_at_rebal.columns.union(short_scaled.columns), fill_value=0.0)
+            shorts = short_scaled.reindex(index=longs.index, columns=longs.columns, fill_value=0.0)
+            weights_at_rebal = longs - shorts
+
+        # --- Step 4: SPY 200MA overlay (matches production pipeline) ---
+        # When SPY is below its 200-day MA, cut all weights by 30%.
+        # Causal: 200MA computed from prices available at each rebalance date.
+        weights_at_rebal = self._apply_200ma_overlay(data, weights_at_rebal)
+
+        # --- Step 5: Volatility targeting ---
+        weights_at_rebal = self._apply_vol_target(data, weights_at_rebal)
+
         # Position-level stop-loss — parity with production (see
-        # docs/superpowers/plans/2026-07-27-position-stop-loss.md). Applied
-        # on the DAILY panel, not the rebalance rows, because a stop has to
-        # be able to fire between rebalances.
+        # docs/superpowers/plans/2026-07-27-position-stop-loss.md). Deliberately
+        # LAST, after Step 3b and the Step 4/5 overlays, not right after the
+        # risk-budget cap: it reassigns weights_at_rebal from a rebalance-
+        # frequency frame to a DAILY frame (a stop has to be able to fire
+        # between rebalances), and anything downstream would receive a daily
+        # frame it wasn't written for. Placed early, it broke two things:
+        # (1) Step 3b's `shorts = short_scaled.reindex(index=longs.index, ...,
+        # fill_value=0.0)` line has short_scaled at rebalance frequency vs a
+        # daily longs.index, so every non-rebalance day filled the short leg
+        # with 0.0, silently zeroing the short book; (2) the Step 4/5 200MA
+        # and vol-target overlays are written to compute one scale per
+        # rebalance row, held constant by the final ffill — on a daily frame
+        # they recompute per calendar day instead, diverging from production.
         try:
             from ascent.config.settings import get_config as _get_cfg2
             _sl = _get_cfg2().backtest
@@ -304,30 +338,6 @@ class AscentPortfolioStrategy(PortfolioBaseStrategy):
                 import logging as _lg
                 _lg.getLogger(__name__).warning(
                     "[StopLoss/WF] skipped: %s", _sl_e)
-
-        # --- Step 3b: Long/short extension ---
-        # Short bottom-N momentum stocks with half the gross of the long side.
-        # Borrow cost handled in execution model via negative weights → turnover.
-        if self.short_n > 0:
-            short_alpha = alpha_at_rebal.multiply(-1)
-            short_raw   = sector_constrained_weighted(
-                short_alpha, n=self.short_n, max_weight=self.max_weight,
-                sector_map=self.sector_map, regime_signal=None,
-            )
-            # Short at 50% gross (100L/50S = net 50% long)
-            short_scaled = short_raw * 0.50
-            # Subtract short weights from portfolio (negative = short)
-            longs  = weights_at_rebal.reindex(columns=weights_at_rebal.columns.union(short_scaled.columns), fill_value=0.0)
-            shorts = short_scaled.reindex(index=longs.index, columns=longs.columns, fill_value=0.0)
-            weights_at_rebal = longs - shorts
-
-        # --- Step 4: SPY 200MA overlay (matches production pipeline) ---
-        # When SPY is below its 200-day MA, cut all weights by 30%.
-        # Causal: 200MA computed from prices available at each rebalance date.
-        weights_at_rebal = self._apply_200ma_overlay(data, weights_at_rebal)
-
-        # --- Step 5: Volatility targeting ---
-        weights_at_rebal = self._apply_vol_target(data, weights_at_rebal)
 
         weights_ffilled = (
             weights_at_rebal

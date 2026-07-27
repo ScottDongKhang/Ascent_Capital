@@ -105,6 +105,44 @@ def test_clear_cache_resets():
     assert len(AscentPortfolioStrategy._alpha_cache)   == 0
 
 
+def test_stop_loss_does_not_zero_short_leg_off_rebalance(ohlcv, monkeypatch):
+    """
+    Ordering regression guard (2026-07-27 fix): the WF stop-loss block must
+    run LAST — after Step 3b (long/short), Step 4 (200MA) and Step 5
+    (vol-target) — not right after the risk-budget cap. If it ran earlier,
+    it would reassign weights_at_rebal from a rebalance-frequency frame to a
+    daily frame BEFORE Step 3b built the short leg. Step 3b's
+    `short_scaled.reindex(index=longs.index, ...)` would then fill every
+    non-rebalance day's short weight with 0.0 (short_scaled is still at
+    rebalance frequency), silently zeroing the short book off-rebalance.
+    """
+    from ascent.config.settings import get_config
+
+    AscentPortfolioStrategy.clear_cache()
+    s = AscentPortfolioStrategy(top_n=5, max_weight=0.20, mom_window=63,
+                                 rebalance_freq=10)
+    s.short_n = 3
+
+    cfg = get_config()
+    monkeypatch.setattr(cfg.backtest, "stop_loss_enabled", True)
+
+    result = s.generate_signals(ohlcv)
+
+    assert (result.values < 0).any(), "No short weights produced at all"
+
+    rebal_dates = set(result.index[::s.rebalance_freq])
+    non_rebal_dates = [d for d in result.index if d not in rebal_dates]
+    assert non_rebal_dates, "Fixture too short to have non-rebalance days"
+
+    has_short_off_rebal = any(
+        (result.loc[d] < 0).any() for d in non_rebal_dates
+    )
+    assert has_short_off_rebal, (
+        "Short leg vanished on non-rebalance days — the stop-loss block is "
+        "running before Step 3b builds the short book (ordering regression)"
+    )
+
+
 def test_no_lookahead(ohlcv):
     # Use mom_window=9999 (effectively no trim) so both partial and full runs
     # use all input data, making overlapping dates comparable.
