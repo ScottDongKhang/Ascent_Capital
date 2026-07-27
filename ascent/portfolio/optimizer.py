@@ -200,6 +200,91 @@ def _water_fill_cap(scores: pd.Series, max_weight: float) -> pd.Series:
     return raw_w
 
 
+def enforce_risk_budget_cap(
+    weights: pd.Series,
+    vols: pd.Series,
+    budget: float = 0.012,
+) -> pd.Series:
+    """
+    Per-name risk-budget cap: no name may contribute more than `budget`
+    annualized of w_i * sigma_i.
+
+    Mirrors `_water_fill_cap` / `enforce_cluster_cap`: violators are frozen at
+    their risk-budget-implied cap (budget / sigma_i) and the excess weight is
+    redistributed pro-rata across still-uncapped names, iterated to a fixed
+    point. Sum of weights is preserved.
+
+    Names with missing or non-positive vol data cannot have their risk
+    contribution computed, so they are exempt from capping (logged) — they
+    behave as ordinary uncapped names for redistribution purposes.
+
+    If the budget is infeasible (the per-name caps for vol-covered names sum
+    to less than the total weight to allocate), renormalizes proportionally
+    across the capped names rather than silently under-allocating — analogous
+    to `_water_fill_cap`'s "cap too tight" branch.
+    """
+    if weights is None or len(weights) == 0:
+        return weights
+
+    w = weights.astype(float).copy()
+    total = w.sum()
+    if total <= 0:
+        return w
+
+    vols_aligned = vols.reindex(w.index) if vols is not None else pd.Series(
+        index=w.index, dtype=float
+    )
+    has_vol = vols_aligned.notna() & (vols_aligned > 0)
+    missing = list(w.index[~has_vol])
+    if missing:
+        log.warning(
+            "[RiskBudget] Missing/invalid vol data for %s — exempting from "
+            "risk-budget cap enforcement", missing,
+        )
+
+    cap = pd.Series(np.inf, index=w.index)
+    cap.loc[has_vol] = budget / vols_aligned.loc[has_vol]
+
+    # Infeasible: even freezing every capped-eligible name at its cap can't
+    # reach `total`. Renormalize proportionally across those caps instead of
+    # silently leaving the book under-allocated.
+    # Names without vol data have an infinite cap (unlimited capacity), so the
+    # budget can only be truly infeasible when *every* name has vol data and
+    # their finite caps still can't sum to `total`.
+    finite_cap_sum = cap[np.isfinite(cap)].sum()
+    if has_vol.all() and finite_cap_sum < total - 1e-9:
+        log.warning(
+            "[RiskBudget] budget infeasible for this book (sum of caps "
+            "%.4f < target %.4f) — renormalizing capped names proportionally",
+            finite_cap_sum, total,
+        )
+        out = w.copy()
+        finite = cap[np.isfinite(cap)]
+        if finite.sum() > 0:
+            out.loc[finite.index] = finite / finite.sum() * total
+        return out
+
+    raw_w = w.copy()
+    frozen = pd.Series(False, index=w.index)
+    for _ in range(50):
+        over = (~frozen) & (raw_w > cap + 1e-9)
+        if not over.any():
+            break
+        raw_w[over] = cap[over]
+        frozen[over] = True
+        remaining = total - raw_w[frozen].sum()
+        free_mask = ~frozen
+        free_total = w[free_mask].sum()
+        if free_total > 0:
+            raw_w[free_mask] = w[free_mask] / free_total * remaining
+        else:
+            n_free = free_mask.sum()
+            if n_free > 0:
+                raw_w[free_mask] = remaining / n_free
+
+    return raw_w
+
+
 def _normalize_sector(sec) -> str | None:
     """
     Bug 1 + Bug 12 fix: canonical missing-sector label.
@@ -302,6 +387,7 @@ def sector_constrained_weighted_mvo(
     alpha_scores: pd.Series,
     regime_label: str = "calm_bull",
     covariance: Optional[np.ndarray] = None,
+    covariance_symbols: Optional[list] = None,
     factor_constraints: Optional[list] = None,
     current_weights: Optional[pd.Series] = None,
     sector_map: Optional[dict] = None,
@@ -312,6 +398,7 @@ def sector_constrained_weighted_mvo(
     risk_aversion: float = 1.0,
     turnover_penalty: float = 0.002,
     llm_alpha: Optional[pd.Series] = None,
+    vols: Optional[pd.Series] = None,
 ) -> tuple[pd.Series, str]:
     """
     MVO-based portfolio construction with sector pre-screening.
@@ -377,8 +464,62 @@ def sector_constrained_weighted_mvo(
         alpha_bl = alpha_screened
 
     # ── Step 3: slice covariance to screened universe ─────────────────────────
+    # Bug fix (2026-07-27 post-outage remediation, W1): covariance is built by
+    # the caller over the FULL alpha universe (~900 symbols), never over just
+    # `alpha_screened` (n≈15) — a shape comparison here was never true and the
+    # real covariance was silently discarded on every rebalance in favor of the
+    # flat identical-variance proxy in mvo_optimizer.py. Reindex by symbol
+    # instead, using the covariance's own symbol ordering.
+    #
+    # Reindex against `alpha_bl.index`, NOT `alpha_screened.index`: BL blending
+    # (Step 2) intersects with llm_alpha and can reorder/subset symbols, so
+    # alpha_bl is what actually gets passed to optimize_mvo below.
     cov_screened = None
-    if covariance is not None and covariance.shape[0] == len(alpha_screened):
+    if covariance is not None and covariance_symbols is not None:
+        try:
+            cov_df = pd.DataFrame(
+                covariance, index=covariance_symbols, columns=covariance_symbols
+            )
+            missing = [s for s in alpha_bl.index if s not in cov_df.index]
+            if missing:
+                log.warning(
+                    "[MVO] Covariance reindex: %d/%d screened symbols missing "
+                    "from covariance (%s) — falling back to proxy",
+                    len(missing), len(alpha_bl), missing[:10],
+                )
+            else:
+                cov_reindexed = cov_df.reindex(
+                    index=alpha_bl.index, columns=alpha_bl.index
+                ).values
+                if not np.isfinite(cov_reindexed).all():
+                    log.warning(
+                        "[MVO] Reindexed covariance contains NaN/inf — upstream "
+                        "covariance builder produced an invalid matrix (e.g. a "
+                        "tz-aware/naive date-index mismatch collapsing the "
+                        "residual-variance lookback to zero rows); falling back "
+                        "to per-name proxy rather than feeding NaN to the solver"
+                    )
+                else:
+                    off_diag = cov_reindexed - np.diag(np.diag(cov_reindexed))
+                    diag = np.diag(cov_reindexed)
+                    if np.allclose(off_diag, 0.0) and (
+                        diag.size == 0 or np.allclose(diag, diag[0])
+                    ):
+                        log.warning(
+                            "[MVO] Reindexed covariance is degenerate (identity-like, "
+                            "no cross-name structure) — factor data is likely "
+                            "unavailable upstream (see ascent/risk/covariance_model.py "
+                            "diagonal-proxy fallback); falling back to per-name proxy"
+                        )
+                    else:
+                        cov_screened = cov_reindexed
+        except Exception as _reindex_exc:
+            log.warning(
+                "[MVO] Covariance reindex failed: %s — falling back to proxy",
+                _reindex_exc,
+            )
+    elif covariance is not None and covariance.shape[0] == len(alpha_bl):
+        # Back-compat path when the caller doesn't supply covariance_symbols.
         cov_screened = covariance
 
     # ── Step 4: slice factor constraints to screened universe ─────────────────
@@ -426,6 +567,7 @@ def sector_constrained_weighted_mvo(
             max_weight=max_weight,
             min_weight=min_weight,
             top_n=len(alpha_bl),
+            vols=vols,
         )
     except Exception as _mvo_exc:
         log.warning("[MVO] optimize_mvo raised: %s", _mvo_exc)

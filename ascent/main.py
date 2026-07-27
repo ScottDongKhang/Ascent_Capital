@@ -676,6 +676,7 @@ def run_pipeline(
 
     # Build factor covariance for the last date (Plan 1 integration)
     mvo_covariance = None
+    mvo_covariance_symbols = None
     try:
         from ascent.risk.covariance_model import build_factor_covariance_matrix
         last_date_str = str(alpha.index[-1].date()) if not alpha.empty else None
@@ -687,6 +688,11 @@ def run_pipeline(
             cov_result = build_factor_covariance_matrix(weights_for_cov, last_date_str)
             if cov_result and cov_result.get("full") is not None:
                 mvo_covariance = cov_result["full"]
+                # Covariance is built over the FULL alpha universe here, not the
+                # post-screening ~15-symbol book — sector_constrained_weighted_mvo
+                # reindexes down to its screened universe using this symbol list
+                # (W1 fix, docs/superpowers/plans/2026-07-27-post-outage-remediation.md).
+                mvo_covariance_symbols = cov_result.get("symbols")
     except Exception as _cov_e:
         print(f"[Portfolio] Factor covariance unavailable: {_cov_e}")
 
@@ -702,29 +708,40 @@ def run_pipeline(
     except Exception:
         pass
 
+    # Trailing 63d annualized vol, shifted 1d (causal) — feeds the inverse-vol
+    # tilt, the MVO per-name fallback proxy (when the factor covariance is
+    # unavailable), and the risk-budget cap below. Computed unconditionally
+    # since the MVO/risk-budget uses are independent of `inverse_vol_tilt`.
+    _vol_panel_raw = None
+    try:
+        _vol_panel_raw = (builder.close.pct_change()
+                           .rolling(63, min_periods=21).std()
+                           .mul(np.sqrt(252)).shift(1))
+    except Exception as _vp_e:
+        print(f"[Portfolio] Trailing vol panel unavailable: {_vp_e}")
+
+    _mvo_vols_latest = None
+    if _vol_panel_raw is not None and not alpha.empty and alpha.index[-1] in _vol_panel_raw.index:
+        _mvo_vols_latest = _vol_panel_raw.loc[alpha.index[-1]]
+
     # MVO on latest date
     mvo_weights_latest, opt_method = sector_constrained_weighted_mvo(
         alpha_scores=last_alpha_row,
         regime_label=regime_signal.label.value if regime_signal else "calm_bull",
         covariance=mvo_covariance,
+        covariance_symbols=mvo_covariance_symbols,
         factor_constraints=None,   # Plan 2 wires in; constraints per-symbol not per-date
         current_weights=None,
         sector_map=sector_map,
         n=cfg.backtest.top_n,
         max_weight=cfg.backtest.max_weight,
         llm_alpha=llm_alpha_latest,
+        vols=_mvo_vols_latest,
     )
     print(f"[Portfolio] Optimization method: {opt_method}")
 
-    # Inverse-vol tilt input: trailing 63d annualized vol, shifted 1d (causal)
-    _vol_panel = None
-    if cfg.backtest.inverse_vol_tilt:
-        try:
-            _vol_panel = (builder.close.pct_change()
-                          .rolling(63, min_periods=21).std()
-                          .mul(np.sqrt(252)).shift(1))
-        except Exception as _vp_e:
-            print(f"[Portfolio] Inverse-vol tilt skipped: {_vp_e}")
+    # Inverse-vol tilt input for historical/rank-weight dates (gated by config).
+    _vol_panel = _vol_panel_raw if cfg.backtest.inverse_vol_tilt else None
 
     # Historical dates: rank-weighting (MVO is single-period, not a panel optimizer)
     target_weights = sector_constrained_weighted(
@@ -762,6 +779,29 @@ def run_pipeline(
             target_weights.loc[last_dt] = capped_row
         except Exception as _cc_e:
             print(f"[Portfolio] Cluster cap skipped: {_cc_e}")
+
+    # Per-name risk-budget cap: no name may contribute more than
+    # `risk_budget_per_name` annualized of w_i * sigma_i. Independent guard
+    # against a degenerate MVO that ignores the covariance structure entirely
+    # (equal-weight LP hitting the box cap) — see W1 in
+    # docs/superpowers/plans/2026-07-27-post-outage-remediation.md.
+    if cfg.backtest.risk_budget_cap_enabled and not target_weights.empty:
+        try:
+            from ascent.portfolio.optimizer import enforce_risk_budget_cap
+            last_dt = target_weights.index[-1]
+            _rb_vol_panel = _vol_panel_raw
+            if _rb_vol_panel is not None and last_dt in _rb_vol_panel.index:
+                _vol_row = _rb_vol_panel.loc[last_dt].reindex(target_weights.columns)
+            else:
+                _vol_row = pd.Series(dtype=float, index=target_weights.columns)
+            rb_row = enforce_risk_budget_cap(
+                target_weights.loc[last_dt],
+                _vol_row,
+                budget=cfg.backtest.risk_budget_per_name,
+            )
+            target_weights.loc[last_dt] = rb_row
+        except Exception as _rb_e:
+            print(f"[Portfolio] Risk-budget cap skipped: {_rb_e}")
 
     warmup = 252 + 21
     if len(target_weights) > warmup:

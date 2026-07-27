@@ -17,9 +17,23 @@ log = logging.getLogger(__name__)
 
 
 def _diagonal_covariance_proxy(n_assets: int, vol_estimate: float = 0.25) -> np.ndarray:
-    """Diagonal proxy Σ when Plan 1 covariance is unavailable."""
+    """Diagonal proxy Σ when Plan 1 covariance is unavailable and no per-name
+    vol data was supplied either — flat annualized vol for every asset."""
     daily_var = (vol_estimate / np.sqrt(252)) ** 2
     return np.eye(n_assets) * daily_var
+
+
+def _per_name_covariance_proxy(annualized_vols: np.ndarray) -> np.ndarray:
+    """
+    Diagonal proxy Σ built from trailing realized per-name annualized vol,
+    used when the factor covariance (Plan 1) is unavailable. Uncorrelated by
+    construction (zero off-diagonal) — strictly better than
+    `_diagonal_covariance_proxy`'s single flat estimate, which otherwise
+    treats a 0.2%-vol cash proxy (e.g. SGOV) identically to a 75%-vol name
+    (e.g. BRBR) purely because the real covariance wasn't available.
+    """
+    daily_var = (annualized_vols / np.sqrt(252)) ** 2
+    return np.diag(daily_var)
 
 
 def optimize_mvo(
@@ -32,12 +46,18 @@ def optimize_mvo(
     max_weight: float = 0.10,
     min_weight: float = 0.02,
     top_n: int = 15,
+    vols: Optional[pd.Series] = None,
 ) -> Optional[pd.Series]:
     """
     MVO portfolio optimizer.
 
     Returns a weight Series summing to 1.0, or None if infeasible.
     factor_constraints: list of dicts from ascent.risk.factor_constraints.build_factor_constraints()
+    vols: optional per-symbol trailing annualized realized vol (Series indexed
+        like alpha_scores). Used to build a per-name diagonal covariance proxy
+        when `covariance` is unavailable, instead of a single flat estimate
+        for every asset. Symbols missing from `vols` (or with non-positive
+        values) fall back individually to the flat 0.25 estimate.
     """
     try:
         import cvxpy as cp
@@ -62,7 +82,18 @@ def optimize_mvo(
 
     # ── Covariance ────────────────────────────────────────────────────────────
     if covariance is None:
-        Sigma = _diagonal_covariance_proxy(n)
+        if vols is not None:
+            v = vols.reindex(syms)
+            missing = v[~(v.notna() & (v > 0))].index.tolist()
+            if missing:
+                log.warning(
+                    "[MVO] Missing/invalid trailing vol for %s — using flat "
+                    "0.25 estimate for these names only", missing,
+                )
+            v = v.where(v.notna() & (v > 0), 0.25)
+            Sigma = _per_name_covariance_proxy(v.values.astype(float))
+        else:
+            Sigma = _diagonal_covariance_proxy(n)
     else:
         # Slice covariance to the selected symbols if needed
         if covariance.shape[0] != n:

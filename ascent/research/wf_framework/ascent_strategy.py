@@ -46,7 +46,7 @@ from .portfolio_strategy import PortfolioBaseStrategy
 
 from ascent.alpha.stack import DEFAULT_ALPHA_WEIGHTS, DEFAULT_ALPHA_WEIGHTS_BY_REGIME, build_alpha_stack
 from ascent.features.build_features import FeatureBuilder
-from ascent.portfolio.optimizer import sector_constrained_weighted
+from ascent.portfolio.optimizer import sector_constrained_weighted, enforce_risk_budget_cap
 
 
 # Mapping: (FeatureBuilder kwarg, parquet cache name, date column for PIT slice)
@@ -200,9 +200,11 @@ class AscentPortfolioStrategy(PortfolioBaseStrategy):
             _bt = _get_cfg().backtest
             _tilt_on, _cluster_on = _bt.inverse_vol_tilt, _bt.cluster_cap_enabled
             _max_cluster, _cluster_corr = _bt.max_cluster_weight, _bt.cluster_corr_threshold
+            _rb_on, _rb_budget = _bt.risk_budget_cap_enabled, _bt.risk_budget_per_name
         except Exception:
             _tilt_on, _cluster_on = True, True
             _max_cluster, _cluster_corr = 0.20, 0.70
+            _rb_on, _rb_budget = True, 0.012
 
         _close_panel = None
         _vol_panel = None
@@ -242,6 +244,28 @@ class AscentPortfolioStrategy(PortfolioBaseStrategy):
                         max_cluster_weight=_max_cluster,
                         corr_threshold=_cluster_corr,
                         max_weight=self.max_weight,
+                    )
+            except Exception:
+                pass
+
+        # Per-name risk-budget cap — same guard as production main.py, kept in
+        # parity so research and live sizing don't silently diverge (see
+        # ascent/portfolio/exposure.py header + W1 in
+        # docs/superpowers/plans/2026-07-27-post-outage-remediation.md).
+        if _rb_on and _close_panel is not None and not weights_at_rebal.empty:
+            try:
+                _rb_vol_panel = _vol_panel
+                if _rb_vol_panel is None:
+                    _rb_vol_panel = (_close_panel.pct_change()
+                                      .rolling(63, min_periods=21).std()
+                                      .mul(np.sqrt(252)).shift(1))
+                for _dt in weights_at_rebal.index:
+                    if _dt in _rb_vol_panel.index:
+                        _vol_row = _rb_vol_panel.loc[_dt].reindex(weights_at_rebal.columns)
+                    else:
+                        _vol_row = pd.Series(dtype=float, index=weights_at_rebal.columns)
+                    weights_at_rebal.loc[_dt] = enforce_risk_budget_cap(
+                        weights_at_rebal.loc[_dt], _vol_row, budget=_rb_budget,
                     )
             except Exception:
                 pass

@@ -148,6 +148,10 @@ class BacktestConfig:
     cluster_cap_enabled: bool = True
     max_cluster_weight: float = 0.20
     cluster_corr_threshold: float = 0.70
+    # Per-name risk-budget cap: no name may contribute more than this much
+    # annualized (w_i * sigma_i). See ascent.portfolio.optimizer.enforce_risk_budget_cap.
+    risk_budget_cap_enabled: bool = True
+    risk_budget_per_name: float = 0.012
 
 
 @dataclass

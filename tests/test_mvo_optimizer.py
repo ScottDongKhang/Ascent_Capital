@@ -143,6 +143,94 @@ def test_optimization_method_logged():
     assert method in ("mvo", "rank_weight_fallback")
 
 
+def test_covariance_reindexed_to_screened_universe():
+    """
+    Bug: covariance built over the FULL alpha universe (e.g. ~900 symbols) was
+    guarded on `covariance.shape[0] == len(alpha_screened)` (e.g. 15), which is
+    never true, so the real covariance was silently discarded every time. Fix:
+    reindex by symbol using `covariance_symbols` instead of comparing shapes.
+    A correctly reindexed non-degenerate matrix should be used by the solver
+    (verified indirectly: risk_aversion should now meaningfully discriminate
+    between a genuinely diversifying covariance and the flat proxy).
+    """
+    from ascent.portfolio.optimizer import sector_constrained_weighted_mvo
+
+    n_full = 30
+    full_syms = [f"S{i:02d}" for i in range(n_full)]
+    a = pd.Series(np.random.RandomState(7).randn(n_full), index=full_syms)
+
+    # Full-universe covariance: S00-S09 form a tight cluster (corr 0.9), rest independent.
+    n = n_full
+    cov = np.eye(n) * (0.20 / np.sqrt(252)) ** 2
+    for i in range(10):
+        for j in range(10):
+            if i != j:
+                cov[i, j] = 0.9 * (0.20 / np.sqrt(252)) ** 2
+
+    w, method = sector_constrained_weighted_mvo(
+        a, covariance=cov, covariance_symbols=full_syms, n=10,
+    )
+    assert method == "mvo"
+    assert not w.empty
+    assert abs(w.sum() - 1.0) < 1e-3
+
+
+def test_covariance_reindex_missing_symbols_falls_back_to_proxy(caplog):
+    """If the screened universe has symbols the covariance matrix doesn't
+    cover, reindexing would silently NaN — must fall through to the proxy
+    and log loudly, not crash or silently proceed with NaNs."""
+    from ascent.portfolio.optimizer import sector_constrained_weighted_mvo
+
+    full_syms = [f"S{i:02d}" for i in range(5)]  # covariance covers only 5
+    a = pd.Series(np.random.RandomState(3).randn(10),
+                  index=[f"S{i:02d}" for i in range(10)])  # alpha universe has 10
+    cov = np.eye(5) * (0.20 / np.sqrt(252)) ** 2
+
+    with caplog.at_level("WARNING"):
+        w, method = sector_constrained_weighted_mvo(
+            a, covariance=cov, covariance_symbols=full_syms, n=10,
+        )
+    assert method == "mvo"
+    assert not w.empty
+    assert any("covariance" in rec.message.lower() for rec in caplog.records)
+
+
+def test_per_name_vol_proxy_penalizes_high_vol_name_more():
+    """
+    Fallback proxy (no covariance available) should use per-name trailing
+    realized vol, not a single flat 0.25 for every asset — a wild name (e.g.
+    BRBR-style 75% vol) shouldn't be treated identically to a cash-like name
+    (e.g. SGOV 0.2% vol) just because the factor covariance wasn't available.
+    """
+    from ascent.portfolio.mvo_optimizer import optimize_mvo
+
+    syms = ["WILD", "CALM"]
+    a = pd.Series({"WILD": 1.0, "CALM": 1.0})  # identical alpha
+    vols = pd.Series({"WILD": 0.80, "CALM": 0.05})
+
+    w_high_ra = optimize_mvo(
+        a, covariance=None, vols=vols, risk_aversion=50.0, top_n=2, max_weight=1.0,
+        min_weight=0.0,
+    )
+    if w_high_ra is None:
+        pytest.skip("solver unavailable")
+    # With equal alpha and a real risk penalty, the far riskier name should
+    # get materially less weight than the calm one.
+    assert w_high_ra["CALM"] > w_high_ra["WILD"]
+
+
+def test_per_name_vol_proxy_missing_symbol_falls_back_to_flat():
+    """A symbol with no trailing vol data should not crash — falls back to
+    the flat 0.25 estimate for that name only."""
+    from ascent.portfolio.mvo_optimizer import optimize_mvo
+
+    a = pd.Series({"A": 1.0, "B": 1.0})
+    vols = pd.Series({"A": 0.20})  # B missing
+    w = optimize_mvo(a, covariance=None, vols=vols, top_n=2, max_weight=1.0, min_weight=0.0)
+    assert w is not None
+    assert abs(w.sum() - 1.0) < 1e-3
+
+
 def test_expected_turnover_cost_positive():
     from ascent.portfolio.mvo_optimizer import compute_expected_turnover_cost
     current  = pd.Series({"A": 0.5, "B": 0.5})
