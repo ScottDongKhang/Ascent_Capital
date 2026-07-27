@@ -75,8 +75,8 @@ def ma_filter_scale(
     return pd.Series(np.where(aligned, multiplier, 1.0), index=dates)
 
 
-def vol_target_scale(
-    spy_close: pd.Series,
+def realized_vol_scale(
+    returns: pd.Series,
     dates: pd.Index,
     target_vol: float = VOL_TARGET,
     lookback: int = VOL_LOOKBACK,
@@ -84,20 +84,26 @@ def vol_target_scale(
     cap: float = VOL_CAP,
 ) -> pd.Series:
     """
-    Per-date exposure multiplier targeting `target_vol` annualized, using
-    trailing `lookback`-day SPY realized vol as the portfolio vol proxy.
+    Per-date exposure multiplier targeting `target_vol` annualized against an
+    arbitrary daily return series.
 
     scale(d) = clip(target_vol / realized_vol(d), floor, cap), where
     realized_vol(d) uses returns strictly before d (fully causal).
     Dates with <5 trailing observations get scale 1.0.
+
+    Barroso & Santa-Clara (2015) and Moreira & Muir (2017) both scale a
+    factor by ITS OWN trailing realized volatility. Passing SPY returns here
+    reproduces the legacy market-referenced behaviour; passing the strategy's
+    own returns implements the papers.
     """
-    spy_close = spy_close.sort_index()
-    spy_close = spy_close[~spy_close.index.duplicated(keep="last")]
-    spy_rets = spy_close.pct_change().dropna()
+    if len(dates) == 0:
+        return pd.Series(dtype=float)
+
+    rets = returns.sort_index().dropna()
 
     scales = []
     for d in dates:
-        past = spy_rets[spy_rets.index < d].iloc[-lookback:]
+        past = rets[rets.index < d].iloc[-lookback:]
         if len(past) < 5:
             scales.append(1.0)
             continue
@@ -107,6 +113,29 @@ def vol_target_scale(
             continue
         scales.append(float(np.clip(target_vol / realized, floor, cap)))
     return pd.Series(scales, index=dates)
+
+
+def vol_target_scale(
+    spy_close: pd.Series,
+    dates: pd.Index,
+    target_vol: float = VOL_TARGET,
+    lookback: int = VOL_LOOKBACK,
+    floor: float = VOL_FLOOR,
+    cap: float = VOL_CAP,
+) -> pd.Series:
+    """
+    Market-referenced vol targeting: `realized_vol_scale` over SPY returns.
+
+    Retained with its original signature so existing callers and tests are
+    unaffected. New code should prefer `realized_vol_scale` with the
+    strategy's own return series — see `strategy_return_proxy`.
+    """
+    spy_close = spy_close.sort_index()
+    spy_close = spy_close[~spy_close.index.duplicated(keep="last")]
+    return realized_vol_scale(
+        spy_close.pct_change().dropna(), dates,
+        target_vol=target_vol, lookback=lookback, floor=floor, cap=cap,
+    )
 
 
 def apply_exposure_overlays(
