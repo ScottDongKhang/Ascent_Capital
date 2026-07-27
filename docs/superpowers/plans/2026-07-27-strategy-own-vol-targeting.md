@@ -1,5 +1,21 @@
 # Strategy-Own Volatility Targeting Implementation Plan
 
+> **STATUS (2026-07-27, branch `feature/risk-management`):** Tasks 1-4 LANDED.
+> Task 5 (walk-forward comparison + enable decision) NOT RUN — deferred to a
+> combined WF run with the momentum-crash plan to avoid paying ~1h of compute
+> twice. `vol_target_reference` therefore still defaults to `"spy"`, so live
+> behaviour is unchanged. Commits: `26e42b2` (Task 1), `7f89c67` (Task 2),
+> `b9ee614` (Task 3), `d65c6a9` (Task 4).
+> **Deviation from plan, Task 4 Step 5:** the WF `_apply_vol_target` receives
+> weights indexed at REBALANCE dates only, and `strategy_return_proxy`
+> reindexes prices onto the weights index — so the plan's literal diff would
+> compute ~10-day returns and annualize them by sqrt(252), a ~3x vol
+> overstatement pinning the scale near the 0.25 floor (measured: mean scale
+> 0.466 vs a correct 0.95 on a 15%-vol book). Weights are now forward-filled
+> onto the daily close panel first; two regression tests in
+> `tests/portfolio/test_exposure_strategy_vol.py::TestProxyNeedsADailyGrid`
+> cover both grids.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Scale portfolio exposure by the inverse of the **strategy's own** trailing realized volatility rather than SPY's, implementing Barroso & Santa-Clara (2015) and Moreira & Muir (2017).
