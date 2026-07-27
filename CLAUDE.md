@@ -125,9 +125,39 @@ One step at a time. Verify existing logic before proposing fixes. `ast.parse` af
 
 ---
 
+## Rebalance recap (required after every rebalance)
+
+After **any** run of `run_all_agents.py` that submits orders, write a four-part recap
+unprompted. This is the primary interface to what the system decided — a status line is
+not sufficient.
+
+1. **Reasoning behind the decision.** Read `outputs/debate_log/verdict_YYYY-MM-DD.json`
+   (`verdict.reasoning`, `verdict.key_risks`) and the adversarial intervention. Explain
+   why *these* trades, which argument won which exchange, and what the judge explicitly
+   declined to do. **Then verify execution matched the reasoning** — on 2026-07-27 the
+   judge argued against cutting UUP/TLT 48h before FOMC and the `reduce_size` fallback
+   (`[EodRunner] reduce_size: Haiku only reduced 0 positions — forcing trim on top
+   positions`) sold them anyway. Quote the reasoning; don't paraphrase it away.
+2. **Things to watch for.** Live catalysts (FOMC, earnings, ex-div), positions on thin
+   ice, guards that nearly fired, data sources that were down, anything that changes the
+   read next run.
+3. **Performance since the last rebalance.** Portfolio vs SPY over the window, with
+   per-position attribution when a few names dominate. Use
+   `alpaca_broker.get_portfolio_history()` (settled bars) — never same-day
+   `equity − last_equity`, which reads a fake 0.0 before ~17:00 PT.
+4. **Why performance looks like that.** The causal story, separating sizing/structure
+   from stock selection from things outside the model's control.
+
+**Ground every number in a real artifact and flag anything reconstructed.** A confident
+wrong number is worse than an acknowledged gap: on 2026-07-27 drawdown was reported as
+−8.5% from a synthetic equity curve while the kill switch's actual NAV/peak read 4.7%.
+
+---
+
 ## Current state (as of 2026-06-22)
 
-- **AI PM**: Level 1 (Analyst, 5% authority). D−A★ = −6.52pp/23d, B−A★ = −5.27pp/31d. Modestly value-subtracting in calm_bull; n small — watch at Jun 24, not a disable signal yet. Counterfactual self-heals each run.
+- **AI PM**: Level 1 (Analyst, 5% authority). **As of 2026-07-27: B−A★ = −7.82pp/38d, D−A★ = −6.34pp/29d** (was −5.27pp/−6.52pp in June — the gap widened). Pure quant +23.59% beats both actual (+16.03%) and SPY (+16.63%); pure AI PM is worst at +11.54%.
+  **Diagnose transmission before judging judgment.** On 2026-07-27 the judge's reasoning was sound (flagged a real correlation risk from the model's own contradiction: quant VaR −0.96% vs regime-flip −7.1%) but never reached the weights — `reduce_size` fired, the Haiku adjustment trimmed 0 positions, and a size-sorted fallback cut UUP/TLT, the exact positions the judge argued to protect. Disabling the layer is right only if the judgment is bad, not if a fallback is discarding it.
 - **No alpha vs SPY is structural**: ~22% defensive non-equity sleeves + 200MA cut + 15% vol-target overlay cost beta in an equity-only bull. WF OOS confirms positive risk-adjusted alpha; raw-return lag is by design.
 - **WF OOS**: ✅ VERIFIED (2026-06-22) on a clean re-fetched cache — **Sharpe 0.41, CAGR +10.3%, +1.0pp excess CAGR vs SPY, max DD −32.9%, beta 0.73**, OOS 2021-01→2026-01 (1134 days, 21 folds). WFE −0.65 (overfit — disclose); engine Sortino field buggy (real ≈0.68, don't cite). Supersedes the corrupted-cache 0.483/12.61%. Artifact `outputs/wf_results/wf_report_clean_2026-06-22.json`. Single source of truth: `CURRENT_VERIFIED_NUMBERS.md`.
 - **Regime**: calm_bull.
