@@ -832,10 +832,13 @@ def run_pipeline(
             vol_targeting_enabled=cfg.backtest.vol_targeting_enabled,
             vol_reference=cfg.backtest.vol_target_reference,
             close=builder.close,
+            crash_overlay_enabled=cfg.backtest.momentum_crash_overlay_enabled,
+            crash_multiplier=cfg.backtest.momentum_crash_multiplier,
         )
         print(f"[Portfolio] Exposure overlays: {_exp_meta['ma_cut_dates']} MA+VIX cut dates | "
               f"vol scale mean {_exp_meta['mean_vol_scale']:.2f}, min {_exp_meta['min_vol_scale']:.2f} "
-              f"(target {cfg.backtest.target_vol:.0%}, ref {_exp_meta['vol_reference']})")
+              f"(target {cfg.backtest.target_vol:.0%}, ref {_exp_meta['vol_reference']}) | "
+              f"{_exp_meta['crash_cut_dates']} momentum-crash cut dates")
     except Exception as _e:
         print(f"[Portfolio] Exposure overlays skipped: {_e}")
 

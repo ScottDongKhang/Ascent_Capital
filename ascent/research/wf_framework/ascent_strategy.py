@@ -294,6 +294,11 @@ class AscentPortfolioStrategy(PortfolioBaseStrategy):
         # --- Step 5: Volatility targeting ---
         weights_at_rebal = self._apply_vol_target(data, weights_at_rebal)
 
+        # --- Step 6: Momentum-crash overlay (parity with production) ---
+        weights_at_rebal = self._apply_momentum_crash_overlay(
+            data, weights_at_rebal
+        )
+
         # Position-level stop-loss — parity with production (see
         # docs/superpowers/plans/2026-07-27-position-stop-loss.md). Deliberately
         # LAST, after Step 3b and the Step 4/5 overlays, not right after the
@@ -379,6 +384,51 @@ class AscentPortfolioStrategy(PortfolioBaseStrategy):
             )
             return weights.mul(scale, axis=0)
         except Exception:
+            return weights
+
+    def _apply_momentum_crash_overlay(self, data, weights):
+        """
+        Daniel & Moskowitz (2016) crash-state cut. Delegates to
+        ascent/portfolio/exposure.py — single source of truth shared with
+        production. See docs/superpowers/plans/2026-07-27-momentum-crash-indicator.md.
+
+        Reads `momentum_crash_overlay_enabled` / `momentum_crash_multiplier`,
+        the same two config fields production reads, so research and production
+        cannot silently diverge. Inert while the flag is False.
+        """
+        if weights is None or weights.empty:
+            return weights
+        try:
+            from ascent.config.settings import get_config as _gc
+            _bt = _gc().backtest
+            if not getattr(_bt, "momentum_crash_overlay_enabled", False):
+                return weights
+            mult = float(getattr(_bt, "momentum_crash_multiplier", 0.50))
+        except Exception:
+            return weights
+
+        try:
+            from ascent.portfolio.exposure import momentum_crash_scale
+
+            # Same SPY-loading mechanism as _apply_200ma_overlay — do not add
+            # a second way of obtaining the benchmark series.
+            spy = (
+                data[data["symbol"] == "SPY"]
+                .copy()
+                .assign(date=lambda d: pd.to_datetime(d["date"]).dt.tz_localize(None))
+                .sort_values("date")
+                .set_index("date")["close"]
+            )
+            if spy is None or spy.empty:
+                return weights
+            scale = momentum_crash_scale(spy, weights.index, multiplier=mult)
+            return weights.mul(scale, axis=0)
+        except Exception as exc:
+            # ascent_strategy.py has NO module-level `log` (verified
+            # 2026-07-27) — use a self-contained local logger.
+            import logging as _lg
+            _lg.getLogger(__name__).warning(
+                "[Exposure/WF] momentum-crash overlay skipped: %s", exc)
             return weights
 
     def _apply_vol_target(
