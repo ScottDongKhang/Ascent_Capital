@@ -201,3 +201,48 @@ class TestVolReferenceSelection:
         with caplog.at_level("WARNING"):
             _, meta = apply_exposure_overlays(w, spy, vol_reference="banana")
         assert meta["vol_reference"] == "spy"
+
+
+class TestProxyNeedsADailyGrid:
+    """
+    strategy_return_proxy() reindexes `close` onto the weights index, so the
+    weights frame MUST be on a daily grid. The WF framework holds weights at
+    rebalance dates only (~every 10 days); passing that frame straight in
+    yields 10-day returns annualized by sqrt(252) — a ~3x vol overstatement
+    that pins the scale near the floor. Guards the fix in
+    AscentStrategy._apply_vol_target, which ffills onto the panel first.
+    """
+
+    @staticmethod
+    def _panel(n=260, vol_ann=0.15, seed=3):
+        idx = pd.bdate_range("2025-01-01", periods=n)
+        rng = np.random.default_rng(seed)
+        close = pd.DataFrame(
+            {"A": 100 * np.cumprod(
+                1 + rng.normal(0.0, vol_ann / np.sqrt(252), n))},
+            index=idx,
+        )
+        return idx, close
+
+    def test_rebalance_spaced_weights_overstate_vol(self):
+        idx, close = self._panel()
+        rebal = idx[::10]
+        sparse = pd.DataFrame(1.0, index=rebal, columns=["A"])
+        sparse_scale = realized_vol_scale(
+            strategy_return_proxy(sparse, close), rebal, target_vol=0.15)
+        # The book really has ~15% vol, so a 15% target should sit near 1.0.
+        assert sparse_scale.mean() < 0.60, (
+            "sparse grid should visibly overstate vol — if this fails the "
+            "hazard is gone and the ffill guard may be removable"
+        )
+
+    def test_daily_gridded_weights_recover_the_right_scale(self):
+        idx, close = self._panel()
+        rebal = idx[::10]
+        daily = (pd.DataFrame(1.0, index=rebal, columns=["A"])
+                 .reindex(close.index).ffill().fillna(0.0))
+        scale = realized_vol_scale(
+            strategy_return_proxy(daily, close), rebal, target_vol=0.15)
+        # A 15%-vol book against a 15% target -> scale near 1.0.
+        assert scale.mean() == pytest.approx(1.0, abs=0.25)
+        assert scale.mean() > 0.75

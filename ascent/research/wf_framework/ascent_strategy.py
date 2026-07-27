@@ -401,7 +401,9 @@ class AscentPortfolioStrategy(PortfolioBaseStrategy):
         shared with production.
         """
         try:
-            from ascent.portfolio.exposure import vol_target_scale
+            from ascent.portfolio.exposure import (
+                vol_target_scale, realized_vol_scale, strategy_return_proxy,
+            )
 
             spy = (
                 data[data["symbol"] == "SPY"]
@@ -410,10 +412,50 @@ class AscentPortfolioStrategy(PortfolioBaseStrategy):
                 .sort_values("date")
                 .set_index("date")["close"]
             )
-            scale = vol_target_scale(
-                spy, weights.index, target_vol=target_vol,
-                lookback=lookback, floor=floor, cap=cap,
-            )
+
+            try:
+                from ascent.config.settings import get_config as _gc
+                _ref = str(getattr(_gc().backtest, "vol_target_reference", "spy")).lower()
+            except Exception:
+                _ref = "spy"
+
+            # `data` is long-format; strategy-own vol targeting needs a
+            # (dates x symbols) close panel, so build one on demand.
+            _close_panel = None
+            if _ref == "strategy":
+                try:
+                    _close_panel = (
+                        data.assign(
+                            date=lambda d: pd.to_datetime(d["date"]).dt.tz_localize(None))
+                        .pivot_table(index="date", columns="symbol",
+                                     values="close", aggfunc="last")
+                        .sort_index()
+                    )
+                except Exception:
+                    _close_panel = None
+
+            if _ref == "strategy" and _close_panel is not None and not _close_panel.empty:
+                # `weights` here is indexed at REBALANCE dates only. The proxy
+                # reindexes prices onto the weights index, so feeding it the
+                # sparse frame would produce ~10-day returns annualized by
+                # sqrt(252) (a ~3x vol overstatement that pins the scale to the
+                # floor). Forward-fill the held book onto the daily grid first.
+                _daily_w = (
+                    weights.reindex(_close_panel.index.union(weights.index))
+                    .ffill()
+                    .reindex(_close_panel.index)
+                    .fillna(0.0)
+                )
+                scale = realized_vol_scale(
+                    strategy_return_proxy(_daily_w, _close_panel),
+                    weights.index, target_vol=target_vol,
+                    lookback=lookback, floor=floor, cap=cap,
+                )
+            else:
+                scale = vol_target_scale(
+                    spy, weights.index, target_vol=target_vol,
+                    lookback=lookback, floor=floor, cap=cap,
+                )
             return weights.mul(scale, axis=0)
         except Exception:
             return weights

@@ -162,6 +162,11 @@ class BacktestConfig:
     stop_loss_threshold: float = 0.10
     stop_loss_cooldown_days: int = 30
     stop_loss_redistribute: bool = False
+    # Reference series for vol targeting: "spy" (market-referenced, legacy) or
+    # "strategy" (the book's own trailing realized vol — Barroso &
+    # Santa-Clara 2015, Moreira & Muir 2017). See
+    # docs/superpowers/plans/2026-07-27-strategy-own-vol-targeting.md.
+    vol_target_reference: str = "spy"
 
 
 @dataclass
