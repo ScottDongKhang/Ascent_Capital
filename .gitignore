@@ -11,7 +11,7 @@ build/
 .worktrees/
 .streamlit/secrets.toml
 logs/
-execution/
+/execution/
 dashboard/*.json
 memory/*.jsonl
 outputs/scenarios/
