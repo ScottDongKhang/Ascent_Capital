@@ -588,7 +588,10 @@ class TestStopLossPanel:
         assert out.loc[dates[2], "A"] == 0.0                  # -20%, stopped
         assert out.loc[dates[3], "A"] == 0.0                  # cooldown
         # B untouched throughout — no redistribution.
-        assert (out["B"] == pytest.approx(0.5)).all()
+        # NOTE: exact equality, not pytest.approx — `Series == approx(x)`
+        # compares floats to the ApproxScalar object and yields all-False.
+        # 0.5 is exactly representable, so exact comparison is correct here.
+        assert (out["B"] == 0.5).all()
 
         assert len(events) == 1
         assert events[0]["symbol"] == "A"
