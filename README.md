@@ -59,7 +59,7 @@ The adversarial debate engine makes exactly one falsifiable weight change per re
 |--------|-------|
 | Current NAV | $104,646 |
 | Total Return | +3.73% |
-| Alpha vs SPY | -9.34% |
+| Alpha vs SPY | -9.22% |
 | Sharpe (Ann.) | 0.833 |
 | Max Drawdown | -9.26% |
 | Days Live | 81 |
