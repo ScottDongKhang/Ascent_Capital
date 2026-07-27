@@ -194,3 +194,93 @@ def blocked_symbols(state: dict, today: str,
         if today_d < d + timedelta(days=int(cooldown_days)):
             out.add(sym)
     return out
+
+
+def apply_stop_loss_panel(
+    weights: pd.DataFrame,
+    close: pd.DataFrame,
+    threshold: float = STOP_THRESHOLD,
+    cooldown_days: int = COOLDOWN_DAYS,
+    redistribute: bool = False,
+) -> tuple:
+    """
+    Apply the stop-loss rule across a (dates x symbols) weights panel.
+
+    Research counterpart to the production path: there is no broker to ask
+    for entry prices, so they are reconstructed by walking the panel forward
+    and recording the close on the day each name enters the book.
+
+    Entry price is the close on the entry date. In the live path the fill is
+    the next open, so research is a close-to-close approximation of the same
+    rule — a deliberate, documented simplification for a risk overlay.
+
+    threshold <= 0 disables the rule entirely (exact no-op).
+
+    Returns (stopped_weights, events).
+    """
+    if weights is None or weights.empty or threshold <= 0:
+        return (weights.astype(float) if weights is not None
+                and not weights.empty else weights), []
+
+    out = weights.astype(float).copy()
+    px = close.reindex(index=out.index, columns=out.columns)
+
+    entry: dict = {}          # symbol -> entry price
+    blocked_until: dict = {}  # symbol -> pd.Timestamp
+    events: list = []
+
+    for dt in out.index:
+        row = out.loc[dt]
+        held = [s for s in out.columns if float(row.get(s, 0.0)) > 0.0]
+
+        # 1. Names still inside their cooldown cannot be re-entered.
+        for s in held:
+            until = blocked_until.get(s)
+            if until is not None and dt < until:
+                out.loc[dt, s] = 0.0
+        row = out.loc[dt]
+        held = [s for s in out.columns if float(row.get(s, 0.0)) > 0.0]
+
+        # 2. Names that left the book (by the strategy or by cooldown) lose
+        #    their recorded entry, so a later re-entry prices fresh.
+        for s in list(entry):
+            if s not in held:
+                entry.pop(s, None)
+
+        # 3. New entries record their price and cannot breach on day one.
+        fresh = []
+        for s in held:
+            if s not in entry:
+                p = px.at[dt, s] if s in px.columns else np.nan
+                if pd.notna(p) and float(p) > 0:
+                    entry[s] = float(p)
+                    fresh.append(s)
+
+        # 4. Evaluate breaches for names held since a prior date.
+        seasoned = [s for s in held if s in entry and s not in fresh]
+        if seasoned:
+            breached = compute_stop_breaches(
+                pd.Series({s: entry[s] for s in seasoned}),
+                pd.Series({s: px.at[dt, s] for s in seasoned}),
+                threshold=threshold,
+            )
+            hits = [s for s in seasoned if bool(breached.get(s, False))]
+            if hits:
+                for s in hits:
+                    exit_px = float(px.at[dt, s])
+                    events.append({
+                        "date":           str(dt),
+                        "symbol":         s,
+                        "entry_price":    entry[s],
+                        "exit_price":     exit_px,
+                        "pct_from_entry": exit_px / entry[s] - 1.0,
+                    })
+                    blocked_until[s] = dt + pd.Timedelta(days=int(cooldown_days))
+                    entry.pop(s, None)
+                out.loc[dt] = apply_stop_loss(
+                    out.loc[dt],
+                    pd.Series(True, index=hits),
+                    redistribute=redistribute,
+                )
+
+    return out, events

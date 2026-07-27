@@ -171,3 +171,157 @@ class TestCooldownState:
 
     def test_empty_state_blocks_nothing(self):
         assert blocked_symbols({}, "2026-07-10") == set()
+
+
+from ascent.portfolio.stop_loss import apply_stop_loss_panel
+
+
+class TestStopLossPanel:
+    def test_position_is_stopped_and_stays_out_for_cooldown(self):
+        dates = pd.to_datetime(
+            ["2026-01-01", "2026-01-02", "2026-01-03", "2026-01-04"]
+        )
+        # A crashes 20% on day 3; B is flat.
+        close = pd.DataFrame(
+            {"A": [100.0, 99.0, 80.0, 81.0], "B": [50.0, 50.0, 50.0, 50.0]},
+            index=dates,
+        )
+        w = pd.DataFrame(0.5, index=dates, columns=["A", "B"])
+
+        out, events = apply_stop_loss_panel(
+            w, close, threshold=0.10, cooldown_days=30
+        )
+
+        assert out.loc[dates[0], "A"] == pytest.approx(0.5)   # entry day
+        assert out.loc[dates[1], "A"] == pytest.approx(0.5)   # -1%, fine
+        assert out.loc[dates[2], "A"] == 0.0                  # -20%, stopped
+        assert out.loc[dates[3], "A"] == 0.0                  # cooldown
+        # B untouched throughout — no redistribution. (Exact equality: B is
+        # never touched by the rule, so there is no float drift to tolerate.
+        # `Series == pytest.approx(scalar)` is broken in this pandas/pytest
+        # combo — Series.__eq__ intercepts before ApproxScalar's reflected
+        # comparison runs and silently returns all-False; confirmed via
+        # `out["B"].values == pytest.approx(0.5)` which correctly gives True.)
+        assert (out["B"] == 0.5).all()
+
+        assert len(events) == 1
+        assert events[0]["symbol"] == "A"
+        assert events[0]["entry_price"] == pytest.approx(100.0)
+        assert events[0]["pct_from_entry"] == pytest.approx(-0.20)
+
+    def test_gross_falls_when_a_name_is_stopped(self):
+        dates = pd.to_datetime(["2026-01-01", "2026-01-02"])
+        close = pd.DataFrame({"A": [100.0, 80.0], "B": [50.0, 50.0]}, index=dates)
+        w = pd.DataFrame(0.5, index=dates, columns=["A", "B"])
+        out, _ = apply_stop_loss_panel(w, close, threshold=0.10)
+        assert out.loc[dates[0]].sum() == pytest.approx(1.0)
+        assert out.loc[dates[1]].sum() == pytest.approx(0.5)  # A -> cash
+
+    def test_reentry_allowed_after_cooldown_resets_entry_price(self):
+        dates = pd.to_datetime(
+            ["2026-01-01", "2026-01-02", "2026-03-01", "2026-03-02"]
+        )
+        close = pd.DataFrame({"A": [100.0, 80.0, 40.0, 39.0]}, index=dates)
+        w = pd.DataFrame(1.0, index=dates, columns=["A"])
+        out, events = apply_stop_loss_panel(w, close, threshold=0.10,
+                                            cooldown_days=30)
+        assert out.loc[dates[1], "A"] == 0.0     # stopped
+        assert out.loc[dates[2], "A"] == 1.0     # cooldown expired, re-entered
+        # Re-entry price is 40.0, so -2.5% on the next day is NOT a breach.
+        assert out.loc[dates[3], "A"] == 1.0
+        assert len(events) == 1
+
+    def test_name_that_exits_naturally_clears_its_entry(self):
+        """Weight -> 0 by the strategy, then back in later at a new price."""
+        dates = pd.to_datetime(
+            ["2026-01-01", "2026-01-02", "2026-01-03"]
+        )
+        close = pd.DataFrame({"A": [100.0, 100.0, 91.0]}, index=dates)
+        w = pd.DataFrame({"A": [1.0, 0.0, 1.0]}, index=dates)
+        out, events = apply_stop_loss_panel(w, close, threshold=0.10)
+        # Re-entry on day 3 at 91.0 is a fresh entry, not -9% from 100.
+        assert out.loc[dates[2], "A"] == 1.0
+        assert events == []
+
+    def test_disabled_threshold_zero_is_a_noop(self):
+        dates = pd.to_datetime(["2026-01-01", "2026-01-02"])
+        close = pd.DataFrame({"A": [100.0, 1.0]}, index=dates)
+        w = pd.DataFrame(1.0, index=dates, columns=["A"])
+        out, events = apply_stop_loss_panel(w, close, threshold=0.0)
+        pd.testing.assert_frame_equal(out, w.astype(float))
+        assert events == []
+
+    def test_empty_weights_returns_empty(self):
+        out, events = apply_stop_loss_panel(pd.DataFrame(), pd.DataFrame())
+        assert out.empty
+        assert events == []
+
+
+class TestAlgmMrnaRegression:
+    """
+    The 2026-06-29 -> 2026-07-24 episode that motivated this work.
+
+    Real closes. Entry prices are the 2026-06-29 rebalance closes. Held to
+    the end, ALGM returned -30.65% and MRNA -22.42%. A 10% stop should exit
+    ALGM on 2026-07-02 and MRNA on 2026-07-17.
+    """
+
+    ALGM = [66.370003, 69.620003, 63.200001, 55.485001, 56.560001, 51.549999,
+            51.465000, 57.380001, 54.869999, 50.855000, 52.320000, 50.029999,
+            47.119999, 46.480000, 46.360001, 49.349998, 49.869999, 50.070000,
+            46.029999]
+    MRNA = [69.699997, 70.029999, 72.500000, 79.760002, 81.800003, 79.769997,
+            73.800003, 76.559998, 68.269997, 67.010002, 67.440002, 68.279999,
+            63.150002, 61.820000, 59.490002, 59.660000, 58.070000, 57.020000,
+            54.070000]
+    DATES = ["2026-06-29", "2026-06-30", "2026-07-01", "2026-07-02",
+             "2026-07-06", "2026-07-07", "2026-07-08", "2026-07-09",
+             "2026-07-10", "2026-07-13", "2026-07-14", "2026-07-15",
+             "2026-07-16", "2026-07-17", "2026-07-20", "2026-07-21",
+             "2026-07-22", "2026-07-23", "2026-07-24"]
+
+    def _panel(self):
+        idx = pd.to_datetime(self.DATES)
+        close = pd.DataFrame({"ALGM": self.ALGM, "MRNA": self.MRNA}, index=idx)
+        w = pd.DataFrame(0.04086962656941537, index=idx,
+                         columns=["ALGM", "MRNA"])
+        return w, close
+
+    def test_ten_percent_stop_exits_both_on_the_expected_dates(self):
+        w, close = self._panel()
+        out, events = apply_stop_loss_panel(w, close, threshold=0.10,
+                                            cooldown_days=30)
+        by_sym = {e["symbol"]: e for e in events}
+        assert set(by_sym) == {"ALGM", "MRNA"}
+        assert str(pd.Timestamp(by_sym["ALGM"]["date"]).date()) == "2026-07-02"
+        assert str(pd.Timestamp(by_sym["MRNA"]["date"]).date()) == "2026-07-17"
+        # Both stay out for the remainder (cooldown covers the window).
+        assert out.iloc[-1].sum() == pytest.approx(0.0)
+
+    def test_ten_percent_stop_saves_about_one_percentage_point(self):
+        """
+        Measured 2026-07-27: +1.037pp vs holding. Assert the magnitude, with
+        tolerance for the exact fill convention.
+        """
+        w, close = self._panel()
+        _, events = apply_stop_loss_panel(w, close, threshold=0.10)
+        weight = 0.04086962656941537
+        held = {"ALGM": close["ALGM"].iloc[-1] / close["ALGM"].iloc[0] - 1,
+                "MRNA": close["MRNA"].iloc[-1] / close["MRNA"].iloc[0] - 1}
+        saved = sum(
+            (e["pct_from_entry"] - held[e["symbol"]]) * weight for e in events
+        )
+        assert saved == pytest.approx(0.01037, abs=0.002)
+
+    def test_twenty_percent_stop_saves_much_less(self):
+        """Threshold matters: a 20% stop recovers roughly a third as much."""
+        w, close = self._panel()
+        _, events = apply_stop_loss_panel(w, close, threshold=0.20)
+        weight = 0.04086962656941537
+        held = {"ALGM": close["ALGM"].iloc[-1] / close["ALGM"].iloc[0] - 1,
+                "MRNA": close["MRNA"].iloc[-1] / close["MRNA"].iloc[0] - 1}
+        saved = sum(
+            (e["pct_from_entry"] - held[e["symbol"]]) * weight for e in events
+        )
+        assert saved == pytest.approx(0.0034, abs=0.002)
+        assert saved < 0.01037
