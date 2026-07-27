@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.ascentcapital.heartbeat</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/scott/IdeaProjects/ascent-capital/.venv/bin/python</string>
+        <string>/Users/scott/IdeaProjects/ascent-capital/scripts/heartbeat_check.py</string>
+        <string>--quiet</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/scott/IdeaProjects/ascent-capital</string>
+
+    <!--
+      StartInterval, NOT StartCalendarInterval: this is the fix for the
+      root cause of the outage. StartCalendarInterval jobs are skipped
+      entirely if the Mac is asleep at the scheduled wall-clock moment
+      (no catch-up), whereas StartInterval jobs fire promptly on wake if
+      the interval has elapsed. 21600 seconds = 6 hours, so a laptop that
+      is only awake part of the day still gets checked multiple times.
+    -->
+    <key>StartInterval</key>
+    <integer>21600</integer>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <false/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/scott/IdeaProjects/ascent-capital/logs/heartbeat_stdout.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/scott/IdeaProjects/ascent-capital/logs/heartbeat_stderr.log</string>
+</dict>
+</plist>

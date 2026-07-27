@@ -9,24 +9,65 @@
     <key>ProgramArguments</key>
     <array>
         <string>/bin/bash</string>
-        <string>/Users/kdong/Downloads/ascent capital v2 up to phase 5.1/scripts/run_eod.sh</string>
+        <string>/Users/scott/IdeaProjects/ascent-capital/scripts/run_eod.sh</string>
     </array>
 
-    <!-- 1:45pm PT = 4:45pm ET on weekdays -->
+    <!--
+      1:45pm PT, weekdays only. Hour/Minute in StartCalendarInterval are
+      local machine time (PT here), so 1:45pm PT is Hour=13 Minute=45 —
+      NOT Hour=19 (that was 7:45pm PT, ~4h late, the previous bug).
+      Weekday: 1=Monday .. 5=Friday (0 and 7 both mean Sunday). One dict
+      per weekday because StartCalendarInterval does not support ranges.
+    -->
     <key>StartCalendarInterval</key>
-    <dict>
-        <key>Hour</key>
-        <integer>19</integer>
-        <key>Minute</key>
-        <integer>45</integer>
-        <!-- Weekdays only: Monday=2 through Friday=6 -->
-    </dict>
+    <array>
+        <dict>
+            <key>Weekday</key>
+            <integer>1</integer>
+            <key>Hour</key>
+            <integer>13</integer>
+            <key>Minute</key>
+            <integer>45</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key>
+            <integer>2</integer>
+            <key>Hour</key>
+            <integer>13</integer>
+            <key>Minute</key>
+            <integer>45</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key>
+            <integer>3</integer>
+            <key>Hour</key>
+            <integer>13</integer>
+            <key>Minute</key>
+            <integer>45</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key>
+            <integer>4</integer>
+            <key>Hour</key>
+            <integer>13</integer>
+            <key>Minute</key>
+            <integer>45</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key>
+            <integer>5</integer>
+            <key>Hour</key>
+            <integer>13</integer>
+            <key>Minute</key>
+            <integer>45</integer>
+        </dict>
+    </array>
 
     <key>StandardOutPath</key>
-    <string>/Users/kdong/Downloads/ascent capital v2 up to phase 5.1/logs/launchd_stdout.log</string>
+    <string>/Users/scott/IdeaProjects/ascent-capital/logs/launchd_stdout.log</string>
 
     <key>StandardErrorPath</key>
-    <string>/Users/kdong/Downloads/ascent capital v2 up to phase 5.1/logs/launchd_stderr.log</string>
+    <string>/Users/scott/IdeaProjects/ascent-capital/logs/launchd_stderr.log</string>
 
     <key>RunAtLoad</key>
     <false/>

@@ -24,6 +24,17 @@ _DRAWDOWN_CRIT  = 0.10   # 10%
 _FACTOR_BREACH  = 0.6    # ±0.6σ
 _IC_FLOOR       = -0.01  # sleeve IC below this → warning
 
+# "liveness" alerts (pipeline staleness / missed rebalances) come from
+# scripts/heartbeat_check.py, which runs OUTSIDE the pipeline it monitors
+# on its own launchd interval schedule. That script is stdlib-only and does
+# not import this module in the common case (so it can't be broken by the
+# same failure it watches) — but when `ascent` IS importable it calls
+# send_alert() directly so liveness alerts share the same log/dedup file as
+# every other alert type. Nothing here changes existing callers/behavior.
+VALID_ALERT_TYPES = {
+    "drawdown", "factor_breach", "sleeve_ic_degradation", "liveness", "system_alive",
+}
+
 
 def _load_alert_state() -> Dict[str, str]:
     """Load {alert_key: last_sent_iso} deduplication map."""
@@ -174,3 +185,36 @@ def send_alert(alert_dict: dict) -> None:
             )
         except Exception:
             pass
+
+
+def send_system_alive_ping(last_run: Optional[str] = None, nav: Optional[float] = None,
+                            nav_prior: Optional[float] = None) -> dict:
+    """Positive daily "system alive" notification.
+
+    An alert channel that only ever fires on failure is indistinguishable
+    from a broken one — you cannot tell "no alerts because everything is
+    fine" from "no alerts because the alerting path itself died" (which is
+    exactly what happened during the 27-day outage: NTFY_TOPIC was unset,
+    logs/alerts.jsonl was never created, and nothing told the user).
+
+    This writes a low-severity "INFO" entry to the same alerts.jsonl log
+    (so there is always at least one entry per day proving the channel is
+    live) and sends it through the same ntfy path as send_alert(). Callers
+    are expected to invoke this once per day, independent of whether any
+    failure alert fired.
+    """
+    if nav is not None and nav_prior is not None and nav_prior:
+        nav_note = f"NAV {nav:,.2f} ({(nav / nav_prior - 1):+.2%} vs prior)"
+    elif nav is not None:
+        nav_note = f"NAV {nav:,.2f}"
+    else:
+        nav_note = "NAV unchanged"
+    message = f"System alive. Last run {last_run or 'unknown'}. {nav_note}."
+    alert = {
+        "type": "system_alive",
+        "severity": "INFO",
+        "message": message,
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+    send_alert(alert)
+    return alert
