@@ -22,6 +22,23 @@ log = logging.getLogger(__name__)
 _FACTOR_SRC = ["Mkt-RF", "SMB", "HML", "RMW", "CMA", "UMD"]
 
 
+def _to_naive_calendar_index(idx: pd.Index) -> pd.Index:
+    """Normalize a DatetimeIndex to tz-naive calendar days.
+
+    Mirrors the `_calendar_day_key()` convention in `ascent/data/store/parquet.py`:
+    strips any tz (keeps wall-clock day) and zeroes the time so that a
+    tz-aware index (e.g. `prices_live`, stored in America/New_York) and a
+    tz-naive index (e.g. Fama-French factor returns) intersect correctly on
+    the trading day rather than producing an empty intersection.
+    """
+    if not isinstance(idx, pd.DatetimeIndex):
+        idx = pd.DatetimeIndex(idx)
+    normalized = idx.normalize()
+    if normalized.tz is not None:
+        normalized = normalized.tz_localize(None)
+    return normalized
+
+
 def compute_factor_covariance(factor_returns: pd.DataFrame, lookback: int = 252) -> np.ndarray:
     """
     6×6 factor return covariance over trailing lookback days (annualised).
@@ -52,6 +69,19 @@ def compute_residual_variances(
     Returns 1-D array of length N (residual variances, annualised).
     """
     syms = list(loadings_df.index)
+
+    # Normalize both indices to tz-naive calendar days before intersecting —
+    # prices_df (e.g. `prices_live`) is tz-aware (America/New_York) while
+    # factor_returns (Fama-French) is tz-naive. Intersecting the raw indices
+    # silently yields an empty set (see _to_naive_calendar_index docstring).
+    prices_df = prices_df.copy()
+    prices_df.index = _to_naive_calendar_index(prices_df.index)
+    factor_returns = factor_returns.copy()
+    factor_returns.index = _to_naive_calendar_index(factor_returns.index)
+    # Both are daily series — collapse any same-day dups defensively (keep last).
+    prices_df = prices_df[~prices_df.index.duplicated(keep="last")]
+    factor_returns = factor_returns[~factor_returns.index.duplicated(keep="last")]
+
     common_idx = prices_df.index.intersection(factor_returns.index)
     window_returns = prices_df[syms].reindex(common_idx).pct_change().tail(lookback).dropna(how="all")
     factors_window = factor_returns[_FACTOR_SRC].reindex(window_returns.index).dropna()
@@ -146,6 +176,25 @@ def build_factor_covariance_matrix(
             D_full[i] = D_valid[j]
 
     Sigma = B_full @ F @ B_full.T + np.diag(D_full)
+
+    # Post-condition: never hand back a NaN/inf-poisoned matrix. A poisoned
+    # Sigma (e.g. from a broken index alignment upstream) is more dangerous
+    # than the clean fallback because it fails silently downstream in MVO.
+    if not np.all(np.isfinite(Sigma)):
+        n_nan = int(np.isnan(Sigma).sum())
+        n_inf = int(np.isinf(Sigma).sum())
+        log.warning(
+            "[CovModel] Computed covariance matrix contains non-finite values "
+            "(nan=%d, inf=%d) — falling back to diagonal proxy instead of "
+            "returning a poisoned matrix",
+            n_nan, n_inf,
+        )
+        sigma = np.eye(N) * 0.04
+        return {
+            "full": sigma, "factor": np.eye(6) * 0.04,
+            "loadings": np.zeros((N, 6)), "idiosyncratic": np.full(N, 0.04),
+            "symbols": syms,
+        }
 
     return {
         "full":          Sigma,
