@@ -167,6 +167,76 @@ def strategy_return_proxy(
     return (w.shift(1).fillna(0.0) * rets).sum(axis=1)
 
 
+CRASH_BEAR_LOOKBACK    = 504   # ~2 trading years
+CRASH_REBOUND_LOOKBACK = 21    # ~1 trading month
+CRASH_MULTIPLIER       = 0.50
+
+
+def momentum_crash_scale(
+    spy_close: pd.Series,
+    dates: pd.Index,
+    bear_lookback: int = CRASH_BEAR_LOOKBACK,
+    rebound_lookback: int = CRASH_REBOUND_LOOKBACK,
+    multiplier: float = CRASH_MULTIPLIER,
+) -> pd.Series:
+    """
+    Per-date exposure multiplier for the momentum-crash state.
+
+    Daniel & Moskowitz (2016): momentum crashes cluster in panic periods —
+    a prolonged market decline followed by a rebound. Winners carry beta
+    acquired during the decline, and the rebound repriced them violently.
+
+    Fires `multiplier` when BOTH hold, using only data strictly before `d`:
+      * bear:    cumulative SPY return over the trailing `bear_lookback` < 0
+      * rebound: SPY return over the trailing `rebound_lookback` > 0
+    Otherwise 1.0.
+
+    Deliberately NOT the full dynamic model. Daniel & Moskowitz scale
+    continuously by a forecast conditional Sharpe ratio; estimating that on
+    this book's history is an overfitting risk. This is the low-parameter
+    state indicator at the core of the same result.
+
+    Distinct from the 200MA cut, which fires on "market is below trend".
+    This fires on "market fell for a long time and is now bouncing" — the
+    200MA filter is typically OFF in exactly that state, which is the point.
+    """
+    if len(dates) == 0:
+        return pd.Series(dtype=float)
+    if multiplier >= 1.0:
+        return pd.Series(1.0, index=dates)
+
+    try:
+        s = spy_close.sort_index()
+        s = s[~s.index.duplicated(keep="last")].dropna()
+    except Exception as exc:
+        log.warning("[Exposure] momentum_crash_scale: bad SPY series (%s) "
+                    "— no cut applied", exc)
+        return pd.Series(1.0, index=dates)
+
+    scales = []
+    for d in dates:
+        past = s[s.index < d]
+        if len(past) < bear_lookback + 1:
+            scales.append(1.0)
+            continue
+
+        bear_window = past.iloc[-(bear_lookback + 1):]
+        bear_ret = float(bear_window.iloc[-1] / bear_window.iloc[0] - 1.0)
+
+        reb_window = past.iloc[-(rebound_lookback + 1):]
+        reb_ret = float(reb_window.iloc[-1] / reb_window.iloc[0] - 1.0)
+
+        scales.append(float(multiplier) if (bear_ret < 0.0 and reb_ret > 0.0)
+                      else 1.0)
+
+    out = pd.Series(scales, index=dates)
+    n_cut = int((out < 1.0).sum())
+    if n_cut:
+        log.info("[Exposure] Momentum-crash state on %d/%d dates — exposure "
+                 "x%.2f (Daniel & Moskowitz 2016)", n_cut, len(out), multiplier)
+    return out
+
+
 def apply_exposure_overlays(
     weights: pd.DataFrame,
     spy_close: pd.Series,
