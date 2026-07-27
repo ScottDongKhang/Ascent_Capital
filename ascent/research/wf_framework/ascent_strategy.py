@@ -270,6 +270,41 @@ class AscentPortfolioStrategy(PortfolioBaseStrategy):
             except Exception:
                 pass
 
+        # Position-level stop-loss — parity with production (see
+        # docs/superpowers/plans/2026-07-27-position-stop-loss.md). Applied
+        # on the DAILY panel, not the rebalance rows, because a stop has to
+        # be able to fire between rebalances.
+        try:
+            from ascent.config.settings import get_config as _get_cfg2
+            _sl = _get_cfg2().backtest
+            _sl_on = getattr(_sl, "stop_loss_enabled", False)
+        except Exception:
+            _sl_on = False
+
+        if _sl_on and _close_panel is not None and not weights_at_rebal.empty:
+            try:
+                from ascent.portfolio.stop_loss import apply_stop_loss_panel
+                _daily = weights_at_rebal.reindex(
+                    _close_panel.index, method="ffill"
+                ).dropna(how="all")
+                _daily, _events = apply_stop_loss_panel(
+                    _daily, _close_panel,
+                    threshold=_sl.stop_loss_threshold,
+                    cooldown_days=_sl.stop_loss_cooldown_days,
+                    redistribute=_sl.stop_loss_redistribute,
+                )
+                weights_at_rebal = _daily
+                if _events:
+                    # ascent_strategy.py has NO module-level `log` (verified
+                    # 2026-07-27) — use a self-contained local logger.
+                    import logging as _lg
+                    _lg.getLogger(__name__).info(
+                        "[StopLoss/WF] %d stop events", len(_events))
+            except Exception as _sl_e:
+                import logging as _lg
+                _lg.getLogger(__name__).warning(
+                    "[StopLoss/WF] skipped: %s", _sl_e)
+
         # --- Step 3b: Long/short extension ---
         # Short bottom-N momentum stocks with half the gross of the long side.
         # Borrow cost handled in execution model via negative weights → turnover.
