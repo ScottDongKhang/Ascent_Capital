@@ -134,7 +134,21 @@ def record_intervention(
     prediction:        str,
     regime:            str,
 ) -> None:
-    """Log a new intervention. Called immediately after the judge applies a change."""
+    """
+    Log a new intervention. Called immediately after the judge applies a change.
+
+    Idempotent on (date, symbol): if an intervention for this symbol on this
+    date is already logged, this is a no-op (no duplicate row written, no
+    double-increment of n_interventions). Fixes 2026-06-10 duplicate writes
+    (VNO logged 4x, VOYA 2x) caused by re-entrant call sites (falsifier-trim
+    and mini-rebalance paths can both fire for the same symbol/day).
+    """
+    existing = _load_interventions()
+    if any(r.get("date") == date_str and r.get("symbol") == symbol for r in existing):
+        print(f"[AdvAuth] Duplicate intervention suppressed: {symbol} already recorded "
+              f"for {date_str}")
+        return
+
     record = {
         "date":              date_str,
         "symbol":            symbol,

@@ -24,6 +24,30 @@ EOD_LOG_PATH    = Path("logs/eod_log.jsonl")
 CREDIBILITY_PATH = Path("outputs/debate_log/agent_credibility.json")
 OUTCOME_WINDOW_DAYS = 14  # days after verdict to measure outcome
 
+# Minimum scored samples required before a track-record figure is shown to the
+# judge as an accuracy percentage rather than an explicit "insufficient data"
+# note. Same threshold as get_agent_regime_accuracy's min_samples convention
+# below — with fewer scored outcomes, the estimate is noise (see W4 finding:
+# a single 2026-04-15 record was presented to the judge as a track record and
+# suppressed a trim).
+MIN_SAMPLES_FOR_TRACK_RECORD = 10
+
+_REGIME_LABEL_PREFIX = "regimelabel."
+
+
+def _normalize_regime_key(regime) -> str:
+    """
+    Normalize a regime label for use as a credibility-bucket key.
+
+    Strips a leading "RegimeLabel." (from `str(RegimeSignal.enum_member)`)
+    and lowercases, so "RegimeLabel.STRESSED" and "stressed" land in the same
+    bucket instead of splitting sample counts across two keys.
+    """
+    s = str(regime).strip().lower()
+    if s.startswith(_REGIME_LABEL_PREFIX):
+        s = s[len(_REGIME_LABEL_PREFIX):]
+    return s
+
 
 # ── Credibility loader ───────────────────────────────────────────────────────
 
@@ -53,7 +77,7 @@ def get_agent_regime_accuracy(agent_name: str, regime: str,
         Float accuracy in [0, 1], or None if no data / too few samples.
     """
     cred = _load_credibility()
-    regime_key = str(regime).lower()
+    regime_key = _normalize_regime_key(regime)
     accuracy   = cred.get("by_regime", {}).get(regime_key, {}).get(agent_name)
     n_samples  = cred.get("sample_counts", {}).get(regime_key, {}).get(agent_name, 0)
     if accuracy is None or n_samples < min_samples:
@@ -254,14 +278,17 @@ def _rebuild_credibility():
         if not rec.get("outcome_scored"):
             continue
 
-        regime = str(rec.get("portfolio_state", {}).get("us_regime", "unknown")).lower()
+        # Normalize so "RegimeLabel.STRESSED" and "stressed" share one bucket
+        # instead of silently splitting sample counts (see W4 finding).
+        regime = _normalize_regime_key(rec.get("portfolio_state", {}).get("us_regime", "unknown"))
         agent_scores = rec.get("agent_scores", {})
 
         for agent, score in agent_scores.items():
             buckets[regime][agent].append(score)
             overall[agent].append(score)
 
-    credibility = {"by_regime": {}, "overall": {}, "sample_counts": {}}
+    credibility = {"by_regime": {}, "overall": {}, "sample_counts": {},
+                   "overall_sample_counts": {}}
 
     for regime, agents in buckets.items():
         credibility["by_regime"][regime] = {}
@@ -274,6 +301,7 @@ def _rebuild_credibility():
     for agent, scores in overall.items():
         if len(scores) > 0:
             credibility["overall"][agent] = round(sum(scores) / len(scores), 3)
+            credibility["overall_sample_counts"][agent] = len(scores)
 
     DEBATE_LOG_DIR.mkdir(parents=True, exist_ok=True)
     with open(CREDIBILITY_PATH, "w") as f:
@@ -282,10 +310,15 @@ def _rebuild_credibility():
 
 # ── Context loader (called by agents.py and judge.py) ────────────────────────
 
-def load_credibility_context(regime: Optional[str] = None) -> str:
+def load_credibility_context(regime: Optional[str] = None,
+                              min_samples: int = MIN_SAMPLES_FOR_TRACK_RECORD) -> str:
     """
     Returns a plain-English credibility summary for injection into agent prompts.
     E.g. "In stressed regime: bear agent accuracy 78% (9 debates), bull 44%, devil 67%"
+
+    Below `min_samples` scored debates, the accuracy figure is withheld and
+    replaced with an explicit insufficient-data note — with n<10 the estimate
+    is noise (see MIN_SAMPLES_FOR_TRACK_RECORD).
     """
     if not CREDIBILITY_PATH.exists():
         return ""
@@ -299,63 +332,103 @@ def load_credibility_context(regime: Optional[str] = None) -> str:
 
     # Regime-specific if available
     if regime:
-        regime_key = str(regime).lower()
-        # Try to match partial regime names
-        matched = None
-        for k in cred.get("by_regime", {}):
-            if k in regime_key or regime_key in k:
-                matched = k
-                break
+        regime_key = _normalize_regime_key(regime)
+        by_regime  = cred.get("by_regime", {})
+
+        # Exact match on the normalized key first (deterministic). Fall back
+        # to a normalized substring match only if no exact key exists, and
+        # break ties deterministically (sorted) rather than on dict iteration
+        # order.
+        matched = regime_key if regime_key in by_regime else None
+        if matched is None:
+            candidates = sorted(
+                k for k in by_regime
+                if k in regime_key or regime_key in k
+            )
+            matched = candidates[0] if candidates else None
 
         if matched:
-            regime_data   = cred["by_regime"][matched]
+            regime_data   = by_regime[matched]
             sample_counts = cred.get("sample_counts", {}).get(matched, {})
             lines.append(f"\nIn {matched} regime:")
             for agent in ["bull", "bear", "devils_advocate"]:
                 acc   = regime_data.get(agent)
                 n     = sample_counts.get(agent, 0)
                 label = agent.replace("_", " ").title()
-                if acc is not None:
+                if acc is None:
+                    lines.append(f"  {label}: no data yet for this regime")
+                elif n < min_samples:
+                    lines.append(
+                        f"  {label}: n={n}, insufficient to infer a track record "
+                        f"(min {min_samples} required)"
+                    )
+                else:
                     pct = f"{acc:.0%}"
                     lines.append(f"  {label}: {pct} accuracy ({n} debates)")
-                else:
-                    lines.append(f"  {label}: no data yet for this regime")
 
     # Overall always shown
-    overall = cred.get("overall", {})
+    overall       = cred.get("overall", {})
+    overall_n_map = cred.get("overall_sample_counts", {})
     if overall:
         lines.append("\nOverall (all regimes):")
         for agent in ["bull", "bear", "devils_advocate"]:
-            acc = overall.get(agent)
-            if acc is not None:
-                label = agent.replace("_", " ").title()
+            acc   = overall.get(agent)
+            n     = overall_n_map.get(agent, 0)
+            label = agent.replace("_", " ").title()
+            if acc is None:
+                continue
+            if n < min_samples:
+                lines.append(
+                    f"  {label}: n={n}, insufficient to infer a track record "
+                    f"(min {min_samples} required)"
+                )
+            else:
                 lines.append(f"  {label}: {acc:.0%}")
 
     return "\n".join(lines) if len(lines) > 1 else ""
 
 
-def load_recent_verdict_outcomes(n: int = 5) -> str:
+def load_recent_verdict_outcomes(n: int = 5,
+                                  min_samples: int = MIN_SAMPLES_FOR_TRACK_RECORD) -> str:
     """
     Returns a summary of the last N scored verdicts with their outcomes.
     For injection into the judge prompt.
+
+    Below `min_samples` total scored verdicts, individual outcomes are
+    withheld and replaced with an explicit insufficient-data note. This is
+    the guard for the exact failure mode found in the W4 audit: a single
+    scored verdict (2026-04-15, a whole-portfolio-NAV outcome unrelated to
+    any specific position) was presented to the judge as "JUDGE'S OWN TRACK
+    RECORD" and used to justify suppressing an unrelated single-name trim.
     """
     if not DEBATE_LOG_DIR.exists():
         return ""
 
     verdict_files = sorted(DEBATE_LOG_DIR.glob("verdict_*.json"), reverse=True)
-    lines = ["JUDGE'S OWN TRACK RECORD (recent scored decisions):"]
-    found = 0
-
+    scored_recs = []
     for vf in verdict_files:
-        if found >= n:
-            break
         try:
             rec = json.loads(vf.read_text())
         except Exception:
             continue
+        if rec.get("outcome_scored"):
+            scored_recs.append(rec)
 
-        if not rec.get("outcome_scored"):
-            continue
+    total_scored = len(scored_recs)
+    if total_scored < min_samples:
+        return (
+            f"JUDGE'S OWN TRACK RECORD: n={total_scored}, insufficient to infer a "
+            f"track record (min {min_samples} required). Treat any individual past "
+            f"outcome as anecdote, not evidence — do not let it override the current "
+            f"analysis."
+        )
+
+    lines = ["JUDGE'S OWN TRACK RECORD (recent scored decisions):"]
+    found = 0
+
+    for rec in scored_recs:
+        if found >= n:
+            break
 
         vdate   = rec.get("date", "?")
         verdict = rec.get("verdict", {})

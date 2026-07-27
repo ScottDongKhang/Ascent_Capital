@@ -256,6 +256,59 @@ class TestAdversarialAuthority:
         assert "ADVERSARIAL AUTHORITY" in text
         assert "adversarial_thesis" in text
 
+    # ── W4: record_intervention idempotency (2026-06-10 logged VNO 4x, VOYA 2x) ──
+
+    def test_record_intervention_is_idempotent_on_date_symbol(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("debate.adversarial_authority.AUTHORITY_PATH",
+                            tmp_path / "auth.json")
+        monkeypatch.setattr("debate.adversarial_authority.INTERVENTION_LOG",
+                            tmp_path / "interventions.jsonl")
+        from debate.adversarial_authority import record_intervention
+
+        for _ in range(4):
+            record_intervention(
+                date_str="2026-06-10", symbol="VNO",
+                intervention_type="adversarial_thesis",
+                from_weight=0.05, to_weight=0.04,
+                prediction="VNO underperforms SPY", regime="calm_bull",
+            )
+
+        lines = (tmp_path / "interventions.jsonl").read_text().strip().splitlines()
+        assert len(lines) == 1
+
+    def test_record_intervention_duplicate_does_not_double_count_authority(
+            self, tmp_path, monkeypatch):
+        monkeypatch.setattr("debate.adversarial_authority.AUTHORITY_PATH",
+                            tmp_path / "auth.json")
+        monkeypatch.setattr("debate.adversarial_authority.INTERVENTION_LOG",
+                            tmp_path / "interventions.jsonl")
+        from debate.adversarial_authority import record_intervention, get_authority
+
+        record_intervention("2026-06-10", "VOYA", "regime_sizing",
+                             0.06, 0.05, "trim", "calm_bull")
+        record_intervention("2026-06-10", "VOYA", "regime_sizing",
+                             0.06, 0.05, "trim", "calm_bull")
+
+        import json as _j
+        state = _j.loads((tmp_path / "auth.json").read_text())
+        assert state["regime_sizing"]["n_interventions"] == 1
+
+    def test_record_intervention_different_symbols_same_date_both_write(
+            self, tmp_path, monkeypatch):
+        monkeypatch.setattr("debate.adversarial_authority.AUTHORITY_PATH",
+                            tmp_path / "auth.json")
+        monkeypatch.setattr("debate.adversarial_authority.INTERVENTION_LOG",
+                            tmp_path / "interventions.jsonl")
+        from debate.adversarial_authority import record_intervention
+
+        record_intervention("2026-06-10", "VNO", "adversarial_thesis",
+                             0.05, 0.04, "x", "calm_bull")
+        record_intervention("2026-06-10", "VOYA", "adversarial_thesis",
+                             0.05, 0.04, "x", "calm_bull")
+
+        lines = (tmp_path / "interventions.jsonl").read_text().strip().splitlines()
+        assert len(lines) == 2
+
 
 # ── debate_gate ───────────────────────────────────────────────────────────────
 
