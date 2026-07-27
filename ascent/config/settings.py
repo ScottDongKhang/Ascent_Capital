@@ -152,6 +152,16 @@ class BacktestConfig:
     # annualized (w_i * sigma_i). See ascent.portfolio.optimizer.enforce_risk_budget_cap.
     risk_budget_cap_enabled: bool = True
     risk_budget_per_name: float = 0.012
+    # Position-level stop-loss (Han, Zhou & Zhu 2014). Exits a name that has
+    # fallen `stop_loss_threshold` below its entry price and blocks re-entry
+    # for `stop_loss_cooldown_days` calendar days. Freed weight goes to cash
+    # unless `stop_loss_redistribute` is set.
+    # DISABLED by default — enable only after the walk-forward validation in
+    # docs/superpowers/plans/2026-07-27-position-stop-loss.md (Task 7).
+    stop_loss_enabled: bool = False
+    stop_loss_threshold: float = 0.10
+    stop_loss_cooldown_days: int = 30
+    stop_loss_redistribute: bool = False
 
 
 @dataclass
