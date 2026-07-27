@@ -138,3 +138,66 @@ class TestStrategyReturnProxy:
 
     def test_empty_inputs_return_empty(self):
         assert strategy_return_proxy(pd.DataFrame(), pd.DataFrame()).empty
+
+
+from ascent.portfolio.exposure import apply_exposure_overlays
+
+
+def _calm_spy(idx):
+    """SPY drifting up quietly: ~6% annualized vol."""
+    rng = np.random.default_rng(2)
+    return pd.Series(
+        100 * np.cumprod(1 + rng.normal(0.0003, 0.06 / np.sqrt(252), len(idx))),
+        index=idx,
+    )
+
+
+class TestVolReferenceSelection:
+    def test_default_is_spy_and_unchanged(self):
+        idx = pd.bdate_range("2025-01-01", periods=90)
+        spy = _calm_spy(idx)
+        w = pd.DataFrame(0.5, index=idx, columns=["A", "B"])
+        a, meta_a = apply_exposure_overlays(w, spy)
+        b, meta_b = apply_exposure_overlays(w, spy, vol_reference="spy")
+        pd.testing.assert_frame_equal(a, b)
+        assert meta_b["vol_reference"] == "spy"
+
+    def test_strategy_reference_derisks_when_book_is_wild_but_spy_is_calm(self):
+        """The 2026-06/07 pattern: flat market, violent single names."""
+        idx = pd.bdate_range("2025-01-01", periods=90)
+        spy = _calm_spy(idx)
+        rng = np.random.default_rng(5)
+        # Book holds one very volatile name (~60% ann).
+        close = pd.DataFrame(
+            {"WILD": 100 * np.cumprod(
+                1 + rng.normal(0.0, 0.60 / np.sqrt(252), len(idx)))},
+            index=idx,
+        )
+        w = pd.DataFrame(1.0, index=idx, columns=["WILD"])
+
+        spy_scaled, _ = apply_exposure_overlays(
+            w, spy, vol_reference="spy", close=close, rebalance_only=False)
+        str_scaled, meta = apply_exposure_overlays(
+            w, spy, vol_reference="strategy", close=close, rebalance_only=False)
+
+        assert meta["vol_reference"] == "strategy"
+        # Strategy-referenced must cut exposure harder than the calm-SPY view.
+        assert str_scaled.iloc[-1].sum() < spy_scaled.iloc[-1].sum()
+
+    def test_strategy_reference_without_close_falls_back_to_spy(self, caplog):
+        idx = pd.bdate_range("2025-01-01", periods=90)
+        spy = _calm_spy(idx)
+        w = pd.DataFrame(0.5, index=idx, columns=["A", "B"])
+        with caplog.at_level("WARNING"):
+            out, meta = apply_exposure_overlays(w, spy, vol_reference="strategy")
+        expected, _ = apply_exposure_overlays(w, spy, vol_reference="spy")
+        pd.testing.assert_frame_equal(out, expected)
+        assert meta["vol_reference"] == "spy"
+
+    def test_unknown_reference_falls_back_to_spy(self, caplog):
+        idx = pd.bdate_range("2025-01-01", periods=60)
+        spy = _calm_spy(idx)
+        w = pd.DataFrame(0.5, index=idx, columns=["A"])
+        with caplog.at_level("WARNING"):
+            _, meta = apply_exposure_overlays(w, spy, vol_reference="banana")
+        assert meta["vol_reference"] == "spy"

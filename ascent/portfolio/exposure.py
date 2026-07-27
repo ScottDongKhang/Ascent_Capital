@@ -177,6 +177,8 @@ def apply_exposure_overlays(
     vol_cap: float = VOL_CAP,
     ma_multiplier: float = MA_CUT_MULTIPLIER,
     vol_targeting_enabled: bool = True,
+    vol_reference: str = "spy",
+    close: Optional[pd.DataFrame] = None,
 ) -> tuple[pd.DataFrame, dict]:
     """
     Apply MA filter then vol targeting to a (dates × symbols) weights frame.
@@ -185,17 +187,40 @@ def apply_exposure_overlays(
     where the underlying weights change (rebalance rows) and held constant
     between them — matching live behavior, where exposure is set at rebalance
     and not adjusted daily. Returns (scaled_weights, meta).
+
+    `vol_reference` selects the series vol targeting is measured against:
+    "spy" (market-referenced, legacy default) or "strategy" (the book's own
+    trailing realized vol — Barroso & Santa-Clara 2015, Moreira & Muir 2017),
+    which requires a `close` price panel. Unknown values and a missing panel
+    both fall back to "spy" with a warning; this never raises.
     """
+    ref = str(vol_reference or "spy").lower()
+    if ref not in ("spy", "strategy"):
+        log.warning("[Exposure] Unknown vol_reference %r — using 'spy'",
+                    vol_reference)
+        ref = "spy"
+    if ref == "strategy" and (close is None or close.empty):
+        log.warning("[Exposure] vol_reference='strategy' needs a close panel "
+                    "— falling back to 'spy'")
+        ref = "spy"
+
     if weights.empty:
-        return weights, {"ma_cut_dates": 0, "mean_vol_scale": 1.0}
+        return weights, {"ma_cut_dates": 0, "mean_vol_scale": 1.0,
+                         "vol_reference": ref}
 
     dates = weights.index
 
     ma_scale = ma_filter_scale(spy_close, dates, vix_close=vix_close,
                                multiplier=ma_multiplier)
     if vol_targeting_enabled:
-        v_scale = vol_target_scale(spy_close, dates, target_vol=target_vol,
-                                   floor=vol_floor, cap=vol_cap)
+        if ref == "strategy":
+            strat_rets = strategy_return_proxy(weights, close)
+            v_scale = realized_vol_scale(strat_rets, dates,
+                                         target_vol=target_vol,
+                                         floor=vol_floor, cap=vol_cap)
+        else:
+            v_scale = vol_target_scale(spy_close, dates, target_vol=target_vol,
+                                       floor=vol_floor, cap=vol_cap)
     else:
         v_scale = pd.Series(1.0, index=dates)
 
@@ -211,6 +236,7 @@ def apply_exposure_overlays(
         "ma_cut_dates": int((ma_scale < 1.0).sum()),
         "mean_vol_scale": round(float(v_scale.mean()), 4),
         "min_vol_scale": round(float(v_scale.min()), 4),
+        "vol_reference": ref,
     }
     return scaled, meta
 
