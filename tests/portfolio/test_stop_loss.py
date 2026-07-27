@@ -114,3 +114,60 @@ class TestApplyStopLoss:
         out = apply_stop_loss(w, breached)
         assert out["A"] == 0.0
         assert out["B"] == pytest.approx(0.10)
+
+
+import json
+
+from ascent.portfolio.stop_loss import (
+    COOLDOWN_DAYS,
+    load_stop_state,
+    record_stops,
+    blocked_symbols,
+)
+
+
+class TestCooldownState:
+    def test_record_then_load_roundtrip(self, tmp_path):
+        p = str(tmp_path / "state.json")
+        record_stops(["ALGM", "MRNA"], "2026-07-02", path=p)
+        state = load_stop_state(p)
+        assert state == {"ALGM": "2026-07-02", "MRNA": "2026-07-02"}
+
+    def test_record_overwrites_older_stop_for_same_symbol(self, tmp_path):
+        p = str(tmp_path / "state.json")
+        record_stops(["ALGM"], "2026-07-02", path=p)
+        record_stops(["ALGM"], "2026-07-20", path=p)
+        assert load_stop_state(p)["ALGM"] == "2026-07-20"
+
+    def test_missing_state_file_is_empty_not_an_error(self, tmp_path):
+        assert load_stop_state(str(tmp_path / "nope.json")) == {}
+
+    def test_corrupt_state_file_is_empty_not_an_error(self, tmp_path, caplog):
+        p = tmp_path / "state.json"
+        p.write_text("{not valid json")
+        with caplog.at_level("WARNING"):
+            assert load_stop_state(str(p)) == {}
+        assert caplog.records
+
+    def test_symbol_is_blocked_inside_cooldown(self):
+        state = {"ALGM": "2026-07-02"}
+        assert "ALGM" in blocked_symbols(state, "2026-07-10", cooldown_days=30)
+
+    def test_symbol_is_free_after_cooldown(self):
+        state = {"ALGM": "2026-07-02"}
+        assert "ALGM" not in blocked_symbols(state, "2026-08-02", cooldown_days=30)
+
+    def test_boundary_day_is_free(self):
+        """Exactly cooldown_days later the name is tradeable again."""
+        state = {"A": "2026-07-01"}
+        assert "A" not in blocked_symbols(state, "2026-07-31", cooldown_days=30)
+
+    def test_unparseable_date_does_not_block(self, caplog):
+        """Fail-open: bad state must not permanently freeze a symbol out."""
+        with caplog.at_level("WARNING"):
+            out = blocked_symbols({"A": "garbage"}, "2026-07-10")
+        assert "A" not in out
+        assert caplog.records
+
+    def test_empty_state_blocks_nothing(self):
+        assert blocked_symbols({}, "2026-07-10") == set()

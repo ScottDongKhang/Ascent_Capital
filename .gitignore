@@ -17,3 +17,4 @@ memory/*.jsonl
 outputs/scenarios/
 .superpowers/
 mockups/
+data_cache/stop_loss_state.json
