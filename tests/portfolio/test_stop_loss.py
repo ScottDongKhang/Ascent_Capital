@@ -325,3 +325,61 @@ class TestAlgmMrnaRegression:
         )
         assert saved == pytest.approx(0.0034, abs=0.002)
         assert saved < 0.01037
+
+
+class TestFailOpenGuard:
+    """
+    Plan-mandated contract: "Risk overlays never raise. On any internal
+    failure, log a warning and return the input unchanged (fail-open),
+    matching enforce_cluster_cap."
+
+    Each public function delegates to an `_impl` helper under a blanket
+    try/except. These tests force the `_impl` to raise via monkeypatch —
+    the only honest way to exercise the except branch, since none of the
+    module's real code paths raise on this pandas version.
+    """
+
+    def test_compute_stop_breaches_guards_unexpected_error(self, monkeypatch, caplog):
+        import ascent.portfolio.stop_loss as sl
+
+        def boom(*a, **k):
+            raise RuntimeError("boom")
+
+        monkeypatch.setattr(sl, "_compute_stop_breaches_impl", boom)
+        entry = pd.Series({"A": 100.0})
+        now = pd.Series({"A": 50.0})
+        with caplog.at_level("WARNING"):
+            out = sl.compute_stop_breaches(entry, now)
+        assert not out.any()
+        assert set(out.index) == {"A"}
+        assert any("compute_stop_breaches" in rec.message for rec in caplog.records)
+
+    def test_apply_stop_loss_guards_unexpected_error(self, monkeypatch, caplog):
+        import ascent.portfolio.stop_loss as sl
+
+        def boom(*a, **k):
+            raise RuntimeError("boom")
+
+        monkeypatch.setattr(sl, "_apply_stop_loss_impl", boom)
+        w = pd.Series({"A": 0.5, "B": 0.5})
+        breached = pd.Series({"A": True, "B": False})
+        with caplog.at_level("WARNING"):
+            out = sl.apply_stop_loss(w, breached)
+        assert out is w  # unchanged, not a copy
+        assert any("apply_stop_loss" in rec.message for rec in caplog.records)
+
+    def test_apply_stop_loss_panel_guards_unexpected_error(self, monkeypatch, caplog):
+        import ascent.portfolio.stop_loss as sl
+
+        def boom(*a, **k):
+            raise RuntimeError("boom")
+
+        monkeypatch.setattr(sl, "_apply_stop_loss_panel_impl", boom)
+        dates = pd.to_datetime(["2026-01-01", "2026-01-02"])
+        w = pd.DataFrame({"A": [1.0, 1.0]}, index=dates)
+        close = pd.DataFrame({"A": [100.0, 80.0]}, index=dates)
+        with caplog.at_level("WARNING"):
+            out, events = sl.apply_stop_loss_panel(w, close)
+        assert out is w  # unchanged, not a copy
+        assert events == []
+        assert any("apply_stop_loss_panel" in rec.message for rec in caplog.records)

@@ -53,7 +53,30 @@ def compute_stop_breaches(
     a liquidation.
 
     The comparison is inclusive: exactly -threshold breaches.
+
+    Never raises: any unexpected internal failure is logged and reported as
+    an all-False Series (no stops) — the fail-open direction required of a
+    risk overlay, matching enforce_cluster_cap's never-raise contract.
     """
+    try:
+        return _compute_stop_breaches_impl(entry_prices, current_prices, threshold)
+    except Exception as exc:
+        log.warning(
+            "[StopLoss] compute_stop_breaches failed unexpectedly (%s) — "
+            "reporting no breaches (fail-open)", exc,
+        )
+        try:
+            idx = entry_prices.index.union(current_prices.index)
+        except Exception:
+            idx = pd.Index([])
+        return pd.Series(False, index=idx, dtype=bool)
+
+
+def _compute_stop_breaches_impl(
+    entry_prices: pd.Series,
+    current_prices: pd.Series,
+    threshold: float,
+) -> pd.Series:
     idx = entry_prices.index.union(current_prices.index)
     if len(idx) == 0:
         return pd.Series(dtype=bool)
@@ -91,7 +114,26 @@ def apply_stop_loss(
 
     redistribute=True: freed weight is spread pro-rata across survivors,
     preserving gross. Provided for research comparison only.
+
+    Never raises: any unexpected internal failure is logged and `weights` is
+    returned unchanged (fail-open), matching enforce_cluster_cap's
+    never-raise contract.
     """
+    try:
+        return _apply_stop_loss_impl(weights, breached, redistribute)
+    except Exception as exc:
+        log.warning(
+            "[StopLoss] apply_stop_loss failed unexpectedly (%s) — "
+            "returning weights unchanged (fail-open)", exc,
+        )
+        return weights
+
+
+def _apply_stop_loss_impl(
+    weights: pd.Series,
+    breached: pd.Series,
+    redistribute: bool = False,
+) -> pd.Series:
     if weights is None or len(weights) == 0:
         return weights
 
@@ -173,6 +215,14 @@ def blocked_symbols(state: dict, today: str,
 
     An unparseable date does not block (fail-open): a corrupt entry must not
     freeze a symbol out of the book forever.
+
+    NOTE: the cooldown-boundary rule ("< " not "<=", exclusive at exactly
+    `cooldown_days` later) is intentionally re-implemented here AND in
+    `apply_stop_loss_panel`'s internal `blocked_until` dict — this one on
+    ISO strings via `date`/`timedelta` for the persisted live-trading state,
+    that one on `pd.Timestamp`/`pd.Timedelta` for a single backtest pass with
+    no disk state. If `COOLDOWN_DAYS` semantics ever change (e.g. to trading
+    days, or to an inclusive boundary), update both.
     """
     if not state:
         return set()
@@ -217,7 +267,30 @@ def apply_stop_loss_panel(
     threshold <= 0 disables the rule entirely (exact no-op).
 
     Returns (stopped_weights, events).
+
+    Never raises: any unexpected internal failure is logged and `(weights,
+    [])` is returned unchanged (fail-open), matching enforce_cluster_cap's
+    never-raise contract.
     """
+    try:
+        return _apply_stop_loss_panel_impl(
+            weights, close, threshold, cooldown_days, redistribute,
+        )
+    except Exception as exc:
+        log.warning(
+            "[StopLoss] apply_stop_loss_panel failed unexpectedly (%s) — "
+            "returning weights unchanged, no events (fail-open)", exc,
+        )
+        return weights, []
+
+
+def _apply_stop_loss_panel_impl(
+    weights: pd.DataFrame,
+    close: pd.DataFrame,
+    threshold: float,
+    cooldown_days: int,
+    redistribute: bool,
+) -> tuple:
     if weights is None or weights.empty or threshold <= 0:
         return (weights.astype(float) if weights is not None
                 and not weights.empty else weights), []
@@ -226,6 +299,11 @@ def apply_stop_loss_panel(
     px = close.reindex(index=out.index, columns=out.columns)
 
     entry: dict = {}          # symbol -> entry price
+    # NOTE: `blocked_until` re-implements the cooldown-boundary rule from
+    # `blocked_symbols` above (exclusive at exactly `cooldown_days` later),
+    # but on pd.Timestamp/pd.Timedelta for a single backtest pass rather than
+    # ISO strings against persisted state. Keep both in sync if COOLDOWN_DAYS
+    # semantics ever change.
     blocked_until: dict = {}  # symbol -> pd.Timestamp
     events: list = []
 
@@ -233,7 +311,11 @@ def apply_stop_loss_panel(
         row = out.loc[dt]
         held = [s for s in out.columns if float(row.get(s, 0.0)) > 0.0]
 
-        # 1. Names still inside their cooldown cannot be re-entered.
+        # 1. Names still inside their cooldown cannot be re-entered. This
+        #    mutates out.loc[dt, s] to 0.0, so `row`/`held` below must be
+        #    recomputed from the post-mutation state before step 2 decides
+        #    which names are still "held" — the duplication is load-bearing
+        #    for that ordering, not accidental repetition.
         for s in held:
             until = blocked_until.get(s)
             if until is not None and dt < until:
