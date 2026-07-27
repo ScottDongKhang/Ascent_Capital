@@ -12,7 +12,7 @@ import json
 import logging
 from typing import Any, Dict
 
-from ascent.llm.client import get_client, SONNET_MODEL
+from ascent.llm.client import get_client, SONNET_MODEL, extract_text
 
 log = logging.getLogger(__name__)
 
@@ -128,11 +128,11 @@ Format: override attacks first, then position attacks, then blind spot, then kil
         client = get_client()
         response = client.messages.create(
             model=SONNET_MODEL,
-            max_tokens=1500,
+            max_tokens=4096,   # headroom: thinking shares this budget
             messages=[{"role": "user", "content": prompt}],
             system=_SYSTEM_PROMPT,
         )
-        return response.content[0].text
+        return extract_text(response)
 
     except Exception as exc:
         log.warning("[RedTeam] Red team critique failed: %s — skipping revision pass", exc)

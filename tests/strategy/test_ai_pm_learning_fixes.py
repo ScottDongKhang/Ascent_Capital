@@ -52,7 +52,7 @@ def test_post_mortem_fires_without_overrides(tmp_path, monkeypatch):
 
     # Mock Anthropic client so no real API call is made
     mock_resp = MagicMock()
-    mock_resp.content = [MagicMock(text="[TEST POST-MORTEM] Pattern: When quant agrees, trust momentum.")]
+    mock_resp.content = [MagicMock(type="text", text="[TEST POST-MORTEM] Pattern: When quant agrees, trust momentum.")]
     mock_client = MagicMock()
     mock_client.messages.create.return_value = mock_resp
 
@@ -103,7 +103,7 @@ def test_post_mortem_uses_fallback_text_when_no_scored(tmp_path, monkeypatch):
     def mock_create(**kwargs):
         captured_prompts.append(kwargs.get("messages", [{}])[0].get("content", ""))
         mock_resp = MagicMock()
-        mock_resp.content = [MagicMock(text="Fallback post-mortem text")]
+        mock_resp.content = [MagicMock(type="text", text="Fallback post-mortem text")]
         return mock_resp
 
     mock_client = MagicMock()

@@ -44,7 +44,7 @@ def daily_intelligence_brief(
     Sonnet daily brief: thesis health per position + macro read + risk flags.
     Returns the brief text. Logs to ai_pm_daily_briefs.jsonl.
     """
-    from ascent.llm.client import SONNET_MODEL
+    from ascent.llm.client import SONNET_MODEL, extract_text
     import anthropic
     client = anthropic.Anthropic()
 
@@ -102,10 +102,10 @@ Give a sharp, experienced daily review in three sections:
 Be direct, specific, and critical. Reference the actual return numbers. A Wall Street vet doesn't hedge every sentence."""
 
     resp = client.messages.create(
-        model=SONNET_MODEL, max_tokens=600,
+        model=SONNET_MODEL, max_tokens=4096,   # headroom: thinking shares this budget
         messages=[{"role": "user", "content": prompt}],
     )
-    brief_text = resp.content[0].text if resp.content else ""
+    brief_text = extract_text(resp)
 
     BRIEF_LOG.parent.mkdir(parents=True, exist_ok=True)
     with open(BRIEF_LOG, "a") as f:
@@ -173,7 +173,7 @@ def run_post_mortem(today: date, feedback: dict) -> Optional[str]:
             for s in scored
         )
 
-    from ascent.llm.client import SONNET_MODEL
+    from ascent.llm.client import SONNET_MODEL, extract_text
     import anthropic
     client = anthropic.Anthropic()
 
@@ -202,10 +202,10 @@ Do a honest, self-critical post-mortem in three parts:
 **ONE RULE TO ADD TO YOUR PLAYBOOK** — based on this rebalance, what's one specific, actionable pattern to remember? Format: "When [condition], [action] because [reason]." Make it concrete enough to apply next time."""
 
     resp = client.messages.create(
-        model=SONNET_MODEL, max_tokens=700,
+        model=SONNET_MODEL, max_tokens=4096,   # headroom: thinking shares this budget
         messages=[{"role": "user", "content": prompt}],
     )
-    mortem_text = resp.content[0].text if resp.content else ""
+    mortem_text = extract_text(resp)
 
     POSTMORTEM_LOG.parent.mkdir(parents=True, exist_ok=True)
     with open(POSTMORTEM_LOG, "a") as f:
@@ -226,7 +226,7 @@ def update_pattern_memory(post_mortem_text: str, today: date) -> None:
     Extract the 'one rule' from the post-mortem and add it to the pattern memory.
     Uses Haiku — cheap extraction, not generation.
     """
-    from ascent.llm.client import HAIKU_MODEL
+    from ascent.llm.client import HAIKU_MODEL, extract_text
     import anthropic
     client = anthropic.Anthropic()
 
@@ -252,7 +252,7 @@ Return ONLY the JSON, no other text."""
     )
 
     try:
-        extracted = json.loads(resp.content[0].text.strip())
+        extracted = json.loads(extract_text(resp).strip())
         if extracted.get("avoid"):
             patterns.setdefault("avoid", []).extend(extracted["avoid"])
             patterns["avoid"] = patterns["avoid"][-20:]  # keep last 20

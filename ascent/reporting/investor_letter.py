@@ -642,7 +642,7 @@ def _write_letter_via_llm(user_prompt: str, year: int, month: int) -> str:
     month_name = calendar.month_name[month]
 
     try:
-        from ascent.llm.client import get_client, SONNET_MODEL
+        from ascent.llm.client import get_client, SONNET_MODEL, extract_text
         client = get_client()
         system = _SYSTEM_PROMPT.format(month_name=month_name, year=year)
         resp = client.messages.create(
@@ -651,7 +651,7 @@ def _write_letter_via_llm(user_prompt: str, year: int, month: int) -> str:
             system=system,
             messages=[{"role": "user", "content": user_prompt}],
         )
-        return resp.content[0].text
+        return extract_text(resp)
     except Exception as e:
         log.error(f"[Letter] LLM call failed: {e}")
         return f"[Letter generation failed: {e}]\n\n{user_prompt}"

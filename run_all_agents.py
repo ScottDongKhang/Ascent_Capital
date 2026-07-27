@@ -138,7 +138,7 @@ Be specific. Cite the return numbers from the table. No vague statements."""
 
 def _write_decision_log(today, ai_pm_result, quant_weights: dict,
                         blended_weights: dict, authority_state: dict,
-                        phase2_model: str = "claude-sonnet-4-6") -> None:
+                        phase2_model: str = "claude-sonnet-5") -> None:
     """Write one entry to ai_pm_decision_log.jsonl per rebalance day."""
     try:
         AI_PM_DECISION_LOG.parent.mkdir(parents=True, exist_ok=True)
@@ -1388,7 +1388,7 @@ def main():
 
     _quant_weights_snapshot = dict(merged_weights)  # updated after Phase 1 (Track A)
     _snap_ai_weights = None
-    _phase2_model_used = "claude-sonnet-4-6"
+    _phase2_model_used = "claude-sonnet-5"
 
     if not is_rebalance:
         # Non-rebalance: lightweight Haiku daily view

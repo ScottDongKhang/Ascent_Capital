@@ -9,7 +9,7 @@ Agents:
   - Regime specialist  — LLM, Haiku
   - Quant sanity checker — pure Python, no LLM
 
-Uses claude-sonnet-4-6 (DEBATE_MODEL) for bull/bear/devil.
+Uses claude-sonnet-5 (DEBATE_MODEL) for bull/bear/devil.
 Uses claude-haiku-4-5-20251001 (HAIKU_MODEL) for regime specialist.
 Quant sanity checker uses no LLM.
 """

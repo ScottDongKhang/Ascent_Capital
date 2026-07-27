@@ -18,10 +18,30 @@ Python 3.12.13, venv at `.venv/`. Always use `.venv/bin/python`. API keys via `A
 
 Import constants from here — never redefine locally:
 ```python
-DEFAULT_MODEL = "claude-opus-4-6"           # AI PM synthesis (Phase 2)
-SONNET_MODEL  = "claude-sonnet-4-6"         # debate agents, red team, pre-thesis (Phase 1)
+DEFAULT_MODEL = "claude-opus-5"             # AI PM synthesis (Phase 2)
+SONNET_MODEL  = "claude-sonnet-5"           # debate agents, red team, pre-thesis (Phase 1)
 HAIKU_MODEL   = "claude-haiku-4-5-20251001" # classifiers, weight adjustment
 ```
+
+**Claude 5 rules (migrated 2026-07-27 from the 4.6 generation):**
+- **Never index `resp.content[0].text`** — thinking is ON by default, so block 0 is
+  usually a thinking block. Use `from ascent.llm.client import extract_text`.
+- **Never pass `temperature` / `top_p` / `top_k` to the API** — 400 on Claude 5. The
+  `temperature` kwarg still exists on the wrappers for call-site compatibility and is
+  silently dropped for Claude 5 models; steer with prompts instead.
+- **Never pass `thinking={"type": "enabled", "budget_tokens": N}`** — 400. Depth is set
+  by `output_config.effort` (`low`/`medium`/`high`/`xhigh`/`max`). Wrapper defaults:
+  `chat_completion`/`generate_structured` = medium, `extended_thinking_completion` and
+  `tool_completion` = high.
+- **`max_tokens` caps thinking + visible text together.** The wrappers raise it to
+  `_MIN_TOKENS_WITH_THINKING` (4096); direct `messages.create()` callers must leave
+  their own headroom or thinking will consume the whole budget and return no text.
+- **Keep thinking enabled in tool loops.** With thinking disabled, Claude 5 can emit a
+  tool call as visible text instead of a `tool_use` block — the turn succeeds and the
+  tool silently never runs.
+- **Echo thinking blocks back unchanged** when continuing a turn (handled inside
+  `tool_completion`); dropping or editing them is rejected.
+- Haiku 4.5 is already current and is unchanged — it keeps the legacy parameter path.
 
 ---
 

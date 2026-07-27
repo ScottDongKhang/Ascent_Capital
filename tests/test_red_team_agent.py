@@ -25,6 +25,7 @@ _SAMPLE_THESIS = {
 def _make_mock_client(return_text: str = "This portfolio will blow up.") -> MagicMock:
     """Return a mock Anthropic client that returns return_text on messages.create."""
     mock_content_block = MagicMock()
+    mock_content_block.type = "text"
     mock_content_block.text = return_text
 
     mock_response = MagicMock()

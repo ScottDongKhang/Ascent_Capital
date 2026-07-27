@@ -2,10 +2,23 @@
 ascent/llm/client.py
 Centralized LLM client for Ascent Capital.
 
-Uses Anthropic SDK directly with Claude Opus 4.6.
+Uses Anthropic SDK directly with the Claude 5 generation (Opus 5 / Sonnet 5)
+plus Haiku 4.5 for classifiers.
 
 Configuration:
     ANTHROPIC_API_KEY in .env
+
+Claude 5 notes (differ from the 4.6 generation this module used to target):
+  - `temperature` / `top_p` / `top_k` are REJECTED (400). The `temperature`
+    arguments below are retained for call-site compatibility but are no longer
+    forwarded to the API; steer behaviour with prompts instead.
+  - Manual `thinking={"type": "enabled", "budget_tokens": N}` is REJECTED (400).
+    Depth is controlled by `output_config.effort` instead.
+  - Thinking is ON BY DEFAULT. `response.content[0]` may be a thinking block, so
+    text must be extracted by filtering on block type — never by index. Use
+    `extract_text()` below rather than `resp.content[0].text`.
+  - `max_tokens` caps thinking + visible text together, so a tight cap can be
+    consumed entirely by thinking. `_MIN_TOKENS_WITH_THINKING` enforces a floor.
 """
 
 import os
@@ -20,10 +33,16 @@ log = logging.getLogger(__name__)
 # ── Cost accumulator (per-process, reset on each run) ─────────────────────────
 _PRICING = {
     # (input $/MTok, output $/MTok)
+    # Current generation.
+    "claude-opus-5":             ( 5.00, 25.00),
+    # Sonnet 5 carries introductory pricing of $2/$10 through 2026-08-31; the
+    # standard $3/$15 is used here so cost estimates never understate the bill.
+    "claude-sonnet-5":           ( 3.00, 15.00),
+    "claude-haiku-4-5-20251001": ( 0.80,  4.00),
+    # Retained so historical cost_log.jsonl entries still price correctly.
     "claude-opus-4-6":           (15.00, 75.00),
     "claude-opus-4-7":           (15.00, 75.00),
     "claude-sonnet-4-6":         ( 3.00, 15.00),
-    "claude-haiku-4-5-20251001": ( 0.80,  4.00),
 }
 _DEFAULT_PRICING = (3.00, 15.00)  # fallback for unknown models
 
@@ -87,12 +106,72 @@ def _load_env():
 _load_env()
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-DEFAULT_MODEL     = "claude-opus-4-6"
-SONNET_MODEL      = "claude-sonnet-4-6"
+DEFAULT_MODEL     = "claude-opus-5"
+SONNET_MODEL      = "claude-sonnet-5"
 HAIKU_MODEL       = "claude-haiku-4-5-20251001"
 
 # Retry config
 _MAX_RETRIES = 3
+
+# Models on the Claude 5 generation, where thinking is on by default and the
+# sampling / budget_tokens parameters are rejected.
+_CLAUDE_5_MODELS = frozenset({"claude-opus-5", "claude-sonnet-5"})
+
+# Thinking and visible text share the max_tokens budget, so a cap tuned for a
+# non-thinking model can be consumed entirely by thinking and return no text.
+# Several callers pass 500-2000; this floor keeps them producing output.
+_MIN_TOKENS_WITH_THINKING = 4096
+
+_ADAPTIVE_THINKING = {"type": "adaptive"}
+
+
+def _is_claude_5(model: str) -> bool:
+    return model in _CLAUDE_5_MODELS
+
+
+def extract_text(resp) -> str:
+    """Join the text blocks of a Messages response.
+
+    On the Claude 5 generation thinking is enabled by default, so `content[0]`
+    is frequently a thinking block. Indexing it raises AttributeError or yields
+    empty output; always filter by block type instead.
+
+    Returns "" for a refusal or an empty response rather than raising, so
+    callers keep their existing "empty means no result" handling.
+    """
+    if resp is None or not getattr(resp, "content", None):
+        return ""
+    if getattr(resp, "stop_reason", None) == "refusal":
+        details = getattr(resp, "stop_details", None)
+        log.warning("[LLM] Request refused by safety classifiers (category=%s)",
+                    getattr(details, "category", None))
+        return ""
+    parts = [b.text for b in resp.content if getattr(b, "type", "") == "text"]
+    return "\n".join(parts)
+
+
+def _thinking_kwargs(model: str, max_tokens: int, effort: str) -> tuple[dict, int]:
+    """Return (extra request kwargs, adjusted max_tokens) for `model`.
+
+    Claude 5 models take adaptive thinking plus an effort level; older models
+    keep their previous behaviour so a pinned legacy model still works.
+    """
+    if not _is_claude_5(model):
+        return {}, max_tokens
+    adjusted = max(max_tokens, _MIN_TOKENS_WITH_THINKING)
+    if adjusted != max_tokens:
+        log.debug("[LLM] max_tokens %d -> %d to leave room for thinking (%s)",
+                  max_tokens, adjusted, model)
+    return {"thinking": dict(_ADAPTIVE_THINKING)}, adjusted
+
+
+def _merge_output_config(base: dict | None, effort: str | None) -> dict | None:
+    """Combine a caller-supplied output_config with an effort level."""
+    if effort is None:
+        return base
+    merged = dict(base or {})
+    merged.setdefault("effort", effort)
+    return merged
 
 # Lazy singleton — initialized on first call, reused thereafter
 _client: Optional[object] = None
@@ -126,6 +205,7 @@ def chat_completion(
     temperature: float = 0.7,
     use_cache: bool = False,
     output_config: dict | None = None,
+    effort: str = "medium",
 ) -> str:
     """
     Send a chat completion request to Anthropic.
@@ -134,11 +214,13 @@ def chat_completion(
         messages:    List of {"role": "user"/"system"/"assistant", "content": "..."}
                      System messages are extracted and passed as the system param.
         model:       Anthropic model string
-        max_tokens:  Max output tokens
-        temperature: Sampling temperature
+        max_tokens:  Max output tokens (raised to the thinking floor on Claude 5)
+        temperature: IGNORED on Claude 5 models, which reject the parameter.
+                     Kept so existing call sites keep working; steer with prompts.
+        effort:      low | medium | high | xhigh | max — controls thinking depth.
 
     Returns:
-        The assistant's response text.
+        The assistant's response text ("" on a safety refusal).
     """
     _check_api_key()
 
@@ -153,12 +235,18 @@ def chat_completion(
         else:
             filtered_messages.append(m)
 
+    thinking_kwargs, max_tokens = _thinking_kwargs(model, max_tokens, effort)
     kwargs = dict(
         model=model,
         max_tokens=max_tokens,
-        temperature=temperature,
         messages=filtered_messages,
+        **thinking_kwargs,
     )
+    if _is_claude_5(model):
+        # temperature is rejected with a 400 on this generation.
+        output_config = _merge_output_config(output_config, effort)
+    else:
+        kwargs["temperature"] = temperature
     if system_prompt:
         if use_cache:
             kwargs["system"] = [
@@ -173,7 +261,7 @@ def chat_completion(
         try:
             response = client.messages.create(**kwargs)
             _record_usage(model, response.usage.input_tokens, response.usage.output_tokens)
-            return response.content[0].text
+            return extract_text(response)
         except Exception as e:
             if attempt == _MAX_RETRIES - 1:
                 raise
@@ -190,11 +278,14 @@ def generate_structured(
     temperature: float = 0.4,
     use_cache: bool = False,
     json_schema: dict | None = None,
+    effort: str = "medium",
 ) -> str:
     """
     Convenience wrapper for structured generation tasks.
-    Lower temperature for more deterministic output.
     Pass json_schema to enforce response shape via structured outputs.
+
+    `temperature` is ignored on Claude 5 models (see chat_completion); determinism
+    now comes from the schema plus a tightly-scoped prompt.
     """
     output_config = (
         {"format": {"type": "json_schema", "schema": json_schema}}
@@ -211,6 +302,7 @@ def generate_structured(
         temperature=temperature,
         use_cache=use_cache,
         output_config=output_config,
+        effort=effort,
     )
 
 
@@ -219,8 +311,15 @@ def extended_thinking_completion(
     model: str = DEFAULT_MODEL,
     max_tokens: int = 5000,
     thinking_budget: int = 3000,
+    effort: str = "high",
 ) -> str:
-    """Extended thinking mode. temperature=1 required by Anthropic API. Falls back on rejection."""
+    """Deep-reasoning completion.
+
+    On Claude 5 this uses adaptive thinking at `effort` (default "high"). The
+    `thinking_budget` argument is retained for call-site compatibility but is no
+    longer sent — fixed token budgets are rejected on this generation; depth is
+    controlled by `effort`. Older models keep the legacy budget_tokens path.
+    """
     _check_api_key()
     client = _get_client()
     system_prompt = ""
@@ -230,26 +329,36 @@ def extended_thinking_completion(
             system_prompt = m["content"]
         else:
             filtered.append(m)
-    kwargs = dict(
-        model=model,
-        max_tokens=max_tokens,
-        temperature=1,
-        thinking={"type": "enabled", "budget_tokens": thinking_budget},
-        messages=filtered,
-    )
+
+    if _is_claude_5(model):
+        thinking_kwargs, max_tokens = _thinking_kwargs(model, max_tokens, effort)
+        kwargs = dict(
+            model=model,
+            max_tokens=max_tokens,
+            messages=filtered,
+            output_config={"effort": effort},
+            **thinking_kwargs,
+        )
+    else:
+        kwargs = dict(
+            model=model,
+            max_tokens=max_tokens,
+            temperature=1,
+            thinking={"type": "enabled", "budget_tokens": thinking_budget},
+            messages=filtered,
+        )
     if system_prompt:
         kwargs["system"] = system_prompt
     for attempt in range(_MAX_RETRIES):
         try:
             resp = client.messages.create(**kwargs)
             _record_usage(model, resp.usage.input_tokens, resp.usage.output_tokens)
-            text_parts = [b.text for b in resp.content if getattr(b, "type", "") == "text"]
-            return "\n".join(text_parts)
+            return extract_text(resp)
         except Exception as e:
             msg = str(e).lower()
-            if any(x in msg for x in ("thinking", "budget", "unsupported", "temperature")):
+            if any(x in msg for x in ("thinking", "budget", "unsupported", "temperature", "effort")):
                 log.warning(f"[LLM] Extended thinking unavailable ({e}), falling back")
-                return chat_completion(messages, model=model, max_tokens=max_tokens, temperature=0.3)
+                return chat_completion(messages, model=model, max_tokens=max_tokens, effort=effort)
             if attempt == _MAX_RETRIES - 1:
                 raise
             time.sleep(2 ** attempt)
@@ -272,6 +381,7 @@ def tool_completion(
     max_tokens: int = 2000,
     max_tool_calls: int = 3,
     use_cache: bool = False,
+    effort: str = "high",
 ) -> str:
     """
     Execute an LLM call with Anthropic tool use, running the tool loop until
@@ -285,13 +395,21 @@ def tool_completion(
         model:          Anthropic model string.
         max_tokens:     Max output tokens per call.
         max_tool_calls: Maximum number of tool call iterations before forcing a final response.
+        effort:         Thinking depth for the loop. Defaults to "high" — this drives the
+                        AI PM's portfolio judgement, so it is deliberately not cheapened.
 
     Returns:
         The agent's final text response after all tool calls.
+
+    Thinking is left enabled on Claude 5 here on purpose: with thinking disabled
+    that generation can emit a tool call as visible text instead of a tool_use
+    block, which completes the turn successfully while silently never running
+    the tool — a failure mode this loop could not detect.
     """
     _check_api_key()
     client   = _get_client()
     messages = [{"role": "user", "content": user_prompt}]
+    thinking_kwargs, max_tokens = _thinking_kwargs(model, max_tokens, effort)
 
     for _iteration in range(max_tool_calls + 1):
         system_block = (
@@ -304,7 +422,10 @@ def tool_completion(
             tools=tools,
             messages=messages,
             system=system_block,
+            **thinking_kwargs,
         )
+        if _is_claude_5(model):
+            kwargs["output_config"] = {"effort": effort}
         for attempt in range(_MAX_RETRIES):
             try:
                 resp = client.messages.create(**kwargs)
@@ -317,18 +438,20 @@ def tool_completion(
                 log.warning("[LLM/Tools] Attempt %d failed (%s), retry in %ds", attempt + 1, e, wait)
                 time.sleep(wait)
 
+        if resp.stop_reason == "refusal":
+            log.warning("[LLM/Tools] Request refused by safety classifiers; ending loop")
+            return ""
+
         if resp.stop_reason == "end_turn":
-            text_parts = [
-                block.text for block in resp.content
-                if getattr(block, "type", "") == "text"
-            ]
-            return "\n".join(text_parts)
+            return extract_text(resp)
 
         if resp.stop_reason == "tool_use":
             tool_use_blocks = [b for b in resp.content if getattr(b, "type", "") == "tool_use"]
             if not tool_use_blocks:
                 break
 
+            # Thinking blocks must be echoed back unchanged when continuing a
+            # turn on the same model — dropping or editing them is rejected.
             assistant_content = []
             for block in resp.content:
                 block_type = getattr(block, "type", "")
@@ -341,6 +464,9 @@ def tool_completion(
                     })
                 elif block_type == "text":
                     assistant_content.append({"type": "text", "text": block.text})
+                elif block_type in ("thinking", "redacted_thinking"):
+                    assistant_content.append(block.to_dict() if hasattr(block, "to_dict")
+                                             else block.model_dump())
 
             messages.append({"role": "assistant", "content": assistant_content})
 

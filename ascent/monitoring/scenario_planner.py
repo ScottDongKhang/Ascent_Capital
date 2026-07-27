@@ -153,7 +153,7 @@ def _assess_scenarios_with_llm(
     Single call to minimize cost.
     """
     try:
-        from ascent.llm.client import SONNET_MODEL
+        from ascent.llm.client import SONNET_MODEL, extract_text
         import anthropic
         client = anthropic.Anthropic()
 
@@ -191,10 +191,10 @@ Respond with a JSON array, one object per scenario, in the same order:
 
         resp = client.messages.create(
             model=SONNET_MODEL,
-            max_tokens=1000,
+            max_tokens=4096,   # headroom: thinking shares this budget
             messages=[{"role": "user", "content": prompt}],
         )
-        text = resp.content[0].text.strip()
+        text = extract_text(resp).strip()
         if "```" in text:
             text = text.split("```")[1].lstrip("json").strip()
         return json.loads(text)
