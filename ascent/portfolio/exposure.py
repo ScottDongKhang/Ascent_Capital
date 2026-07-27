@@ -138,6 +138,35 @@ def vol_target_scale(
     )
 
 
+def strategy_return_proxy(
+    weights: pd.DataFrame,
+    close: pd.DataFrame,
+) -> pd.Series:
+    """
+    Daily return series of the book: r(t) = sum_i w_i(t-1) * ret_i(t).
+
+    Causal by construction — yesterday's weights against today's returns.
+    Used as the reference series for strategy-own volatility targeting
+    (Barroso & Santa-Clara 2015, Moreira & Muir 2017), because the realized
+    return series is not available inside the strategy before it runs.
+
+    Symbols present in `weights` but absent from `close` contribute zero
+    rather than NaN, so one missing ticker cannot blank the whole series.
+    """
+    if weights is None or weights.empty or close is None or close.empty:
+        return pd.Series(dtype=float)
+
+    cols = [c for c in weights.columns if c in close.columns]
+    if not cols:
+        return pd.Series(0.0, index=weights.index)
+
+    w = weights[cols].astype(float).fillna(0.0)
+    rets = close[cols].reindex(w.index).pct_change().fillna(0.0)
+
+    # shift(1): weights known at the close of t-1 earn t's return.
+    return (w.shift(1).fillna(0.0) * rets).sum(axis=1)
+
+
 def apply_exposure_overlays(
     weights: pd.DataFrame,
     spy_close: pd.Series,

@@ -89,3 +89,52 @@ class TestVolTargetScaleUnchanged:
                                     target_vol=VOL_TARGET,
                                     floor=VOL_FLOOR, cap=VOL_CAP)
         pd.testing.assert_series_equal(legacy, direct)
+
+
+from ascent.portfolio.exposure import strategy_return_proxy
+
+
+class TestStrategyReturnProxy:
+    def test_single_asset_full_weight_reproduces_asset_return(self):
+        idx = pd.bdate_range("2025-01-01", periods=4)
+        close = pd.DataFrame({"A": [100.0, 110.0, 99.0, 108.9]}, index=idx)
+        w = pd.DataFrame({"A": [1.0, 1.0, 1.0, 1.0]}, index=idx)
+        out = strategy_return_proxy(w, close)
+        assert out.loc[idx[1]] == pytest.approx(0.10)
+        assert out.loc[idx[2]] == pytest.approx(-0.10)
+
+    def test_half_weight_earns_half_the_return(self):
+        idx = pd.bdate_range("2025-01-01", periods=3)
+        close = pd.DataFrame({"A": [100.0, 110.0, 121.0]}, index=idx)
+        w = pd.DataFrame({"A": [0.5, 0.5, 0.5]}, index=idx)
+        out = strategy_return_proxy(w, close)
+        assert out.loc[idx[1]] == pytest.approx(0.05)
+
+    def test_uses_yesterdays_weights_not_todays(self):
+        """Causality: a weight set on day t must not earn day t's return."""
+        idx = pd.bdate_range("2025-01-01", periods=3)
+        close = pd.DataFrame({"A": [100.0, 200.0, 200.0]}, index=idx)
+        # Zero weight on day 0 -> the +100% move on day 1 must NOT be earned.
+        w = pd.DataFrame({"A": [0.0, 1.0, 1.0]}, index=idx)
+        out = strategy_return_proxy(w, close)
+        assert out.loc[idx[1]] == pytest.approx(0.0)
+
+    def test_cash_position_contributes_zero(self):
+        idx = pd.bdate_range("2025-01-01", periods=3)
+        close = pd.DataFrame({"A": [100.0, 110.0, 121.0],
+                              "B": [50.0, 55.0, 60.5]}, index=idx)
+        w = pd.DataFrame({"A": [0.5, 0.5, 0.5], "B": [0.0, 0.0, 0.0]}, index=idx)
+        out = strategy_return_proxy(w, close)
+        assert out.loc[idx[1]] == pytest.approx(0.05)
+
+    def test_missing_price_column_is_ignored_not_fatal(self):
+        idx = pd.bdate_range("2025-01-01", periods=3)
+        close = pd.DataFrame({"A": [100.0, 110.0, 121.0]}, index=idx)
+        w = pd.DataFrame({"A": [0.5, 0.5, 0.5], "GHOST": [0.5, 0.5, 0.5]},
+                         index=idx)
+        out = strategy_return_proxy(w, close)
+        assert out.loc[idx[1]] == pytest.approx(0.05)
+        assert not out.isna().any()
+
+    def test_empty_inputs_return_empty(self):
+        assert strategy_return_proxy(pd.DataFrame(), pd.DataFrame()).empty
