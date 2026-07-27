@@ -41,6 +41,14 @@ HALT_STATE_PATH      = Path("execution/halt_state.json")
 AI_PM_DECISION_LOG   = Path("logs/ai_pm_decision_log.jsonl")
 AI_PM_DAILY_VIEWS    = Path("logs/ai_pm_daily_views.jsonl")
 
+# Catch-up guard (W3 item 5): default staleness threshold, in NYSE trading
+# days, beyond which the daily run refuses to auto-execute without an
+# explicit --catch-up flag. Mutated only by _catch_up_guard()/main() to
+# record whether this run is a catch-up recovery, so _log_run can tag the
+# multi_agent_run.jsonl entry accordingly.
+CATCH_UP_STALE_TRADING_DAYS = 3
+_CATCH_UP_STATE = {"active": False, "missed_dates": []}
+
 
 def _fetch_position_returns(symbols: list) -> dict:
     """Fetch today's price changes for held symbols. Returns {sym: pct_change}."""
@@ -627,6 +635,51 @@ def main():
         run_weekend(dry_run=dry_run)
         return
 
+    # ── W3.5: Catch-up guard — refuse to auto-execute on a stale pipeline ─────
+    # This exists because the 27-day outage that motivated this whole plan
+    # produced zero warning: the daily job just silently stopped running.
+    catch_up_flag = "--catch-up" in sys.argv
+    must_refuse, _missed_dates = _catch_up_guard(today)
+    if must_refuse:
+        if catch_up_flag:
+            _CATCH_UP_STATE["active"] = True
+            _CATCH_UP_STATE["missed_dates"] = _missed_dates
+            print(f"\n{'!'*60}")
+            print(f"  CATCH-UP MODE")
+            print(f"  Last logged run is stale — {len(_missed_dates)} trading day(s) missed.")
+            if _missed_dates:
+                print(f"  Skipped dates (NOT replayed): {', '.join(_missed_dates)}")
+            print(f"  Running ONE fresh rebalance on today's data ({today.isoformat()}).")
+            print(f"  Missed dates are intentionally not replayed — stale intent and")
+            print(f"  double transaction costs are worse than a clean gap.")
+            print(f"{'!'*60}\n")
+            try:
+                Path("logs/eod_log.jsonl").parent.mkdir(parents=True, exist_ok=True)
+                Path("logs/eod_log.jsonl").open("a").write(json.dumps({
+                    "date":          today.isoformat(),
+                    "run_type":      "catch_up",
+                    "skipped_dates": _missed_dates,
+                    "note":          (f"Outage recovery: {len(_missed_dates)} trading day(s) "
+                                      "missed prior to this run; not replayed."),
+                    "timestamp":     datetime.now().isoformat(),
+                }) + "\n")
+            except Exception as _cu_log_e:
+                print(f"[CatchUpGuard] Failed to write catch_up marker to eod_log: {_cu_log_e}")
+        else:
+            print(f"\n{'!'*60}")
+            print(f"  OUTAGE DETECTED — refusing to auto-execute")
+            print(f"  {'='*56}")
+            if _missed_dates:
+                print(f"  Last logged run is {len(_missed_dates)} trading day(s) stale.")
+                print(f"  Missed trading days: {', '.join(_missed_dates)}")
+            else:
+                print(f"  No prior run could be found in logs/eod_log.jsonl.")
+            print(f"\n  RECOVERY: re-run with --catch-up to compute ONE fresh")
+            print(f"  rebalance on today's data. Missed dates will NOT be replayed")
+            print(f"  (stale intent + double transaction costs).")
+            print(f"{'!'*60}\n")
+            sys.exit(1)
+
     # ── Startup validation: sector data must be present before agents spawn ───
     from ascent.config.settings import UniverseConfig, get_config
     us_symbols = UniverseConfig().symbols
@@ -647,6 +700,19 @@ def main():
         update_outcomes({})
     except Exception:
         pass
+
+    # ── W4: score pending adversarial interventions on the daily path ────────
+    # Previously this was ONLY called from ascent/monitoring/weekend_runner.py,
+    # and the last weekend run was 2026-06-06 — seven weekends missed, so
+    # n_scored stayed 0 for every intervention type and the whole layer's
+    # authority was frozen at the 1pp floor. Fail-soft: never blocks the run.
+    try:
+        from debate.adversarial_authority import score_pending_interventions
+        _n_adv_scored = score_pending_interventions()
+        if _n_adv_scored:
+            print(f"[AdvAuth] Scored {_n_adv_scored} pending adversarial intervention(s)")
+    except Exception as _adv_score_e:
+        print(f"[AdvAuth] score_pending_interventions skipped: {_adv_score_e}")
 
     # Update calibration outcomes using real price returns (best-effort)
     try:
@@ -1198,7 +1264,10 @@ def main():
                       "rebalance (it will recompute the book anyway)")
             else:
                 from ascent.strategy.ticker_discovery import run_discovery as _run_discovery
-                _current_universe = list((merged_weights or {}).keys())
+                # Filter against the LIVE book, not the freshly recomputed target —
+                # otherwise "don't rediscover what we already hold" can abort on a
+                # name the account doesn't actually hold, or add one it already does.
+                _current_universe = list(_live_book_or(merged_weights).keys())
                 if _news_context and _current_universe:
                     _discovery = _run_discovery(_news_context, _current_universe)
                     if _discovery:
@@ -1928,6 +1997,12 @@ def _log_run(today, merged_weights, agent_outputs, dry_run):
         "timestamp":        datetime.now().isoformat(),
     }
 
+    if _CATCH_UP_STATE["active"]:
+        # So a catch-up recovery run does not silently read as a normal, flat
+        # day in the AI PM calibration and D-A*/B-A* counterfactual series.
+        run_log["run_type"]      = "catch_up"
+        run_log["skipped_dates"] = _CATCH_UP_STATE["missed_dates"]
+
     log_path = Path("logs/multi_agent_run.jsonl")
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with open(log_path, "a") as f:
@@ -2211,6 +2286,60 @@ def _is_near_scheduled_rebalance(today, window: int = 3, cal_path=None) -> bool:
         return False
 
 
+def _catch_up_guard(today, threshold_days: int = CATCH_UP_STALE_TRADING_DAYS):
+    """
+    Determine whether the daily run should refuse to auto-execute because the
+    last logged run is stale (W3 item 5 — the 27-day outage this guard exists
+    to catch never printed a warning; the pipeline just silently didn't run).
+
+    Returns (must_refuse: bool, missed_trading_days: list[str]).
+
+    Fail-safe: any failure to read/parse the log, or no prior run found at
+    all, returns must_refuse=True — refuse rather than silently proceed.
+
+    Reuses the same stdlib-only trading-day arithmetic as
+    scripts/heartbeat_check.py so the two staleness checks agree.
+    """
+    from datetime import timedelta as _timedelta
+    try:
+        from scripts.heartbeat_check import read_last_run_date, trading_days_between
+        last_run = read_last_run_date(Path("logs/eod_log.jsonl"))
+    except Exception as e:
+        print(f"[CatchUpGuard] Could not read last run date ({e}) — refusing (fail-safe).")
+        return True, []
+
+    if last_run is None:
+        print("[CatchUpGuard] No prior run found in logs/eod_log.jsonl — refusing (fail-safe).")
+        return True, []
+
+    missed = trading_days_between(last_run, today + _timedelta(days=1))
+    missed_iso = [d.isoformat() for d in missed]
+    must_refuse = len(missed) > threshold_days
+    return must_refuse, missed_iso
+
+
+def _live_book_or(fallback: dict) -> dict:
+    """
+    Return the LIVE Alpaca book as {symbol: weight}, normalized to sum to 1.0,
+    falling back to `fallback` when the broker returns nothing usable or raises.
+
+    This is the single implementation of the "read live positions, fall back to
+    a recomputed/passed-in book" pattern used by both the falsifier-trim path
+    and the discovery mini-rebalance path. Never raises.
+    """
+    try:
+        from ascent.execution.alpaca_broker import get_positions
+        pos = get_positions()
+        if pos is not None and not pos.empty and {"symbol", "weight"}.issubset(pos.columns):
+            book = {str(r["symbol"]): float(r["weight"]) for _, r in pos.iterrows()}
+            total = sum(abs(w) for w in book.values())
+            if total > 0:
+                return {k: v / total for k, v in book.items()}
+    except Exception:
+        pass
+    return dict(fallback or {})
+
+
 def _insert_candidate_weights(
     current_weights: dict,
     symbol: str,
@@ -2306,16 +2435,7 @@ def _apply_falsifier_trim(fired: list, current_weights: dict, today, dry_run: bo
             return
 
         # Base = live book when available, else today's merged weights
-        book = {}
-        try:
-            from ascent.execution.alpaca_broker import get_positions
-            pos = get_positions()
-            if pos is not None and not pos.empty and {"symbol", "weight"}.issubset(pos.columns):
-                book = {r["symbol"]: float(r["weight"]) for _, r in pos.iterrows()}
-        except Exception:
-            pass
-        if not book:
-            book = dict(current_weights or {})
+        book = _live_book_or(current_weights)
         if not book:
             print("[Falsifier] No book available — no trim")
             return
@@ -2423,10 +2543,17 @@ def _trigger_mini_rebalance(
     print(f"[Discovery] Catalyst: {result.catalyst_snippet}")
 
     try:
-        if not current_weights:
-            print("[Discovery] Mini-rebalance: current book is empty — aborting")
+        # Base book MUST be the live Alpaca book, not the freshly recomputed
+        # orchestrator target — otherwise the add-only insert below operates on
+        # a book nobody is holding, and the downstream diff-against-live-positions
+        # in run_eod_with_weights(force=True) turns every absent name into a full
+        # exit (2026-06-30 incident: 27 orders, 7 complete exits from a "discovery"
+        # trigger that only meant to add one name).
+        base_book = _live_book_or(current_weights)
+        if not base_book:
+            print("[Discovery] Mini-rebalance: no book available (live + fallback both empty) — aborting")
             return
-        if result.symbol in current_weights:
+        if result.symbol in base_book:
             print(f"[Discovery] {result.symbol} already held — nothing to add, aborting")
             return
 
@@ -2439,10 +2566,10 @@ def _trigger_mini_rebalance(
         # Add-only insertion: candidate gets an equal-weight slot, the rest of the
         # book is trimmed pro-rata (relative ordering preserved), max-weight cap
         # enforced via the optimizer's water-fill routine.
-        new_weights = _insert_candidate_weights(current_weights, result.symbol, max_weight=_max_w)
+        new_weights = _insert_candidate_weights(base_book, result.symbol, max_weight=_max_w)
         print(f"[Discovery] Add-only insertion: {result.symbol} @ "
               f"{new_weights.get(result.symbol, 0.0) * 100:.1f}% — "
-              f"{len(new_weights)} positions (was {len(current_weights)})")
+              f"{len(new_weights)} positions (was {len(base_book)})")
 
         # Regime label for the debate context (no agent re-run); read from the
         # us_equities output already computed this cycle if available.
@@ -2472,6 +2599,29 @@ def _trigger_mini_rebalance(
 
         if verdict.get("recommendation") == "halt_and_review":
             print("[Discovery] Debate: halt_and_review — mini-rebalance aborted")
+            return
+
+        # ── Safety assertion (fail-safe, not fail-open) ──────────────────────
+        # An add-only discovery insert must never produce a complete exit from
+        # the base book, and must never introduce more than one new symbol
+        # (the candidate itself). Either condition means the base book was
+        # wrong (e.g. recomputed target instead of live positions) — abort
+        # loudly rather than submit.
+        _exited_syms = sorted(
+            s for s, w in base_book.items()
+            if w > 0.0 and new_weights.get(s, 0.0) <= 0.0
+        )
+        _new_syms = sorted(set(new_weights) - set(base_book))
+        if _exited_syms or len(_new_syms) > 1:
+            import logging as _logging
+            _logging.error(
+                "[Discovery] SAFETY ABORT: add-only insert would fully exit %s "
+                "and/or introduce %d new symbol(s) %s vs base book (expected <=1, "
+                "the candidate) — refusing to submit",
+                _exited_syms, len(_new_syms), _new_syms,
+            )
+            print(f"[Discovery] SAFETY ABORT — full exits={_exited_syms}, "
+                  f"new symbols={_new_syms} — mini-rebalance NOT submitted")
             return
 
         if dry_run:

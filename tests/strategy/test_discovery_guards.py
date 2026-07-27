@@ -10,6 +10,8 @@ Two behaviors are enforced here:
 2. Add-only insertion — when discovery DOES fire, it must insert the candidate
    and trim the rest of the book pro-rata, NOT re-rank/re-optimize every holding.
 """
+import pandas as pd
+
 import run_all_agents as ra
 
 
@@ -119,3 +121,126 @@ def test_ic_decay_trigger_allowed_far_from_rebalance(tmp_path):
     # IC decay is allowed to fire when not near
     trigger_allowed = not near
     assert trigger_allowed, "IC decay trigger must be permitted when far from rebalance"
+
+
+# ── Guard D: _live_book_or — single implementation of live-book-with-fallback ─
+
+def test_live_book_or_normalizes_live_weights(mocker):
+    pos = pd.DataFrame({"symbol": ["AAA", "BBB"], "weight": [0.3, 0.3]})
+    mocker.patch("ascent.execution.alpaca_broker.get_positions", return_value=pos)
+    out = ra._live_book_or({"CCC": 1.0})
+    assert set(out) == {"AAA", "BBB"}
+    assert abs(sum(out.values()) - 1.0) < 1e-9
+
+
+def test_live_book_or_falls_back_when_broker_returns_empty(mocker):
+    mocker.patch("ascent.execution.alpaca_broker.get_positions", return_value=pd.DataFrame())
+    out = ra._live_book_or({"CCC": 1.0})
+    assert out == {"CCC": 1.0}
+
+
+def test_live_book_or_falls_back_when_broker_raises(mocker):
+    mocker.patch(
+        "ascent.execution.alpaca_broker.get_positions",
+        side_effect=RuntimeError("broker unreachable"),
+    )
+    out = ra._live_book_or({"CCC": 1.0})
+    assert out == {"CCC": 1.0}
+
+
+# ── Guard E: the discovery call site must use the live book ─────────────────
+#
+# These exercise _trigger_mini_rebalance itself (not just the helpers in
+# isolation) -- this is exactly the gap that let the 2026-06-30 incident ship:
+# the add-only insert unit tests all passed while the call site fed it the
+# freshly recomputed orchestrator target instead of the live Alpaca book.
+
+class _FakeResult:
+    def __init__(self, symbol, conviction_score=0.8, catalyst_snippet="test catalyst"):
+        self.symbol = symbol
+        self.conviction_score = conviction_score
+        self.catalyst_snippet = catalyst_snippet
+
+
+def _isolate_fs(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "data_cache").mkdir(exist_ok=True)
+    (tmp_path / "logs").mkdir(exist_ok=True)
+
+
+def test_mini_rebalance_inserts_onto_live_book_not_recomputed_target(tmp_path, monkeypatch, mocker):
+    _isolate_fs(tmp_path, monkeypatch)
+
+    # Live book actually held at the broker.
+    live_positions = pd.DataFrame({"symbol": ["AAA", "BBB"], "weight": [0.6, 0.4]})
+    mocker.patch("ascent.execution.alpaca_broker.get_positions", return_value=live_positions)
+    mocker.patch("ascent.execution.debate_gate.should_run_debate", return_value=False)
+    mock_eod = mocker.patch("ascent.execution.eod_runner.run_eod_with_weights")
+
+    # Freshly recomputed orchestrator target for today -- deliberately diverges
+    # from the live book (drops BBB, adds CCC), mirroring the real incident.
+    recomputed_target = {"AAA": 0.5, "CCC": 0.5}
+
+    ra._trigger_mini_rebalance(_FakeResult("NEW"), recomputed_target, ra.date(2026, 6, 30))
+
+    assert mock_eod.called, "run_eod_with_weights should have been invoked"
+    submitted = mock_eod.call_args[0][0]
+    # Base must be the LIVE book: BBB (live) must survive, CCC (recomputed-only)
+    # must never appear, and the candidate must be added.
+    assert "BBB" in submitted
+    assert "CCC" not in submitted
+    assert "NEW" in submitted
+
+
+def test_mini_rebalance_order_set_has_zero_full_exits(tmp_path, monkeypatch, mocker):
+    _isolate_fs(tmp_path, monkeypatch)
+
+    live_positions = pd.DataFrame({
+        "symbol": ["AAA", "BBB", "CCC"],
+        "weight": [0.5, 0.3, 0.2],
+    })
+    mocker.patch("ascent.execution.alpaca_broker.get_positions", return_value=live_positions)
+    mocker.patch("ascent.execution.debate_gate.should_run_debate", return_value=False)
+    mock_eod = mocker.patch("ascent.execution.eod_runner.run_eod_with_weights")
+
+    ra._trigger_mini_rebalance(_FakeResult("NEW"), {"unused": 1.0}, ra.date(2026, 6, 30))
+
+    assert mock_eod.called
+    submitted = mock_eod.call_args[0][0]
+    for sym in ("AAA", "BBB", "CCC"):
+        assert submitted.get(sym, 0.0) > 0.0, f"{sym} was fully exited by an add-only insert"
+
+
+def test_mini_rebalance_falls_back_to_current_weights_when_broker_empty(tmp_path, monkeypatch, mocker):
+    _isolate_fs(tmp_path, monkeypatch)
+
+    mocker.patch("ascent.execution.alpaca_broker.get_positions", return_value=pd.DataFrame())
+    mocker.patch("ascent.execution.debate_gate.should_run_debate", return_value=False)
+    mock_eod = mocker.patch("ascent.execution.eod_runner.run_eod_with_weights")
+
+    current_weights = {"AAA": 0.5, "BBB": 0.5}
+    ra._trigger_mini_rebalance(_FakeResult("NEW"), current_weights, ra.date(2026, 6, 30))
+
+    assert mock_eod.called
+    submitted = mock_eod.call_args[0][0]
+    assert "AAA" in submitted
+    assert "BBB" in submitted
+    assert "NEW" in submitted
+
+
+def test_mini_rebalance_safety_assertion_aborts_on_full_exit(tmp_path, monkeypatch, mocker):
+    _isolate_fs(tmp_path, monkeypatch)
+
+    live_positions = pd.DataFrame({"symbol": ["AAA", "BBB"], "weight": [0.6, 0.4]})
+    mocker.patch("ascent.execution.alpaca_broker.get_positions", return_value=live_positions)
+    mocker.patch("ascent.execution.debate_gate.should_run_debate", return_value=False)
+    mock_eod = mocker.patch("ascent.execution.eod_runner.run_eod_with_weights")
+
+    # Force a pathological insertion result that drops BBB entirely -- this is
+    # the safety net that must catch a regression even if the insertion logic
+    # itself is fine; it directly encodes "never submit a full exit".
+    mocker.patch.object(ra, "_insert_candidate_weights", return_value={"AAA": 0.5, "NEW": 0.5})
+
+    ra._trigger_mini_rebalance(_FakeResult("NEW"), {"AAA": 0.6, "BBB": 0.4}, ra.date(2026, 6, 30))
+
+    mock_eod.assert_not_called()
