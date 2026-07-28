@@ -125,9 +125,39 @@ One step at a time. Verify existing logic before proposing fixes. `ast.parse` af
 
 ---
 
+## Rebalance recap (required after every rebalance)
+
+After **any** run of `run_all_agents.py` that submits orders, write a four-part recap
+unprompted. This is the primary interface to what the system decided — a status line is
+not sufficient.
+
+1. **Reasoning behind the decision.** Read `outputs/debate_log/verdict_YYYY-MM-DD.json`
+   (`verdict.reasoning`, `verdict.key_risks`) and the adversarial intervention. Explain
+   why *these* trades, which argument won which exchange, and what the judge explicitly
+   declined to do. **Then verify execution matched the reasoning** — on 2026-07-27 the
+   judge argued against cutting UUP/TLT 48h before FOMC and the `reduce_size` fallback
+   (`[EodRunner] reduce_size: Haiku only reduced 0 positions — forcing trim on top
+   positions`) sold them anyway. Quote the reasoning; don't paraphrase it away.
+2. **Things to watch for.** Live catalysts (FOMC, earnings, ex-div), positions on thin
+   ice, guards that nearly fired, data sources that were down, anything that changes the
+   read next run.
+3. **Performance since the last rebalance.** Portfolio vs SPY over the window, with
+   per-position attribution when a few names dominate. Use
+   `alpaca_broker.get_portfolio_history()` (settled bars) — never same-day
+   `equity − last_equity`, which reads a fake 0.0 before ~17:00 PT.
+4. **Why performance looks like that.** The causal story, separating sizing/structure
+   from stock selection from things outside the model's control.
+
+**Ground every number in a real artifact and flag anything reconstructed.** A confident
+wrong number is worse than an acknowledged gap: on 2026-07-27 drawdown was reported as
+−8.5% from a synthetic equity curve while the kill switch's actual NAV/peak read 4.7%.
+
+---
+
 ## Current state (as of 2026-06-22)
 
-- **AI PM**: Level 1 (Analyst, 5% authority). D−A★ = −6.52pp/23d, B−A★ = −5.27pp/31d. Modestly value-subtracting in calm_bull; n small — watch at Jun 24, not a disable signal yet. Counterfactual self-heals each run.
+- **AI PM**: Level 1 (Analyst, 5% authority). **As of 2026-07-27: B−A★ = −7.82pp/38d, D−A★ = −6.34pp/29d** (was −5.27pp/−6.52pp in June — the gap widened). Pure quant +23.59% beats both actual (+16.03%) and SPY (+16.63%); pure AI PM is worst at +11.54%.
+  **Diagnose transmission before judging judgment.** On 2026-07-27 the judge's reasoning was sound (flagged a real correlation risk from the model's own contradiction: quant VaR −0.96% vs regime-flip −7.1%) but never reached the weights — `reduce_size` fired, the Haiku adjustment trimmed 0 positions, and a size-sorted fallback cut UUP/TLT, the exact positions the judge argued to protect. Disabling the layer is right only if the judgment is bad, not if a fallback is discarding it.
 - **No alpha vs SPY is structural**: ~22% defensive non-equity sleeves + 200MA cut + 15% vol-target overlay cost beta in an equity-only bull. WF OOS confirms positive risk-adjusted alpha; raw-return lag is by design.
 - **WF OOS**: ✅ VERIFIED (2026-06-22) on a clean re-fetched cache — **Sharpe 0.41, CAGR +10.3%, +1.0pp excess CAGR vs SPY, max DD −32.9%, beta 0.73**, OOS 2021-01→2026-01 (1134 days, 21 folds). WFE −0.65 (overfit — disclose); engine Sortino field buggy (real ≈0.68, don't cite). Supersedes the corrupted-cache 0.483/12.61%. Artifact `outputs/wf_results/wf_report_clean_2026-06-22.json`. Single source of truth: `CURRENT_VERIFIED_NUMBERS.md`.
 - **Regime**: calm_bull.
@@ -139,16 +169,6 @@ One step at a time. Verify existing logic before proposing fixes. `ast.parse` af
 ## Session log
 
 > Prior sessions archived to `docs/session_log_archive.md`.
-
-### 2026-07-27 (risk-management plans 3 & 4 — resumed after a lost terminal; both land DISABLED)
-- **Context:** work was resumed, not restarted. The trace was in worktree `.claude/worktrees/risk-mgmt` on branch `feature/risk-management` (clean tree, no stashes). Plans 1-2 of the four 2026-07-27 risk plans had already landed (`96e7987` cash-bucket, `2587069`→`fbd8661` stop-loss). Plans 3-4 were untouched. Both plan files now carry a **STATUS header** recording exactly what landed, so this archaeology is not needed again.
-- **Plan 3 — strategy-own vol targeting (Barroso & Santa-Clara 2015, Moreira & Muir 2017). Tasks 1-4 done, Task 5 (WF) deferred.** Extracted `realized_vol_scale()` (generic over any return series) with `vol_target_scale()` as a bit-identical SPY wrapper; added causal `strategy_return_proxy()` (`r(t) = Σ w(t-1)·ret(t)`); added `vol_reference` + `close` to `apply_exposure_overlays()` with fail-open fallback to `"spy"` on an unknown value or missing panel. **`vol_target_reference` defaults to `"spy"` — live behaviour unchanged.** Commits `26e42b2`, `7f89c67`, `b9ee614`, `d65c6a9`.
-- **BUG THE PLAN DID NOT ANTICIPATE (found + fixed + regression-tested):** the WF `_apply_vol_target` receives weights indexed at **rebalance dates only** (~every 10 days), and `strategy_return_proxy` reindexes prices onto the weights index. Feeding it the sparse frame yields ~10-day returns annualized by `sqrt(252)` — a **~3× vol overstatement that pins the scale near the 0.25 floor**. Measured on a 15%-vol book: **mean scale 0.466 (wrong) vs 0.95 (correct)**, i.e. the book would have been silently ~halved for a reason that is pure grid artifact. Fix: forward-fill the held book onto the daily close panel before computing the proxy. Production was never affected (daily index). Guard: `tests/portfolio/test_exposure_strategy_vol.py::TestProxyNeedsADailyGrid` (2 tests, one asserting the hazard still exists on a sparse grid so the guard cannot be silently removed).
-- **Plan 4 — momentum-crash indicator (Daniel & Moskowitz 2016). Tasks 1-3 done, Task 4 audit done, WF deferred.** `momentum_crash_scale()` fires `×0.50` when SPY's trailing ~504d return < 0 **AND** its trailing 21d return > 0 (both strictly causal); composed as a third multiplicative overlay; wired through production and research with an `inspect.getsource` **parity guard** so the two cannot silently diverge again. **Ships disabled** (`momentum_crash_overlay_enabled = False`). Commits `7425223`, `f2fea4a`, `ddde470`.
-- **FIRING AUDIT (the decisive cheap check, run before spending WF compute) — verbatim:** `OOS dates: 1395   crash-state dates: 64 (4.6%)`, `first: 2023-04-11  last: 2024-01-08`. 64 > 5 so the plan nominally says proceed. **But the episode decomposition is the real finding:** the 64 dates form 15 contiguous runs (largest 14d = 22% of firings), and **all 15 fall inside one 9-month macro window — the post-2022-bear recovery, Apr 2023 → Jan 2024**. That is ONE macro episode fragmented into 15 runs, not 15 independent events. Task 5's third condition ("improvement not driven by a single episode") is therefore very unlikely to be satisfiable on the 2021-2026 OOS window whatever the WF numbers show. Expected landing point is the plan's own documented outcome: leave disabled, keep the code, validate on pre-2021 history. Economically the timing is *correct* — it fires in the post-bear rebound, which is exactly the Daniel & Moskowitz state.
-- **Neither overlay would have prevented the ALGM/MRNA episode**, and both plans say so up front. Vol targeting is portfolio-level (scales the whole book, does not target two names); the crash indicator needs a 2y decline and the window was labelled `calm_bull`. The position-level answer was plan 2 (stop-loss, already landed, also disabled).
-- **Tests:** 113 passed across `tests/portfolio` + the two new config tests. `tests/portfolio/test_exposure.py` (the behaviour-preservation regression guard) passes **unedited** — verified via empty `git diff` after every task. Pre-existing unrelated failure: `tests/data/test_new_ingest.py::test_fetch_ff_factors_returns_dataframe` (openbb `_get_obb` attribute; module untouched by this work).
-- **Open:** (a) one combined walk-forward comparing baseline vs `vol_target_reference="strategy"` vs `momentum_crash_overlay_enabled=True` (~30 min/run via `scripts/run_ascent_wf.py`; the plans' baseline artifact `wf_report_cashfix_2026-07-27.json` does not exist, so the baseline must be run too); (b) apply each plan's decision gate; (c) branch `feature/risk-management` is NOT merged to `main` — main has since moved (`470a5ee`), so expect a `CLAUDE.md` merge conflict.
 
 ### 2026-07-04 (ascent-agri — first real user feedback, shipped same day)
 - **Chris Kornman (The Crown / Royal Coffee education) replied to Scott's outreach**: praise ("quite advanced for a high school student"), will refer people to the site, open invite to chat. His substance — the trade thinks in near-to-long-term trends (not intraday) and Royal is ~arabica-only — was built and deployed same day: "The long view" (full-history KC=F vs 200-day average) + "Growing conditions — Sul de Minas, Brazil" (rainfall anomaly + tmin with frost-risk line) live on the site. 156 tests.

@@ -21,6 +21,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from ascent.data.store.parquet import has_data, load_parquet
+from ascent.utils.market_time import market_today
 from ascent.portfolio.optimizer import SectorDataError
 
 from agents.ai_pm_agent import run_ai_pm, run_ai_pm_prethesis, AIPMResult, AIPreThesis
@@ -33,7 +34,10 @@ from ascent.monitoring.ai_pm_counterfactual import (
     score_daily as cf_score_daily, load_snapshots as cf_load_snapshots,
     print_cumulative_report as cf_print_report, backfill_track_b as cf_backfill_track_b,
 )
-from ascent.strategy.ai_pm_perf_feedback import compute_feedback as compute_ai_feedback
+from ascent.strategy.ai_pm_perf_feedback import (
+    compute_feedback as compute_ai_feedback,
+    derive_overrides,
+)
 
 
 SECTOR_OVERRIDE_LOG  = Path("logs/sector_override.jsonl")
@@ -142,9 +146,20 @@ def _write_decision_log(today, ai_pm_result, quant_weights: dict,
     """Write one entry to ai_pm_decision_log.jsonl per rebalance day."""
     try:
         AI_PM_DECISION_LOG.parent.mkdir(parents=True, exist_ok=True)
-        overrides = []
+        # Derive overrides from the two weight vectors rather than trusting the
+        # model to self-report them. `thesis["quant_overrides"]` came back empty
+        # on all 9 logged decisions, which pinned n_decisions_evaluated at 0 and
+        # made the authority ladder a downward-only ratchet (min_decisions >= 5
+        # is a hard promotion gate; demotion needs one bad day). Both vectors
+        # were already logged here, so the override set is recoverable by
+        # subtraction. `self_reported_overrides` is kept for comparison — the gap
+        # between what the model says it did and what it did is itself a signal.
+        _ai_book = (ai_pm_result.portfolio
+                    if ai_pm_result and not ai_pm_result.fallback else {}) or {}
+        overrides = derive_overrides(quant_weights, _ai_book)
+        _self_reported = []
         if ai_pm_result and ai_pm_result.thesis:
-            overrides = ai_pm_result.thesis.get("quant_overrides", [])
+            _self_reported = ai_pm_result.thesis.get("quant_overrides", []) or []
         entry = {
             "date":                  today.isoformat(),
             "level":                 authority_state.get("level", 0),
@@ -155,7 +170,8 @@ def _write_decision_log(today, ai_pm_result, quant_weights: dict,
             "perf_feedback_injected": Path("data_cache/ai_pm_perf_feedback.json").exists(),
             "quant_proposed":        {k: round(v, 6) for k, v in quant_weights.items()},
             "ai_pm_proposed":        {k: round(v, 6) for k, v in (ai_pm_result.portfolio if ai_pm_result and not ai_pm_result.fallback else {}).items()},
-            "overrides_applied":     overrides,
+            "overrides_applied":       overrides,
+            "self_reported_overrides": _self_reported,
             "final_blended":         {k: round(v, 6) for k, v in blended_weights.items()},
             "thesis_summary":        str((ai_pm_result.thesis or {}).get("market_view", ""))[:200] if ai_pm_result and ai_pm_result.thesis else "",
             "tool_failures":         list(ai_pm_result.tool_failures) if (ai_pm_result and hasattr(ai_pm_result, "tool_failures")) else [],
@@ -613,8 +629,13 @@ def _compute_calibration_returns(today: date) -> dict:
 def main():
     dry_run             = "--dry-run" in sys.argv
     skip_sector_check   = "--skip-sector-check" in sys.argv
+    _force_run          = "--force" in sys.argv
     _date_override      = next((a.split("=",1)[1] for a in sys.argv if a.startswith("--date=")), None)
-    today               = date.fromisoformat(_date_override) if _date_override else date.today()
+    # market_today(), not date.today(): this host is UTC+7, so the local calendar
+    # day rolls over ~14h before the US one. Using local time dated ~78% of
+    # historical rows to a session that had not closed yet, and put weekend and
+    # holiday dates into the logs. See ascent/utils/market_time.py.
+    today               = date.fromisoformat(_date_override) if _date_override else market_today()
 
     # ── Weekend branch: runs before everything else ───────────────────────────
     if today.weekday() >= 5:  # Saturday=5, Sunday=6
@@ -679,6 +700,18 @@ def main():
             print(f"  (stale intent + double transaction costs).")
             print(f"{'!'*60}\n")
             sys.exit(1)
+
+    # ── Same-session guard ────────────────────────────────────────────────────
+    # The scheduled job fires at 09:00 local (UTC+7) = the previous US session,
+    # so a manual/catch-up run earlier in that same session would otherwise be
+    # re-processed here and append a duplicate row. Explicit --date or --force
+    # overrides (a deliberate re-run is allowed; an accidental one is not).
+    if not _force_run and not _date_override and already_ran_for_session(today):
+        print(f"\n[Runner] A run is already logged for the {today} session "
+              f"(market date). Skipping to avoid a duplicate record.")
+        print(f"[Runner] Re-run deliberately with --force, or target another "
+              f"session with --date=YYYY-MM-DD.")
+        return
 
     # ── Startup validation: sector data must be present before agents spawn ───
     from ascent.config.settings import UniverseConfig, get_config
@@ -1757,9 +1790,19 @@ def main():
 
                     _ai_ret = _port_ret(_prev_ai)
                     _qt_ret = _port_ret(_prev_qt)
-                    update_authority(_ai_ret, _qt_ret)
-                    print(f"[Runner] Authority updated: AI {_ai_ret*100:.2f}% vs Quant "
-                          f"{_qt_ret*100:.2f}% ({_prev_date} → {today.isoformat()})")
+                    # Diagnostic only — deliberately does NOT call
+                    # update_authority(). It used to, with n_decisions_evaluated
+                    # defaulted to 0 and hit_rate None, which stamped
+                    # last_updated=today; the informed call later in the run then
+                    # early-returned on `last_updated == today`, so on every
+                    # rebalance day the promotion metrics never reached the
+                    # ladder at all. It also appended REBALANCE-PERIOD returns to
+                    # the same buffer the daily path fills with DAILY Track D vs
+                    # A* returns, mixing horizons in the sortino_edge estimate.
+                    # The single informed call now owns the ladder.
+                    print(f"[Runner] Rebalance-period comparison: AI {_ai_ret*100:.2f}% "
+                          f"vs Quant {_qt_ret*100:.2f}% ({_prev_date} → "
+                          f"{today.isoformat()}) [diagnostic, not fed to authority]")
 
             # Step 2: save snapshot for next rebalance comparison
             # Use AI PM portfolio if it ran successfully, else fall back to quant
@@ -1856,86 +1899,12 @@ def main():
             return
 
         # ── Apply ONE adversarial position change (if warranted and not halted) ──
-        position_changes = verdict.get("position_changes", [])
-        if position_changes:
-            change   = position_changes[0]
-            sym      = change.get("symbol", "")
-            new_w    = float(change.get("new_weight", 0))
-            old_w    = float(merged_weights.get(sym, 0))
-            itype    = change.get("intervention_type", "adversarial_thesis")
-
-            if sym in merged_weights and new_w >= 0.01:
-                MAX_WEIGHT = 0.10
-                is_increase = new_w > old_w
-
-                if is_increase:
-                    # Fund the increase by taking proportionally from all other positions
-                    needed = new_w - old_w
-                    others = {s: w for s, w in merged_weights.items() if s != sym}
-                    other_total = sum(others.values())
-                    if other_total > 0:
-                        for s in others:
-                            merged_weights[s] = max(0.0, merged_weights[s] - needed * (others[s] / other_total))
-                    merged_weights[sym] = min(new_w, MAX_WEIGHT)
-                else:
-                    # Original redistribution: freed weight goes proportionally to others
-                    freed = old_w - new_w
-                    others = {s: w for s, w in merged_weights.items() if s != sym}
-                    other_total = sum(others.values())
-                    if other_total > 0:
-                        for s in others:
-                            merged_weights[s] += freed * (others[s] / other_total)
-                    merged_weights[sym] = new_w
-
-                # Renormalize
-                total = sum(w for w in merged_weights.values() if w > 0)
-                if total > 0:
-                    merged_weights = {s: max(0.0, w / total)
-                                      for s, w in merged_weights.items()}
-
-                direction = "↑" if is_increase else "↓"
-                print(f"\n[AdvInt] ADVERSARIAL INTERVENTION APPLIED:")
-                print(f"  {sym}: {old_w:.1%} {direction} {new_w:.1%} [{itype}]")
-                print(f"  Reason: {change.get('reason', '')[:100]}")
-                print(f"  10d Prediction: {change.get('prediction', '')[:100]}")
-
-                # Log the intervention for authority tracking
-                try:
-                    from debate.adversarial_authority import record_intervention
-                    record_intervention(
-                        date_str=today.isoformat(),
-                        symbol=sym,
-                        intervention_type=itype,
-                        from_weight=old_w,
-                        to_weight=new_w,
-                        prediction=change.get("prediction", ""),
-                        regime=portfolio_state.get("us_regime", "unknown"),
-                    )
-                    print(f"[AdvInt] Intervention logged for 10-day outcome tracking")
-                except Exception as _ai_e:
-                    print(f"[AdvInt] Authority log failed: {_ai_e}")
-
-                # Register the judge's prediction as a daily-checked falsifier
-                try:
-                    from ascent.strategy.falsifier_registry import add_judge_falsifier
-                    add_judge_falsifier(sym, change.get("prediction", ""), today)
-                except Exception as _jf_e:
-                    print(f"[Falsifier] Judge falsifier registration failed: {_jf_e}")
-
-                # Re-write merged_weights.json with the adjusted weights
-                weights_path = Path("execution/merged_weights.json")
-                with open(weights_path, "w") as f:
-                    json.dump({
-                        "date":         today.isoformat(),
-                        "weights":      merged_weights,
-                        "agents":       [ao.agent_id for ao in agent_outputs],
-                        "adversarial_intervention": change,
-                        "generated_at": datetime.now().isoformat(),
-                    }, f, indent=2)
-                print(f"[AdvInt] merged_weights.json updated with adversarial adjustment")
-            else:
-                print(f"[AdvInt] Position change for {sym} skipped "
-                      f"(not in weights or below 1% floor)")
+        # Shared with the discovery mini-rebalance path, which previously ran the
+        # debate and discarded its position_changes entirely.
+        merged_weights = apply_judge_position_change(
+            merged_weights, verdict, today,
+            agent_outputs=agent_outputs, portfolio_state=portfolio_state,
+        )
 
     except Exception as e:
         print(f"[Runner] Debate failed ({e}) — proceeding to execution anyway")
@@ -2287,6 +2256,180 @@ def _is_near_scheduled_rebalance(today, window: int = 3, cal_path=None) -> bool:
         return trading_days <= window
     except Exception:
         return False
+
+
+#: Ceiling on any single position after a judge intervention.
+_JUDGE_MAX_WEIGHT = 0.10
+#: Interventions below this are not worth their transaction cost.
+_JUDGE_MIN_WEIGHT = 0.01
+
+
+def _apply_position_change_to_weights(weights: dict, change) -> tuple:
+    """Apply the judge's single position change to a weight book.
+
+    Pure: returns `(new_weights, applied)` and never mutates the input. The
+    authority clamp has already been applied in debate/judge.py, which bounds
+    `new_weight` to the earned per-intervention limit.
+
+    Returns applied=False (and the book unchanged) when the symbol is not held,
+    the target is below the 1% floor, or the change is malformed.
+    """
+    if not isinstance(change, dict) or not isinstance(weights, dict):
+        return dict(weights or {}), False
+
+    sym = change.get("symbol") or ""
+    if not isinstance(sym, str) or sym not in weights:
+        return dict(weights), False
+    try:
+        new_w = float(change.get("new_weight", 0))
+    except (TypeError, ValueError):
+        return dict(weights), False
+    if new_w < _JUDGE_MIN_WEIGHT:
+        return dict(weights), False
+
+    out = dict(weights)
+    others = {s: w for s, w in out.items() if s != sym}
+    other_total = sum(others.values())
+
+    # Solve directly instead of adjust-then-renormalize. The original code capped
+    # the position at _JUDGE_MAX_WEIGHT and *then* renormalized, so the cap was
+    # not a cap: a request for 40% on a 5% position landed at 14.3%. Setting the
+    # target first and scaling the rest into the remaining (1 - target) gives an
+    # exact sum of 1.0, keeps the others' relative sizing, and makes the cap real.
+    target = min(max(new_w, 0.0), _JUDGE_MAX_WEIGHT)
+
+    if other_total <= 0:
+        out = {s: (1.0 if s == sym else 0.0) for s in out}
+        return out, True
+
+    scale = (1.0 - target) / other_total
+    out = {s: (target if s == sym else max(0.0, w * scale)) for s, w in out.items()}
+    return out, True
+
+
+def apply_judge_position_change(merged_weights: dict, verdict: dict, today,
+                                agent_outputs=None, portfolio_state=None,
+                                write_weights: bool = True) -> dict:
+    """Apply and RECORD the judge's one sanctioned position change.
+
+    This is the single sanctioned exception to debate-is-advisory (see CLAUDE.md
+    integrity constraint 5): at most one position per rebalance, capped by earned
+    authority, applied by run_all_agents rather than by anything under debate/.
+
+    Extracted 2026-07-28 because it previously existed only inline in the
+    scheduled-rebalance branch. The discovery mini-rebalance path ran the full
+    debate, wrote a verdict with a sized and falsifiable change, then honoured
+    only `halt_and_review` — so 4 of 7 judge changes in history were never
+    applied and, because record_intervention() never ran, never scored. That
+    kept n_scored at 0 and the authority tier frozen at its 1.0pp floor, which
+    is a self-sealing loop: no scoring, no authority, no measurable effect.
+
+    Returns the (possibly unchanged) weight book.
+    """
+    changes = (verdict or {}).get("position_changes") or []
+    if not changes:
+        return merged_weights
+
+    change = changes[0]
+    sym = change.get("symbol", "")
+    old_w = float(merged_weights.get(sym, 0) or 0)
+    itype = change.get("intervention_type", "adversarial_thesis")
+
+    new_weights, applied = _apply_position_change_to_weights(merged_weights, change)
+    if not applied:
+        print(f"[AdvInt] Position change for {sym or '(none)'} skipped "
+              f"(not in weights or below {_JUDGE_MIN_WEIGHT:.0%} floor)")
+        return merged_weights
+
+    new_w = float(change.get("new_weight", 0))
+    direction = "up" if new_w > old_w else "down"
+    print(f"\n[AdvInt] ADVERSARIAL INTERVENTION APPLIED:")
+    print(f"  {sym}: {old_w:.1%} {direction} {new_w:.1%} [{itype}]")
+    print(f"  Reason: {change.get('reason', '')[:100]}")
+    print(f"  10d Prediction: {change.get('prediction', '')[:100]}")
+
+    # Record for authority tracking. Without this the prediction is never scored,
+    # which is exactly why the tier never moved off its floor.
+    try:
+        from debate.adversarial_authority import record_intervention
+        record_intervention(
+            date_str=today.isoformat(),
+            symbol=sym,
+            intervention_type=itype,
+            from_weight=old_w,
+            to_weight=new_w,
+            prediction=change.get("prediction", ""),
+            regime=(portfolio_state or {}).get("us_regime", "unknown"),
+        )
+        print(f"[AdvInt] Intervention logged for 10-day outcome tracking")
+    except Exception as _ai_e:
+        print(f"[AdvInt] Authority log failed: {_ai_e}")
+
+    try:
+        from ascent.strategy.falsifier_registry import add_judge_falsifier
+        add_judge_falsifier(sym, change.get("prediction", ""), today)
+    except Exception as _jf_e:
+        print(f"[Falsifier] Judge falsifier registration failed: {_jf_e}")
+
+    if write_weights:
+        try:
+            weights_path = Path("execution/merged_weights.json")
+            with open(weights_path, "w") as f:
+                json.dump({
+                    "date":         today.isoformat(),
+                    "weights":      new_weights,
+                    "agents":       [ao.agent_id for ao in (agent_outputs or [])],
+                    "adversarial_intervention": change,
+                    "generated_at": datetime.now().isoformat(),
+                }, f, indent=2)
+            print(f"[AdvInt] merged_weights.json updated with adversarial adjustment")
+        except Exception as _w_e:
+            print(f"[AdvInt] merged_weights.json write failed: {_w_e}")
+
+    return new_weights
+
+
+def already_ran_for_session(session_date, log_path=None) -> bool:
+    """True if logs/eod_log.jsonl already holds a RUN record for `session_date`.
+
+    The scheduled job fires at 09:00 local (UTC+7), which resolves to the
+    previous US session — so a manual catch-up run earlier in that same session
+    collides with it. Without this check the second run appends a duplicate row,
+    which is how logs/ai_pm_decision_log.jsonl ended up with 9 rows across 2
+    dates (2026-06-10 recorded 8 times), inflating every rate computed from it.
+
+    Fails OPEN (returns False) on a missing or unreadable log: never block the
+    first ever run. `_catch_up_guard` is the fail-CLOSED counterpart for
+    staleness; this one only dedupes.
+
+    Discovery-candidate objects are also written into eod_log (keys: symbol /
+    trigger / conviction) and are not run records, so they do not count.
+    """
+    from pathlib import Path as _P
+
+    p = _P(log_path) if log_path is not None else _P("logs/eod_log.jsonl")
+    if not p.exists():
+        return False
+    target = session_date.isoformat() if hasattr(session_date, "isoformat") else str(session_date)
+    try:
+        with p.open("r", errors="replace") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(entry, dict):
+                    continue
+                if entry.get("trigger") == "discovery" or "conviction" in entry:
+                    continue
+                if str(entry.get("date") or entry.get("run_date") or "") == target:
+                    return True
+    except OSError:
+        return False
+    return False
 
 
 def _catch_up_guard(today, threshold_days: int = CATCH_UP_STALE_TRADING_DAYS):
@@ -2687,6 +2830,23 @@ def _trigger_mini_rebalance(
         if verdict.get("recommendation") == "halt_and_review":
             print("[Discovery] Debate: halt_and_review — mini-rebalance aborted")
             return
+
+        # ── Apply the judge's ONE position change on this path too ────────────
+        # This path used to honour only halt_and_review: it ran the full debate,
+        # wrote a verdict carrying a sized and falsifiable position change, then
+        # dropped it. 4 of 7 judge changes in history died here (06-15 PK,
+        # 06-22 BAX, 06-29 TLT, 07-27 VNQ), and because record_intervention()
+        # never ran they were never scored — so n_scored stayed 0 and the
+        # authority tier stayed pinned at its 1.0pp floor.
+        #
+        # Applied AFTER the candidate insert so the judge sees the book that will
+        # actually be submitted, and BEFORE the add-only safety assertion below
+        # so any change it makes is still checked. Same one-position,
+        # authority-capped bound as the scheduled path.
+        new_weights = apply_judge_position_change(
+            new_weights, verdict, today,
+            agent_outputs=prior_agent_outputs, portfolio_state=portfolio_state,
+        )
 
         # ── Safety assertion (fail-safe, not fail-open) ──────────────────────
         # An add-only discovery insert must never produce a complete exit from

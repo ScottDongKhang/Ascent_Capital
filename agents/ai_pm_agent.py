@@ -892,6 +892,11 @@ PRE_THESIS_TOOLS = [
         "get_narrative_shift", "get_scenario_plan", "get_weekend_research",
         "get_crowding_signal", "get_attribution_history", "get_calibration_report",
         "get_causal_graph",
+        # get_alpha_wedge's own description says "Call in Phase 1 to calibrate how
+        # aggressively to override the quant this session" — but it was absent from
+        # this set, so in the live two-phase path Phase 1 literally could not call
+        # it. The single number most relevant to how hard to push was unreachable.
+        "get_alpha_wedge",
     }
 ] + [_PROPOSE_PRETHESIS_TOOL]
 
@@ -1065,18 +1070,57 @@ def _build_temporal_context(feedback: dict | None = None) -> str:
     except Exception:
         pass
 
+    # Authority disclosure. The AI PM was never told what fraction of its
+    # proposal actually reaches the book, so it wrote 9-10% convictions believing
+    # they would be implemented when the most that could land was ~1pp. The
+    # debate judge IS told its cap and visibly reasons well about it ("Capped at
+    # 1% by unproven adversarial_thesis authority (n=9)"); this agent deserves
+    # the same input. Measured dilution over the real logged proposals was
+    # 11-45% of each intended delta, median ~14%.
+    authority_str = ""
+    try:
+        from ascent.strategy.earned_authority import get_state as _get_auth
+        _a = _get_auth() or {}
+        _w = float(_a.get("ai_weight", 0.0) or 0.0)
+        authority_str = (
+            f"\nYOUR AUTHORITY: Level {_a.get('level', 0)} "
+            f"({_a.get('title', 'Shadow')}), tracking-error budget {_w:.0%}.\n"
+            f"  Your proposal is NOT implemented as written. It is blended against\n"
+            f"  the quant book so that total one-way active deviation equals {_w:.0%}.\n"
+            f"  Every delta you propose is scaled by the same factor, so a\n"
+            f"  10pp conviction typically lands as ~1pp and a full exit becomes a\n"
+            f"  trim. Size your convictions as RANKED RELATIVE BETS, not as target\n"
+            f"  weights: what survives is their ordering and relative magnitude.\n"
+            f"  Authority rises only with scored decisions that beat the quant."
+        )
+    except Exception:
+        pass
+
     return (
         f"\n══ AUTHORITATIVE SYSTEM CONTEXT (do not contradict) ══\n"
         f"Today: {today.isoformat()}\n"
         f"Current regime: {regime}\n"
         f"Data freshness cutoff: {cutoff} — do not cite data older than this as 'current'\n"
-        f"OBJECTIVE: Sharpe ratio, not raw return.\n"
+        f"OBJECTIVE — this is the metric you are actually scored on:\n"
+        f"  wedge_21d = (your portfolio's return over the next 21 trading days)\n"
+        f"              minus (the pure-quant baseline's return over the same days).\n"
+        f"  Positive wedge is the only way authority increases. It is a RELATIVE,\n"
+        f"  21-day, raw-return measure — not a 3-month absolute return, and not\n"
+        f"  Sharpe. This prompt used to say 'OBJECTIVE: Sharpe ratio, not raw\n"
+        f"  return' and to ask for a 3-month view, which is a different target\n"
+        f"  from the one being measured; following it cost the layer real ground\n"
+        f"  in an equity bull market.\n"
+        f"  Risk still matters, but as a constraint, not the objective: you are\n"
+        f"  scored against a baseline that carries the same market exposure, so\n"
+        f"  de-risking relative to it is a bet you must be willing to defend.\n"
         f"  For every position you propose, state:\n"
-        f"    - Expected 3-month return (with cited basis)\n"
+        f"    - Expected 21-day return RELATIVE to the quant baseline (cited basis)\n"
         f"    - Expected volatility (high/medium/low with reason)\n"
         f"    - What would make you wrong (one falsifiable condition)\n"
-        f"  A 15% position in a volatile name hurts Sharpe more than 8% in a stable name.\n"
-        f"  When in doubt, choose the lower-volatility expression of the same thesis.{worst_str}"
+        f"  A position identical to the quant baseline is not a safe default: it\n"
+        f"  costs turnover and API spend for zero expected wedge, and is logged as\n"
+        f"  a non-decision. If you genuinely see no edge, say so explicitly rather\n"
+        f"  than reproducing the baseline silently.{authority_str}{worst_str}"
         f"{pattern_str}\n"
         f"══════════════════════════════════════════════════════\n"
     )
@@ -2328,8 +2372,16 @@ def run_ai_pm_prethesis(
             _cli = _get_client()
             _resp = _cli.messages.create(
                 model=SONNET_MODEL,
-                max_tokens=4000,
-                system=_build_temporal_context(feedback=_p1_feedback) + _p1_grounding + sentiment_block,
+                # 4000 was below the wrapper's own 4096 thinking floor, on a
+                # direct messages.create() that gets no floor applied — thinking
+                # could consume the whole budget and return no text.
+                max_tokens=8192,
+                # _PRE_THESIS_PROMPT was omitted here, so the sealed thesis came
+                # from a model never told what a pre-thesis is, what
+                # directional_stance means, or that non-price sourcing is
+                # required. This is the path that produced the 2026-06-24 thesis.
+                system=(_build_temporal_context(feedback=_p1_feedback)
+                        + _PRE_THESIS_PROMPT + _p1_grounding + sentiment_block),
                 messages=[{"role": "user", "content": (
                     f"Today is {date.today()}. Seal your investment thesis now. "
                     "Base it on the regime, macro, and portfolio data in the system prompt."
@@ -2576,7 +2628,14 @@ def run_ai_pm(
             tools=AI_PM_TOOLS,
             tool_executor=_make_executor(result_store, precomputed, failures=_phase2_failures, prethesis_active=(prethesis is not None)),
             model=_phase2_model,
-            max_tokens=4000,
+            # Phase 2 is the highest-judgment call in the fund: Opus synthesising
+            # ~20 weights plus a 12-key thesis memo. max_tokens caps thinking AND
+            # visible text together, and 4000 was below the wrapper's own 4096
+            # thinking floor — a plausible co-cause of the budget exhaustion that
+            # force-sealed both phases on 2026-06-24. Effort was also left at the
+            # wrapper default (high) while nothing in the repo ever used xhigh.
+            max_tokens=12000,
+            effort="xhigh",
             max_tool_calls=14,
             use_cache=True,
         )
@@ -2612,7 +2671,9 @@ def run_ai_pm(
             for _seal_attempt in range(2):
                 _resp = _cli.messages.create(
                     model=_phase2_model,
-                    max_tokens=4000,
+                    # Below the wrapper's 4096 thinking floor, and this is a
+                    # direct messages.create() so no floor is applied.
+                    max_tokens=8192,
                     system=_system,
                     messages=[{"role": "user", "content": _seal_prompt}],
                     tools=[_PROPOSE_PORTFOLIO_TOOL],

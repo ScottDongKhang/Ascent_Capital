@@ -462,93 +462,220 @@ if __name__ == "__main__":
 from ascent.llm.client import HAIKU_MODEL
 
 
+#: Gross exposure a reduce_size verdict targets, as a fraction of NAV. The
+#: remainder becomes cash — which is the entire point, and is what this channel
+#: was structurally unable to do before 2026-07-28.
+REDUCE_SIZE_GROSS_TARGET = 0.90
+
+#: Bounds on a verdict-supplied reduction, so a malformed or run-away number
+#: cannot liquidate or no-op the book.
+REDUCE_SIZE_MIN_GROSS = 0.75
+REDUCE_SIZE_MAX_GROSS = 0.98
+
+
+def _reduce_size_target_gross(verdict) -> float:
+    """Gross exposure a reduce_size verdict should land at or below.
+
+    Uses the verdict's optional `reduction_pct` when present and sane — the
+    2026-04-06 verdict asked to "reduce overall position size by ~30%" and had
+    nowhere to say so — otherwise the documented default. Always clamped to
+    [REDUCE_SIZE_MIN_GROSS, REDUCE_SIZE_MAX_GROSS] so a hallucinated number can
+    neither near-liquidate the book nor no-op the verdict.
+    """
+    pct = verdict.get("reduction_pct") if isinstance(verdict, dict) else None
+    if not isinstance(pct, (int, float)) or isinstance(pct, bool) or pct <= 0:
+        return REDUCE_SIZE_GROSS_TARGET
+    target = 1.0 - float(pct)
+    return max(REDUCE_SIZE_MIN_GROSS, min(REDUCE_SIZE_MAX_GROSS, target))
+
+
+def _verdict_protected_symbols(verdict) -> frozenset:
+    """Symbols the judge explicitly argued to keep, from the verdict contract.
+
+    Before 2026-07-28 there was no field for this. On 07-27 the judge wrote
+    "cutting insurance 48 hours before the catalyst it exists to hedge is poor
+    timing — the bull wins that specific exchange" and deliberately chose VNQ
+    instead of UUP/TLT. That protection existed only as prose inside
+    verdict["reasoning"], which the enforcement layer never saw, so the
+    size-sorted fallback sold UUP and TLT anyway.
+
+    Tolerant of shape (list of dicts or of bare strings) and never raises:
+    a malformed field yields no protection rather than blocking the run.
+    """
+    if not isinstance(verdict, dict):
+        return frozenset()
+    raw = verdict.get("protected_positions")
+    if not isinstance(raw, list):
+        return frozenset()
+    out = set()
+    for item in raw:
+        if isinstance(item, str):
+            sym = item
+        elif isinstance(item, dict):
+            sym = item.get("symbol")
+        else:
+            continue
+        if isinstance(sym, str) and sym.strip():
+            out.add(sym.strip().upper())
+    return frozenset(out)
+
+
 def _enforce_reduce_size(
     original_weights: dict,
     haiku_weights: dict,
     min_reduction_threshold: float = 0.01,
     min_positions_reduced: int = 3,
+    target_gross: float = REDUCE_SIZE_GROSS_TARGET,
+    protected: frozenset = frozenset(),
 ) -> dict:
     """
-    Ensure that a reduce_size verdict actually produces measurably smaller weights.
+    Ensure a reduce_size verdict actually produces a smaller book — and does not
+    sell the positions the judge argued to keep.
 
-    If Haiku already reduced >= min_positions_reduced positions by >= min_reduction_threshold,
-    return haiku_weights unchanged (pass-through).
+    Four defects this function used to have (audit 2026-07-27), all fixed here:
 
-    Otherwise, force a trim on the top 5 positions (0.02 each), redistribute freed weight
-    proportionally, and renormalize to 1.0.
+    1. **It could not reduce gross.** It ended by renormalizing to exactly 1.0,
+       so gross was 1.0000 before and after on every reduce_size date in
+       history. `target_gross` is now the scaling destination; the freed weight
+       becomes cash instead of being recycled into other positions.
+
+    2. **Detection ran after renormalization.** On 07-27 Haiku correctly cut VNQ
+       by 1.01pp, renormalization scaled it back to 0.947pp, the 1pp threshold
+       read 0 reductions, and the forced trim fired. Reductions are now measured
+       on a gross-normalized basis so a real cut is not erased by scaling.
+
+    3. **The forced trim was thesis-blind**, sorting by weight. It sold UUP and
+       TLT — the FOMC hedge leg the verdict explicitly protected — plus BIL,
+       the T-bill sleeve the same verdict called too small. `protected` names
+       are now excluded from trim selection.
+
+    4. **It ignored the authority cap** (VNQ moved -2.93pp against a stated
+       1.0pp limit). Deliberately NOT fixed by capping here. A per-name cap and
+       an honoured protect-list are mutually exclusive: holding UUP at its full
+       weight while gross falls to 0.90 *is* a deviation from UUP's pro-rata
+       share, so a 1pp cap would forbid honouring the judge. The audit flagged
+       this same contradiction from the other side ("requiring 3 cuts of >=1pp
+       while capping each intervention at 1.0pp is self-contradictory").
+       De-grossing is a portfolio-level risk action, not a per-name bet; the
+       per-intervention authority cap governs the judge's `position_changes`,
+       which run_all_agents already enforces. What needs bounding here is the
+       total gross reduction — REDUCE_SIZE_MIN_GROSS / _MAX_GROSS do that.
 
     Args:
-        original_weights: Dict of {symbol: weight} before reduce_size verdict
-        haiku_weights: Dict of {symbol: weight} adjusted by Haiku
-        min_reduction_threshold: Minimum weight reduction per position to count as "genuine"
-        min_positions_reduced: Minimum number of positions that must be reduced
+        original_weights: {symbol: weight} before the verdict
+        haiku_weights:    {symbol: weight} after the Haiku adjustment
+        min_reduction_threshold: per-position cut that counts as genuine
+        min_positions_reduced:   how many such cuts to accept Haiku's work
+        target_gross: gross exposure to land at or below. Defaults to
+            REDUCE_SIZE_GROSS_TARGET, deliberately NOT 1.0: a 1.0 default makes
+            this function a silent no-op (needed = total - 1.0 = 0), which is the
+            same failure it exists to prevent, just relocated into the signature.
+            A function named _enforce_reduce_size must reduce by default.
+        protected: symbols the verdict said not to cut. These keep their
+            absolute weight and the whole reduction comes from the rest.
 
     Returns:
-        Dict of {symbol: weight} that guarantees measurable reduction
+        {symbol: weight} summing to `target_gross`
     """
     # Guard: empty haiku_weights
     if not haiku_weights:
         print("[EodRunner] reduce_size: haiku_weights is empty — returning original weights")
         return dict(original_weights)
 
-    # Count how many positions Haiku genuinely reduced
+    def _cap_at_target(w: dict) -> dict:
+        """Scale down to `target_gross` — never up.
+
+        The invariant is `gross <= target`, not `gross == target`. Scaling up to
+        hit the target exactly would re-gross a book that Haiku had already
+        reduced, which is the same class of bug as the old renormalize-to-1.0.
+        """
+        total = sum(w.values())
+        if total <= 0 or total <= target_gross:
+            return dict(w)
+        k = target_gross / total
+        return {s: max(0.0, v * k) for s, v in w.items()}
+
+    # --- (2) Measure reductions on RAW weights --------------------------------
+    # Deliberately not normalized. A cut is expressed in absolute weight, and
+    # normalizing the reduced book back up is precisely what erased the 07-27
+    # cut (1.01pp -> 0.947pp, under the 1pp threshold). The upstream fix is that
+    # _apply_verdict_adjustments no longer renormalizes to 1.0, so what arrives
+    # here still carries the reduction it was given.
     reduced_count = sum(
         1 for s, w in haiku_weights.items()
-        if w < original_weights.get(s, 0) - min_reduction_threshold
+        if w < original_weights.get(s, 0.0) - min_reduction_threshold
     )
 
     if reduced_count >= min_positions_reduced:
         print(f"[EodRunner] reduce_size: Haiku reduced {reduced_count} positions — accepted")
-        return haiku_weights
+        # (1) Still scale to target: accepting Haiku's shape must not re-gross
+        # the book back to 1.0, which is what silently undid every reduction.
+        return {s: round(w, 6) for s, w in _cap_at_target(haiku_weights).items()}
 
-    # Haiku didn't reduce enough — apply forced trim to top positions
+    # --- Forced trim ----------------------------------------------------------
     print(f"[EodRunner] reduce_size: Haiku only reduced {reduced_count} positions "
-          f"(need {min_positions_reduced}) — forcing trim on top positions")
+          f"(need {min_positions_reduced}) — forcing trim")
 
     weights = dict(haiku_weights)
-    sorted_syms = sorted(weights, key=lambda s: weights[s], reverse=True)
-    top_n = min(5, len(sorted_syms))
-    trim_per = 0.02
-    total_freed = 0.0
-    trimmed_syms = set(sorted_syms[:top_n])
+    current_total = sum(weights.values())
+    needed = current_total - target_gross
 
-    for sym in sorted_syms[:top_n]:
-        actual_trim = min(trim_per, weights[sym])  # don't go negative
-        weights[sym] -= actual_trim
-        total_freed += actual_trim
+    if needed <= 0:
+        # Already at or below target — just land exactly on it.
+        return {s: round(w, 6) for s, w in _cap_at_target(weights).items()}
 
-    # Guard: no weight freed
-    if total_freed == 0:
-        print("[EodRunner] reduce_size: no weight freed during trim (all positions at 0?) — weights unchanged")
-        return dict(haiku_weights)
+    # (3) The reduction comes proportionally out of the NON-protected names.
+    # The old code trimmed the top 5 by weight, which is how a verdict that said
+    # "do not cut the hedge leg before FOMC" ended up selling UUP, TLT and BIL.
+    # Proportional-across-the-rest also spreads the cut instead of concentrating
+    # it on the largest positions, which is what min_positions_reduced was
+    # clumsily reaching for.
+    non_protected = {s: w for s, w in weights.items() if s not in protected}
+    nonprot_total = sum(non_protected.values())
 
-    # Redistribute freed weight only to NON-trimmed positions
-    non_trimmed_total = sum(weights[s] for s in weights if s not in trimmed_syms)
+    if protected:
+        held = sorted(s for s in weights if s in protected)
+        print(f"[EodRunner] reduce_size: holding {held} at full weight per verdict")
 
-    if non_trimmed_total > 0 and total_freed > 0:
-        for sym in weights:
-            if sym not in trimmed_syms:
-                weights[sym] += total_freed * (weights[sym] / non_trimmed_total)
-    elif total_freed > 0:
-        # All positions were trimmed (very small portfolio) — distribute to all
-        total = sum(weights.values())
-        if total > 0:
-            for sym in weights:
-                weights[sym] += total_freed * (weights[sym] / total)
+    if nonprot_total >= needed and nonprot_total > 0:
+        keep = (nonprot_total - needed) / nonprot_total
+        for sym in non_protected:
+            weights[sym] = max(0.0, weights[sym] * keep)
+        # (1) The freed weight is NOT redistributed — it becomes cash. Recycling
+        # it into other positions is what made this a rotation rather than a
+        # reduction: on 07-27 it moved 10pp out of dollar, duration and T-bills
+        # into equities 48h before FOMC, under a de-risking verdict.
+    else:
+        # The protect-list is too large to fund the reduction from the rest.
+        # De-gross everything uniformly and say so — silently failing to reduce
+        # is the original bug.
+        print(f"[EodRunner] reduce_size: non-protected sleeve ({nonprot_total:.3f}) "
+              f"cannot fund a {needed:.3f} reduction — de-grossing uniformly")
+        weights = _cap_at_target(weights)
 
-    # Renorm to exactly 1.0
-    final_total = sum(weights.values())
-    if final_total > 0:
-        weights = {s: round(w / final_total, 6) for s, w in weights.items()}
-
-    return weights
+    return {s: round(w, 6) for s, w in weights.items()}
 
 
-def _apply_verdict_adjustments(merged_weights: dict, verdict: dict) -> dict:
+def _apply_verdict_adjustments(merged_weights: dict, verdict: dict,
+                               target_gross: float = 1.0) -> dict:
     """
     Send verdict + current weights to Haiku and get back adjusted weights.
-    Called when debate verdict is reduce_size.
-    Returns adjusted weights dict, falls back to original if anything fails.
+    Called when the debate verdict is reduce_size.
+
+    Three fixes from the 2026-07-27 audit:
+
+    - The system prompt used to require "weights must sum to 1.0", which made it
+      structurally impossible for a *reduce size* instruction to reduce size.
+      Haiku is now told the gross target explicitly.
+    - The validator renormalized any deviation from 1.0 back to 1.0. That is what
+      shrank a correctly-implemented 1.01pp VNQ cut to 0.947pp, dropping it under
+      the downstream 1pp detection threshold and triggering the size-sorted
+      fallback that sold the hedges the judge protected. It now only caps at the
+      target, never scales up.
+    - The judge's `position_changes` and protected names were never passed, so
+      Haiku saw only free-text reasoning. Both are now stated explicitly.
+
+    Returns adjusted weights, falling back to the input if anything fails.
     """
     import json as _json
     from ascent.llm.client import generate_structured
@@ -562,11 +689,23 @@ def _apply_verdict_adjustments(merged_weights: dict, verdict: dict) -> dict:
     key_risks  = verdict.get("key_risks", [])
     risks_str  = "\n".join(f"  - {r}" for r in key_risks)
 
+    protected = _verdict_protected_symbols(verdict)
+    protected_str = ", ".join(sorted(protected)) if protected else "(none)"
+
+    changes = verdict.get("position_changes") or []
+    changes_str = "\n".join(
+        f"  - {c.get('symbol')}: {c.get('current_weight')} -> {c.get('new_weight')}"
+        f" ({c.get('reason', '')[:120]})"
+        for c in changes if isinstance(c, dict) and c.get("symbol")
+    ) or "  (none specified)"
+
     system_prompt = (
         "You are a portfolio risk manager. You will receive current portfolio weights "
         "and a debate verdict explaining what needs to be reduced. "
         "Output ONLY valid JSON — a dict of {symbol: new_weight} with no other text. "
-        "Rules: weights must sum to 1.0, no weight above 0.15, no negative weights, "
+        f"Rules: the weights must sum to AT MOST {target_gross:.2f} (the remainder is "
+        "cash — this is a REDUCE SIZE instruction, so a book summing to 1.0 has not "
+        "reduced anything), no weight above 0.15, no negative weights, "
         "keep all existing symbols but adjust their weights per the verdict instructions."
     )
 
@@ -574,8 +713,13 @@ def _apply_verdict_adjustments(merged_weights: dict, verdict: dict) -> dict:
         f"Current portfolio weights:\n{weights_str}\n\n"
         f"Debate verdict reasoning:\n{reasoning}\n\n"
         f"Key risks to address:\n{risks_str}\n\n"
-        "Produce adjusted weights that implement the verdict recommendations. "
-        "Return ONLY a JSON object like {{\"AAPL\": 0.05, \"MSFT\": 0.08, ...}}. "
+        f"Specific position changes the judge asked for:\n{changes_str}\n\n"
+        f"DO NOT REDUCE these positions — the judge argued explicitly to keep "
+        f"them: {protected_str}\n\n"
+        f"Produce adjusted weights that implement the verdict. The total must be "
+        f"at most {target_gross:.2f}; take the reduction from positions other than "
+        f"the protected ones.\n"
+        'Return ONLY a JSON object like {"AAPL": 0.05, "MSFT": 0.08}. '
         "No markdown, no explanation, just the JSON."
     )
 
@@ -583,7 +727,9 @@ def _apply_verdict_adjustments(merged_weights: dict, verdict: dict) -> dict:
         raw = generate_structured(
             system_prompt, user_prompt,
             model=HAIKU_MODEL,
-            max_tokens=800,
+            # 800 truncated mid-JSON on a 23-position book, which the bare
+            # json.loads below turns into a silent fallback to the input.
+            max_tokens=2000,
             temperature=0.1,
         )
         raw = raw.strip()
@@ -595,11 +741,16 @@ def _apply_verdict_adjustments(merged_weights: dict, verdict: dict) -> dict:
 
         adjusted = _json.loads(raw)
 
-        # Validate
+        # Validate. Cap at the gross target; never scale UP — scaling up is what
+        # erased the reduction this call exists to produce.
         total = sum(adjusted.values())
-        if abs(total - 1.0) > 0.001:
-            print(f"[Debate] Adjusted weights sum to {total:.4f} — renormalizing")
-            adjusted = {s: w / total for s, w in adjusted.items()}
+        if total > target_gross + 0.001:
+            print(f"[Debate] Adjusted weights sum to {total:.4f} > target "
+                  f"{target_gross:.2f} — capping")
+            adjusted = {s: w * (target_gross / total) for s, w in adjusted.items()}
+        else:
+            print(f"[Debate] Adjusted weights sum to {total:.4f} "
+                  f"(target <= {target_gross:.2f}) — left as returned")
 
         if max(adjusted.values()) > 0.15:
             print("[Debate] Adjusted weights have position > 15% — falling back to original")
@@ -626,10 +777,13 @@ def run_eod_with_weights(merged_weights: dict, run_date=None, dry_run: bool = Fa
     large-trade approval still apply.
     """
     import time as _time
-    from datetime import date as _date
     import pandas as _pd
 
-    today = run_date or _date.today()
+    from ascent.utils.market_time import market_today
+
+    # market_today(), not date.today() — this host is UTC+7, so local time names
+    # the next US session for ~14h of every day. See ascent/utils/market_time.py.
+    today = run_date or market_today()
     today_str = today.isoformat() if hasattr(today, "isoformat") else str(today)
 
     print(f"\n[EOD-Multi] Running with orchestrator weights | {today_str}")
@@ -678,9 +832,15 @@ def run_eod_with_weights(merged_weights: dict, run_date=None, dry_run: bool = Fa
         if _rec == "reduce_size":
             print("[EOD-Multi] REDUCE SIZE -- applying Haiku adjustments...")
             original_weights = dict(merged_weights)
-            merged_weights = _apply_verdict_adjustments(merged_weights, precomputed_verdict)
-            merged_weights = _enforce_reduce_size(original_weights, merged_weights)
-            print(f"[EOD-Multi] Adjusted. Total: {sum(merged_weights.values()):.4f}")
+            _tg = _reduce_size_target_gross(precomputed_verdict)
+            _prot = _verdict_protected_symbols(precomputed_verdict)
+            merged_weights = _apply_verdict_adjustments(
+                merged_weights, precomputed_verdict, target_gross=_tg)
+            merged_weights = _enforce_reduce_size(
+                original_weights, merged_weights, target_gross=_tg, protected=_prot)
+            print(f"[EOD-Multi] Adjusted. Gross: {sum(original_weights.values()):.4f} "
+                  f"-> {sum(merged_weights.values()):.4f} (target <= {_tg:.2f}); "
+                  f"protected={sorted(_prot) or 'none'}")
     else:
         try:
             from debate.debate_runner import run_debate
@@ -758,9 +918,16 @@ def run_eod_with_weights(merged_weights: dict, run_date=None, dry_run: bool = Fa
                 if recommendation == "reduce_size":
                     print("[EOD-Multi] Debate says REDUCE SIZE — applying verdict-specific adjustments...")
                     original_weights = dict(merged_weights)
-                    merged_weights = _apply_verdict_adjustments(merged_weights, verdict)
-                    merged_weights = _enforce_reduce_size(original_weights, merged_weights)
-                    print(f"[EOD-Multi] Adjusted weights. Total: {sum(merged_weights.values()):.4f}")
+                    _tg = _reduce_size_target_gross(verdict)
+                    _prot = _verdict_protected_symbols(verdict)
+                    merged_weights = _apply_verdict_adjustments(
+                        merged_weights, verdict, target_gross=_tg)
+                    merged_weights = _enforce_reduce_size(
+                        original_weights, merged_weights, target_gross=_tg, protected=_prot)
+                    print(f"[EOD-Multi] Adjusted weights. Gross: "
+                          f"{sum(original_weights.values()):.4f} -> "
+                          f"{sum(merged_weights.values()):.4f} (target <= {_tg:.2f}); "
+                          f"protected={sorted(_prot) or 'none'}")
                     import json as _jpdp
                     from pathlib import Path as _Ppdp
                     _Ppdp("logs/post_debate_portfolio.jsonl").open("a").write(

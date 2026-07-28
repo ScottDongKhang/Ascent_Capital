@@ -26,6 +26,64 @@ DECISION_LOG  = _REPO / "logs" / "ai_pm_decision_log.jsonl"
 DAILY_LOG     = _REPO / "logs" / "counterfactual_daily.jsonl"
 
 
+#: Minimum active weight difference that counts as a deliberate override rather
+#: than rounding noise.
+OVERRIDE_MIN_DELTA = 0.005
+
+
+def derive_overrides(quant_weights: Optional[Dict[str, float]],
+                     ai_weights: Optional[Dict[str, float]],
+                     min_delta: float = OVERRIDE_MIN_DELTA) -> List[dict]:
+    """Recover the AI PM's overrides by differencing the two weight books.
+
+    `overrides_applied` used to be copied from `thesis["quant_overrides"]`, a
+    field the model had to volunteer. Across 9 logged decisions it volunteered
+    none, so `n_decisions_evaluated` sat at 0 — and `min_decisions: n >= 5` is a
+    hard promotion gate while demotion needs only one bad day. The ladder could
+    only ratchet downward.
+
+    Both vectors were already logged side by side, so nothing here depends on the
+    model's cooperation. Emits `ai_w` / `quant_w` / `type`, which are the keys
+    `_score_decisions` actually reads — the tool schema emitted `ai_action` /
+    `override_type` instead, so even a volunteered override scored 0.0
+    incremental alpha and pinned profit_factor at exactly 1.0, failing the
+    > 1.2 gate regardless of skill.
+
+    An empty `ai_weights` (a force-sealed or fallback run) yields no overrides:
+    such a run expressed no original judgment and must not be recorded as having
+    overridden the entire book.
+    """
+    if not quant_weights or not ai_weights:
+        return []
+
+    out: List[dict] = []
+    for sym in set(quant_weights) | set(ai_weights):
+        q = float(quant_weights.get(sym, 0.0) or 0.0)
+        a = float(ai_weights.get(sym, 0.0) or 0.0)
+        delta = a - q
+        if abs(delta) < min_delta:
+            continue
+        if sym not in quant_weights or q == 0.0:
+            otype = "new"
+        elif sym not in ai_weights or a == 0.0:
+            otype = "exit"
+        elif delta > 0:
+            otype = "amplify"
+        else:
+            otype = "reduce"
+        out.append({
+            "symbol":  sym,
+            "type":    otype,
+            "ai_w":    round(a, 6),
+            "quant_w": round(q, 6),
+            "delta":   round(delta, 6),
+            "source":  "derived_from_weights",
+        })
+
+    out.sort(key=lambda o: abs(o["ai_w"] - o["quant_w"]), reverse=True)
+    return out
+
+
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def _confidence(n: int) -> str:

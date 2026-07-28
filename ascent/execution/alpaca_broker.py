@@ -85,8 +85,12 @@ def get_portfolio_history(period: str = "6M") -> dict:
     bars. These bars settle only after ~17:00 PT — after the daily run — so the series
     ends at the previous trading day. This is the authoritative source for Track B,
     unlike the same-day (equity − last_equity)/last_equity estimate which reads 0.0
-    before the account is marked. Returns {} on any failure (caller skips backfill)."""
-    from datetime import datetime
+    before the account is marked. Returns {} on any failure (caller skips backfill).
+
+    Bar timestamps are converted in MARKET time, not host time: this host runs at
+    UTC+7, where a 16:00 ET close falls on the next local calendar day and would
+    attribute every settled return to the wrong session."""
+    from ascent.utils.market_time import market_date_from_epoch
     try:
         r = requests.get(
             f"{ALPACA_BASE_URL}/account/portfolio/history",
@@ -101,7 +105,7 @@ def get_portfolio_history(period: str = "6M") -> dict:
             if eq is None or eq == 0:
                 prev_eq = eq
                 continue
-            d = datetime.fromtimestamp(ts).date().isoformat()
+            d = market_date_from_epoch(ts).isoformat()
             if prev_eq and prev_eq > 0:
                 out[d] = round(eq / prev_eq - 1, 6)
             prev_eq = eq
