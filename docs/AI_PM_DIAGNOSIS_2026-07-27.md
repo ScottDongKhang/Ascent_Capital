@@ -54,16 +54,59 @@ disabled — the evidence supports neither.
 | T2.12 | Deduplicate logs | **Partly.** New duplicates prevented by the same-session guard; existing rows not rewritten |
 | T3.13–18 | Prompt fixes | **Done.** `wedge_21d` objective, authority disclosure, `get_alpha_wedge` in Phase 1, `xhigh`/12k tokens, force-seal keeps its instructions |
 | — | Counterfactual backfill can insert dates | **Done.** Mechanism fixed |
-| — | **Rebuild the 45 contaminated rows** | **NOT DONE — the one thing still blocking every number** |
+| — | **Rebuild the 45 contaminated rows** | **DONE — see below** |
 
-**What is still blocked.** The existing 45 `counterfactual_daily.jsonl` rows were
-written under the old one-day date shift. The source is fixed, so new rows will be
-correct, but the history must be re-derived from `get_portfolio_history()`, with
-the ~10 closed-market rows dropped (including a `track_b +1.53%` on Juneteenth)
-and the 7 duplicated Track B values removed. I left this undone deliberately: it
-rewrites logged history, the settled Alpaca series is the only clean source, and
-it is worth doing once, after a few correct runs have accumulated. **Until then no
-counterfactual number is citable, including those still in `CLAUDE.md`.**
+### The counterfactual log has been rebuilt (2026-07-28)
+
+Rebuilt by `scripts/rebuild_counterfactual_log.py` (logic in
+`ascent/monitoring/counterfactual_rebuild.py`, 17 tests) from sources independent
+of the broken log: settled Alpaca 1D bars for Track B, the snapshot files priced
+off `prices_live` for A★/A/D, SPY closes for Track C. Previous log backed up to
+`logs/counterfactual_daily.pre_rebuild.20260728-114026.bak.jsonl`.
+
+**45 rows → 86 rows. All 86 expected trading days present, none missing, no
+duplicates, no weekends, no holidays.** The Juneteenth row that carried
+`track_b +1.53%` on a closed market is gone.
+
+| Track | Old log | Rebuilt |
+|---|---|---|
+| A★ pure quant | +23.59% | **+9.54%** |
+| A quant + Phase-1 priors | +21.53% | **+0.73%** |
+| B actual book | +16.03% | **+4.70%** |
+| C SPY | +16.63% | **+13.13%** |
+| D pure AI PM | +11.54% | **−2.12%** |
+| **B − A★** | −7.82pp / 38d | **−5.92pp / 70 paired days, t = −1.24** |
+| **D − A★** | −6.34pp / 29d | **−3.04pp / 47 paired days, t = −0.94** |
+
+Window 2026-03-24 → 07-27.
+
+**Two independent reconciliations, both exact.** Track C chained daily equals SPY
+point-to-point to the basis point (+13.13% = +13.13%) — a chained series only
+matches point-to-point when there are no gaps and no misalignment, which is
+precisely the check the old +16.63% failed. Track B chained equals the raw equity
+endpoints exactly (+4.70%, 100,000.00 → 104,695.25).
+
+**The alignment defect is gone.** Same-day `corr(B, A★)` is now **+0.936**, and
+lag-1 is **−0.118**. Before the rebuild those read −0.005 and +0.60 — two books
+sharing 95% of their holdings appearing uncorrelated same-day and correlated at a
+one-day lag, which is what generated the −7.82pp headline.
+
+**What this changes.** The gap is real but smaller, and still **not statistically
+significant** (t = −1.24 and −0.94). And the ranking changed in a way that matters:
+**SPY (+13.13%) now beats pure quant (+9.54%)** over this window, where the old log
+claimed quant beat SPY by 7pp. That is consistent with the documented structural
+position — defensive sleeves plus the 200MA cut plus vol targeting cost beta in an
+equity-only bull — but it is no longer hidden behind an inflated quant number.
+
+A★/A/D still cannot be reconciled against an external source; they are
+reconstructions from snapshot weights priced on `prices_live`, using the same
+method `score_daily` uses live. One asymmetry is disclosed and deliberately not
+"corrected": Alpaca equity is total-return, while `prices_live` closes on the
+production cache are split-only, so B is not perfectly comparable to A★/D on
+dividend-paying names.
+
+`CURRENT_VERIFIED_NUMBERS.md` still needs its §3 updated with these figures — it
+is being edited concurrently, so it was left alone.
 
 **What this changes about the diagnosis.** Nothing in the conclusion. The AI PM's
 judgment was never the problem, and the derived-override replay is the sharpest
