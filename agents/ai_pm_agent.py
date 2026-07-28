@@ -293,6 +293,34 @@ def _apply_recency_gate_python(conviction_reasons: list) -> tuple[list, list]:
     return valid, stripped
 
 
+def _load_current_holdings(path=None) -> List[str]:
+    """Tickers in the current book.
+
+    Phase 1 read `data_cache/merged_weights.json` — a path nothing writes; every
+    writer in the repo uses `execution/merged_weights.json`. And even at the right
+    path it took `.keys()` of the wrapper object, which yields
+    date/weights/agents/generated_at rather than tickers. So this list was always
+    empty and the entire CAUSAL INTELLIGENCE block was never injected into a
+    Phase 1 prompt.
+
+    Accepts both shapes: the wrapper `{"date":..., "weights": {...}}` written by
+    run_all_agents, and a bare `{symbol: weight}` mapping. Never raises — a
+    missing book degrades the prompt, it must not fail the run.
+    """
+    p = Path(path) if path is not None else _REPO_ROOT / "execution" / "merged_weights.json"
+    try:
+        if not p.exists():
+            return []
+        data = json.loads(p.read_text())
+        if not isinstance(data, dict):
+            return []
+        weights = data.get("weights") if isinstance(data.get("weights"), dict) else data
+        return [str(s) for s, w in weights.items()
+                if isinstance(w, (int, float)) and not isinstance(w, bool)]
+    except Exception:
+        return []
+
+
 def _get_current_regime() -> str:
     """Read the current regime label from dashboard/regime_signal.json. Returns 'unknown' on any failure."""
     try:
@@ -1468,32 +1496,81 @@ def _tool_get_transcript_signal(inputs: dict) -> str:
 
 
 def _tool_get_attribution_history(inputs: dict) -> str:
-    symbol = inputs.get("symbol", "")
+    """Per-symbol contribution history from logs/attribution_log.jsonl.
+
+    This tool could never return data. It matched `r.get("symbol") == symbol`,
+    but every row in that log is PORTFOLIO-level — 0 of 314 rows carry a
+    top-level `symbol`. Per-symbol figures live nested under `all_positions`
+    (and `top_contributors` / `top_drags`). So it always answered "No attribution
+    history", in both phases, while consuming a call from a hard tool budget.
+    """
+    symbol = (inputs.get("symbol") or "").strip().upper()
+    if not symbol:
+        return "No symbol supplied."
     try:
         p = _REPO_ROOT / "logs" / "attribution_log.jsonl"
         if not p.exists():
             return "Attribution log not found."
-        records = []
+
+        hits = []  # (date, weight, ret, contribution)
         with open(p) as f:
             for line in f:
+                line = line.strip()
+                if not line:
+                    continue
                 try:
                     r = json.loads(line)
-                    if r.get("symbol") == symbol:
-                        records.append(r)
                 except Exception:
-                    pass
-        records = records[-63:]
-        if not records:
+                    continue
+                if not isinstance(r, dict):
+                    continue
+                # Prefer all_positions; fall back to the ranked lists, which
+                # carry the same per-symbol shape for the extremes.
+                buckets = []
+                for key in ("all_positions", "top_contributors", "top_drags"):
+                    v = r.get(key)
+                    if isinstance(v, list):
+                        buckets.append(v)
+                seen_here = False
+                for bucket in buckets:
+                    for pos in bucket:
+                        if not isinstance(pos, dict):
+                            continue
+                        if str(pos.get("symbol", "")).upper() != symbol:
+                            continue
+                        hits.append((
+                            r.get("date", "?"),
+                            pos.get("weight"),
+                            pos.get("return"),
+                            pos.get("contribution"),
+                        ))
+                        seen_here = True
+                        break
+                    if seen_here:
+                        break
+
+        hits = hits[-63:]
+        if not hits:
             return f"No attribution history for {symbol}."
-        total = sum(r.get("pnl", 0) for r in records)
-        factor = sum(r.get("factor_pnl", 0) for r in records)
-        idio = sum(r.get("idiosyncratic_pnl", 0) for r in records)
-        return (
-            f"Attribution for {symbol} (last {len(records)} days):\n"
-            f"  Total P&L: {total:+.4f}\n"
-            f"  Factor P&L: {factor:+.4f}\n"
-            f"  Idiosyncratic P&L: {idio:+.4f}"
+
+        contribs = [c for _, _, _, c in hits if isinstance(c, (int, float))]
+        rets     = [r for _, _, r, _ in hits if isinstance(r, (int, float))]
+        total    = sum(contribs)
+        n_pos    = sum(1 for c in contribs if c > 0)
+        recent   = ", ".join(
+            f"{d}: {c:+.4f}" for d, _, _, c in hits[-5:] if isinstance(c, (int, float))
         )
+        lines = [
+            f"Attribution for {symbol} ({len(hits)} days held):",
+            f"  Cumulative contribution to portfolio return: {total:+.4f}",
+        ]
+        if contribs:
+            lines.append(f"  Positive-contribution days: {n_pos}/{len(contribs)}")
+        if rets:
+            lines.append(f"  Mean daily return while held: {sum(rets)/len(rets):+.4%}")
+        if recent:
+            lines.append(f"  Most recent: {recent}")
+        return "\n".join(lines)
     except Exception as exc:
         return f"Attribution failed for {symbol}: {exc}"
 
@@ -2294,13 +2371,7 @@ def run_ai_pm_prethesis(
 
     # Inject causal context for current portfolio holdings
     _current_regime = _get_current_regime()
-    _portfolio_symbols: list = []
-    try:
-        mw_path = _REPO_ROOT / "data_cache" / "merged_weights.json"
-        if mw_path.exists():
-            _portfolio_symbols = list(json.loads(mw_path.read_text()).keys())
-    except Exception:
-        pass
+    _portfolio_symbols = _load_current_holdings()
 
     _causal_lines = _build_velocity_context(_portfolio_symbols, _current_regime)
     _causal_context = ""

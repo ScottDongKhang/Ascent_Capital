@@ -167,6 +167,12 @@ def _write_decision_log(today, ai_pm_result, quant_weights: dict,
             "ai_weight":             authority_state.get("ai_weight", 0.0),
             "phase2_model":          phase2_model,
             "fallback":              ai_pm_result.fallback if ai_pm_result else True,
+            # A force-sealed run is a designed fallback that submits near the
+            # quant baseline when the tool loop exhausts its budget. It reached
+            # the holdings log and the counterfactual snapshots but NOT here —
+            # so in the file that feeds override scoring and the authority
+            # ladder it was indistinguishable from real judgment.
+            "force_sealed":          bool(getattr(ai_pm_result, "force_sealed", False)),
             "perf_feedback_injected": Path("data_cache/ai_pm_perf_feedback.json").exists(),
             "quant_proposed":        {k: round(v, 6) for k, v in quant_weights.items()},
             "ai_pm_proposed":        {k: round(v, 6) for k, v in (ai_pm_result.portfolio if ai_pm_result and not ai_pm_result.fallback else {}).items()},

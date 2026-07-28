@@ -221,6 +221,60 @@ Do a honest, self-critical post-mortem in three parts:
 
 # ── 3. Pattern Memory ──────────────────────────────────────────────────────────
 
+def _parse_pattern_json(text: str) -> dict:
+    """Pull {"avoid": [...], "work": [...]} out of a model reply.
+
+    The old code did a bare `json.loads` on the raw text, so a markdown fence or
+    any surrounding prose discarded the whole extraction — which is why
+    data_cache/ai_pm_pattern_memory.json never existed despite a post-mortem
+    having been written, and why get_pattern_summary() has always returned "".
+
+    Never raises: an unparseable reply yields empty arrays, so the caller can
+    distinguish "nothing learned" from "extraction crashed".
+    """
+    out = {"avoid": [], "work": []}
+    if not text or not isinstance(text, str):
+        return out
+
+    raw = text.strip()
+    # Strip a ```json ... ``` fence if present.
+    if raw.startswith("```"):
+        raw = raw.split("\n", 1)[-1] if "\n" in raw else raw
+        if raw.endswith("```"):
+            raw = raw.rsplit("```", 1)[0]
+        raw = raw.strip()
+
+    data = None
+    try:
+        data = json.loads(raw)
+    except Exception:
+        # Scan for the first balanced {...} span, so JSON embedded in prose works.
+        start = raw.find("{")
+        while start != -1 and data is None:
+            depth = 0
+            for i in range(start, len(raw)):
+                if raw[i] == "{":
+                    depth += 1
+                elif raw[i] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        try:
+                            data = json.loads(raw[start:i + 1])
+                        except Exception:
+                            data = None
+                        break
+            if data is None:
+                start = raw.find("{", start + 1)
+
+    if not isinstance(data, dict):
+        return out
+    for key in ("avoid", "work"):
+        v = data.get(key)
+        if isinstance(v, list):
+            out[key] = [str(x) for x in v if isinstance(x, str) and x.strip()]
+    return out
+
+
 def update_pattern_memory(post_mortem_text: str, today: date) -> None:
     """
     Extract the 'one rule' from the post-mortem and add it to the pattern memory.
@@ -246,13 +300,19 @@ Return ONLY a JSON object with two arrays:
 Each entry must be actionable and specific. If no clear pattern emerged, return empty arrays.
 Return ONLY the JSON, no other text."""
 
+    # 200 tokens truncated two rule arrays mid-string, and the bare json.loads
+    # below then threw the whole extraction away.
     resp = client.messages.create(
-        model=HAIKU_MODEL, max_tokens=200,
+        model=HAIKU_MODEL, max_tokens=800,
         messages=[{"role": "user", "content": prompt}],
     )
 
     try:
-        extracted = json.loads(extract_text(resp).strip())
+        extracted = _parse_pattern_json(extract_text(resp))
+        if not extracted["avoid"] and not extracted["work"]:
+            log.warning("[AIPMLearning] Pattern extraction returned nothing usable; "
+                        "raw reply began: %r", extract_text(resp)[:200])
+            return
         if extracted.get("avoid"):
             patterns.setdefault("avoid", []).extend(extracted["avoid"])
             patterns["avoid"] = patterns["avoid"][-20:]  # keep last 20
