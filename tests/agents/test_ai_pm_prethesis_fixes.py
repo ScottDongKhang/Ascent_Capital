@@ -25,9 +25,21 @@ sys.path.insert(0, str(_REPO_ROOT))
 
 def _import_agent():
     """Import ai_pm_agent, stubbing heavy optional deps if needed."""
-    # Stub heavy deps that may not be installed in test env
+    # Stub heavy deps that may not be installed in the test env.
+    #
+    # Only stub what is genuinely ABSENT. Blindly stubbing shadows an installed
+    # package for the remainder of the session — sys.modules is process-global
+    # and nothing here restores it — and a MagicMock is not a package, so a
+    # later `import sklearn.preprocessing` dies with "'sklearn' is not a
+    # package". That is what made tests/regime/test_ai_regime_blend.py fail
+    # only when run after this file.
+    import importlib
     for mod_name in ["yfinance", "pandas", "sklearn", "anthropic"]:
-        if mod_name not in sys.modules:
+        if mod_name in sys.modules:
+            continue
+        try:
+            importlib.import_module(mod_name)
+        except ImportError:
             sys.modules[mod_name] = MagicMock()
     # Stub ascent.llm.client so the import itself doesn't fail
     llm_stub = types.ModuleType("ascent.llm.client")
@@ -229,3 +241,30 @@ def test_tool_propose_portfolio_accepts_valid_disposition(tmp_path):
         _guard.check_conviction_inflation = orig_check
         if orig_log is not None:
             _cal.log_prediction = orig_log
+
+
+# ── Regression: module stubs must not shadow installed packages ───────────────
+
+def test_import_agent_does_not_shadow_installed_packages():
+    """`_import_agent` stubs heavy optional deps, but it must only do so for deps
+    that are genuinely absent. Stubbing an INSTALLED package with a MagicMock
+    leaves it in sys.modules for the rest of the session, and any later
+    `import sklearn.preprocessing` then fails with
+    "'sklearn' is not a package" — which is what made 5 tests in
+    tests/regime/test_ai_regime_blend.py fail when run after this file and pass
+    in isolation.
+    """
+    _import_agent()
+    import importlib
+    for mod_name in ("sklearn", "pandas", "yfinance"):
+        try:
+            importlib.import_module(mod_name)
+        except ImportError:
+            continue  # genuinely absent -> stubbing it is correct
+        # Installed: it must be the real module, not a stub.
+        assert not isinstance(sys.modules[mod_name], MagicMock), (
+            f"{mod_name} is installed but was replaced by a MagicMock stub; "
+            f"this leaks into every later test in the session"
+        )
+    # The concrete failure mode.
+    importlib.import_module("sklearn.preprocessing")

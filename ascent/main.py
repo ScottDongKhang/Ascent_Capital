@@ -19,6 +19,7 @@ except Exception:
     pass
 
 from ascent.config.settings import get_config, Config
+from ascent.utils.freshness import AI_PRIOR_MAX_AGE_DAYS, ai_prior_is_fresh
 from ascent.data.ingest.simulated import generate_price_data, generate_macro_data
 from ascent.data.normalize.prices import normalize_prices, normalize_macro, pivot_prices
 from ascent.data.store.parquet import save_parquet, load_parquet, has_data, validate_cache
@@ -526,11 +527,19 @@ def run_pipeline(
         try:
             _ai_assess = json.loads(_ai_assess_path.read_text())
             _assess_date = _ai_assess.get("as_of_date", "")
-            if _assess_date and regime_engine is not None:
+            # Expire stale priors. `as_of_date` used only to be passed through to
+            # blend_with_ai, which never compared it to today — so a month-old
+            # assessment kept pulling the regime label and risk multiplier on
+            # every run. See ascent/utils/freshness.py.
+            if not ai_prior_is_fresh(_assess_date):
+                print(f"[Regime] AI blend SKIPPED — assessment dated "
+                      f"{_assess_date or 'unknown'} is older than "
+                      f"{AI_PRIOR_MAX_AGE_DAYS}d (or unparseable)")
+            elif regime_engine is not None:
                 regime_engine.blend_with_ai(_ai_assess, as_of_date=_assess_date)
                 print(f"[Regime] AI blend applied: {_ai_assess.get('label', 'n/a')} "
                       f"conf={_ai_assess.get('confidence', 0):.2f}")
-            _ai_sleeve_prior = dict(_ai_assess.get("sleeve_weight_prior") or {})
+                _ai_sleeve_prior = dict(_ai_assess.get("sleeve_weight_prior") or {})
         except Exception as _blend_e:
             print(f"[Regime] AI blend skipped: {_blend_e}")
 
@@ -644,8 +653,18 @@ def run_pipeline(
         if _pt_path.exists():
             import json as _json
             _pt = _json.loads(_pt_path.read_text())
-            _ai_conviction_syms = [n["symbol"] for n in _pt.get("high_conviction_names", []) if "symbol" in n]
-            _ai_avoid_syms      = {n["symbol"] for n in _pt.get("names_to_avoid", []) if "symbol" in n}
+            # This read had NO date check at all. On 2026-07-27 it consumed a
+            # pre-thesis dated 2026-06-24 (33 days stale) and six of its ten
+            # conviction names were in the executed book — uncapped by earned
+            # authority. Expire it. See ascent/utils/freshness.py.
+            _pt_date = _pt.get("as_of_date", "")
+            if not ai_prior_is_fresh(_pt_date):
+                print(f"[Portfolio] AI PM priors SKIPPED — pre-thesis dated "
+                      f"{_pt_date or 'unknown'} is older than "
+                      f"{AI_PRIOR_MAX_AGE_DAYS}d (or unparseable)")
+            else:
+                _ai_conviction_syms = [n["symbol"] for n in _pt.get("high_conviction_names", []) if "symbol" in n]
+                _ai_avoid_syms      = {n["symbol"] for n in _pt.get("names_to_avoid", []) if "symbol" in n}
     except Exception:
         pass
 
