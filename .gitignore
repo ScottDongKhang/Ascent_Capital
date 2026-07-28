@@ -11,9 +11,10 @@ build/
 .worktrees/
 .streamlit/secrets.toml
 logs/
-execution/
+/execution/
 dashboard/*.json
 memory/*.jsonl
 outputs/scenarios/
 .superpowers/
 mockups/
+data_cache/stop_loss_state.json

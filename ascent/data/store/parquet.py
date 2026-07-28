@@ -33,8 +33,14 @@ def has_data(name: str) -> bool:
     return _cache_path(name).exists()
 
 
+# A bar timestamped at/after this local hour is treated as belonging to the
+# NEXT trading day, not its nominal date. See _calendar_day_key for the
+# rationale (Defect 2, 2026-07-28 audit).
+_EVENING_ROLLOVER_HOUR = 17
+
+
 def _calendar_day_key(s: pd.Series) -> pd.Series:
-    """Collapse a `date` column to a comparable per-row calendar day for dedup.
+    """Collapse a `date` column to a comparable per-row TRADING day for dedup.
 
     Handles all three shapes a blended cache produces:
       - tz-aware datetime64  (the hub stores bars at 19:00 NY)
@@ -44,23 +50,50 @@ def _calendar_day_key(s: pd.Series) -> pd.Series:
         is False for this, so the old code skipped normalization entirely and
         dedup never fired (the 3-generation blend that bloated prices_live ~3×).
 
-    Strips tz (keeps wall-clock day) and zeroes the time, so the same trading day
-    matches regardless of intraday timestamp / tz / dtype. Stored values are not
-    mutated — only the dedup key.
+    Evening-rollover rule (Defect 2, 2026-07-28 audit): a bar stamped
+    >=17:00 local (i.e. after the US cash-market close at 16:00 ET) does not
+    belong to its own nominal date — it is that trading day's already-closed
+    bar being fetched and stamped relative to the NEXT calendar day, which one
+    provider (yfinance_hub) stores as e.g. "2020-01-01 19:00 NY" for what is
+    really 2020-01-02's close (2020-01-01 is a market holiday, so a row dated
+    on it cannot be a real session; the audit's own duplicate-count evidence —
+    1,999 keys for ~1,625 real trading days — is explained by exactly this: the
+    same trading day fetched once late (stamped on the day before, evening) and
+    once promptly (stamped at 00:00 on the correct day) produced two different
+    un-rolled keys that never collided). Rolling the evening stamp forward by
+    one calendar day makes both fetches of the same trading day key identically.
+
+    This is intentionally conservative: it only merges a late-evening stamp on
+    day D with a same-day-or-later fetch actually dated D+1. It never merges
+    two stamps that are already on different real calendar days without going
+    through that exact D-evening / D+1-midnight relationship (e.g. a Friday
+    evening bar rolls to Saturday, which will NOT collide with the following
+    Monday's real trading day — under-collapsing across a weekend/holiday gap
+    rather than ever wrongly merging two distinct trading days).
+
+    Strips tz (keeps wall-clock day) and zeroes the time, so the same trading
+    day matches regardless of intraday timestamp / tz / dtype. Stored values
+    are not mutated — only the dedup key.
     """
     if pd.api.types.is_datetime64_any_dtype(s):
+        hour = s.dt.hour
         d = s.dt.normalize()
         if isinstance(s.dtype, pd.DatetimeTZDtype):
             d = d.dt.tz_localize(None)
-        return d
+        rollover = (hour >= _EVENING_ROLLOVER_HOUR).astype("int64")
+        return d + pd.to_timedelta(rollover, unit="D")
 
     def _one(x):
         if x is None or (not isinstance(x, pd.Timestamp) and pd.isna(x)):
             return pd.NaT
         ts = x if isinstance(x, pd.Timestamp) else pd.Timestamp(x)
+        hour = ts.hour
         if ts.tzinfo is not None:
             ts = ts.tz_localize(None)
-        return ts.normalize()
+        day = ts.normalize()
+        if hour >= _EVENING_ROLLOVER_HOUR:
+            day = day + pd.Timedelta(days=1)
+        return day
 
     return s.map(_one)
 
@@ -68,30 +101,45 @@ def _calendar_day_key(s: pd.Series) -> pd.Series:
 def save_parquet(df: pd.DataFrame, name: str) -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     path = _cache_path(name)
+    # FIX #3: include series_id in preferred id columns alongside symbol.
+    # Before: only "series" was checked, which doesn't exist in either
+    # simulated.py or fred.py output — those both write "series_id".
+    # This meant macro deduplication never matched on the right column,
+    # so every save appended duplicate rows instead of replacing them.
+    #
+    # Defect 1 fix (2026-07-28): dedup used to run ONLY inside `if
+    # path.exists()`, so the very FIRST save_parquet call for a cache name
+    # wrote the incoming `df` straight through with no dedup at all. If that
+    # first incoming frame already contained exact-duplicate rows (e.g. a hub
+    # blend of multiple providers concatenated before ever calling
+    # save_parquet), those duplicates were persisted permanently — every
+    # later append only ever compared new rows against that already-corrupt
+    # baseline, never revisiting it. The dedup logic below now always runs,
+    # against `df` alone when there is no existing cache and against
+    # `old + df` when there is, so a self-duplicated first write is caught
+    # too.
     if path.exists():
         old = pd.read_parquet(path)
-        # FIX #3: include series_id in preferred id columns alongside symbol.
-        # Before: only "series" was checked, which doesn't exist in either
-        # simulated.py or fred.py output — those both write "series_id".
-        # This meant macro deduplication never matched on the right column,
-        # so every save appended duplicate rows instead of replacing them.
-        id_cols = [
-            c for c in ["symbol", "date", "series_id", "series"]
-            if c in old.columns
-        ]
-        if not id_cols:
-            id_cols = [c for c in old.columns if c not in ("known_time", "source")]
         combined = pd.concat([old, df], ignore_index=True)
-        # Build the dedup key with any datetime `date` column normalised to its
-        # CALENDAR DAY. Different fetches store the same bar at different intraday
-        # timestamps / tz offsets (the cache keeps `date` at 19:00 ET), so a raw
-        # (symbol, date) match never fired and every save appended duplicate rows
-        # (audit 2026-06-22: prices_live had ~59% duplicates). Normalising the key
-        # collapses those without mutating the stored `date` values.
-        key = combined[id_cols].copy()
-        if "date" in key.columns:
-            key["date"] = _calendar_day_key(key["date"])
-        df = combined[~key.duplicated(keep="last")]
+    else:
+        combined = df
+    id_cols = [
+        c for c in ["symbol", "date", "series_id", "series"]
+        if c in combined.columns
+    ]
+    if not id_cols:
+        id_cols = [c for c in combined.columns if c not in ("known_time", "source")]
+    # Build the dedup key with any datetime `date` column normalised to its
+    # CALENDAR DAY (with evening-rollover, see _calendar_day_key). Different
+    # fetches store the same bar at different intraday timestamps / tz offsets
+    # (the cache keeps `date` at 19:00 ET), so a raw (symbol, date) match never
+    # fired and every save appended duplicate rows (audit 2026-06-22:
+    # prices_live had ~59% duplicates). Normalising the key collapses those
+    # without mutating the stored `date` values.
+    key = combined[id_cols].copy()
+    if "date" in key.columns:
+        key["date"] = _calendar_day_key(key["date"])
+    df = combined[~key.duplicated(keep="last")]
     df.to_parquet(path, index=False)
     log.info("[cache] saved %s  rows=%d", name, len(df))
 

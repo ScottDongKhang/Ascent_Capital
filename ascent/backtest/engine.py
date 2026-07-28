@@ -71,13 +71,24 @@ class BacktestEngine:
             dt          = common_dates[i]
             start_value = prev_end_value
 
-            # Drift weights from previous day
+            # Drift weights from previous day.
+            #
+            # Weights are fractions of TOTAL portfolio value, including the
+            # cash bucket (1 - gross). Renormalizing by the invested sum alone
+            # silently re-levers a partially-invested book back to gross 1.0
+            # on every non-rebalance day, erasing the 200MA cut, vol targeting
+            # and any stop-loss-to-cash rule. Divide by the portfolio value
+            # factor instead: invested_after_drift + cash (cash returns 0).
             if i > 0:
                 prev_dt = common_dates[i - 1]
                 ret     = daily_returns.loc[prev_dt]
                 drifted = prev_weights * (1 + ret)
-                total   = drifted.sum()
-                current_weights = drifted / total if total > 0 else prev_weights.copy()
+                cash    = 1.0 - float(prev_weights.sum())
+                port_factor = float(drifted.sum()) + cash
+                current_weights = (
+                    drifted / port_factor if abs(port_factor) > 1e-12
+                    else prev_weights.copy()
+                )
             else:
                 current_weights = prev_weights.copy()
 

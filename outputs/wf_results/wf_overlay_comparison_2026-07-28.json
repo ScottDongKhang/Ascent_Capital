@@ -1,0 +1,80 @@
+{
+  "baseline": {
+    "cagr": 0.039126441184502925,
+    "volatility": 0.12759491068721254,
+    "sharpe": 0.085578625113428,
+    "sortino": 0.007750033753790313,
+    "max_drawdown": -0.2141899740731575,
+    "win_rate": 0.5220458553791887,
+    "wfe": 1.2092561726247757,
+    "n_folds": 21.0,
+    "n_oos_days": 1134.0,
+    "alpha": -0.030372602861886644,
+    "beta": 0.532840850448963,
+    "_overlay_stats": {
+      "vol_scale_n": 8656,
+      "vol_scale_mean": 0.8819,
+      "vol_scale_min": 0.25,
+      "vol_scale_at_floor_pct": 0.31,
+      "crash_scale_n": 0,
+      "crash_cut_n": 0
+    },
+    "_config": {
+      "vol_target_reference": "spy",
+      "momentum_crash_overlay_enabled": false,
+      "source_cache": "prices_live_clean_refetch"
+    }
+  },
+  "stratvol": {
+    "cagr": 0.003448610989875478,
+    "volatility": 0.12958108772520677,
+    "sharpe": -0.2142863317620093,
+    "sortino": -0.01904659328875118,
+    "max_drawdown": -0.2804427489415646,
+    "win_rate": 0.5167548500881834,
+    "wfe": 0.17224873455925457,
+    "n_folds": 21.0,
+    "n_oos_days": 1134.0,
+    "alpha": -0.06904202932864639,
+    "beta": 0.5868780151562724,
+    "_overlay_stats": {
+      "vol_scale_n": 8647,
+      "vol_scale_mean": 0.9247,
+      "vol_scale_min": 0.2843,
+      "vol_scale_at_floor_pct": 0.0,
+      "crash_scale_n": 0,
+      "crash_cut_n": 0
+    },
+    "_config": {
+      "vol_target_reference": "strategy",
+      "momentum_crash_overlay_enabled": false,
+      "source_cache": "prices_live_clean_refetch"
+    }
+  },
+  "crashoverlay": {
+    "cagr": 0.039126441184502925,
+    "volatility": 0.12759491068721254,
+    "sharpe": 0.085578625113428,
+    "sortino": 0.007750033753790313,
+    "max_drawdown": -0.2141899740731575,
+    "win_rate": 0.5220458553791887,
+    "wfe": 1.2092561726247757,
+    "n_folds": 21.0,
+    "n_oos_days": 1134.0,
+    "alpha": -0.030372602861886644,
+    "beta": 0.532840850448963,
+    "_overlay_stats": {
+      "vol_scale_n": 8656,
+      "vol_scale_mean": 0.8819,
+      "vol_scale_min": 0.25,
+      "vol_scale_at_floor_pct": 0.31,
+      "crash_scale_n": 8656,
+      "crash_cut_n": 0
+    },
+    "_config": {
+      "vol_target_reference": "spy",
+      "momentum_crash_overlay_enabled": true,
+      "source_cache": "prices_live_clean_refetch"
+    }
+  }
+}

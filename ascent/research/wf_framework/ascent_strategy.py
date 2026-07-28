@@ -294,6 +294,56 @@ class AscentPortfolioStrategy(PortfolioBaseStrategy):
         # --- Step 5: Volatility targeting ---
         weights_at_rebal = self._apply_vol_target(data, weights_at_rebal)
 
+        # --- Step 6: Momentum-crash overlay (parity with production) ---
+        weights_at_rebal = self._apply_momentum_crash_overlay(
+            data, weights_at_rebal
+        )
+
+        # Position-level stop-loss — parity with production (see
+        # docs/superpowers/plans/2026-07-27-position-stop-loss.md). Deliberately
+        # LAST, after Step 3b and the Step 4/5 overlays, not right after the
+        # risk-budget cap: it reassigns weights_at_rebal from a rebalance-
+        # frequency frame to a DAILY frame (a stop has to be able to fire
+        # between rebalances), and anything downstream would receive a daily
+        # frame it wasn't written for. Placed early, it broke two things:
+        # (1) Step 3b's `shorts = short_scaled.reindex(index=longs.index, ...,
+        # fill_value=0.0)` line has short_scaled at rebalance frequency vs a
+        # daily longs.index, so every non-rebalance day filled the short leg
+        # with 0.0, silently zeroing the short book; (2) the Step 4/5 200MA
+        # and vol-target overlays are written to compute one scale per
+        # rebalance row, held constant by the final ffill — on a daily frame
+        # they recompute per calendar day instead, diverging from production.
+        try:
+            from ascent.config.settings import get_config as _get_cfg2
+            _sl = _get_cfg2().backtest
+            _sl_on = getattr(_sl, "stop_loss_enabled", False)
+        except Exception:
+            _sl_on = False
+
+        if _sl_on and _close_panel is not None and not weights_at_rebal.empty:
+            try:
+                from ascent.portfolio.stop_loss import apply_stop_loss_panel
+                _daily = weights_at_rebal.reindex(
+                    _close_panel.index, method="ffill"
+                ).dropna(how="all")
+                _daily, _events = apply_stop_loss_panel(
+                    _daily, _close_panel,
+                    threshold=_sl.stop_loss_threshold,
+                    cooldown_days=_sl.stop_loss_cooldown_days,
+                    redistribute=_sl.stop_loss_redistribute,
+                )
+                weights_at_rebal = _daily
+                if _events:
+                    # ascent_strategy.py has NO module-level `log` (verified
+                    # 2026-07-27) — use a self-contained local logger.
+                    import logging as _lg
+                    _lg.getLogger(__name__).info(
+                        "[StopLoss/WF] %d stop events", len(_events))
+            except Exception as _sl_e:
+                import logging as _lg
+                _lg.getLogger(__name__).warning(
+                    "[StopLoss/WF] skipped: %s", _sl_e)
+
         weights_ffilled = (
             weights_at_rebal
             .reindex(alpha_dates)
@@ -336,6 +386,51 @@ class AscentPortfolioStrategy(PortfolioBaseStrategy):
         except Exception:
             return weights
 
+    def _apply_momentum_crash_overlay(self, data, weights):
+        """
+        Daniel & Moskowitz (2016) crash-state cut. Delegates to
+        ascent/portfolio/exposure.py — single source of truth shared with
+        production. See docs/superpowers/plans/2026-07-27-momentum-crash-indicator.md.
+
+        Reads `momentum_crash_overlay_enabled` / `momentum_crash_multiplier`,
+        the same two config fields production reads, so research and production
+        cannot silently diverge. Inert while the flag is False.
+        """
+        if weights is None or weights.empty:
+            return weights
+        try:
+            from ascent.config.settings import get_config as _gc
+            _bt = _gc().backtest
+            if not getattr(_bt, "momentum_crash_overlay_enabled", False):
+                return weights
+            mult = float(getattr(_bt, "momentum_crash_multiplier", 0.50))
+        except Exception:
+            return weights
+
+        try:
+            from ascent.portfolio.exposure import momentum_crash_scale
+
+            # Same SPY-loading mechanism as _apply_200ma_overlay — do not add
+            # a second way of obtaining the benchmark series.
+            spy = (
+                data[data["symbol"] == "SPY"]
+                .copy()
+                .assign(date=lambda d: pd.to_datetime(d["date"]).dt.tz_localize(None))
+                .sort_values("date")
+                .set_index("date")["close"]
+            )
+            if spy is None or spy.empty:
+                return weights
+            scale = momentum_crash_scale(spy, weights.index, multiplier=mult)
+            return weights.mul(scale, axis=0)
+        except Exception as exc:
+            # ascent_strategy.py has NO module-level `log` (verified
+            # 2026-07-27) — use a self-contained local logger.
+            import logging as _lg
+            _lg.getLogger(__name__).warning(
+                "[Exposure/WF] momentum-crash overlay skipped: %s", exc)
+            return weights
+
     def _apply_vol_target(
         self,
         data: pd.DataFrame,
@@ -356,7 +451,9 @@ class AscentPortfolioStrategy(PortfolioBaseStrategy):
         shared with production.
         """
         try:
-            from ascent.portfolio.exposure import vol_target_scale
+            from ascent.portfolio.exposure import (
+                vol_target_scale, realized_vol_scale, strategy_return_proxy,
+            )
 
             spy = (
                 data[data["symbol"] == "SPY"]
@@ -365,10 +462,50 @@ class AscentPortfolioStrategy(PortfolioBaseStrategy):
                 .sort_values("date")
                 .set_index("date")["close"]
             )
-            scale = vol_target_scale(
-                spy, weights.index, target_vol=target_vol,
-                lookback=lookback, floor=floor, cap=cap,
-            )
+
+            try:
+                from ascent.config.settings import get_config as _gc
+                _ref = str(getattr(_gc().backtest, "vol_target_reference", "spy")).lower()
+            except Exception:
+                _ref = "spy"
+
+            # `data` is long-format; strategy-own vol targeting needs a
+            # (dates x symbols) close panel, so build one on demand.
+            _close_panel = None
+            if _ref == "strategy":
+                try:
+                    _close_panel = (
+                        data.assign(
+                            date=lambda d: pd.to_datetime(d["date"]).dt.tz_localize(None))
+                        .pivot_table(index="date", columns="symbol",
+                                     values="close", aggfunc="last")
+                        .sort_index()
+                    )
+                except Exception:
+                    _close_panel = None
+
+            if _ref == "strategy" and _close_panel is not None and not _close_panel.empty:
+                # `weights` here is indexed at REBALANCE dates only. The proxy
+                # reindexes prices onto the weights index, so feeding it the
+                # sparse frame would produce ~10-day returns annualized by
+                # sqrt(252) (a ~3x vol overstatement that pins the scale to the
+                # floor). Forward-fill the held book onto the daily grid first.
+                _daily_w = (
+                    weights.reindex(_close_panel.index.union(weights.index))
+                    .ffill()
+                    .reindex(_close_panel.index)
+                    .fillna(0.0)
+                )
+                scale = realized_vol_scale(
+                    strategy_return_proxy(_daily_w, _close_panel),
+                    weights.index, target_vol=target_vol,
+                    lookback=lookback, floor=floor, cap=cap,
+                )
+            else:
+                scale = vol_target_scale(
+                    spy, weights.index, target_vol=target_vol,
+                    lookback=lookback, floor=floor, cap=cap,
+                )
             return weights.mul(scale, axis=0)
         except Exception:
             return weights

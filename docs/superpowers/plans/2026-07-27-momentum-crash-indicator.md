@@ -1,5 +1,48 @@
 # Momentum Crash Indicator Implementation Plan
 
+> **STATUS (2026-07-28, branch `feature/risk-management`): COMPLETE — Tasks 1-4
+> done. Task 4 verdict: DO NOT ENABLE.** Stays
+> `momentum_crash_overlay_enabled = False`; live behaviour unchanged.
+> Commits: `7425223` (T1), `f2fea4a` (T2), `ddde470` (T3).
+>
+> **The decisive finding is that this plan's Task 4 Step 4 CANNOT be executed as
+> written.** The overlay is **structurally inert inside the WF harness**: each fold
+> hands the strategy only `is_days=252 + oos_days=63` ≈ **320 trading days**, while
+> `momentum_crash_scale` needs `bear_lookback + 1 = 505` rows strictly before each
+> decision date. It therefore returns 1.0 unconditionally — measured
+> `crash_cut_n = 0` across 8,656 evaluations, and the treatment run came back
+> **byte-identical to baseline** (Sharpe 0.0856 both). **Zero firings is NOT
+> evidence the overlay is harmless; it is evidence the harness cannot test it.**
+> Validating a 504-day-lookback rule needs a materially longer IS window (or
+> full-history context for the lookback while keeping fold isolation for the
+> signal). Do not re-run Task 4 Step 4 unchanged and read "no difference" as a
+> pass.
+>
+> Independently, the firing audit already made the gate unsatisfiable — see below.
+> Full decision record: **`docs/risk_overlays_wf_decision_2026-07-28.md`**.
+>
+> **Firing audit result (Task 4 Step 2), verbatim:**
+> ```
+> SPY series: 1648 rows, 2020-01-01 -> 2026-07-23
+> OOS dates: 1395   crash-state dates: 64 (4.6%)
+> first: 2023-04-11  last: 2024-01-08
+> ```
+> 64 firings > 5, so Step 3 nominally says "proceed to the walk-forward".
+> **Read the episode decomposition before doing so:** the 64 dates form 15
+> contiguous runs (largest 14 days = 22% of firings), but ALL 15 fall inside a
+> single 9-month macro window — the post-2022-bear recovery of Apr 2023 to Jan
+> 2024. Statistically this is ONE macro episode fragmented into 15 runs, not 15
+> independent events. Task 5's third condition ("the improvement is not driven
+> by a single episode") is therefore very unlikely to be satisfiable on this
+> OOS window regardless of what the WF numbers say. Expect to land on the
+> plan's own documented outcome: leave it disabled, keep the code, and note
+> that validation needs pre-2021 history.
+>
+> **Deviation from plan, Task 3 Step 4:** `self._benchmark_close(data)` was a
+> prose-flagged placeholder; the method reuses `_apply_200ma_overlay`'s inline
+> SPY-loading mechanism instead. Sequenced as Step 6, after vol targeting but
+> BEFORE the position stop-loss, preserving the ordering set in `fbd8661`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Cut portfolio exposure when the market is in the specific state that precedes momentum crashes — a prolonged decline followed by a rebound — implementing the conditional mechanism from Daniel & Moskowitz (2016), "Momentum Crashes."

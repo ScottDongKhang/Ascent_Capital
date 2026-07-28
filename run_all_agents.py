@@ -1917,6 +1917,9 @@ def main():
     else:
         print("[Runner] LIVE MODE — calling eod_runner with merged weights")
         try:
+            merged_weights, _stopped_syms = _apply_stop_loss_to_book(
+                merged_weights, today.isoformat()
+            )
             from ascent.execution.eod_runner import run_eod_with_weights
             run_eod_with_weights(merged_weights, run_date=today, dry_run=False, precomputed_verdict=verdict)
         except ImportError:
@@ -2555,6 +2558,87 @@ def _write_mini_rebalance_log(symbol: str, conviction: float) -> None:
     }))
 
 
+def _apply_stop_loss_to_book(target_weights: dict, today: str) -> tuple:
+    """
+    Apply the position-level stop-loss to a target book, using entry prices
+    from the live Alpaca positions.
+
+    Must be called LAST, after every cap and overlay. Those caps
+    (_water_fill_cap, enforce_cluster_cap, enforce_risk_budget_cap,
+    apply_exposure_overlays) run upstream, in the agents and orchestrator,
+    before `merged_weights` ever reaches this function — they are not invoked
+    here or nearby. They all renormalize and would refill a stopped name, so
+    this call must stay downstream of all of them.
+
+    Fail-open: any failure (broker down, missing prices) returns the input
+    unchanged. A monitoring failure must never liquidate the book.
+
+    Returns (adjusted_weights, stopped_symbols).
+    """
+    # Local imports match this file's style: run_all_agents.py has no
+    # module-level `logging` import (verified 2026-07-27 — the only use is a
+    # function-local `import logging as _logging` at line 2616).
+    import logging
+    import pandas as pd
+    from ascent.config.settings import get_config
+
+    cfg = get_config()
+    if not getattr(cfg.backtest, "stop_loss_enabled", False):
+        return target_weights, []
+
+    try:
+        from ascent.portfolio.stop_loss import (
+            DEFAULT_STATE_PATH, compute_stop_breaches, apply_stop_loss,
+            load_stop_state, record_stops, blocked_symbols,
+        )
+        from ascent.execution import alpaca_broker
+
+        w = pd.Series(target_weights, dtype=float)
+
+        # 1. Names still inside their re-entry cooldown never get re-bought.
+        state = load_stop_state(DEFAULT_STATE_PATH)
+        blocked = blocked_symbols(
+            state, today, cooldown_days=cfg.backtest.stop_loss_cooldown_days
+        )
+        if blocked:
+            hit = [s for s in w.index if s in blocked]
+            if hit:
+                logging.info("[StopLoss] Cooldown blocks re-entry: %s", hit)
+                w.loc[hit] = 0.0
+
+        # 2. Evaluate live positions against their entry prices.
+        pos = alpaca_broker.get_positions()
+        stopped: list = []
+        if pos is not None and not pos.empty and "avg_entry_price" in pos.columns:
+            idx = pos.set_index("symbol")
+            breached = compute_stop_breaches(
+                idx["avg_entry_price"].astype(float),
+                idx["current_price"].astype(float),
+                threshold=cfg.backtest.stop_loss_threshold,
+            )
+            stopped = [s for s in breached.index if bool(breached[s])]
+            if stopped:
+                w = apply_stop_loss(
+                    w,
+                    pd.Series(True, index=[s for s in stopped if s in w.index]),
+                    redistribute=cfg.backtest.stop_loss_redistribute,
+                )
+                record_stops(stopped, today, path=DEFAULT_STATE_PATH)
+                logging.warning(
+                    "[StopLoss] Stopped out %s at a %.0f%% threshold",
+                    stopped, cfg.backtest.stop_loss_threshold * 100,
+                )
+
+        return w.to_dict(), stopped
+
+    except Exception as exc:
+        logging.warning(
+            "[StopLoss] Skipped (%s) — book unchanged. Fail-open by design.",
+            exc,
+        )
+        return target_weights, []
+
+
 def _apply_falsifier_trim(fired: list, current_weights: dict, today, dry_run: bool = False) -> None:
     """
     Execute ONE bounded trim for the highest-priority fired falsifier:
@@ -2642,6 +2726,9 @@ def _apply_falsifier_trim(fired: list, current_weights: dict, today, dry_run: bo
         if dry_run:
             print(f"[Falsifier] DRY RUN — would sell {sym} down to {new_w:.1%}")
         else:
+            new_weights, _stopped_syms = _apply_stop_loss_to_book(
+                new_weights, today.isoformat()
+            )
             from ascent.execution.eod_runner import run_eod_with_weights
             run_eod_with_weights(new_weights, run_date=today, dry_run=False, force=True)
 
@@ -2788,6 +2875,9 @@ def _trigger_mini_rebalance(
             print(f"[Discovery] DRY RUN — would submit {len(new_weights)} positions "
                   f"including {result.symbol}")
         else:
+            new_weights, _stopped_syms = _apply_stop_loss_to_book(
+                new_weights, today.isoformat()
+            )
             from ascent.execution.eod_runner import run_eod_with_weights
             run_eod_with_weights(
                 new_weights,

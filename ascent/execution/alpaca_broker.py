@@ -41,7 +41,8 @@ def get_account() -> dict:
 def get_positions() -> pd.DataFrame:
     """
     Return current positions as a DataFrame with columns:
-    symbol, qty, market_value, current_price, weight
+    symbol, qty, market_value, current_price, weight,
+    avg_entry_price, unrealized_plpc
     Weights are computed as fraction of total portfolio value.
     """
     r = requests.get(f"{ALPACA_BASE_URL}/positions", headers=_headers(), timeout=10)
@@ -49,15 +50,22 @@ def get_positions() -> pd.DataFrame:
     data = r.json()
 
     if not data:
-        return pd.DataFrame(columns=["symbol", "qty", "market_value", "current_price", "weight"])
+        return pd.DataFrame(columns=[
+            "symbol", "qty", "market_value", "current_price", "weight",
+            "avg_entry_price", "unrealized_plpc",
+        ])
 
     rows = []
     for p in data:
         rows.append({
-            "symbol":        p["symbol"],
-            "qty":           float(p["qty"]),
-            "market_value":  float(p["market_value"]),
-            "current_price": float(p["current_price"]),
+            "symbol":          p["symbol"],
+            "qty":             float(p["qty"]),
+            "market_value":    float(p["market_value"]),
+            "current_price":   float(p["current_price"]),
+            "avg_entry_price": pd.to_numeric(p.get("avg_entry_price"),
+                                             errors="coerce"),
+            "unrealized_plpc": pd.to_numeric(p.get("unrealized_plpc"),
+                                             errors="coerce"),
         })
 
     df = pd.DataFrame(rows)

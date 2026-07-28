@@ -1,5 +1,28 @@
 # Strategy-Own Volatility Targeting Implementation Plan
 
+> **STATUS (2026-07-28, branch `feature/risk-management`): COMPLETE — Tasks 1-5
+> done. Task 5 verdict: REJECTED, default stays `"spy"`.** The walk-forward gate
+> (Sharpe +0.05 AND improved max DD) failed decisively: **Sharpe 0.0856 → −0.2143
+> and max drawdown −21.42% → −28.04%** over 21 folds / 1134 OOS days.
+> Mechanism: the book's own realized vol (~12.8%) is BELOW the 15% target, so
+> strategy-referenced scaling **de-risks LESS** than SPY-referenced (mean scale
+> 0.925 vs 0.882, min 0.284 vs 0.250) — it levers toward 1.0 and carries more
+> exposure into drawdowns. Barroso/Santa-Clara presumes the factor's own vol
+> EXCEEDS the target; this book is already defensive, so the premise fails.
+> Machinery stays in the tree behind the config flag. Full decision record with
+> the comparison table and the experiment-local caveat:
+> **`docs/risk_overlays_wf_decision_2026-07-28.md`**.
+> Commits: `26e42b2` (T1), `7f89c67` (T2), `b9ee614` (T3), `d65c6a9` (T4).
+> **Deviation from plan, Task 4 Step 5:** the WF `_apply_vol_target` receives
+> weights indexed at REBALANCE dates only, and `strategy_return_proxy`
+> reindexes prices onto the weights index — so the plan's literal diff would
+> compute ~10-day returns and annualize them by sqrt(252), a ~3x vol
+> overstatement pinning the scale near the 0.25 floor (measured: mean scale
+> 0.466 vs a correct 0.95 on a 15%-vol book). Weights are now forward-filled
+> onto the daily close panel first; two regression tests in
+> `tests/portfolio/test_exposure_strategy_vol.py::TestProxyNeedsADailyGrid`
+> cover both grids.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Scale portfolio exposure by the inverse of the **strategy's own** trailing realized volatility rather than SPY's, implementing Barroso & Santa-Clara (2015) and Moreira & Muir (2017).
