@@ -92,28 +92,93 @@ Section 1 above must match `outputs/wf_results/wf_report_clean_2026-06-22.json`:
 
 ## 3. AI-native layer (SYSTEM 2)
 
-Live since **2026-06-04** (~2.5 weeks). **No multi-year track record exists for this layer.**
+Live since **2026-06-04**. **No multi-year track record exists for this layer.**
+
+**STATUS: ✅ counterfactual log REBUILT 2026-07-28.** The figures below supersede everything
+previously reported here and in `CLAUDE.md`. The old log was unusable — see "What was wrong"
+below — and the numbers it produced (`B−A★ = −7.82pp`, `A★ +23.59%`, `SPY +16.63%`) must not
+be quoted again from any source.
 
 | Fact | Value | Source | Verified |
 |---|---|---|---|
-| Authority level | **Level 1 (Analyst), 5% budget** | `data_cache/earned_authority.json` | 2026-06-22 |
-| Completed **scheduled** rebalances participated in | **1 of 1** (June 10 only; next June 24) | `rebalance_calendar.csv` + `ai_pm_decision_log.jsonl` + `counterfactual_ai_snapshots.jsonl` | 2026-06-22 |
-| (June 15 & 22 order submissions were off-calendar **discovery mini-rebalances** — AI PM did not enter Phase 2; not bugs) | — | `eod_log.jsonl` `trigger: discovery` | 2026-06-22 |
-| Pure-AI-PM vs pure-quant (D−A★) | **−6.52pp over 23 common days** (stable) | `logs/counterfactual_daily.jsonl` | 2026-06-22 |
-| Actual book vs pure-quant (B−A★) | **−6.57pp over 32 common days** (⚠️ UNSTABLE) | `logs/counterfactual_daily.jsonl` | 2026-06-22 |
-| Promotion gates (L1→L2) | **failing 4 of 7** (sortino_edge −3.73 vs +0.20; hit_rate 0; profit_factor 1.0; decisions_evaluated 0) | `data_cache/ai_pm_perf_feedback.json` | 2026-06-22 |
+| Authority level | **Level 1 (Analyst), 5% budget**, 19 days at level | `data_cache/earned_authority.json` | 2026-07-28 |
+| Completed **scheduled** rebalances participated in (Phase 2) | **2** — 2026-06-10, 2026-06-24 | `logs/ai_pm_decision_log.jsonl` (2 distinct dates) | 2026-07-28 |
+| (07-08 and 07-22 scheduled rebalances **never ran** — 19-trading-day outage) | — | `logs/liveness.json`, `logs/eod_log.jsonl` | 2026-07-28 |
+| (06-15, 06-22, 06-29 order submissions were off-calendar **discovery mini-rebalances** — no Phase 2) | — | `eod_log.jsonl` `trigger: discovery` | 2026-07-28 |
+| Actual book vs pure-quant (B−A★) | **−5.92pp over 70 common days, t = −1.24** (not significant) | `logs/counterfactual_daily.jsonl` | 2026-07-28 |
+| Pure-AI-PM vs pure-quant (D−A★) | **−3.04pp over 47 common days, t = −0.94** (not significant) | `logs/counterfactual_daily.jsonl` | 2026-07-28 |
+| Promotion gates (L1→L2) | **failing** (n_decisions_evaluated 0, hit_rate 0, profit_factor 1.0, sortino_edge 0.016 vs +0.20 required) | `data_cache/ai_pm_perf_feedback.json` | 2026-07-28 |
+
+### Cumulative track returns, 2026-03-24 → 2026-07-27 (86 trading days)
+
+| Track | Value | Note |
+|---|---|---|
+| A★ pure quant | **+9.54%** | snapshot weights priced on `prices_live` |
+| A quant + Phase-1 priors | **+0.73%** | only 31 non-null days (2 snapshots exist) |
+| B actual book | **+4.70%** | settled Alpaca 1D bars |
+| C SPY | **+13.13%** | `prices_live` closes |
+| D pure AI PM | **−2.12%** | 47 non-null days |
+
+**SPY beats pure quant over this window** (+13.13% vs +9.54%). The old log claimed the
+reverse by ~7pp. This is consistent with the documented structural position — ~22% defensive
+non-equity sleeves, the 200MA cut and the 15% vol-target overlay all cost beta in an
+equity-only bull — but it is no longer masked by an inflated quant figure. Section 2's
+independent book-vs-SPY figure (−8.88% over its own window) points the same way.
+
+### Reconciliation — three independent checks, all passing
+
+| Check | Result |
+|---|---|
+| Track C chained daily vs SPY point-to-point | **+13.13% = +13.13%**, exact |
+| Track B chained vs raw Alpaca equity endpoints | **+4.70%**, 100,000.00 → 104,695.25, exact |
+| Track B vs §2's `holdings_log` book return, same window (04-01→07-27) | **+3.77% vs +3.79%** — 0.02pp, different sources |
+
+A chained series equals point-to-point only when there are no gaps and no misalignment,
+which is precisely the check the old `+16.63%` SPY figure failed.
+
+**Alignment:** same-day `corr(B, A★)` is now **+0.936**, lag-1 **−0.118**. Before the rebuild
+those read −0.005 and +0.60 — two books sharing 95% of their holdings appearing uncorrelated
+same-day and correlated one day late. That shift *was* the −7.82pp headline.
+
+### What was wrong with the old log
+
+1. **45 rows for 78 trading days.** The backfills could only mutate existing rows, never
+   insert, so any day the pipeline did not run was permanently absent — including a 19-day
+   outage hole. `_cumret_over` chains across gaps as though those days never happened, which
+   inflated every cumulative figure 2.5–4×.
+2. **Track B keyed one day late** — `datetime.fromtimestamp(ts)` with no timezone on Alpaca's
+   UTC epochs, rendered in host-local time (UTC+7), so a 16:00 ET close became the next
+   calendar day. Friday's bar became Saturday and Monday was unreachable (14 Saturdays,
+   1 Monday on the published page).
+3. **A 2026-06-19 row** carrying `track_b +1.53%` / `track_c +1.04%` on Juneteenth, with the
+   market shut.
+
+Rebuilt by `scripts/rebuild_counterfactual_log.py` (logic in
+`ascent/monitoring/counterfactual_rebuild.py`, 17 tests; dry-run by default). 86 rows, all 86
+expected trading days present, no duplicates, no weekends, no holidays. Previous log backed up
+to `logs/counterfactual_daily.pre_rebuild.20260728-114026.bak.jsonl`.
 
 Caveats:
-- **B−A★ is not settled.** It was −5.27pp/31d in the logged file; running the standard
-  daily backfill once filled a verified-correct April-16 cell and moved it to −6.57pp/32d
-  (applied to the log 2026-06-22, backup `counterfactual_daily.jsonl.bak-astar-fill-*`).
-  It keeps drifting as the heal reaches older rows and as n grows (n≈32, a single ±3% day
-  moves it ~0.3–0.5pp). Treat as directional, low confidence.
-- All counterfactual numbers dated before ~2026-06-20 are unreliable (pre self-heal repair).
-- Authority gate thresholds are **held constant** (`ai_pm_perf_feedback.py:240–243`, one commit
-  since creation, never loosened); the system is correctly refusing promotion.
-- Net: the AI layer is currently **value-neutral-to-negative on a tiny sample**. Strongest
-  honest framing is the *governance discipline*, not results.
+- **Still not statistically significant.** t = −1.24 (B−A★) and −0.94 (D−A★). More
+  importantly the daily observations are not independent evidence: weights are frozen between
+  rebalances, and all of it descends from **2** Phase-2 decisions. Effective n is closer to 2
+  than to 70.
+- **A★/A/D cannot be reconciled against an external source.** They are reconstructions from
+  snapshot weights priced on `prices_live`, using the same method `score_daily` uses live. Only
+  B and C have outside confirmation.
+- **One asymmetry, disclosed not corrected:** Alpaca equity is total-return, while production
+  `prices_live` closes are split-only, so B is not perfectly comparable to A★/D on
+  dividend-paying names. Pre-existing — `score_daily` reads the same two sources.
+- **Track A is thin.** Only 2 quant snapshots exist, so its 31 non-null days and +0.73% carry
+  much less weight than the other tracks.
+- Authority gate thresholds are **held constant** (`ai_pm_perf_feedback.py`, never loosened);
+  the system is correctly refusing promotion. As of 2026-07-28 `n_decisions_evaluated` is
+  reachable for the first time (overrides are now derived from weight deltas rather than
+  self-reported), so the gates can begin to accumulate real samples.
+- Net: the AI layer remains **value-neutral-to-negative on a sample too small to judge**. The
+  honest framing is still the governance discipline, not results — but note the transmission
+  defects found on 2026-07-27 mean the layer's *judgment* has never been cleanly measured.
+  See `docs/AI_PM_DIAGNOSIS_2026-07-27.md`.
 
 ---
 <!-- BEGIN GENERATED data-integrity: reconcile_numbers.py -->
@@ -144,4 +209,6 @@ More than one source generation is blended in this cache. Mixed adjustment bases
 1. ~~Re-fetch `prices_live` clean → re-run WF → get the real OOS number.~~ **DONE 2026-06-22** — Sharpe 0.41 / CAGR +10.3% verified (§1). Staging cache only; production cache not yet swapped (see §1 production note).
 2. ~~WF-results header "CPCV C(6,2) = 15 folds" line~~ **CORRECTED** — the WF backtest is rolling 252d-IS/63d-OOS, **21 folds** (README updated). Still unverified: the *ML-sleeve internal* CV line in the alpha-stack table (`ML (XGBoost/CPCV) C(6,2)=15`) — that refers to a different thing (the ML sleeve's own cross-validation) and has not been checked against the code.
 3. (Optional production step) Decide whether to swap the clean staging cache into live `prices_live.parquet` — changes live momentum signals to total-return-adjusted close; do deliberately, not before June 24.
-4. Decide whether the AI layer's −6.5pp counterfactual at June 24 (next scheduled rebalance, n grows) warrants action.
+4. ~~Decide whether the AI layer's −6.5pp counterfactual warrants action.~~ **SUPERSEDED 2026-07-28** — that figure was a measurement artifact. The rebuilt number is −5.92pp/70d at t = −1.24, from 2 Phase-2 decisions: still not actionable, but for a different reason (no signal yet, rather than a bad signal). Do **not** change the 5% authority budget on this evidence; re-ask after 8–10 cleanly scored rebalances, which is now possible for the first time. See §3 and `docs/AI_PM_DIAGNOSIS_2026-07-27.md`.
+5. **Re-run the counterfactual rebuild once a few correct daily runs have accumulated.** The rebuild is reproducible (`scripts/rebuild_counterfactual_log.py`, dry-run by default) and idempotent on unchanged sources, so it can be re-applied to extend the series rather than being a one-off repair.
+6. **Track A needs more snapshots.** Only 2 exist, so the "quant + Phase-1 priors" track is the weakest of the five and its +0.73% should not be leaned on.
