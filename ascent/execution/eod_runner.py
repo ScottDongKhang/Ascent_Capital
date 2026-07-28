@@ -525,7 +525,7 @@ def _enforce_reduce_size(
     haiku_weights: dict,
     min_reduction_threshold: float = 0.01,
     min_positions_reduced: int = 3,
-    target_gross: float = 1.0,
+    target_gross: float = REDUCE_SIZE_GROSS_TARGET,
     protected: frozenset = frozenset(),
 ) -> dict:
     """
@@ -566,8 +566,11 @@ def _enforce_reduce_size(
         haiku_weights:    {symbol: weight} after the Haiku adjustment
         min_reduction_threshold: per-position cut that counts as genuine
         min_positions_reduced:   how many such cuts to accept Haiku's work
-        target_gross: gross exposure to land on. Defaults to 1.0 so existing
-            callers keep the old behaviour; the reduce_size path passes < 1.0.
+        target_gross: gross exposure to land at or below. Defaults to
+            REDUCE_SIZE_GROSS_TARGET, deliberately NOT 1.0: a 1.0 default makes
+            this function a silent no-op (needed = total - 1.0 = 0), which is the
+            same failure it exists to prevent, just relocated into the signature.
+            A function named _enforce_reduce_size must reduce by default.
         protected: symbols the verdict said not to cut. These keep their
             absolute weight and the whole reduction comes from the rest.
 

@@ -41,33 +41,84 @@ def test_em_commodity_cap_preserves_non_em():
 
 
 def test_reduce_size_enforces_actual_reduction():
-    """reduce_size must produce weights that are measurably smaller than originals."""
-    from ascent.execution.eod_runner import _enforce_reduce_size
+    """reduce_size must produce a measurably SMALLER BOOK, not a rotation.
+
+    Rewritten 2026-07-28. This test previously asserted the old contract —
+    `sum(enforced) == 1.0` plus ">=3 positions each cut by >=1pp" — which is
+    exactly the behaviour the 2026-07-27 audit identified as the defect: gross
+    exposure was 1.0000 before and after on all three dates reduce_size ever
+    fired, so it never reduced anything. It concentrated 2pp cuts on the largest
+    five names and recycled the freed weight into the rest, which on 07-27 pushed
+    10pp out of dollar, duration and T-bills into equities 48h before FOMC under
+    a de-risking verdict.
+
+    The contract now is: gross falls, and the freed weight leaves the book as cash
+    rather than moving to other positions. A per-position ">=1pp cut" assertion is
+    not meaningful under proportional de-grossing of a 20-name book — a 10%
+    de-gross moves the largest 10% position by exactly 1pp and everything else by
+    less — so the assertions are on gross and on direction instead.
+    """
+    from ascent.execution.eod_runner import REDUCE_SIZE_GROSS_TARGET, _enforce_reduce_size
 
     original = {"AAPL": 0.10, "MSFT": 0.09, "AMZN": 0.08, "NVDA": 0.07, "JPM": 0.06,
                 "V": 0.06, "MA": 0.05, "UNH": 0.05, "HD": 0.05, "PG": 0.05,
                 "BRK": 0.04, "XOM": 0.04, "LLY": 0.04, "JNJ": 0.04, "AVGO": 0.04,
                 "META": 0.04, "GOOGL": 0.04, "TSLA": 0.03, "COST": 0.03, "NKE": 0.03}
 
-    # Haiku returns same weights (no reduction) — enforcement must kick in
-    unchanged = dict(original)
-    enforced = _enforce_reduce_size(original, unchanged)
+    # Haiku returns the same weights (no reduction) — enforcement must kick in.
+    enforced = _enforce_reduce_size(original, dict(original))
 
-    reduced_count = sum(1 for s, w in enforced.items() if w < original.get(s, 0) - 0.01)
-    assert reduced_count >= 3, f"Expected >=3 positions reduced, got {reduced_count}"
-    assert abs(sum(enforced.values()) - 1.0) < 0.001
+    # 1. The book is genuinely smaller. This is the assertion that would have
+    #    caught the original bug, and the old version of this test did not make it.
+    assert sum(enforced.values()) < sum(original.values()) - 0.001
+    assert sum(enforced.values()) <= REDUCE_SIZE_GROSS_TARGET + 1e-6
+
+    # 2. No position GREW. A rotation shows up here as some name gaining weight.
+    grew = {s: (original[s], w) for s, w in enforced.items() if w > original[s] + 1e-9}
+    assert not grew, f"reduce_size increased positions (rotation, not reduction): {grew}"
+
+    # 3. Every position shrank, so the reduction is spread rather than
+    #    concentrated on the largest few.
+    assert all(enforced[s] < original[s] for s in original)
 
 
-def test_reduce_size_passes_through_genuine_reduction():
-    """If Haiku genuinely reduced positions, pass through unchanged."""
+def test_reduce_size_passes_through_a_genuine_reduction():
+    """A real reduction — one that lowers gross — is left exactly as Haiku set it.
+
+    Scaling it further would re-gross a book that had already been cut, the same
+    class of bug as the old renormalize-to-1.0.
+    """
     from ascent.execution.eod_runner import _enforce_reduce_size
 
     original = {"AAPL": 0.12, "MSFT": 0.10, "AMZN": 0.08, "NVDA": 0.07, "OTHER": 0.63}
-    adjusted = {"AAPL": 0.08, "MSFT": 0.06, "AMZN": 0.05, "NVDA": 0.04, "OTHER": 0.77}
+    # Sums to 0.85: the freed weight became cash instead of moving elsewhere.
+    adjusted = {"AAPL": 0.08, "MSFT": 0.06, "AMZN": 0.05, "NVDA": 0.04, "OTHER": 0.62}
 
     result = _enforce_reduce_size(original, adjusted)
     assert abs(result["AAPL"] - 0.08) < 0.001
     assert abs(result["MSFT"] - 0.06) < 0.001
+    assert abs(sum(result.values()) - 0.85) < 0.001
+
+
+def test_reduce_size_caps_a_rotation_masquerading_as_a_reduction():
+    """Rewritten 2026-07-28.
+
+    The previous fixture here cut four names while growing OTHER from 0.63 to
+    0.77 — gross unchanged at 1.0 — and asserted it passed through untouched.
+    That is the 2026-07-27 defect exactly: names trimmed, proceeds recycled, no
+    risk removed. Haiku's relative shape is still honoured, but gross is capped.
+    """
+    import pytest
+
+    from ascent.execution.eod_runner import REDUCE_SIZE_GROSS_TARGET, _enforce_reduce_size
+
+    original = {"AAPL": 0.12, "MSFT": 0.10, "AMZN": 0.08, "NVDA": 0.07, "OTHER": 0.63}
+    rotation = {"AAPL": 0.08, "MSFT": 0.06, "AMZN": 0.05, "NVDA": 0.04, "OTHER": 0.77}
+
+    result = _enforce_reduce_size(original, rotation)
+    assert sum(result.values()) <= REDUCE_SIZE_GROSS_TARGET + 1e-6
+    # Relative shape preserved: AAPL still twice MSFT, as Haiku intended.
+    assert result["AAPL"] / result["MSFT"] == pytest.approx(0.08 / 0.06, rel=1e-6)
 
 
 def test_reduce_size_empty_haiku_returns_original():

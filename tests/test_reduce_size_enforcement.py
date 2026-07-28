@@ -50,11 +50,21 @@ class TestGrossExposureActuallyFalls:
         assert sum(out.values()) == pytest.approx(0.85, abs=1e-6)
         assert sum(out.values()) <= 0.90 + 1e-9
 
-    def test_default_target_gross_is_backwards_compatible(self):
-        """Existing callers that pass no target keep the old sum-to-1.0 behaviour."""
+    def test_default_target_reduces_rather_than_no_opping(self):
+        """The default must NOT be 1.0.
+
+        I originally defaulted target_gross to 1.0 for "backwards compatibility",
+        which made the function a silent no-op when the argument was omitted:
+        needed = total - 1.0 = 0, early return, nothing reduced. That relocates
+        the original bug into the signature. A function named
+        _enforce_reduce_size must reduce by default; tests/test_plan_b.py caught
+        this.
+        """
+        from ascent.execution.eod_runner import REDUCE_SIZE_GROSS_TARGET
         original = _book(A=0.5, B=0.5)
         out = _enforce_reduce_size(original, dict(original))
-        assert sum(out.values()) == pytest.approx(1.0, abs=1e-6)
+        assert sum(out.values()) == pytest.approx(REDUCE_SIZE_GROSS_TARGET, abs=1e-6)
+        assert sum(out.values()) < 1.0
 
 
 class TestDetectionIsPreRenormalization:
