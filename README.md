@@ -57,24 +57,31 @@ The adversarial debate engine makes exactly one falsifiable weight change per re
 <!-- LIVE_STATS_START -->
 | Metric | Value |
 |--------|-------|
-| Current NAV | $104,422 |
-| Total Return | +3.58% |
-| Alpha vs SPY | -9.39% |
-| Sharpe (Ann.) | 0.645 |
+| Current NAV | $104,370 |
+| Total Return | +3.53% |
+| Alpha vs SPY | -9.56% |
+| Sharpe (Ann.) | 0.633 |
 | Max Drawdown | -9.26% |
-| Days Live | 80 |
+| Days Live | 81 |
 | Open Positions | 23 |
-| Last Updated | 2026-07-27 |
+| Last Updated | 2026-07-28 |
 <!-- LIVE_STATS_END -->
 
-*Sharpe standard error over ~62 days is large — not statistically significant. This is tracked honestly, which is why authority is earned over 21 rebalances, not calendar time.*
+*The Sharpe standard error at this sample size is large — not statistically significant.
+Authority is therefore earned over rebalances, not calendar time.*
 
-> **Source of truth:** the only reconciled, source-cited figures live in
-> [`CURRENT_VERIFIED_NUMBERS.md`](CURRENT_VERIFIED_NUMBERS.md). The auto-generated table
-> above is dashboard-computed; note the **Sharpe (1.794) is not independently verifiable**
-> (the underlying daily-return series has an Alpaca-settlement issue) — only the
-> **equity-based total return (+8.82%)** is solid. The book trails SPY (~+13%) by ~5pp,
-> which is structural, not an AI-layer effect.
+> **Source of truth:** [`CURRENT_VERIFIED_NUMBERS.md`](CURRENT_VERIFIED_NUMBERS.md) holds the
+> only reconciled, artifact-cited figures. Regenerate it with
+> `.venv/bin/python scripts/reconcile_numbers.py --write` before quoting anything.
+>
+> The table above is computed from the Alpaca portfolio-history API, while the reconciled
+> figures are computed from `logs/holdings_log.jsonl` and the price cache. These are two
+> different equity series and they do not agree. Where they differ, the reconciled file wins.
+> No number is restated in this README, because a hand-copied figure here went five weeks
+> stale and ended up contradicting the table directly above it.
+>
+> The book's lag versus SPY is structural — defensive non-equity sleeves, a 200MA cut, and a
+> vol-target overlay all cost beta in an equity-only bull — not an AI-layer effect.
 
 | Date | Event |
 |------|-------|

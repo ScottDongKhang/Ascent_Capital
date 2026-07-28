@@ -626,10 +626,13 @@ def run_eod_with_weights(merged_weights: dict, run_date=None, dry_run: bool = Fa
     large-trade approval still apply.
     """
     import time as _time
-    from datetime import date as _date
     import pandas as _pd
 
-    today = run_date or _date.today()
+    from ascent.utils.market_time import market_today
+
+    # market_today(), not date.today() — this host is UTC+7, so local time names
+    # the next US session for ~14h of every day. See ascent/utils/market_time.py.
+    today = run_date or market_today()
     today_str = today.isoformat() if hasattr(today, "isoformat") else str(today)
 
     print(f"\n[EOD-Multi] Running with orchestrator weights | {today_str}")

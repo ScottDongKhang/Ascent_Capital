@@ -21,6 +21,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from ascent.data.store.parquet import has_data, load_parquet
+from ascent.utils.market_time import market_today
 from ascent.portfolio.optimizer import SectorDataError
 
 from agents.ai_pm_agent import run_ai_pm, run_ai_pm_prethesis, AIPMResult, AIPreThesis
@@ -613,8 +614,13 @@ def _compute_calibration_returns(today: date) -> dict:
 def main():
     dry_run             = "--dry-run" in sys.argv
     skip_sector_check   = "--skip-sector-check" in sys.argv
+    _force_run          = "--force" in sys.argv
     _date_override      = next((a.split("=",1)[1] for a in sys.argv if a.startswith("--date=")), None)
-    today               = date.fromisoformat(_date_override) if _date_override else date.today()
+    # market_today(), not date.today(): this host is UTC+7, so the local calendar
+    # day rolls over ~14h before the US one. Using local time dated ~78% of
+    # historical rows to a session that had not closed yet, and put weekend and
+    # holiday dates into the logs. See ascent/utils/market_time.py.
+    today               = date.fromisoformat(_date_override) if _date_override else market_today()
 
     # ── Weekend branch: runs before everything else ───────────────────────────
     if today.weekday() >= 5:  # Saturday=5, Sunday=6
@@ -679,6 +685,18 @@ def main():
             print(f"  (stale intent + double transaction costs).")
             print(f"{'!'*60}\n")
             sys.exit(1)
+
+    # ── Same-session guard ────────────────────────────────────────────────────
+    # The scheduled job fires at 09:00 local (UTC+7) = the previous US session,
+    # so a manual/catch-up run earlier in that same session would otherwise be
+    # re-processed here and append a duplicate row. Explicit --date or --force
+    # overrides (a deliberate re-run is allowed; an accidental one is not).
+    if not _force_run and not _date_override and already_ran_for_session(today):
+        print(f"\n[Runner] A run is already logged for the {today} session "
+              f"(market date). Skipping to avoid a duplicate record.")
+        print(f"[Runner] Re-run deliberately with --force, or target another "
+              f"session with --date=YYYY-MM-DD.")
+        return
 
     # ── Startup validation: sector data must be present before agents spawn ───
     from ascent.config.settings import UniverseConfig, get_config
@@ -2284,6 +2302,49 @@ def _is_near_scheduled_rebalance(today, window: int = 3, cal_path=None) -> bool:
         return trading_days <= window
     except Exception:
         return False
+
+
+def already_ran_for_session(session_date, log_path=None) -> bool:
+    """True if logs/eod_log.jsonl already holds a RUN record for `session_date`.
+
+    The scheduled job fires at 09:00 local (UTC+7), which resolves to the
+    previous US session — so a manual catch-up run earlier in that same session
+    collides with it. Without this check the second run appends a duplicate row,
+    which is how logs/ai_pm_decision_log.jsonl ended up with 9 rows across 2
+    dates (2026-06-10 recorded 8 times), inflating every rate computed from it.
+
+    Fails OPEN (returns False) on a missing or unreadable log: never block the
+    first ever run. `_catch_up_guard` is the fail-CLOSED counterpart for
+    staleness; this one only dedupes.
+
+    Discovery-candidate objects are also written into eod_log (keys: symbol /
+    trigger / conviction) and are not run records, so they do not count.
+    """
+    from pathlib import Path as _P
+
+    p = _P(log_path) if log_path is not None else _P("logs/eod_log.jsonl")
+    if not p.exists():
+        return False
+    target = session_date.isoformat() if hasattr(session_date, "isoformat") else str(session_date)
+    try:
+        with p.open("r", errors="replace") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(entry, dict):
+                    continue
+                if entry.get("trigger") == "discovery" or "conviction" in entry:
+                    continue
+                if str(entry.get("date") or entry.get("run_date") or "") == target:
+                    return True
+    except OSError:
+        return False
+    return False
 
 
 def _catch_up_guard(today, threshold_days: int = CATCH_UP_STALE_TRADING_DAYS):

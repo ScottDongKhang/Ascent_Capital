@@ -3,14 +3,27 @@ REPO="/Users/scott/IdeaProjects/ascent-capital"
 LOG_DIR="$REPO/logs"
 mkdir -p "$LOG_DIR"
 
+# Trading-day check. Uses the stdlib holiday calendar in heartbeat_check.py,
+# NOT pandas_market_calendars — that package is not installed in .venv and
+# never was, so the old `except ImportError: print("open")` branch meant this
+# gate silently passed on every market holiday. Fails open (prints "open") on
+# any unexpected error, matching the previous behaviour: a spurious run is
+# recoverable, a silently skipped one is what caused the outage.
+# Gated on the US MARKET date, not dt.date.today(): this host is UTC+7 and the
+# job fires at 09:00 local, which is the previous evening in PT. The local date
+# would name tomorrow's session, so the gate would test the wrong day entirely —
+# skipping real trading days and permitting runs on closed ones.
 IS_HOLIDAY=$("$REPO/.venv/bin/python" - << 'PYEOF'
+import sys
 try:
-    import pandas_market_calendars as mcal
-    from datetime import date
-    nyse = mcal.get_calendar('NYSE')
-    schedule = nyse.schedule(start_date=date.today(), end_date=date.today())
-    print("open" if not schedule.empty else "closed")
-except ImportError:
+    sys.path.insert(0, "/Users/scott/IdeaProjects/ascent-capital")
+    sys.path.insert(0, "/Users/scott/IdeaProjects/ascent-capital/scripts")
+    from ascent.utils.market_time import market_today
+    from heartbeat_check import _holiday_set, is_trading_day
+    today = market_today()
+    holidays = _holiday_set(today.year - 1, today.year + 1)
+    print("open" if is_trading_day(today, holidays) else "closed")
+except Exception:
     print("open")
 PYEOF
 )
