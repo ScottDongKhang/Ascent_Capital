@@ -34,7 +34,10 @@ from ascent.monitoring.ai_pm_counterfactual import (
     score_daily as cf_score_daily, load_snapshots as cf_load_snapshots,
     print_cumulative_report as cf_print_report, backfill_track_b as cf_backfill_track_b,
 )
-from ascent.strategy.ai_pm_perf_feedback import compute_feedback as compute_ai_feedback
+from ascent.strategy.ai_pm_perf_feedback import (
+    compute_feedback as compute_ai_feedback,
+    derive_overrides,
+)
 
 
 SECTOR_OVERRIDE_LOG  = Path("logs/sector_override.jsonl")
@@ -143,9 +146,20 @@ def _write_decision_log(today, ai_pm_result, quant_weights: dict,
     """Write one entry to ai_pm_decision_log.jsonl per rebalance day."""
     try:
         AI_PM_DECISION_LOG.parent.mkdir(parents=True, exist_ok=True)
-        overrides = []
+        # Derive overrides from the two weight vectors rather than trusting the
+        # model to self-report them. `thesis["quant_overrides"]` came back empty
+        # on all 9 logged decisions, which pinned n_decisions_evaluated at 0 and
+        # made the authority ladder a downward-only ratchet (min_decisions >= 5
+        # is a hard promotion gate; demotion needs one bad day). Both vectors
+        # were already logged here, so the override set is recoverable by
+        # subtraction. `self_reported_overrides` is kept for comparison — the gap
+        # between what the model says it did and what it did is itself a signal.
+        _ai_book = (ai_pm_result.portfolio
+                    if ai_pm_result and not ai_pm_result.fallback else {}) or {}
+        overrides = derive_overrides(quant_weights, _ai_book)
+        _self_reported = []
         if ai_pm_result and ai_pm_result.thesis:
-            overrides = ai_pm_result.thesis.get("quant_overrides", [])
+            _self_reported = ai_pm_result.thesis.get("quant_overrides", []) or []
         entry = {
             "date":                  today.isoformat(),
             "level":                 authority_state.get("level", 0),
@@ -156,7 +170,8 @@ def _write_decision_log(today, ai_pm_result, quant_weights: dict,
             "perf_feedback_injected": Path("data_cache/ai_pm_perf_feedback.json").exists(),
             "quant_proposed":        {k: round(v, 6) for k, v in quant_weights.items()},
             "ai_pm_proposed":        {k: round(v, 6) for k, v in (ai_pm_result.portfolio if ai_pm_result and not ai_pm_result.fallback else {}).items()},
-            "overrides_applied":     overrides,
+            "overrides_applied":       overrides,
+            "self_reported_overrides": _self_reported,
             "final_blended":         {k: round(v, 6) for k, v in blended_weights.items()},
             "thesis_summary":        str((ai_pm_result.thesis or {}).get("market_view", ""))[:200] if ai_pm_result and ai_pm_result.thesis else "",
             "tool_failures":         list(ai_pm_result.tool_failures) if (ai_pm_result and hasattr(ai_pm_result, "tool_failures")) else [],
@@ -1775,9 +1790,19 @@ def main():
 
                     _ai_ret = _port_ret(_prev_ai)
                     _qt_ret = _port_ret(_prev_qt)
-                    update_authority(_ai_ret, _qt_ret)
-                    print(f"[Runner] Authority updated: AI {_ai_ret*100:.2f}% vs Quant "
-                          f"{_qt_ret*100:.2f}% ({_prev_date} → {today.isoformat()})")
+                    # Diagnostic only — deliberately does NOT call
+                    # update_authority(). It used to, with n_decisions_evaluated
+                    # defaulted to 0 and hit_rate None, which stamped
+                    # last_updated=today; the informed call later in the run then
+                    # early-returned on `last_updated == today`, so on every
+                    # rebalance day the promotion metrics never reached the
+                    # ladder at all. It also appended REBALANCE-PERIOD returns to
+                    # the same buffer the daily path fills with DAILY Track D vs
+                    # A* returns, mixing horizons in the sortino_edge estimate.
+                    # The single informed call now owns the ladder.
+                    print(f"[Runner] Rebalance-period comparison: AI {_ai_ret*100:.2f}% "
+                          f"vs Quant {_qt_ret*100:.2f}% ({_prev_date} → "
+                          f"{today.isoformat()}) [diagnostic, not fed to authority]")
 
             # Step 2: save snapshot for next rebalance comparison
             # Use AI PM portfolio if it ran successfully, else fall back to quant
