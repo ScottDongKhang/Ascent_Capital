@@ -295,3 +295,75 @@ class TestConvictionPressInAllTypes:
         assert "allowed_change_pct" in auth
         assert auth["suspended"] is False
         assert auth["allowed_change_pct"] > 0
+
+
+# ── Protected positions + reduction_pct (2026-07-28) ─────────────────────────
+
+class TestProtectedPositionsContract:
+    """The judge's protection used to exist only as prose in `reasoning`, which
+    the execution layer never reads. On 2026-07-27 a verdict argued UUP/TLT must
+    not be cut 48h before FOMC and the size-sorted fallback sold both. These
+    fields are the machine-readable channel."""
+
+    def _verdict(self, **extra):
+        base = {
+            "confidence": 0.6,
+            "recommendation": "reduce_size",
+            "key_risks": ["correlated drawdown"],
+            "reasoning": "de-risk but keep the hedge leg",
+            "position_changes": [],
+        }
+        base.update(extra)
+        return json.dumps(base)
+
+    @patch("debate.judge.extended_thinking_completion")
+    def test_held_protected_symbols_survive(self, mock_llm):
+        from debate.judge import run_judge
+        mock_llm.return_value = self._verdict(
+            protected_positions=[{"symbol": "AAPL", "reason": "hedge leg"}])
+        v = run_judge(bull_argument='bull', bear_argument='bear', devils_argument='devil', portfolio_state=_PORTFOLIO_STATE)
+        assert v["protected_positions"] == [{"symbol": "AAPL", "reason": "hedge leg"}]
+
+    @patch("debate.judge.extended_thinking_completion")
+    def test_unheld_symbols_are_dropped(self, mock_llm):
+        """A hallucinated ticker would shield nothing while shrinking the sleeve
+        available to fund the reduction."""
+        from debate.judge import run_judge
+        mock_llm.return_value = self._verdict(
+            protected_positions=[{"symbol": "NVDA", "reason": "not held"}])
+        v = run_judge(bull_argument='bull', bear_argument='bear', devils_argument='devil', portfolio_state=_PORTFOLIO_STATE)
+        assert v["protected_positions"] == []
+
+    @patch("debate.judge.extended_thinking_completion")
+    def test_bare_strings_accepted_and_upper_cased(self, mock_llm):
+        from debate.judge import run_judge
+        mock_llm.return_value = self._verdict(protected_positions=[" aapl "])
+        v = run_judge(bull_argument='bull', bear_argument='bear', devils_argument='devil', portfolio_state=_PORTFOLIO_STATE)
+        assert v["protected_positions"] == [{"symbol": "AAPL", "reason": ""}]
+
+    @patch("debate.judge.extended_thinking_completion")
+    def test_field_always_present_even_when_omitted(self, mock_llm):
+        from debate.judge import run_judge
+        mock_llm.return_value = self._verdict()
+        v = run_judge(bull_argument='bull', bear_argument='bear', devils_argument='devil', portfolio_state=_PORTFOLIO_STATE)
+        assert v["protected_positions"] == []
+
+    @patch("debate.judge.extended_thinking_completion")
+    def test_reduction_pct_is_clamped(self, mock_llm):
+        from debate.judge import run_judge
+        mock_llm.return_value = self._verdict(reduction_pct=0.95)
+        assert run_judge(bull_argument='bull', bear_argument='bear', devils_argument='devil', portfolio_state=_PORTFOLIO_STATE)["reduction_pct"] == 0.25
+
+    @patch("debate.judge.extended_thinking_completion")
+    def test_garbage_reduction_pct_is_removed(self, mock_llm):
+        from debate.judge import run_judge
+        mock_llm.return_value = self._verdict(reduction_pct="a lot")
+        assert "reduction_pct" not in run_judge(bull_argument='bull', bear_argument='bear', devils_argument='devil', portfolio_state=_PORTFOLIO_STATE)
+
+    @patch("debate.judge.extended_thinking_completion")
+    def test_degraded_path_still_exposes_the_field(self, mock_llm):
+        from debate.judge import run_judge
+        mock_llm.return_value = "not json"
+        v = run_judge(bull_argument='bull', bear_argument='bear', devils_argument='devil', portfolio_state=_PORTFOLIO_STATE)
+        assert v["degraded"] is True
+        assert v["protected_positions"] == []

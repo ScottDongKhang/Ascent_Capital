@@ -126,8 +126,27 @@ def run_judge(
         '            "reason": "specific reason referencing the data",\n'
         '            "prediction": "X underperforms/outperforms Y over next 10 trading days"\n'
         "        }\n"
+        "    ],\n"
+        '    "reduction_pct": 0.10,\n'
+        '    "protected_positions": [\n'
+        '        {"symbol": "TICKER", "reason": "why this must NOT be cut now"}\n'
         "    ]\n"
-        "}"
+        "}\n\n"
+        "About the last two fields — they only matter when recommendation is\n"
+        '"reduce_size", and they are how your reasoning actually reaches the book:\n'
+        "  - reduction_pct: how much GROSS exposure to remove (0.02-0.25). The\n"
+        "    remainder becomes cash. Omit for 0.10. This is a real de-grossing:\n"
+        "    before 2026-07-28 a reduce_size verdict renormalized back to 1.0 and\n"
+        "    so reduced nothing at all, three times in a row.\n"
+        "  - protected_positions: names that must NOT be trimmed to fund the\n"
+        "    reduction — hedges ahead of the catalyst they hedge, cash/T-bill\n"
+        "    sleeves, anything load-bearing. State them here even if you also\n"
+        "    explain them in `reasoning`: the execution layer reads ONLY this\n"
+        "    field. On 2026-07-27 a verdict argued in prose that UUP and TLT must\n"
+        "    not be cut 48h before FOMC, had nowhere to record it, and the\n"
+        "    size-sorted fallback sold both.\n"
+        "    The reduction is taken from everything else, so do not protect so\n"
+        "    much that it cannot be funded."
     )
     if disagreement_context:
         system_prompt += f"\n\n{disagreement_context}"
@@ -162,6 +181,40 @@ def run_judge(
         assert "confidence" in verdict
         assert "recommendation" in verdict
         assert verdict["recommendation"] in ("proceed", "reduce_size", "halt_and_review")
+
+        # Normalize protected_positions to a list of {symbol, reason} for names
+        # actually held. The execution layer reads ONLY this field — prose in
+        # `reasoning` is invisible to it (see ascent/execution/eod_runner.py
+        # _verdict_protected_symbols). Unknown symbols are dropped so a
+        # hallucinated ticker cannot shield nothing while shrinking the sleeve
+        # available to fund the reduction.
+        _prot_in = verdict.get("protected_positions")
+        _prot_out = []
+        if isinstance(_prot_in, list):
+            for item in _prot_in:
+                if isinstance(item, str):
+                    sym, why = item, ""
+                elif isinstance(item, dict):
+                    sym, why = item.get("symbol"), str(item.get("reason", ""))
+                else:
+                    continue
+                if not isinstance(sym, str) or not sym.strip():
+                    continue
+                sym = sym.strip().upper()
+                if sym in weights:
+                    _prot_out.append({"symbol": sym, "reason": why[:200]})
+                else:
+                    print(f"[Judge] Dropping protected_positions entry {sym} — not held")
+        verdict["protected_positions"] = _prot_out
+
+        # Clamp reduction_pct into the band the executor accepts, so an
+        # out-of-range number is visible in the artifact rather than silently
+        # replaced downstream.
+        _red = verdict.get("reduction_pct")
+        if isinstance(_red, (int, float)) and not isinstance(_red, bool) and _red > 0:
+            verdict["reduction_pct"] = max(0.02, min(0.25, float(_red)))
+        else:
+            verdict.pop("reduction_pct", None)
 
         # Validate + clamp position_changes
         position_changes = verdict.get("position_changes", [])
@@ -221,5 +274,10 @@ def run_judge(
             "key_risks":         [f"judge_parse_failure: {str(e)[:80]}"],
             "reasoning":         "LLM output could not be parsed. Advisory layer degraded — proceeding without judge intervention.",
             "position_changes":  [],
+            # Present-but-empty so downstream readers never see a missing key on
+            # the degraded path. recommendation is "proceed" here, so neither is
+            # consulted — but a later change to that default should not also
+            # silently change de-grossing behaviour.
+            "protected_positions": [],
             "degraded":          True,
         }
