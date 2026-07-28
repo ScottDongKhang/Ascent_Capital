@@ -114,7 +114,7 @@ be quoted again from any source.
 | Track | Value | Note |
 |---|---|---|
 | A★ pure quant | **+9.54%** | snapshot weights priced on `prices_live` |
-| A quant + Phase-1 priors | **+0.73%** | only 31 non-null days (2 snapshots exist) |
+| A quant + Phase-1 priors | **+0.73%** | ⚠️ **measures nothing — do not cite.** See below |
 | B actual book | **+4.70%** | settled Alpaca 1D bars |
 | C SPY | **+13.13%** | `prices_live` closes |
 | D pure AI PM | **−2.12%** | 47 non-null days |
@@ -169,8 +169,17 @@ Caveats:
 - **One asymmetry, disclosed not corrected:** Alpaca equity is total-return, while production
   `prices_live` closes are split-only, so B is not perfectly comparable to A★/D on
   dividend-paying names. Pre-existing — `score_daily` reads the same two sources.
-- **Track A is thin.** Only 2 quant snapshots exist, so its 31 non-null days and +0.73% carry
-  much less weight than the other tracks.
+- **Track A is structurally incapable of differing from A★ — it measures nothing.** Found
+  2026-07-28, and it survived the rebuild. The two snapshot files hold *literally identical*
+  weight vectors on both dates they share (2026-06-10 n=22, 2026-06-24 n=17), and the rebuilt
+  log is byte-identical on 31 of 31 overlapping days. Mechanism: `merged_weights` is last
+  assigned by the orchestrator, and both `snapshot_quant_star()` and `snapshot_quant()` read
+  that same unchanged vector; Phase 1 runs between them but only writes files that influence
+  the *next* pipeline run. So "quant + Phase-1 priors" is the same portfolio as "pure quant",
+  and its +0.73% differs from A★'s +9.54% only because it covers 31 days rather than 70.
+  **Any claim about Phase 1's contribution to returns is unsupported by this track.** Measuring
+  it properly needs either a second pipeline run with priors disabled, or moving Phase 1 ahead
+  of the quant agents (the in-code comments already claim it runs there; it does not).
 - Authority gate thresholds are **held constant** (`ai_pm_perf_feedback.py`, never loosened);
   the system is correctly refusing promotion. As of 2026-07-28 `n_decisions_evaluated` is
   reachable for the first time (overrides are now derived from weight deltas rather than
