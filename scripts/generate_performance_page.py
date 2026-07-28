@@ -22,6 +22,8 @@ import sys
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
+from ascent.utils.market_time import market_date_from_epoch, market_today
+
 import requests
 import yfinance as yf
 import pandas as pd
@@ -66,7 +68,10 @@ def fetch_portfolio_history() -> list[dict]:
         if eq is None or eq == 0:
             prev_eq = eq
             continue
-        dt = datetime.fromtimestamp(ts).date()
+        # Market time, not host time: at UTC+7 a 16:00 ET close reads as the
+        # next local day, which is what published equity bars under weekend
+        # dates on this page.
+        dt = market_date_from_epoch(ts)
         if dt < LIVE_START:
             prev_eq = eq
             continue
@@ -77,7 +82,7 @@ def fetch_portfolio_history() -> list[dict]:
     # Alpaca publishes the 1D bar for a session only after ~00:00 UTC (17:00 PT),
     # i.e. after our daily run — so the series above always ends at YESTERDAY.
     # Append today's session from live account equity so the chart is current.
-    today = date.today()
+    today = market_today()
     if records and records[-1]["date"] < today.isoformat() and today.weekday() < 5:
         try:
             r = requests.get(f"{PAPER_BASE}/v2/account", headers=_alpaca_headers(), timeout=15)
@@ -685,6 +690,25 @@ def _fmt_pct(v, show_sign=True) -> str:
     sign = "+" if (v >= 0 and show_sign) else ""
     return f"{sign}{v:.2f}%"
 
+def _wf_honesty_line() -> str:
+    """The walk-forward sentence on the published page, read from the artifact.
+
+    This sentence used to hardcode "Sharpe 0.518 (2020-2026)" and call it the
+    rigorous figure. No artifact in the repo has that value. Anything published
+    here is public, so it now comes from the verified record or is omitted.
+    """
+    try:
+        from ascent.reporting.verified_numbers import canonical_wf
+        wf = canonical_wf()
+    except Exception:
+        return ""
+    line = (f"Walk-forward OOS Sharpe {wf.sharpe_str} ({wf.oos_window}, "
+            f"{wf.n_folds} folds) is the rigorous figure.")
+    if wf.wfe < 0:
+        line += (f" Walk-forward efficiency is {wf.wfe:.2f}: the in-sample "
+                 f"optimizer adds no out-of-sample value.")
+    return line
+
 def _esc(s: str) -> str:
     return s.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;").replace('"',"&quot;")
 
@@ -783,17 +807,37 @@ def _counterfactual_chart_html(cfdata: list) -> str:
     cfdata = [by_date[d] for d in sorted(by_date)]
 
     def cumulative(key):
-        v, vals = 1.0, []
+        """Cumulative return for one track, with missing days left as gaps.
+
+        A missing value is NOT a 0% day. Treating it as one fabricates flat
+        sessions, dilutes the track's compounding, and makes four curves with
+        very different coverage look directly comparable on one axis -- which is
+        how Track C came to end at an SPY figure the price cache cannot produce.
+        Emitting None instead renders a visible gap and keeps the endpoint an
+        honest product of the days that actually have data.
+        """
+        v, vals, n = 1.0, [], 0
         for r in cfdata:
-            v *= (1 + (r.get(key) or 0.0))
+            raw = r.get(key)
+            if raw is None:
+                vals.append(None)
+                continue
+            v *= (1 + raw)
+            n += 1
             vals.append(round((v - 1) * 100, 3))
-        return vals
+        return vals, n
 
     dates  = [r["date"] for r in cfdata]
-    astar  = cumulative("track_astar_return")
-    actual = cumulative("track_b_return")
-    spy    = cumulative("track_c_return")
-    ai_pm  = cumulative("track_d_return")
+    astar,  n_astar  = cumulative("track_astar_return")
+    actual, n_actual = cumulative("track_b_return")
+    spy,    n_spy    = cumulative("track_c_return")
+    ai_pm,  n_ai_pm  = cumulative("track_d_return")
+
+    # Coverage differs per track. Say so on the page rather than letting the
+    # chart imply a common window it does not have.
+    _cov = {"quant A*": n_astar, "actual B": n_actual, "SPY C": n_spy, "AI PM D": n_ai_pm}
+    _cov_txt = ", ".join(f"{k} {v}d" for k, v in _cov.items())
+    _cov_spread = max(_cov.values()) - min(_cov.values()) if _cov else 0
 
     # Headline diffs MUST come from the common-window comparison, not from
     # subtracting two tracks each cumulated over its own (disjoint) window —
@@ -828,6 +872,12 @@ def _counterfactual_chart_html(cfdata: list) -> str:
 <div style="font-size:12px;color:#857e70;margin-bottom:8px">
   AI signal quality (D−A★): <span style="color:{sq_color}">{_sq_txt}</span> common window &nbsp;|&nbsp;
   Actual portfolio impact (B−A★): <span style="color:{imp_color}">{_imp_txt}</span> common window
+</div>
+<div style="font-size:11px;color:#857e70;margin-bottom:8px">
+  Track coverage is uneven ({_cov_txt}). Each curve compounds only the sessions it has data
+  for, and gaps are drawn as breaks rather than as flat 0% days. Curve endpoints therefore
+  span different windows and are <em>not</em> directly comparable; only the two common-window
+  figures above compare like with like.
 </div>
 <div style="position:relative;height:230px"><canvas id="cfChart"></canvas></div>
 <script>
@@ -1676,7 +1726,7 @@ def build_html(
     <div class="chart-frame"><div class="chart-wrap"><canvas id="equityChart"></canvas></div></div>
     <div class="cap">
       <div class="leg"><i><span class="swatch"></span>Ascent</i><i><span class="swatch s2"></span>SPY</i></div>
-      <div class="hon">Sharpe annualized from {n_days} sessions (SE {sharpe_se_str}) — not significant at this sample. Walk-forward OOS Sharpe 0.518 (2020–2026) is the rigorous figure. Live since {since_str}.</div>
+      <div class="hon">Sharpe annualized from {n_days} sessions (SE {sharpe_se_str}) — not significant at this sample. {_wf_honesty_line()} Live since {since_str}.</div>
     </div>
   </div>
 
