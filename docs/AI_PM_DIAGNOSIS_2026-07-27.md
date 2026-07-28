@@ -30,6 +30,50 @@
 > Everything below is otherwise unchanged. Findings 3-6 (transmission, capacity,
 > prompts, reasoning quality) are unaffected.
 
+---
+
+## REMEDIATION STATUS (2026-07-28)
+
+Worked in the audit's own priority order: measurement, then transmission, then
+re-measure. Capacity was deliberately **not** touched and the layer was **not**
+disabled — the evidence supports neither.
+
+| # | Item | Status |
+|---|---|---|
+| T0.1 | Scheduler running | **Done.** Heartbeat 6-hourly; EOD 09:00 local Tue–Sat = 18:00–19:00 PT Mon–Fri, post-close and post-settlement |
+| T0.2 | Date basis / Alpaca shift | **Done.** `ascent/utils/market_time.py`; both epoch sites and both pipeline root dates |
+| T0.3 | Retract the numbers | **Partly.** Recorded here and in commits; `CLAUDE.md` is being edited concurrently, so not touched |
+| T1.4 | `protected_positions` contract | **Done.** Judge field + executor reads it; prose is no longer the only channel |
+| T1.5 | `reduce_size` actually de-grosses | **Done.** Targets 0.90 gross; freed weight becomes cash, not a rotation |
+| T1.6 | Threshold interaction | **Done.** Detection is pre-renormalization; the self-contradictory 3×1pp-vs-1pp-cap rule is gone |
+| T1.7 | Judge change on discovery days | **Done.** Extracted `apply_judge_position_change`, called from both paths |
+| T1.8 | Authority-cap the fallback | **Declined, with reasoning.** A per-name cap and an honoured protect-list are mutually exclusive; total gross is bounded instead |
+| T2.9 | Derive overrides from weight deltas | **Done.** Replaying history: self-reported 0 → derived 14–19 per decision |
+| T2.10 | Scorer field names + same-day short-circuit | **Done.** Both fixed; one `update_authority` call site owns the ladder |
+| T2.11 | Date-gate stale priors | **Done.** 14-day expiry, fails closed. The real files (33 days stale) are now rejected |
+| T2.12 | Deduplicate logs | **Partly.** New duplicates prevented by the same-session guard; existing rows not rewritten |
+| T3.13–18 | Prompt fixes | **Done.** `wedge_21d` objective, authority disclosure, `get_alpha_wedge` in Phase 1, `xhigh`/12k tokens, force-seal keeps its instructions |
+| — | Counterfactual backfill can insert dates | **Done.** Mechanism fixed |
+| — | **Rebuild the 45 contaminated rows** | **NOT DONE — the one thing still blocking every number** |
+
+**What is still blocked.** The existing 45 `counterfactual_daily.jsonl` rows were
+written under the old one-day date shift. The source is fixed, so new rows will be
+correct, but the history must be re-derived from `get_portfolio_history()`, with
+the ~10 closed-market rows dropped (including a `track_b +1.53%` on Juneteenth)
+and the 7 duplicated Track B values removed. I left this undone deliberately: it
+rewrites logged history, the settled Alpaca series is the only clean source, and
+it is worth doing once, after a few correct runs have accumulated. **Until then no
+counterfactual number is citable, including those still in `CLAUDE.md`.**
+
+**What this changes about the diagnosis.** Nothing in the conclusion. The AI PM's
+judgment was never the problem, and the derived-override replay is the sharpest
+evidence yet: it was making 14–19 position overrides per decision and every one
+was recorded as zero, so nothing could be scored, so authority could never be
+earned, so the proposals stayed diluted. That loop is now open at both ends.
+
+**Do not re-litigate capacity yet.** The 5% cap is still 5%. Ask again after
+8–10 cleanly scored rebalances, which is now possible for the first time.
+
 **Date:** 2026-07-27
 **Method:** 7 parallel audit agents (architecture, decision quality, performance, prompts, transmission) plus 3 adversarial verifiers whose job was to try to prove the findings wrong.
 **Status of the numbers below:** every claim was checked against a real file. Where a verifier softened or corrected a claim, the corrected version is what is written here.
