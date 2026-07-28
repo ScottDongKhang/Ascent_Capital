@@ -445,6 +445,42 @@ def check_market_time_used_for_vendor_epochs() -> Result:
     return True, "vendor epochs convert via market_time"
 
 
+def check_price_dates_use_calendar_day_key() -> Result:
+    """Deriving a market date from prices_live must go through _calendar_day_key.
+
+    The `date` column holds a date-only value at UTC midnight, tz-localized to
+    New York, so every bar is stamped 20:00 the PREVIOUS evening. An ad-hoc
+    `.dt.tz_convert("America/New_York").dt.date` therefore shifts every bar back
+    a day: on SPY it yields zero Fridays and 307 phantom Sundays, and it
+    disagrees with the dates the live pipeline reads. `_calendar_day_key` applies
+    the evening-rollover rule and is the only correct source.
+
+    Caught in reconcile_numbers.py after it shipped, having first produced a
+    false "the counterfactual log is still date-shifted" conclusion.
+    """
+    offenders = []
+    for p in _source_files():
+        rel = str(p.relative_to(ROOT))
+        if rel in ("scripts/verify_docs.py", "ascent/data/store/parquet.py"):
+            continue
+        lines = _no_comments(rel)
+        src = "\n".join(lines)
+        # Only files that actually touch the price cache are in scope. Note there
+        # is deliberately NO file-level exemption for files that also use
+        # _calendar_day_key: a file can key correctly in one place and wrongly in
+        # another, which is exactly what shipped in reconcile_numbers.py.
+        if not re.search(r"prices_live|load_parquet\(", src):
+            continue
+        for i, line in enumerate(lines, 1):
+            if re.search(r'tz_convert\(\s*["\']America/New_York["\']\s*\)', line):
+                offenders.append(f"{rel}:{i}")
+    if offenders:
+        return False, ("market date derived from the price cache without "
+                       "_calendar_day_key (shifts every bar back a day): "
+                       + ", ".join(offenders))
+    return True, "price-cache dates go through _calendar_day_key"
+
+
 # ------------------------------------------------ checks: doc hygiene ----
 
 # Metrics that must never be hardcoded into CLAUDE.md. They go stale within
@@ -645,6 +681,7 @@ CHECKS: List[Tuple[str, str, Callable[[], Result]]] = [
     ("discovery_guards", "CLAUDE.md discovery mini-rebalance gotchas", check_discovery_guards_exist),
     ("sortino_annualized_once", "CURRENT_VERIFIED_NUMBERS: Sortino is trustworthy", check_sortino_annualized_once),
     ("market_time_epochs", "CLAUDE.md: market dates via ascent/utils/market_time.py", check_market_time_used_for_vendor_epochs),
+    ("price_dates_canonical", "price-cache dates via _calendar_day_key", check_price_dates_use_calendar_day_key),
     ("claude_md_no_numbers", "CLAUDE.md must cite, not restate, figures", check_claude_md_has_no_numbers),
     ("claude_md_paths", "CLAUDE.md paths must resolve", check_claude_md_paths_exist),
     ("claude_md_no_line_nums", "CLAUDE.md must not cite line numbers", check_claude_md_no_line_number_citations),

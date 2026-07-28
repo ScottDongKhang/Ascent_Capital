@@ -65,8 +65,8 @@ judgment and caveats outside them.
 | Window | 2026-04-01 -> 2026-07-27 (77 logged rows) | rows at/after 2026-04-01 | `logs/holdings_log.jsonl` |
 | Current equity | $104,640.21 | last logged row | `logs/holdings_log.jsonl` |
 | Total return | +3.79% | equity 100,816 (2026-04-01) -> 104,640 | `logs/holdings_log.jsonl` |
-| SPY, same window | +12.67% | close-to-close, 78 bars, 2026-04-01 -> 2026-07-23 | `data_cache/prices_live.parquet` |
-| Book vs SPY | -8.88% | difference of the two above | derived |
+| SPY, same window | +12.77% | close-to-close, 79 bars, 2026-04-01 -> 2026-07-24 | `data_cache/prices_live.parquet` |
+| Book vs SPY | -8.98% | difference of the two above | derived |
 | SPY per the log's own column | +4.67% | cumulative `spy_return` over 76 rows | `logs/holdings_log.jsonl` |
 | Max drawdown | -7.29% | equity-based, peak 112,870 (2026-06-02) -> trough (2026-07-27) | `logs/holdings_log.jsonl` |
 | Open positions | 22 | last logged row | `logs/holdings_log.jsonl` |
@@ -74,7 +74,7 @@ judgment and caveats outside them.
 
 **Sharpe is deliberately absent.** At 77 sessions the standard error swamps the estimate, and 4 of those rows carry a `day_return` of exactly 0.0 — the Alpaca late-settlement artifact, not flat days. Any Sharpe computed from that column is meaningless. Do not reintroduce one here.
 
-**The two SPY figures disagree** (+12.67% from the price cache vs +4.67% from the log column). The cache figure is the one to quote: the log's `spy_return` column inherits the same missing-day problem as `day_return`, so its cumulative product understates the index. Both are shown so the gap stays visible.
+**The two SPY figures disagree** (+12.77% from the price cache vs +4.67% from the log column). The cache figure is the one to quote: the log's `spy_return` column inherits the same missing-day problem as `day_return`, so its cumulative product understates the index. Both are shown so the gap stays visible.
 
 
 ### Walk-forward artifact cross-check

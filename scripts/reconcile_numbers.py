@@ -128,13 +128,19 @@ def live_book() -> dict:
     out["spy_return"] = None
     try:
         import pandas as pd
+        # Date keying is delegated to the store's own _calendar_day_key. The
+        # `date` column holds a date-only value at UTC midnight, tz-localized to
+        # New York, so bars are stamped 20:00 the PREVIOUS evening. Converting
+        # to the New York calendar date shifts every bar back a day: it produces
+        # zero Fridays and 307 phantom Sundays, and silently disagrees with the
+        # dates the live pipeline reads.
+        from ascent.data.store.parquet import _calendar_day_key
         df = pd.read_parquet(PRICES, columns=["date", "symbol", "close"])
         spy = df[df["symbol"] == "SPY"].copy()
-        spy["cal"] = pd.to_datetime(spy["date"], utc=True, errors="coerce").dt.tz_convert(
-            "America/New_York").dt.date
+        spy["cal"] = _calendar_day_key(spy["date"]).astype(str).str.slice(0, 10)
         spy = spy.dropna(subset=["cal"]).drop_duplicates("cal", keep="last").sort_values("cal")
-        lo = date.fromisoformat(first["date"])
-        hi = date.fromisoformat(last["date"])
+        lo = first["date"]
+        hi = last["date"]
         win = spy[(spy["cal"] >= lo) & (spy["cal"] <= hi)]
         if len(win) >= 2:
             out["spy_return"] = float(win["close"].iloc[-1] / win["close"].iloc[0] - 1)
@@ -241,13 +247,16 @@ def data_integrity() -> dict:
         out["error"] = f"{type(exc).__name__}: {exc}"
         return out
 
+    from ascent.data.store.parquet import _calendar_day_key
+
     out["rows"] = len(df)
     out["symbols"] = int(df["symbol"].nunique())
-    ts = pd.to_datetime(df["date"], utc=True, errors="coerce")
-    out["date_min"] = str(ts.min().date()) if ts.notna().any() else None
-    out["date_max"] = str(ts.max().date()) if ts.notna().any() else None
+    # Same convention as the live read path -- see the note in live_book().
+    cal = _calendar_day_key(df["date"]).astype(str).str.slice(0, 10)
+    valid = cal[cal.notna() & (cal != "")]
+    out["date_min"] = str(valid.min()) if len(valid) else None
+    out["date_max"] = str(valid.max()) if len(valid) else None
 
-    cal = ts.dt.tz_convert("America/New_York").dt.date
     key = pd.DataFrame({"symbol": df["symbol"].values, "cal": cal.values})
     dup_mask = key.duplicated(keep="first")
     out["dup_rows"] = int(dup_mask.sum())
