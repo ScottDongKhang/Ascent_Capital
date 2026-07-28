@@ -9,7 +9,10 @@
 Ascent Capital is an AI-native systematic multi-factor equity strategy that combines academic quant factors with real-time event intelligence and an LLM-powered risk circuit breaker. The system runs on Alpaca Markets paper trading (transitioning to live capital) and covers four asset class universes managed by independent specialist agents: US equities (S&P 500 + S&P 400, 901 symbols), macro (12 ETFs), international (12 ETFs), and alternatives (7 ETFs).
 
 **Live since:** April 1, 2026  
-**Walk-forward OOS record:** CAGR +12.35%, Sharpe +0.518, Alpha +0.68% vs SPY (Jan 2020 – Apr 2026)  
+**Walk-forward OOS record:** Sharpe 0.41, CAGR +10.3%, max drawdown −32.9%, beta 0.73, regression alpha +2.24%/yr vs SPY (OOS 2021-01-08 → 2026-01-14, 1,134 days, 21 rolling folds).
+Walk-forward efficiency is −0.65, meaning the in-sample optimizer adds no out-of-sample value; this is disclosed rather than presented as a strength.
+Source artifact: `outputs/wf_results/wf_report_clean_2026-06-22.json`. See `CURRENT_VERIFIED_NUMBERS.md` for the authoritative set and its caveats.
+*(A prior version of this line reported CAGR +12.35% / Sharpe 0.518 for a Jan 2020 – Apr 2026 window. Those figures matched no artifact in the repository and are withdrawn.)*  
 **Operator:** Scott Dong  
 **Platform:** Alpaca Markets (paper → live migration in progress)
 

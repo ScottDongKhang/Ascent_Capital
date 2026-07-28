@@ -18,3 +18,7 @@ outputs/scenarios/
 .superpowers/
 mockups/
 data_cache/stop_loss_state.json
+.gstack/
+graphify-out/
+.idea/
+logs.bak-*/

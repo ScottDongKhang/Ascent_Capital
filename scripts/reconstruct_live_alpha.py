@@ -21,6 +21,8 @@ import pandas as pd
 from datetime import datetime, date
 from pathlib import Path
 
+from ascent.utils.market_time import market_date_from_epoch
+
 BASE_DIR = Path(__file__).parent.parent
 HISTORY_LOG = BASE_DIR / "logs" / "live_alpha_history.jsonl"
 SUMMARY_FILE = BASE_DIR / "logs" / "live_alpha_summary.json"
@@ -59,7 +61,7 @@ def fetch_alpaca_history() -> pd.DataFrame:
 
     rows = []
     for ts, eq, ret in zip(data["timestamp"], data["equity"], data["profit_loss_pct"]):
-        dt = datetime.fromtimestamp(ts).date()
+        dt = market_date_from_epoch(ts)
         if eq and eq > 0:
             rows.append({"date": dt, "nav": float(eq), "port_return": float(ret)})
 

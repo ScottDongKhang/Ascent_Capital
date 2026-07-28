@@ -11,6 +11,8 @@ import yfinance as yf
 from datetime import datetime
 from pathlib import Path
 
+from ascent.utils.market_time import market_date_from_epoch
+
 os.environ.setdefault("ALPACA_KEY", "PK6F4S764IDFRNF7ZCHHRJE7IJ")
 os.environ.setdefault("ALPACA_SECRET", "G7FJ2rYPBMTyxW8cJDRUQX1GUaQLA8h8SGLww5RA2f6W")
 
@@ -36,7 +38,7 @@ def fetch_alpaca_history() -> dict:
     ):
         if not eq:
             continue
-        dt = datetime.fromtimestamp(ts).strftime("%Y-%m-%d")
+        dt = market_date_from_epoch(ts).isoformat()
         day_return = (eq / (eq - pl) - 1) if pl and (eq - pl) > 0 else 0.0
         out[dt] = {
             "equity": eq,

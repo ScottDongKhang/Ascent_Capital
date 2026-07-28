@@ -62,6 +62,30 @@ def test_sortino_all_positive_returns():
     assert np.isfinite(result) or result == np.inf, \
         "sortino on all-positive returns must not be NaN"
 
+def test_sortino_is_annualized_exactly_once(positive_returns):
+    """Regression: sortino() annualized both numerator and denominator.
+
+    The bug divided every result by sqrt(252), which is why each
+    wf_report_*.json written before 2026-07-27 carries sortino ~0.042 while
+    the true value for that run is ~0.67. Pin the scale invariant rather than
+    a magic constant: an annualized ratio must equal the per-period ratio
+    times sqrt(periods_per_year).
+    """
+    pa = PerformanceAnalyzer(periods_per_year=252)
+    excess = positive_returns - 0.0
+    per_period = excess.mean() / excess[excess < 0].std()
+    assert pa.sortino(positive_returns) == pytest.approx(
+        per_period * np.sqrt(252), rel=1e-9
+    ), "sortino must be annualized exactly once"
+
+
+def test_sortino_scales_with_periods_per_year(positive_returns):
+    """A daily series scored as annual must not be the same number."""
+    daily = PerformanceAnalyzer(periods_per_year=252).sortino(positive_returns)
+    annual = PerformanceAnalyzer(periods_per_year=1).sortino(positive_returns)
+    assert daily == pytest.approx(annual * np.sqrt(252), rel=1e-9)
+
+
 def test_full_report_keys(positive_returns, benchmark_returns, fold_results):
     pa = PerformanceAnalyzer()
     report = pa.full_report(positive_returns, benchmark_returns, fold_results)

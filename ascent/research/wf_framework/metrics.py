@@ -76,7 +76,11 @@ class PerformanceAnalyzer:
         downside = excess[excess < 0]
         if len(downside) < 2:
             return np.inf if excess.mean() > 0 else 0.0
-        dv = downside.std() * np.sqrt(self.periods_per_year)
+        # dv stays on the PERIOD scale; annualisation is applied once, in the
+        # numerator below. Annualising dv here too divided the result by
+        # sqrt(252) and is what produced the long-standing bogus ~0.042
+        # readings in every wf_report_*.json written before 2026-07-28.
+        dv = downside.std()
         if dv < 1e-10:
             return np.inf if excess.mean() > 0 else 0.0
         return float(np.sqrt(self.periods_per_year) * excess.mean() / dv)

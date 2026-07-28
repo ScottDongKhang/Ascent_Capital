@@ -167,6 +167,22 @@ def get_baseline_sharpe():
         return None
 
 
+def _artifact_baseline_sharpe() -> float:
+    """Fallback baseline Sharpe, read from the verified walk-forward artifact.
+
+    This used to be a hardcoded 0.518 that matched no artifact in the repo. A
+    fabricated baseline is the worst possible value here: it silently sets the
+    bar that every variant is promoted against. If the artifact cannot be read
+    we raise, aborting the promotion run, because declining to promote is
+    always safe and promoting against an invented number is not.
+    """
+    from ascent.reporting.verified_numbers import canonical_wf
+    wf = canonical_wf()  # raises MissingArtifact if unreadable
+    print(f"[SelfImprove] no live Sharpe available — baseline from "
+          f"{wf.artifact}: {wf.sharpe:.4f}")
+    return wf.sharpe
+
+
 def _load_recent_returns(agent_id="us_equities", window=63):
     """Load last `window` daily returns from agent's PnL log. Returns [] if unavailable."""
     try:
@@ -200,8 +216,7 @@ def evaluate_variant(variant_config: dict) -> float:
             # Fall back to baseline Sharpe if OOS failed
             baseline = get_baseline_sharpe()
             if baseline is None:
-                print("[SelfImprove] WARNING: no live Sharpe available — falling back to hardcoded 0.518")
-                baseline = 0.518
+                baseline = _artifact_baseline_sharpe()
             return round(float(baseline), 4)
         sharpe   = result["sharpe"]
         turnover = result["turnover"]
@@ -210,8 +225,7 @@ def evaluate_variant(variant_config: dict) -> float:
         print(f"[SelfImprove] evaluate_variant failed: {e} — using baseline")
         baseline = get_baseline_sharpe()
         if baseline is None:
-            print("[SelfImprove] WARNING: no live Sharpe available — falling back to hardcoded 0.518")
-            baseline = 0.518
+            baseline = _artifact_baseline_sharpe()
         return round(float(baseline), 4)
 
 
