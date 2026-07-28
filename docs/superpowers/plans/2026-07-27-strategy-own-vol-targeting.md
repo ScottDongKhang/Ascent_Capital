@@ -1,11 +1,18 @@
 # Strategy-Own Volatility Targeting Implementation Plan
 
-> **STATUS (2026-07-27, branch `feature/risk-management`):** Tasks 1-4 LANDED.
-> Task 5 (walk-forward comparison + enable decision) NOT RUN — deferred to a
-> combined WF run with the momentum-crash plan to avoid paying ~1h of compute
-> twice. `vol_target_reference` therefore still defaults to `"spy"`, so live
-> behaviour is unchanged. Commits: `26e42b2` (Task 1), `7f89c67` (Task 2),
-> `b9ee614` (Task 3), `d65c6a9` (Task 4).
+> **STATUS (2026-07-28, branch `feature/risk-management`): COMPLETE — Tasks 1-5
+> done. Task 5 verdict: REJECTED, default stays `"spy"`.** The walk-forward gate
+> (Sharpe +0.05 AND improved max DD) failed decisively: **Sharpe 0.0856 → −0.2143
+> and max drawdown −21.42% → −28.04%** over 21 folds / 1134 OOS days.
+> Mechanism: the book's own realized vol (~12.8%) is BELOW the 15% target, so
+> strategy-referenced scaling **de-risks LESS** than SPY-referenced (mean scale
+> 0.925 vs 0.882, min 0.284 vs 0.250) — it levers toward 1.0 and carries more
+> exposure into drawdowns. Barroso/Santa-Clara presumes the factor's own vol
+> EXCEEDS the target; this book is already defensive, so the premise fails.
+> Machinery stays in the tree behind the config flag. Full decision record with
+> the comparison table and the experiment-local caveat:
+> **`docs/risk_overlays_wf_decision_2026-07-28.md`**.
+> Commits: `26e42b2` (T1), `7f89c67` (T2), `b9ee614` (T3), `d65c6a9` (T4).
 > **Deviation from plan, Task 4 Step 5:** the WF `_apply_vol_target` receives
 > weights indexed at REBALANCE dates only, and `strategy_return_proxy`
 > reindexes prices onto the weights index — so the plan's literal diff would

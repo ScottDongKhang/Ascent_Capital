@@ -1,10 +1,25 @@
 # Momentum Crash Indicator Implementation Plan
 
-> **STATUS (2026-07-27, branch `feature/risk-management`):** Tasks 1-3 LANDED;
-> Task 4 Steps 1-3 (firing audit) DONE, Steps 4-5 (walk-forward + enable
-> decision) NOT RUN. Ships DISABLED
-> (`momentum_crash_overlay_enabled = False`), so live behaviour is unchanged.
-> Commits: `7425223` (Task 1), `f2fea4a` (Task 2), `ddde470` (Task 3).
+> **STATUS (2026-07-28, branch `feature/risk-management`): COMPLETE — Tasks 1-4
+> done. Task 4 verdict: DO NOT ENABLE.** Stays
+> `momentum_crash_overlay_enabled = False`; live behaviour unchanged.
+> Commits: `7425223` (T1), `f2fea4a` (T2), `ddde470` (T3).
+>
+> **The decisive finding is that this plan's Task 4 Step 4 CANNOT be executed as
+> written.** The overlay is **structurally inert inside the WF harness**: each fold
+> hands the strategy only `is_days=252 + oos_days=63` ≈ **320 trading days**, while
+> `momentum_crash_scale` needs `bear_lookback + 1 = 505` rows strictly before each
+> decision date. It therefore returns 1.0 unconditionally — measured
+> `crash_cut_n = 0` across 8,656 evaluations, and the treatment run came back
+> **byte-identical to baseline** (Sharpe 0.0856 both). **Zero firings is NOT
+> evidence the overlay is harmless; it is evidence the harness cannot test it.**
+> Validating a 504-day-lookback rule needs a materially longer IS window (or
+> full-history context for the lookback while keeping fold isolation for the
+> signal). Do not re-run Task 4 Step 4 unchanged and read "no difference" as a
+> pass.
+>
+> Independently, the firing audit already made the gate unsatisfiable — see below.
+> Full decision record: **`docs/risk_overlays_wf_decision_2026-07-28.md`**.
 >
 > **Firing audit result (Task 4 Step 2), verbatim:**
 > ```
