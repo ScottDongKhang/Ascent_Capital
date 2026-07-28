@@ -188,25 +188,63 @@ def backfill_track_b(history: Dict[str, float]) -> int:
     log so every settled day carries the real number; today's unsettled row is not in
     `history`, so it is left as-is and self-heals on the next run.
 
-    Returns the number of rows changed (idempotent: re-running with the same history
-    is a no-op)."""
-    if not history or not DAILY_LOG.exists():
+    Settled dates with no row yet are INSERTED, not discarded. This function used
+    to only mutate rows that already existed, so a day the pipeline never ran was
+    permanently absent — the log held 45 rows for an 81-business-day window,
+    including a 19-day hole from the 2026-06/07 outage, and `_cumret_over` chains
+    straight across gaps as though those days never happened. That is what
+    inflated every cumulative figure 2.5-4x (Track C claimed SPY +16.63% over a
+    window in which SPY returned +5.31%).
+
+    An inserted row carries ONLY the settled Track B return and leaves the other
+    tracks None, so `_common_window_diff` — which pairs non-null observations —
+    does not count that day for A*/D comparisons. Filling in what is known
+    without inventing what is not.
+
+    Returns the number of rows changed or added (idempotent: re-running with the
+    same history is a no-op)."""
+    if not history:
         return 0
-    rows, changed = [], 0
-    for line in DAILY_LOG.read_text().splitlines():
-        try:
-            r = json.loads(line)
-        except Exception:
-            continue
-        d = r.get("date")
-        if d in history and r.get("track_b_return") != history[d]:
-            r["track_b_return"] = history[d]
-            changed += 1
-        rows.append(r)
+
+    rows, changed, seen = [], 0, set()
+    if DAILY_LOG.exists():
+        for line in DAILY_LOG.read_text().splitlines():
+            if not line.strip():
+                continue
+            try:
+                r = json.loads(line)
+            except Exception:
+                # Keep unparseable lines rather than silently dropping data.
+                rows.append(line)
+                continue
+            d = r.get("date")
+            if d:
+                seen.add(d)
+            if d in history and r.get("track_b_return") != history[d]:
+                r["track_b_return"] = history[d]
+                changed += 1
+            rows.append(r)
+
+    for d in sorted(set(history) - seen):
+        rows.append({
+            "date":               d,
+            "track_b_return":     history[d],
+            "track_astar_return": None,
+            "track_a_return":     None,
+            "track_d_return":     None,
+            "track_c_return":     None,
+            "source":             "backfill_track_b_insert",
+        })
+        changed += 1
+
     if changed:
+        # Date order keeps the file readable and makes gaps visible to a human
+        # skimming it. Unparseable lines sort last rather than being dropped.
+        rows.sort(key=lambda r: r.get("date", "9999") if isinstance(r, dict) else "9999")
+        DAILY_LOG.parent.mkdir(parents=True, exist_ok=True)
         with open(DAILY_LOG, "w") as f:
             for r in rows:
-                f.write(json.dumps(r) + "\n")
+                f.write((json.dumps(r) if isinstance(r, dict) else r) + "\n")
     return changed
 
 
