@@ -4,6 +4,24 @@ Root cause (audit 2026-06-22): prices_live accumulated ~59% duplicate rows becau
 save_parquet deduped on the raw tz-aware `date` column. Different fetches wrote the
 same calendar day with different intraday time / tz components, so (symbol, date) did
 not match and `drop_duplicates(keep="last")` never collapsed them.
+
+Follow-up (2026-07-28): the 2026-06-24 dedup fix did not fully stop production
+re-corruption. Two further defects were found and are covered below:
+
+  Defect 1 — exact-duplicate rows survive because `save_parquet`'s dedup logic only
+  runs inside the `if path.exists()` branch. On the very first write for a cache name,
+  the incoming `df` is written straight through with NO dedup at all, so any exact
+  duplicate rows already present in that first incoming frame (e.g. a hub blend of
+  multiple providers concatenated before the first save_parquet call) are persisted
+  forever and every subsequent append's dedup only compares against them as already
+  "unique" rows.
+
+  Defect 2 — a bar stamped >=17:00 NY (after the US close) is fetched with the WRONG
+  nominal date: it is stamped with the date it was fetched relative to, but the price
+  data actually belongs to the NEXT trading day. `_calendar_day_key` normalized the
+  date but did not account for this, so the same real trading day fetched once as
+  "D 19:00" and again (correctly) as "D+1 00:00" produced two different keys and never
+  collided.
 """
 import importlib
 import pandas as pd
@@ -19,11 +37,24 @@ def store(tmp_path, monkeypatch):
 
 def test_same_calendar_day_different_intraday_timestamp_collapses(store):
     """Two fetches of the same (symbol, calendar-day) with different intraday
-    timestamps must collapse to ONE row (last wins), not accumulate."""
+    timestamps must collapse to ONE row (last wins), not accumulate.
+
+    NOTE (2026-07-28, Defect 2 fix): the original version of this test used a
+    19:00 NY stamp as one of the two timestamps. Per the Defect 2 root-cause
+    finding, a bar stamped >=17:00 NY (after the US close) actually belongs to
+    the NEXT trading day, not the nominal date it's stamped with — so pairing
+    a 19:00 stamp on date D with a 16:00 stamp also nominally on date D was
+    encoding the OLD, now-understood-incorrect assumption that any two
+    intraday stamps sharing a nominal date are the same trading day
+    regardless of hour. That specific pairing is now covered correctly, and
+    separately, by the evening-rollover tests below. This test is narrowed to
+    two intraday stamps that are BOTH before the close cutoff, which is the
+    unambiguous same-day case it was originally meant to guard.
+    """
     ny = "America/New_York"
     day1 = pd.DataFrame({
         "symbol": ["AAPL"],
-        "date": [pd.Timestamp("2024-06-03 19:00", tz=ny)],  # how the cache stores it
+        "date": [pd.Timestamp("2024-06-03 12:00", tz=ny)],
         "close": [194.03],
     })
     day1b = pd.DataFrame({
@@ -67,21 +98,32 @@ def test_tz_naive_dates_still_dedup(store):
 
 def test_mixed_tzaware_and_naive_across_fetches_collapses(store):
     """The production failure: an existing on-disk row is tz-AWARE and a later
-    fetch writes the same calendar day tz-NAIVE (different ingest source). After
-    pd.concat the `date` column is object dtype (pandas cannot mix aware+naive in
-    one datetime column), so is_datetime64_any_dtype is False and the normalize
-    branch is skipped — dedup never fires and the row accumulates. This is the
-    3-generation blend that bloated prices_live ~3× and let the bad KLAC copy
-    survive. Both rows are the same (symbol, calendar-day) → must collapse to 1."""
+    fetch writes the SAME REAL TRADING DAY tz-NAIVE (different ingest source).
+    After pd.concat the `date` column is object dtype (pandas cannot mix
+    aware+naive in one datetime column), so is_datetime64_any_dtype is False and
+    the normalize branch is skipped — dedup never fires and the row accumulates.
+    This is the 3-generation blend that bloated prices_live ~3x and let the bad
+    KLAC copy survive.
+
+    NOTE (2026-07-28, Defect 2 fix): the original fixture paired an aware
+    "2024-06-03 19:00" stamp with a naive "2024-06-03 00:00" stamp, both on the
+    SAME nominal date. Per the Defect 2 finding, a >=17:00 NY stamp on date D
+    is really date D+1's bar, so that original pairing was actually asserting
+    that two DIFFERENT real trading days collapse to one row — which is the
+    wrong behavior we now explicitly guard against below
+    (test_distinct_real_trading_days_not_falsely_merged). This test is fixed to
+    pair the aware evening stamp with a naive midnight stamp on D+1, which is
+    the real-world pairing that produced the production duplicates.
+    """
     ny = "America/New_York"
     aware = pd.DataFrame({
         "symbol": ["KLAC"],
-        "date": [pd.Timestamp("2024-06-03 19:00", tz=ny)],
+        "date": [pd.Timestamp("2024-06-03 19:00", tz=ny)],  # really belongs to 06-04
         "close": [240.0],
     })
     naive = pd.DataFrame({
         "symbol": ["KLAC"],
-        "date": [pd.Timestamp("2024-06-03 00:00")],  # tz-naive, same calendar day
+        "date": [pd.Timestamp("2024-06-04 00:00")],  # tz-naive, same REAL trading day
         "close": [241.0],
     })
     store.save_parquet(aware, "t_p4")
@@ -90,3 +132,148 @@ def test_mixed_tzaware_and_naive_across_fetches_collapses(store):
     klac = out[out["symbol"] == "KLAC"]
     assert len(klac) == 1, f"expected 1 row per calendar day, got {len(klac)}"
     assert klac["close"].iloc[0] == 241.0  # keep="last"
+
+
+# ---------------------------------------------------------------------------
+# Defect 1 — exact-duplicate rows survive the FIRST write (no path.exists() yet)
+# ---------------------------------------------------------------------------
+
+def test_exact_duplicate_rows_in_first_write_collapse(store):
+    """Reproduces Defect 1 through the real save_parquet API: a single incoming
+    frame (as if a hub blend concatenated multiple providers before the very
+    first save_parquet call for this cache name) already contains two
+    byte-identical rows. Because save_parquet's dedup only runs inside
+    `if path.exists()`, the very first write for a cache name bypasses dedup
+    entirely and both copies would previously be persisted."""
+    ny = "America/New_York"
+    row = {
+        "symbol": "SPY",
+        "date": pd.Timestamp("2020-01-01 19:00", tz=ny),
+        "close": 324.869995,
+        "source": "yfinance_hub",
+    }
+    df = pd.DataFrame([row, row])  # exact duplicate, first write, path does NOT exist
+    store.save_parquet(df, "t_p5")
+    out = store.load_parquet("t_p5")
+    assert len(out) == 1, f"expected exact duplicates in the first write to collapse, got {len(out)}"
+
+
+def test_exact_duplicate_rows_across_two_writes_collapse(store):
+    """Same exact-duplicate row delivered across two separate save_parquet calls
+    (the append path) must also collapse to one — this path already worked
+    before the fix and must keep working."""
+    ny = "America/New_York"
+    row = pd.DataFrame([{
+        "symbol": "SPY",
+        "date": pd.Timestamp("2020-01-01 19:00", tz=ny),
+        "close": 324.869995,
+        "source": "yfinance_hub",
+    }])
+    store.save_parquet(row, "t_p6")
+    store.save_parquet(row.copy(), "t_p6")
+    out = store.load_parquet("t_p6")
+    assert len(out) == 1
+
+
+# ---------------------------------------------------------------------------
+# Defect 2 — evening-stamped bars (>=17:00 NY) belong to the NEXT trading day
+# ---------------------------------------------------------------------------
+
+def test_evening_19h_stamp_collapses_with_next_day_midnight_stamp(store):
+    """A bar stamped 2020-01-01 19:00 NY is really 2020-01-02's close (2020-01-01
+    is a market holiday in the real corruption evidence). A later, correctly
+    dated fetch stamps the same trading day as 2020-01-02 00:00 NY. These must
+    collapse to ONE row."""
+    ny = "America/New_York"
+    evening = pd.DataFrame({
+        "symbol": ["SPY"],
+        "date": [pd.Timestamp("2020-01-01 19:00", tz=ny)],
+        "close": [324.87],
+    })
+    midnight_next_day = pd.DataFrame({
+        "symbol": ["SPY"],
+        "date": [pd.Timestamp("2020-01-02 00:00", tz=ny)],
+        "close": [324.87],
+    })
+    store.save_parquet(evening, "t_p7")
+    store.save_parquet(midnight_next_day, "t_p7")
+    out = store.load_parquet("t_p7")
+    assert len(out) == 1, f"expected evening stamp to roll to next trading day, got {len(out)}"
+
+
+def test_evening_20h_stamp_collapses_with_next_day_midnight_stamp(store):
+    """Same as above but for the 20:00 NY variant also seen in production."""
+    ny = "America/New_York"
+    evening = pd.DataFrame({
+        "symbol": ["SPY"],
+        "date": [pd.Timestamp("2020-01-01 20:00", tz=ny)],
+        "close": [324.87],
+    })
+    midnight_next_day = pd.DataFrame({
+        "symbol": ["SPY"],
+        "date": [pd.Timestamp("2020-01-02 00:00", tz=ny)],
+        "close": [324.87],
+    })
+    store.save_parquet(evening, "t_p8")
+    store.save_parquet(midnight_next_day, "t_p8")
+    out = store.load_parquet("t_p8")
+    assert len(out) == 1
+
+
+def test_distinct_real_trading_days_not_falsely_merged(store):
+    """Conservatism check: the evening-rollover rule must never merge two
+    genuinely different trading days. 2020-01-01 19:00 (rolls to 2020-01-02)
+    and 2020-01-03 00:00 (a separate, later real trading day) must stay
+    distinct."""
+    ny = "America/New_York"
+    df = pd.DataFrame({
+        "symbol": ["SPY", "SPY"],
+        "date": [pd.Timestamp("2020-01-01 19:00", tz=ny),
+                 pd.Timestamp("2020-01-03 00:00", tz=ny)],
+        "close": [324.87, 326.50],
+    })
+    store.save_parquet(df, "t_p9")
+    out = store.load_parquet("t_p9")
+    assert len(out) == 2, f"distinct real trading days must not merge, got {len(out)}"
+
+
+def test_evening_stamp_object_dtype_variant_rolls_forward(store):
+    """The object-dtype (mixed aware/naive) branch of _calendar_day_key must
+    apply the same evening-rollover rule as the pure-datetime64 branch."""
+    ny = "America/New_York"
+    aware_evening = pd.DataFrame({
+        "symbol": ["KLAC"],
+        "date": [pd.Timestamp("2024-06-03 19:00", tz=ny)],  # really 06-04
+        "close": [240.0],
+    })
+    naive_next_day = pd.DataFrame({
+        "symbol": ["KLAC"],
+        "date": [pd.Timestamp("2024-06-04 00:00")],  # tz-naive
+        "close": [241.0],
+    })
+    store.save_parquet(aware_evening, "t_p10")
+    store.save_parquet(naive_next_day, "t_p10")
+    out = store.load_parquet("t_p10")
+    assert len(out) == 1, f"expected object-dtype evening rollover to collapse, got {len(out)}"
+
+
+def test_macro_series_id_cache_still_dedups(store):
+    """Macro caches keyed on series_id (FRED/simulated ingest) must keep
+    deduping correctly — the date-key rollover logic must not break the
+    series_id id_cols path."""
+    a = pd.DataFrame({
+        "series_id": ["DGS10"],
+        "date": [pd.Timestamp("2024-01-02")],
+        "value": [4.5],
+        "source": ["fred"],
+    })
+    b = pd.DataFrame({
+        "series_id": ["DGS10"],
+        "date": [pd.Timestamp("2024-01-02")],
+        "value": [4.6],  # revised value, same series/day
+        "source": ["fred"],
+    })
+    store.save_parquet(a, "t_p11")
+    store.save_parquet(b, "t_p11")
+    out = store.load_parquet("t_p11")
+    assert len(out) == 1 and out["value"].iloc[0] == 4.6
