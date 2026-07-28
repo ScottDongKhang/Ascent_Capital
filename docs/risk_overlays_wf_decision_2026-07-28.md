@@ -139,7 +139,32 @@ Verified empirically before accepting the fix: **PSTG is the only symbol carryin
 types, and all 351 rolled matches have byte-identical closes**, proving the rollover creates
 exactly the right collisions and that `keep="last"` discards nothing.
 
-### The collapse is blocked by design, pending a targeted re-fetch
+### Repair COMPLETED (2026-07-28)
+
+Both steps ran against production `data_cache/prices_live.parquet`, each writing a verified
+backup first. Scripts kept at `scripts/maintenance/`.
+
+1. **Basis repair** (`repair_mixed_basis_symbols.py --apply`): re-fetched CRWD, MIDD, SPGI,
+   HON on the split-only basis, 1,648 rows each, **0 implausible jumps**. Conflicting groups
+   **1,419 → 0**. Backup `prices_live.pre_basis_repair.20260728-162726.bak.parquet`.
+   (CRWD's cached max was a bogus $782 versus a true split-adjusted $210.73 — confirming the
+   cache held rows unadjusted for its 4:1 split.)
+2. **Duplicate collapse** (`collapse_prices_live.py --apply`): **1,839,056 → 1,517,608 rows**
+   (321,448 removed) with key coverage identical (1,517,608 → 1,517,608), so only redundant
+   rows went, never coverage. Backup `prices_live.pre_dedup2.20260728-162756.bak.parquet`.
+
+Post-repair verification: 938 symbols, 1,648 trading days, **0 duplicates**, 0 null closes,
+and the WF fold axis back to **22 folds (was 47)** — the original crash condition is gone.
+
+**Still open, deliberately not changed: `CHRD`.** It carries a 257× jump on 2020-11-20 —
+the documented irreparable source-side ticker-reuse history (Chord Energy reusing Oasis
+Petroleum's ticker), which is why the 2026-06-22 clean re-fetch dropped it (936 vs 938
+symbols). Dropping a universe symbol has portfolio consequences, unlike a pure duplicate
+collapse, so it was left for a deliberate decision. Live risk is low: the artifact sits in
+2020, outside today's 252-day momentum window, and the 2026-06-24 IC winsorization already
+prevents one symbol from gating a sleeve. It WILL distort any backtest spanning 2020.
+
+### Why the collapse was blocked until the re-fetch
 
 The collapse script's safety guard **refused to write**: 1,419 (symbol, trading-day) groups
 hold **conflicting close values** — not duplicates but two different **adjustment bases**.
@@ -162,8 +187,7 @@ so no discontinuity against the other 934 symbols.
 
 - Validating the crash overlay needs a longer-IS `WindowGenerator`; it cannot be tested as
   currently configured.
-- Whether to re-fetch the 4 mixed-basis symbols and complete the production cache collapse.
-  The `save_parquet` fix is self-healing on the next write for pure duplicates, but it
-  cannot adjudicate conflicting bases.
+- `CHRD` still holds an irreparable 257× ticker-reuse artifact in 2020 (see above). Decide
+  whether to drop it from the universe as the clean re-fetch did.
 - `feature/risk-management` has `main` merged into it and is ready to merge out. It was
   deliberately NOT merged into `main` while `main` carried uncommitted WIP.
