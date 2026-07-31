@@ -1,0 +1,15 @@
+{
+  "date": "2026-06-15",
+  "verdict_recommendation": "proceed",
+  "verdict_confidence": 0.62,
+  "regime": "calm_bull",
+  "nav_change": -0.011271,
+  "outcome_correctness": "WRONG",
+  "lesson": "**2026-06-15 Debrief: Judge's Recency Bias Overrode Quantified Systemic Risk; Confidence Floor Was Too Low for Unhedged Concavity**\n\nThe PROCEED verdict at 62% confidence was mathematically justified by calm_bull base rates (72% continuation) but operationally reckless: the debate explicitly quantified portfolio concavity (-7.7% regime-flip impact) and identified three unhedged binary risks (PK fundamental cliff, BYD earnings, FOMC in 2 days) that together created a *conditional* tail exposure the 62% confidence did not account for. The judge's reasoning\u2014\"my recent REDUCE_SIZE call proved wrong, so I'm over-cautious\"\u2014is the textbook error of using recent false alarms to suppress action on new, distinct risks; the 2026-04-15 false alarm was about defensive allocation miscalculation, not about concavity or binary event clustering. **Next time: when a debate flags both (1) quantified structural concavity >5% and (2) three or more unhedged binary events within 14 days, the confidence floor for PROCEED jumps to 75%+ *unless* the largest position (BYD at 7.2%) is explicitly trimmed or hedged before execution.",
+  "lesson_tags": [
+    "regime",
+    "concentration",
+    "macro",
+    "confidence"
+  ]
+}

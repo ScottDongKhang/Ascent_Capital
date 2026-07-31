@@ -633,5 +633,13 @@
       "bear_devil": 0.0901
     }
   },
-  "outcome_scored": false
+  "outcome_scored": true,
+  "outcome_nav_change": -0.011271,
+  "outcome_window_end": "2026-06-26",
+  "outcome_score": 0.0,
+  "agent_scores": {
+    "bull": 0.0,
+    "bear": 0.04,
+    "devils_advocate": 0.04
+  }
 }

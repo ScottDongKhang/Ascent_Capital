@@ -1,0 +1,16 @@
+{
+  "date": "2026-06-24",
+  "verdict_recommendation": "proceed",
+  "verdict_confidence": 0.58,
+  "regime": "calm_bull",
+  "nav_change": -0.004254,
+  "outcome_correctness": "PARTIALLY CORRECT",
+  "lesson": "**2026-06-24 Debrief: Judge Correctly Weighted Base Rates but Underestimated Structural Concavity Under Regime Divergence**\n\nThe PROCEED verdict at 58% confidence was justified by calm_bull's 72% continuation rate and correctly rejected the bear case's over-reliance on a single stressed macro read (38% escalation probability) against a calm_bull label\u2014but the judge fatally discounted two quantified structural risks that proved predictive of the -0.43% outcome: (1) beta breach at 0.928 (3x the 0.300 bound) created unhedged long concavity, and (2) EM concentration at 15.5% with 0.93 correlation was a latent fragility that only needed a single geopolitical trigger to activate. The judge's reasoning\u2014\"I over-reduced on 2026-04-15 and missed +5.6%\"\u2014suppressed action on *new, distinct* structural risks rather than on regime-continuation judgment; the prior false alarm was about defensive miscalculation, not about portfolio architecture. **Next time: when a debate flags both (1) beta breach >2x the bound and (2) single-cluster concentration >15% with correlation >0.90, those are position-sizing constraints, not regime-continuation flags",
+  "lesson_tags": [
+    "regime",
+    "timing",
+    "concentration",
+    "macro",
+    "confidence"
+  ]
+}

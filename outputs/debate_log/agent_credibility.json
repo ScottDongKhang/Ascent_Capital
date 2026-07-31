@@ -1,41 +1,36 @@
 {
   "by_regime": {
     "stressed": {
-      "bull": 0.5,
-      "bear": 0.5,
-      "devils_advocate": 0.5
+      "bull": 0.3,
+      "bear": 0.25,
+      "devils_advocate": 0.25
     },
     "calm_bull": {
-      "bull": 0.75,
-      "bear": 0.75,
-      "devils_advocate": 0.75
-    },
-    "regimelabel.stressed": {
-      "bull": 0.1,
-      "bear": 0.0,
-      "devils_advocate": 0.0
+      "bull": 0.4,
+      "bear": 0.416,
+      "devils_advocate": 0.424
     }
   },
   "overall": {
-    "bull": 0.525,
-    "bear": 0.5,
-    "devils_advocate": 0.5
+    "bull": 0.371,
+    "bear": 0.369,
+    "devils_advocate": 0.374
   },
   "sample_counts": {
     "stressed": {
-      "bull": 1,
-      "bear": 1,
-      "devils_advocate": 1
-    },
-    "calm_bull": {
       "bull": 2,
       "bear": 2,
       "devils_advocate": 2
     },
-    "regimelabel.stressed": {
-      "bull": 1,
-      "bear": 1,
-      "devils_advocate": 1
+    "calm_bull": {
+      "bull": 5,
+      "bear": 5,
+      "devils_advocate": 5
     }
+  },
+  "overall_sample_counts": {
+    "bull": 7,
+    "bear": 7,
+    "devils_advocate": 7
   }
 }

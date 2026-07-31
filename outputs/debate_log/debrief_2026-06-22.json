@@ -1,0 +1,15 @@
+{
+  "date": "2026-06-22",
+  "verdict_recommendation": "proceed",
+  "verdict_confidence": 0.62,
+  "regime": "calm_bull",
+  "nav_change": -0.014788,
+  "outcome_correctness": "WRONG",
+  "lesson": "**2026-06-22 Debrief: Judge's Recency Bias Suppressed Action on Quantified Structural Risks; Confidence Floor Was Too Low for Unhedged Concavity**\n\nThe PROCEED verdict at 62% confidence was mathematically justified by calm_bull base rates (72% continuation) but operationally reckless: the debate explicitly quantified portfolio concavity (-7.7% regime-flip impact), identified BAX as a deteriorating -33.9% momentum drag at 7.5% weight, and flagged systemic correlation collapse (19\u219214 independent bets under stress), yet the judge suppressed action citing the 2026-06-15 false alarm about over-caution. This is the textbook error of using recent false alarms to suppress action on *new, distinct* risks\u2014the prior call was about defensive allocation miscalculation, not about unhedged binary concavity or momentum deterioration. **Next time: when a debate flags both (1) quantified structural concavity >5% and (2) a single position with momentum <-30% at >5% weight, the confidence floor for PROCEED jumps to 75%+ unless that position is explicitly trimmed or hedged before execution.** The portfolio's -1.48% outcome validates the bear case's risk identification; the system",
+  "lesson_tags": [
+    "regime",
+    "concentration",
+    "macro",
+    "confidence"
+  ]
+}

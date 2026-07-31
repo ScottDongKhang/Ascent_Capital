@@ -11,3 +11,15 @@
 /bin/bash: /Users/kdong/Downloads/ascent capital v2 up to phase 5.1/scripts/run_eod.sh: Operation not permitted
 /bin/bash: /Users/kdong/Downloads/ascent capital v2 up to phase 5.1/scripts/run_eod.sh: Operation not permitted
 /bin/bash: /Users/kdong/Downloads/ascent capital v2 up to phase 5.1/scripts/run_eod.sh: Operation not permitted
+/Users/scott/IdeaProjects/ascent-capital/scripts/heartbeat_check.py:356: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  "generated_at": dt.datetime.utcnow().isoformat() + "Z",
+/Users/scott/IdeaProjects/ascent-capital/scripts/heartbeat_check.py:356: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  "generated_at": dt.datetime.utcnow().isoformat() + "Z",
+/Users/scott/IdeaProjects/ascent-capital/scripts/heartbeat_check.py:426: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  "timestamp": dt.datetime.utcnow().isoformat(),
+[Alert:liveness] Liveness CRITICAL: last run 2026-07-27, 3 missed trading day(s), 0 missed rebalance(s).
+/Users/scott/IdeaProjects/ascent-capital/scripts/heartbeat_check.py:356: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  "generated_at": dt.datetime.utcnow().isoformat() + "Z",
+/Users/scott/IdeaProjects/ascent-capital/scripts/heartbeat_check.py:426: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  "timestamp": dt.datetime.utcnow().isoformat(),
+[Alert:liveness] Liveness CRITICAL: last run 2026-07-27, 4 missed trading day(s), 0 missed rebalance(s).

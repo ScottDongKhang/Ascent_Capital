@@ -1,7 +1,7 @@
 {
   "date": "2026-04-12",
   "data_as_of": "2026-04-12",
-  "timestamp": "2026-06-23T17:40:52.981574",
+  "timestamp": "2026-07-31T11:12:37.850062",
   "portfolio_state": {
     "date": "2026-04-12",
     "us_regime": "calm_bull",
@@ -51,8 +51,8 @@
       "catalyst_text": ""
     },
     "quant_context": {
-      "portfolio_var_95": -0.019307,
-      "portfolio_var_99": -0.021799,
+      "portfolio_var_95": -0.023252,
+      "portfolio_var_99": -0.03576,
       "factor_exposures": {
         "us_tech": 1.0
       },
@@ -63,21 +63,21 @@
         {
           "sym1": "AAPL",
           "sym2": "MSFT",
-          "correlation": 0.153
+          "correlation": 0.354
         }
       ],
-      "summary_text": "QUANTITATIVE RISK CONTEXT (pre-computed):\n\nPortfolio VaR (historical simulation, 63 trading days):\n  95th percentile (1-day): -1.93%  (1 in 20 chance of loss >= this)\n  99th percentile (1-day): -2.18%  (1 in 100 chance of loss >= this)\n\nFactor exposures (sum of position weights per factor):\n  us_tech            100.0%\n\nCorrelation: No high-correlation pairs (>0.65) detected.\n\nConcentration warning: us_tech is 100.0% of portfolio"
+      "summary_text": "QUANTITATIVE RISK CONTEXT (pre-computed):\n\nPortfolio VaR (historical simulation, 63 trading days):\n  95th percentile (1-day): -2.33%  (1 in 20 chance of loss >= this)\n  99th percentile (1-day): -3.58%  (1 in 100 chance of loss >= this)\n\nFactor exposures (sum of position weights per factor):\n  us_tech            100.0%\n\nCorrelation: No high-correlation pairs (>0.65) detected.\n\nConcentration warning: us_tech is 100.0% of portfolio"
     },
     "adversarial_engine": {
       "adversarial_scores": {
         "AAPL": {
-          "short_thesis": "",
-          "adversarial_score": 0.5,
+          "short_thesis": "Deteriorating risk trend signals margin compression ahead. Services growth slowing; iPhone saturation in developed markets pressures revenue. Valuation stretched at 30x earnings.",
+          "adversarial_score": 0.58,
           "flagged": false
         },
         "MSFT": {
-          "short_thesis": "",
-          "adversarial_score": 0.5,
+          "short_thesis": "AI hype cycle peaking; Azure growth decelerating. Enterprise software spending cycles turning. Cloud margin expansion limited by competition and capex intensity.",
+          "adversarial_score": 0.52,
           "flagged": false
         }
       },
@@ -135,7 +135,7 @@
           "intervention_type": "regime_sizing",
           "current_weight": 0.5,
           "suggested_weight": 0.065,
-          "adversarial_score": 0.5,
+          "adversarial_score": 0.58,
           "priority_score": 2.61
         },
         {
@@ -144,7 +144,7 @@
           "intervention_type": "regime_sizing",
           "current_weight": 0.5,
           "suggested_weight": 0.065,
-          "adversarial_score": 0.5,
+          "adversarial_score": 0.52,
           "priority_score": 2.61
         }
       ]
@@ -169,7 +169,7 @@
         "intervention_type": "regime_sizing",
         "current_weight": 0.5,
         "suggested_weight": 0.065,
-        "adversarial_score": 0.5,
+        "adversarial_score": 0.58,
         "priority_score": 2.61
       },
       {
@@ -178,7 +178,7 @@
         "intervention_type": "regime_sizing",
         "current_weight": 0.5,
         "suggested_weight": 0.065,
-        "adversarial_score": 0.5,
+        "adversarial_score": 0.52,
         "priority_score": 2.61
       }
     ],
