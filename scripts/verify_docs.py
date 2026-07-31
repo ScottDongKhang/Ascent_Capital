@@ -632,7 +632,8 @@ def check_no_unsourced_sharpe_published() -> Result:
     offenders = []
     targets = ["scripts/generate_performance_page.py", "docs/methodology.md",
                "ascent/research/self_improve.py", "docs/index.html",
-               "README.md", "CURRENT_VERIFIED_NUMBERS.md"]
+               "README.md", "CURRENT_VERIFIED_NUMBERS.md",
+               "ascent/reporting/investor_letter.py"]
     for rel in targets:
         try:
             txt = _read(rel)

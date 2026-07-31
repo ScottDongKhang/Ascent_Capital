@@ -989,7 +989,13 @@ def run_eod_with_weights(merged_weights: dict, run_date=None, dry_run: bool = Fa
     except Exception as _cf_exc:
         print(f"[EOD-Multi] Cost features unavailable ({_cf_exc}) — cost filtering inactive")
 
-    _required_cost_keys = {"dollar_volume"}
+    # extract_cost_features() (ascent/execution/cost_model.py) returns "dollar_vol_21d"
+    # (and, only if a "vol_21d" input DataFrame was supplied — which eod_runner never
+    # does — "vol_21d"). It never returns a key literally named "dollar_volume", so
+    # checking for that key here always failed and silently disabled both the cost
+    # filter and TWAP routing. "vol_21d" is not required: apply_cost_filter's estimate()
+    # falls back to a 0.20 default when it's absent (ascent/execution/cost_model.py:124).
+    _required_cost_keys = {"dollar_vol_21d"}
     features_arg = _cost_features if (_cost_features and _required_cost_keys.issubset(_cost_features)) else None
     orders, diff_df = compute_orders(target_weights, current_positions, portfolio_value,
                                      features=features_arg)

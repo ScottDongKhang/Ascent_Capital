@@ -101,8 +101,16 @@ def compute_orders(
     diff_df = pd.DataFrame(rows)
     orders  = sorted(orders, key=lambda o: (0 if o.side == "sell" else 1, o.symbol))
 
-    # Route large orders through TWAP when enabled
-    if TWAP_ENABLED and should_use_twap is not None and features:
+    # Route large orders through TWAP when enabled.
+    # execute_twap() has its own internal TWAP_ENABLED gate (twap_executor.py:136) — when
+    # the kill switch is off it logs the plan and returns [{"status": "disabled", ...}]
+    # without submitting anything, so calling it here is safe regardless of the switch
+    # state. We only pull an order out of the plain submission list below when
+    # execute_twap() actually reports a "submitted" fill; if it's disabled (today's
+    # default) the order is left in `orders` so it still executes via the normal path,
+    # preserving current behaviour exactly.
+    if TWAP_ENABLED and should_use_twap is not None and execute_twap is not None and features:
+        twap_routed_symbols = set()
         try:
             dollar_vol_map = features.get("dollar_vol_21d", {}) or {}
             for o in orders:
@@ -112,8 +120,25 @@ def compute_orders(
                         "[OrderEngine] %s: $%.0f > 5%% ADV ($%.0f) — routing to TWAP",
                         o.symbol, o.dollar_amount, adv_dollars,
                     )
+                    price = o.dollar_amount / o.estimated_shares if o.estimated_shares else 0.0
+                    try:
+                        fills = execute_twap(
+                            symbol=o.symbol,
+                            total_dollars=o.dollar_amount,
+                            side=o.side,
+                            adv=adv_dollars,
+                            price=price,
+                        )
+                    except Exception as twap_exc:
+                        log.warning("[OrderEngine] %s: TWAP execution failed (%s) — falling back to plain order", o.symbol, twap_exc)
+                        continue
+                    if any(f.get("status") == "submitted" for f in fills):
+                        twap_routed_symbols.add(o.symbol)
         except Exception as exc:
             log.debug("[OrderEngine] TWAP check failed: %s", exc)
+
+        if twap_routed_symbols:
+            orders = [o for o in orders if o.symbol not in twap_routed_symbols]
 
     # Apply cost model if features are available
     if features:

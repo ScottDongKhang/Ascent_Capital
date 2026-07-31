@@ -219,13 +219,12 @@ def run_weekly_debrief() -> dict:
     overrides   = _summarize_overrides(calibration_rows, decision_rows)
     verdict_sum = _summarize_verdicts(verdicts)
 
-    # Get current regime
-    regime = "unknown"
-    try:
-        sig = json.loads(Path("dashboard/regime_signal.json").read_text())
-        regime = sig.get("regime", sig.get("label", "unknown"))
-    except Exception:
-        pass
+    # Get current regime, gated on regime_signal.json freshness (falls back
+    # to the regime engine's own regime_labels.csv when stale/absent).
+    from ascent.utils.freshness import fresh_regime_label
+    regime_result = fresh_regime_label()
+    regime = regime_result["label"]
+    regime_stale = regime_result["stale"]
 
     # LLM synthesis
     synthesis_raw = _call_haiku_synthesis(attribution, overrides, verdict_sum, regime)
@@ -237,6 +236,7 @@ def run_weekly_debrief() -> dict:
     debrief = {
         "as_of": date.today().isoformat(),
         "regime": regime,
+        "regime_stale": regime_stale,
         "attribution": attribution,
         "override_performance": overrides,
         "debate_verdicts": verdict_sum,

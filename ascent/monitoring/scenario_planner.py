@@ -218,13 +218,15 @@ def run_scenario_planning(debrief: Optional[dict] = None) -> dict:
         print("[ScenarioPlanner] No portfolio weights found — skipping")
         return {}
 
-    # Get current regime
-    regime = "unknown"
-    try:
-        sig = json.loads(Path("dashboard/regime_signal.json").read_text())
-        regime = sig.get("regime", sig.get("label", "unknown"))
-    except Exception:
-        pass
+    # Get current regime, gated on regime_signal.json freshness (falls back
+    # to the regime engine's own regime_labels.csv when stale/absent).
+    from ascent.utils.freshness import fresh_regime_label
+    regime_result = fresh_regime_label()
+    regime = regime_result["label"]
+    if regime_result["stale"]:
+        age = regime_result["age_days"]
+        age_str = f"{age}d old" if age is not None else "age unknown"
+        regime = f"{regime} (regime_signal.json stale, {age_str}; source: {regime_result['source']})"
 
     # Dynamic risk from debrief
     dynamic_risk = None

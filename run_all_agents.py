@@ -16,6 +16,7 @@ import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime
 from pathlib import Path
+from typing import Optional
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -1172,20 +1173,22 @@ def main():
     except Exception as _monthly_e:
         print(f"[Monthly] Plan 6/7 monthly tasks skipped: {_monthly_e}")
 
-    # ── Daily: methodology index export + alert check ─────────────────────────
+    # ── Daily: methodology index export ────────────────────────────────────────
     try:
         from compliance.methodology_index import export_methodology_index as _export_mi
         _export_mi()
     except Exception:
         pass
 
-    try:
-        from ascent.monitoring.alert_system import check_alerts as _check_alerts
-        _alert_list = _check_alerts()
-        if _alert_list:
-            print(f"[Alerts] {len(_alert_list)} new alert(s) fired.")
-    except Exception:
-        pass
+    # NOTE: alert checking (drawdown / factor breach / sleeve IC decay) and the
+    # daily "system alive" proof-of-life ping used to be called here with zero
+    # arguments, which made check_alerts() a permanent no-op (every threshold
+    # derives from args that default to None) wrapped in a bare `except: pass`
+    # that would have hidden even a real exception. Neither can be fixed at
+    # this point in the run: merged_weights, factor exposures, and sleeve IC
+    # are all computed later. See `_run_daily_alert_checks()`, called from
+    # `_log_holdings()` below where equity, positions, factor exposures, and
+    # sleeve IC actually exist.
 
     # ── Step 5: Run orchestrator (reads fresh skill scores written above) ─────
     merged_weights = run_orchestrator(agent_outputs)
@@ -2019,6 +2022,123 @@ def _log_run(today, merged_weights, agent_outputs, dry_run):
     print(f"[Runner] Done.\n")
 
 
+def _compute_drawdown_from_holdings_log(
+    current_equity: float,
+    log_path: Path = Path("logs/holdings_log.jsonl"),
+    lookback_entries: int = 90,
+) -> Optional[float]:
+    """
+    Current drawdown from the trailing local peak, using the equity series
+    already recorded in logs/holdings_log.jsonl. Returns None if there is not
+    enough history to establish a peak (e.g. first run, or file missing) —
+    callers should treat None as "no drawdown signal available", not zero.
+    """
+    if current_equity <= 0 or not log_path.exists():
+        return None
+    try:
+        lines = [l for l in log_path.read_text().splitlines() if l.strip()]
+    except Exception:
+        return None
+    if not lines:
+        return None
+
+    equities = []
+    for line in lines[-lookback_entries:]:
+        try:
+            e = json.loads(line).get("equity")
+            if e:
+                equities.append(float(e))
+        except Exception:
+            continue
+    if not equities:
+        return None
+
+    peak = max(equities + [current_equity])
+    if peak <= 0:
+        return None
+    return max(0.0, (peak - current_equity) / peak)
+
+
+def _run_daily_alert_checks(today, equity: float, last_equity: float) -> None:
+    """
+    Wire up the alert system with real, currently-available data and fire the
+    daily "system alive" proof-of-life ping.
+
+    Split out of `_log_holdings()` (rather than inlined) so it can be
+    unit-tested without a live Alpaca account: pass in equity/last_equity
+    directly and monkeypatch the alert_system functions.
+
+    Data sourced here, and why each is what it is (not invented):
+      - portfolio_state["drawdown"]: computed from the equity series already
+        written to logs/holdings_log.jsonl (local peak vs current equity).
+        This is a real proxy for drawdown; it is NOT the same as LiveNAV's
+        intraday drawdown (no streaming NAV is wired into this pipeline —
+        documented gap, left as live_nav=None).
+      - factor_exposures: read back from dashboard/factor_exposures.json,
+        which export_factor_exposures() already wrote earlier this same run
+        (see the "Export factor exposures to dashboard" step). Best-effort:
+        file may not exist yet on a non-rebalance day.
+      - sleeve_ic: from ascent.monitoring.signal_health.compute_signal_health(),
+        which is already computed elsewhere in this run for the post-rebalance
+        snapshot. Uses "ic_5d_avg" (a 5-day rolling average), not a literal
+        21-day figure — check_alerts()'s docstring says 21d but the function
+        only compares against a floor, so a 5d average is a legitimate,
+        genuinely-available substitute rather than invented data.
+    """
+    import logging
+    log = logging.getLogger(__name__)
+
+    try:
+        from ascent.monitoring.alert_system import check_alerts, send_system_alive_ping
+
+        portfolio_state = None
+        drawdown = _compute_drawdown_from_holdings_log(equity)
+        if drawdown is not None:
+            portfolio_state = {"drawdown": drawdown}
+
+        factor_exposures = None
+        try:
+            fe_path = Path("dashboard/factor_exposures.json")
+            if fe_path.exists():
+                factor_exposures = json.loads(fe_path.read_text()).get("exposures") or None
+        except Exception as e:
+            log.warning("[Alerts] Could not read factor_exposures.json: %s", e)
+
+        sleeve_ic = None
+        try:
+            from ascent.monitoring.signal_health import compute_signal_health
+            _health = compute_signal_health(today.isoformat())
+            if _health:
+                sleeve_ic = {s: d.get("ic_5d_avg") for s, d in _health.items()
+                             if d.get("ic_5d_avg") is not None}
+        except Exception as e:
+            log.warning("[Alerts] Could not compute sleeve IC: %s", e)
+
+        alert_list = check_alerts(
+            portfolio_state=portfolio_state,
+            live_nav=None,  # no streaming LiveNAV wired into this pipeline yet
+            factor_exposures=factor_exposures,
+            sleeve_ic=sleeve_ic,
+        )
+        if alert_list:
+            print(f"[Alerts] {len(alert_list)} new alert(s) fired.")
+    except Exception:
+        log.exception("[Alerts] check_alerts() failed")
+
+    # Proof-of-life ping: once per run, so "no failure alerts today" can be
+    # told apart from "the alert channel itself is dead" (the failure mode
+    # behind the earlier multi-week silent outage).
+    try:
+        from ascent.monitoring.alert_system import send_system_alive_ping
+        send_system_alive_ping(
+            last_run=today.isoformat(),
+            nav=equity if equity else None,
+            nav_prior=last_equity if last_equity else None,
+        )
+    except Exception:
+        log.exception("[Alerts] send_system_alive_ping() failed")
+
+
 def _log_holdings(today, force_sealed: bool = False):
     log_path = Path("logs/holdings_log.jsonl")
     log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -2073,6 +2193,13 @@ def _log_holdings(today, force_sealed: bool = False):
         sign = "+" if day_ret >= spy_ret else "-"
         print(f"[Runner] Holdings logged — equity ${equity:,.2f} | "
               f"portfolio {day_ret:+.2%} vs SPY {spy_ret:+.2%} ({sign})")
+
+        # ── Alerts + daily "system alive" proof-of-life ping ──────────────────
+        # This is the actual wiring for the previously-dead alert path (see
+        # `_run_daily_alert_checks` docstring): equity/last_equity are real
+        # numbers from Alpaca at this point in the run, unlike the earlier
+        # no-arg call site before the orchestrator had even run.
+        _run_daily_alert_checks(today, equity, last_equity)
 
         # ── Counterfactual daily scoring ─────────────────────────────────────
         _cf_record = None

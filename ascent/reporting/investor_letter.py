@@ -31,9 +31,23 @@ DEBATE_DIR     = Path("outputs/debate_log")
 REGIME_PATH    = Path("dashboard/regime_signal.json")
 KILL_SW_PATH   = Path("logs/kill_switch_state.json")
 
-# Walk-forward OOS Sharpe — update when new OOS record is computed
-WF_SHARPE = 0.52
-WF_PERIOD  = "Jan 2020–Apr 2026"
+
+def _canonical_wf_sharpe_and_period() -> tuple[str, str]:
+    """Walk-forward OOS Sharpe + window, read from the canonical artifact.
+
+    Never hardcode this pair — CURRENT_VERIFIED_NUMBERS.md is the only
+    citable source, and `canonical_wf()` is the sanctioned path from artifact
+    to citation (see ascent/reporting/verified_numbers.py). Falls back to a
+    visibly-unavailable string rather than a stale hardcoded default so a
+    missing artifact can never be mistaken for a real number.
+    """
+    try:
+        from ascent.reporting.verified_numbers import canonical_wf
+        wf = canonical_wf()
+        return wf.sharpe_str, wf.oos_window
+    except Exception as e:
+        log.error(f"[Letter] canonical_wf() unavailable: {e}")
+        return "unavailable", "unavailable"
 
 
 # ── Detection ────────────────────────────────────────────────────────────────
@@ -249,11 +263,22 @@ def _get_rebalance_events(year: int, month: int) -> list[dict]:
 
 
 def _get_regime() -> str:
-    try:
-        d = json.loads(REGIME_PATH.read_text())
-        return d.get("regime", "unknown")
-    except Exception:
-        return "unknown"
+    """Current regime label, gated on regime_signal.json freshness.
+
+    Falls back to dashboard/regime_labels.csv (the engine's own live output)
+    when regime_signal.json is stale/absent/unparseable, and annotates the
+    string so the stale case is never silently indistinguishable from fresh.
+    """
+    from ascent.utils.freshness import fresh_regime_label
+
+    result = fresh_regime_label(signal_path=REGIME_PATH)
+    if not result["stale"]:
+        return result["label"]
+    age = result["age_days"]
+    age_str = f"{age}d old" if age is not None else "age unknown"
+    if result["source"] == "csv_fallback":
+        return f"{result['label']} (regime_signal.json stale, {age_str}; using engine CSV)"
+    return f"unknown (stale, {age_str})"
 
 
 def _get_kill_switch_state() -> dict:
@@ -487,6 +512,7 @@ def _build_user_prompt(
     import calendar
 
     month_name = calendar.month_name[month]
+    wf_sharpe, wf_period = _canonical_wf_sharpe_and_period()
 
     # ── Performance ──────────────────────────────────────────────────
     if monthly_results:
@@ -583,7 +609,7 @@ RISK METRICS:
   Annualized vol — month: Fund {m_vol_f:.1f}%  /  SPY {m_vol_s:.1f}%
   Annualized vol — ITD:   Fund {itd_vol_f:.1f}%  /  SPY {itd_vol_s:.1f}%
   Beta to SPY (ITD, OLS): {beta:.2f}
-  Walk-forward OOS Sharpe ({WF_PERIOD}): {WF_SHARPE}
+  Walk-forward OOS Sharpe ({wf_period}): {wf_sharpe}
   Live Sharpe: not calculable at {n_days} sessions
   Calmar: not meaningful at this sample length
 

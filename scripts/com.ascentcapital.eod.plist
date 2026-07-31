@@ -13,83 +13,48 @@
     </array>
 
     <!--
-      09:00 local, Tuesday..Saturday.
+      StartInterval, NOT StartCalendarInterval: same root-cause fix as
+      com.ascentcapital.heartbeat.plist. StartCalendarInterval jobs are
+      skipped entirely (no catch-up) if the Mac is asleep at the exact
+      scheduled wall-clock moment — that silent skip is what turned a sleeping
+      laptop into 2 missed scheduled rebalances and a 19-day outage. This job
+      is the one that actually trades, so it needs the fix more than the
+      heartbeat does, not less.
 
-      StartCalendarInterval is interpreted in MACHINE-local time, and this host
-      is Asia/Ho_Chi_Minh (UTC+7) — NOT Pacific. The previous version of this
-      file asserted "local machine time (PT here)" and used Hour=13 to mean
-      1:45pm PT; on a UTC+7 host that fires at 22:45 PT the *previous* day,
-      ~8h before the open and on the wrong US calendar day. Weekday=1 (local
-      Monday) landed on Sunday night PT, when there is no session at all, and
-      Friday's PT session never got a run.
+      Original intent (still true, now enforced in Python instead of launchd):
+      09:00 local (Asia/Ho_Chi_Minh, UTC+7) Tue..Sat, which maps to the
+      Mon..Fri US sessions after Alpaca's ~17:00 PT settlement (see the prior
+      version of this file / git history for the full zoneinfo mapping and
+      the settlement-margin reasoning). None of that logic needs to live in
+      the plist: run_eod.sh gates on the US market date via
+      ascent/utils/market_time.py + heartbeat_check.py's holiday calendar and
+      exits immediately on a non-trading day, and run_all_agents.py's
+      same-session guard (`already_ran_for_session(today)`, grep it) exits
+      immediately if today's session already has a logged run, unless
+      --force/--date is passed. Neither is touched by this change. That
+      combination is what makes firing this job more than once a day safe.
 
-      The mapping, verified against zoneinfo in both DST regimes:
-        local Tue 09:00  ->  Mon 19:00 PDT / 18:00 PST  ->  Monday's session
-        local Sat 09:00  ->  Fri 19:00 PDT / 18:00 PST  ->  Friday's session
-      So Weekday 2..6 (Tue..Sat local) covers the Mon..Fri US sessions. Local
-      Monday is deliberately absent: it would map to Sunday PT.
-
-      09:00 rather than 08:00 because Alpaca settles its 1D bars ~17:00 PT.
-      09:00 local leaves 2h of margin in summer and 1h in winter; 08:00 local
-      lands exactly on 17:00 PST in winter, with no margin. Running after
-      settlement is what makes Track B read real numbers instead of a fake 0.0.
-
-      The run stamps its artifacts with the US market date (see
-      ascent/utils/market_time.py), so a local-Tuesday run correctly writes
-      Monday's session date.
+      Interval choice: tighter than the heartbeat's 21600s (6h) on purpose.
+      The heartbeat is a passive health check where a multi-hour catch-up
+      delay is fine; this job is the one whose late catch-up cost real
+      Track-B settlement margin and 2 missed rebalances. 3600s (1h) means a
+      laptop that wakes at any point in the day is at most ~1h from a
+      catch-up attempt, comfortably inside the 1-2h settlement margin the
+      original 09:00-vs-08:00 choice was built around, while every
+      redundant firing inside the same trading session or on a closed day
+      is a cheap no-op via the guards above.
     -->
-    <key>StartCalendarInterval</key>
-    <array>
-        <dict>
-            <key>Weekday</key>
-            <integer>2</integer>
-            <key>Hour</key>
-            <integer>9</integer>
-            <key>Minute</key>
-            <integer>0</integer>
-        </dict>
-        <dict>
-            <key>Weekday</key>
-            <integer>3</integer>
-            <key>Hour</key>
-            <integer>9</integer>
-            <key>Minute</key>
-            <integer>0</integer>
-        </dict>
-        <dict>
-            <key>Weekday</key>
-            <integer>4</integer>
-            <key>Hour</key>
-            <integer>9</integer>
-            <key>Minute</key>
-            <integer>0</integer>
-        </dict>
-        <dict>
-            <key>Weekday</key>
-            <integer>5</integer>
-            <key>Hour</key>
-            <integer>9</integer>
-            <key>Minute</key>
-            <integer>0</integer>
-        </dict>
-        <dict>
-            <key>Weekday</key>
-            <integer>6</integer>
-            <key>Hour</key>
-            <integer>9</integer>
-            <key>Minute</key>
-            <integer>0</integer>
-        </dict>
-    </array>
+    <key>StartInterval</key>
+    <integer>3600</integer>
+
+    <key>RunAtLoad</key>
+    <true/>
 
     <key>StandardOutPath</key>
     <string>/Users/scott/IdeaProjects/ascent-capital/logs/launchd_stdout.log</string>
 
     <key>StandardErrorPath</key>
     <string>/Users/scott/IdeaProjects/ascent-capital/logs/launchd_stderr.log</string>
-
-    <key>RunAtLoad</key>
-    <false/>
 
     <key>KeepAlive</key>
     <false/>

@@ -132,11 +132,14 @@ def _generate_commentary(perf: dict, year: int, month: int) -> str:
     """Generate 2-3 paragraph strategy commentary via Haiku."""
     try:
         from ascent.llm.client import generate, HAIKU_MODEL
-        regime_data = {}
-        try:
-            regime_data = json.loads(Path("dashboard/regime_signal.json").read_text())
-        except Exception:
-            pass
+        from ascent.utils.freshness import fresh_regime_label
+        regime_result = fresh_regime_label()
+        regime_display = regime_result["label"]
+        if regime_result["stale"]:
+            age = regime_result["age_days"]
+            age_str = f"{age}d old" if age is not None else "age unknown"
+            regime_display = f"{regime_display} (regime_signal.json stale, {age_str}; source: {regime_result['source']})"
+        regime_data = {"regime": regime_display}
 
         prompt = f"""Write a 3-paragraph monthly strategy commentary for an institutional investor report.
 
