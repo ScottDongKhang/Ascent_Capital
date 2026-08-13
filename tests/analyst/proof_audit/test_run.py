@@ -357,14 +357,12 @@ def test_dedupe_wide_prices_by_calendar_day_collapses_intraday_timestamps():
     assert out.loc[pd.Timestamp("2022-12-22"), "TLT"] == pytest.approx(102.0)
 
 
-def test_load_agent_price_matrix_skips_a_cache_with_no_date_index(monkeypatch, tmp_path):
-    """A currently-live data bug (see CLAUDE.md's save_parquet gotcha, under "Non-obvious
-    gotchas"): `save_parquet()` writes wide agent price matrices with `index=False`,
-    silently dropping the DatetimeIndex that carries the only date information those
-    caches have -- they load back with a bare RangeIndex. `_load_agent_price_matrix` must
-    detect that and return None (fall back to shared prices) instead of scoring against a
-    matrix with no real dates."""
-    dateless = pd.DataFrame({"TLT": [100.0, 101.0, 102.0]})  # RangeIndex, no dates
+def test_load_agent_price_matrix_skips_a_cache_with_no_date_index_or_column(monkeypatch, tmp_path):
+    """A cache written before ecaccf9's save_parquet fix (or otherwise still corrupted) can
+    load back with neither a DatetimeIndex nor a `date` column -- a bare RangeIndex over raw
+    values. `_load_agent_price_matrix` must detect that and return None (fall back to shared
+    prices) instead of scoring against a matrix with no real dates."""
+    dateless = pd.DataFrame({"TLT": [100.0, 101.0, 102.0]})  # RangeIndex, no dates, no date col
     monkeypatch.setattr(run_module, "load_parquet", lambda name: dateless)
     assert run_module._load_agent_price_matrix("macro_agent", "prices_macro") is None
 
@@ -379,6 +377,23 @@ def test_load_agent_price_matrix_dedupes_a_cache_with_a_real_date_index(monkeypa
     assert out is not None
     assert len(out) == 2
     assert out.loc[pd.Timestamp("2022-12-21"), "TLT"] == pytest.approx(101.0)
+
+
+def test_load_agent_price_matrix_restores_index_from_a_date_column(monkeypatch):
+    """As of ecaccf9, save_parquet persists wide-format agent caches with the date as a
+    `date` column (RangeIndex on load), not the DataFrame index. `_load_agent_price_matrix`
+    must restore the DatetimeIndex from that column -- this is the fixed-upstream good case,
+    as opposed to the still-corrupted case above (neither index nor column)."""
+    dates = pd.to_datetime(
+        ["2022-12-21 00:00:00", "2022-12-21 19:00:00", "2022-12-22 00:00:00"]
+    )
+    with_date_column = pd.DataFrame({"date": dates, "TLT": [100.0, 101.0, 102.0]})  # RangeIndex
+    monkeypatch.setattr(run_module, "load_parquet", lambda name: with_date_column)
+    out = run_module._load_agent_price_matrix("macro_agent", "prices_macro")
+    assert out is not None
+    assert len(out) == 2
+    assert out.loc[pd.Timestamp("2022-12-21"), "TLT"] == pytest.approx(101.0)
+    assert out.loc[pd.Timestamp("2022-12-22"), "TLT"] == pytest.approx(102.0)
 
 
 def test_agent_fallback_reason_is_disclosed_on_the_row(monkeypatch, tmp_path):

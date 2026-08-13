@@ -255,9 +255,10 @@ def _dedupe_wide_prices_by_calendar_day(price_df):
     long-format frame and does not apply here; this is its wide-format analogue, applying
     the same tz-normalize + keep-last-by-calendar-day treatment directly to the index.
 
-    Only meaningful when `price_df.index` is actually a `DatetimeIndex` -- see the
-    `__main__` block below for a load-time guard against a currently-live data bug where
-    these three caches carry no date information at all.
+    Only meaningful when `price_df.index` is actually a `DatetimeIndex` -- callers must
+    restore it first (see `_load_agent_price_matrix` below, which handles both the current
+    `date`-column cache format and a still-corrupted pre-fix cache with neither a
+    `DatetimeIndex` nor a `date` column).
     """
     idx = price_df.index
     if isinstance(idx, pd.DatetimeIndex) and idx.tz is not None:
@@ -269,31 +270,33 @@ def _dedupe_wide_prices_by_calendar_day(price_df):
 def _load_agent_price_matrix(agent_name: str, cache_name: str):
     """Load one specialist agent's own real price cache as a dated wide matrix, or None.
 
-    DISCOVERED BUG (out of scope for this module -- lives in shared
-    `ascent/data/store/parquet.py`): `save_parquet()` unconditionally writes
-    `df.to_parquet(path, index=False)`. That's harmless for `prices_live`, whose date
-    lives in an explicit `date` column, but `prices_macro`/`prices_international`/
-    `prices_alternatives` carry their date ONLY in the DataFrame's index (see
-    `agents/macro_agent.py::_fetch_macro_prices`) -- so `index=False` silently drops it on
-    every save. Confirmed in this worktree's data_cache: all three caches load back with a
-    bare `RangeIndex` (no `DatetimeIndex`, no `date` column, `index_columns: []` in the
-    parquet metadata), with row counts (176k/151k/150k) far exceeding any plausible
-    trading-day count for ~10-13 symbols -- consistent with each agent's own freshness
-    check (`cached.index.max()`, expecting a real date) silently failing and re-fetching +
-    re-appending on every run. There is no way to recover a dated price matrix from the
-    files as currently persisted; fixing this would mean patching `save_parquet` (shared,
-    live-trading-critical) and re-fetching over the network to regenerate the caches --
-    both out of scope for this caller-side fix (see CLAUDE.md's save_parquet gotcha, under
-    "Non-obvious gotchas", for the durable writeup). This function detects that state and
-    returns None so the caller falls back to the shared `prices` matrix rather than
-    silently scoring against garbage.
+    FIXED UPSTREAM (commit ecaccf9, `ascent/data/store/parquet.py`): `save_parquet()` used
+    to unconditionally write `df.to_parquet(path, index=False)`, which silently dropped the
+    DatetimeIndex that `prices_macro`/`prices_international`/`prices_alternatives` carry
+    their date in (see `agents/macro_agent.py::_fetch_macro_prices`) -- these three wide
+    caches have no `date` column of their own, unlike `prices_live`. `save_parquet` now
+    converts a wide-format `DatetimeIndex` into a `date` column via `reset_index()` before
+    writing, reusing the existing dedup machinery; `load_parquet` stays generic and returns
+    that `date` column as a plain frame, so every call site -- including the three agents'
+    own `_fetch_*_prices` (which each gained a `.set_index("date")` restore in ecaccf9) and
+    this function -- must restore the index itself.
+
+    A cache written before ecaccf9 (or written by some other path this fix didn't reach) can
+    still load back with neither a `DatetimeIndex` nor a `date` column -- a bare `RangeIndex`
+    over raw values, with row counts far exceeding any plausible trading-day count. This
+    function detects that still-corrupted state and returns None so the caller falls back to
+    the shared `prices` matrix rather than silently scoring against garbage.
     """
     cached = load_parquet(cache_name)
-    if not isinstance(cached.index, pd.DatetimeIndex):
+    if isinstance(cached.index, pd.DatetimeIndex):
+        pass
+    elif "date" in cached.columns:
+        cached = cached.set_index("date")
+    else:
         log.warning(
-            "proof_audit: %s has no usable date index (index dtype=%s) -- skipping; "
-            "%s will fall back to the shared prices matrix",
-            cache_name, cached.index.dtype, agent_name,
+            "proof_audit: %s has no usable date index (index dtype=%s, columns=%s) -- "
+            "skipping; %s will fall back to the shared prices matrix",
+            cache_name, cached.index.dtype, list(cached.columns), agent_name,
         )
         return None
     return _dedupe_wide_prices_by_calendar_day(cached)
