@@ -49,6 +49,15 @@ def _load_combined_prices(symbols: List[str]) -> pd.DataFrame:
     if has_data("prices_macro"):
         try:
             macro = load_parquet("prices_macro")
+            # prices_macro is a wide-format cache: save_parquet stores its dates
+            # as a `date` COLUMN (load_parquet stays generic and does not restore
+            # the index), so every consumer restores it itself. Sorting is not
+            # cosmetic here: the correlation window below is positional
+            # (`returns.iloc[-lookback:]`), so an unsorted frame would silently
+            # correlate an arbitrary set of rows rather than the trailing 63
+            # trading days.
+            if "date" in macro.columns:  # wide-format cache: restore DatetimeIndex
+                macro = macro.set_index("date").sort_index()
             if isinstance(macro.columns, pd.MultiIndex):
                 lvl0  = macro.columns.get_level_values(0)
                 macro = macro["Close"] if "Close" in lvl0 else macro.iloc[:, :len(symbols)]
