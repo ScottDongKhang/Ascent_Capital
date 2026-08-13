@@ -10,15 +10,18 @@ per-component try/except boundary.
 """
 from __future__ import annotations
 
+import dataclasses
 import logging
+from collections import defaultdict
 from datetime import date
 from pathlib import Path
 
 from ascent.analyst.proof_audit.components import COMPONENTS
 from ascent.analyst.proof_audit.counterfactual_scorer import score_subsystem
+from ascent.analyst.proof_audit.forward_returns import eligible_dates
 from ascent.analyst.proof_audit.scorecard import DEFAULT_MIN_SAMPLE, ScorecardRow, verdict, write_scorecard
 from ascent.analyst.proof_audit.stats import ICResult
-from ascent.analyst.proof_audit.wf_scorer import score_agent, score_sleeve
+from ascent.analyst.proof_audit.wf_scorer import DegenerateSignalError, score_agent, score_sleeve
 
 log = logging.getLogger(__name__)
 
@@ -27,26 +30,120 @@ _DEFERRED_REASON = {
     "covered_by_sleeves": "covered by per-sleeve rows; not scored standalone",
 }
 
+# Sleeves whose signal functions need fundamentals / earnings / analyst / options / insider /
+# short-interest input frames. The real-data CLI loads prices only, so these cannot be scored
+# there -- a disclosed input gap, not a measured verdict.
+_MISSING_INPUT_SLEEVES = {
+    "fundamental", "earnings", "analyst", "options_flow",
+    "insider", "short_interest", "altdata", "earnings_tone",
+}
+_MISSING_INPUT_REASON = (
+    "requires fundamentals/earnings/analyst/options/insider/short input data "
+    "not loaded by this CLI"
+)
+
+_DEGENERATE_SUFFIX = " -- likely missing feature inputs or wrong universe"
+
+_DUPLICATE_AGENT_REASON = (
+    "identical to another agent's score ({others}) -- signal matrices are not genuinely "
+    "independent, likely a shared/wrong universe bug"
+)
+
+# Path B approximations, disclosed per-row so a reader of the JSON alone can see that three
+# subsystem rows are one measurement under three names. See counterfactual_scorer.py's
+# docstring for the full argument.
+_SUBSYSTEM_REASONS = {
+    "regime_overlay": (
+        "approximated onto the same track pair as earned_authority pending a dedicated "
+        "counterfactual track (see counterfactual_scorer.py docstring)"
+    ),
+    "hedge_overlay": (
+        "approximated onto the same track pair as earned_authority pending a dedicated "
+        "counterfactual track (see counterfactual_scorer.py docstring)"
+    ),
+    "earned_authority": (
+        "canonical row for the (track_d, track_astar) pair; regime_overlay and hedge_overlay "
+        "are approximated onto this same pair and report the same number"
+    ),
+    "debate_judge_intervention": (
+        "track_b is total-return, track_d is split-only -- delta includes the dividend stream "
+        "alongside the judge-intervention effect"
+    ),
+}
+
 
 def _row_for_deferred(name: str, kind: str, method: str) -> ScorecardRow:
     log.info("proof_audit: %s (%s) skipped -- %s", name, method, _DEFERRED_REASON[method])
     return ScorecardRow(
         component=name, kind=kind, method=method,
         metric=None, p_value=None, sample_size=0, verdict="INSUFFICIENT_DATA",
+        reason=_DEFERRED_REASON[method],
     )
 
 
-def _row_from_result(name: str, kind: str, method: str, result: ICResult) -> ScorecardRow:
+def _row_from_result(
+    name: str, kind: str, method: str, result: ICResult, reason: str | None = None
+) -> ScorecardRow:
     return ScorecardRow(
         component=name, kind=kind, method=method,
         metric=result.ic_mean, p_value=result.p_value, sample_size=result.n,
         verdict=verdict(result, min_sample=DEFAULT_MIN_SAMPLE),
+        reason=reason,
     )
+
+
+def _failure_row(component, reason: str) -> ScorecardRow:
+    return ScorecardRow(
+        component=component.name, kind=component.kind, method=component.method,
+        metric=None, p_value=None, sample_size=0, verdict="INSUFFICIENT_DATA",
+        reason=reason,
+    )
+
+
+def _flag_duplicate_agent_scores(rows: list[ScorecardRow]) -> list[ScorecardRow]:
+    """Downgrade agent rows that report byte-identical numbers to each other.
+
+    Only AGENT rows: two alpha sleeves reading the same price panel may legitimately land on
+    the same measurement, but two *agents* that are supposed to trade different universes
+    cannot -- an exact tie means they were fed the same matrix, which makes both numbers
+    measurement artifacts rather than measurements of the named agent.
+    """
+    groups: dict[tuple, list[int]] = defaultdict(list)
+    for i, r in enumerate(rows):
+        if r.kind == "agent" and r.metric is not None:
+            groups[(r.metric, r.p_value, r.sample_size)].append(i)
+
+    out = list(rows)
+    for indices in groups.values():
+        if len(indices) < 2:
+            continue
+        names = [rows[i].component for i in indices]
+        log.warning(
+            "proof_audit: agents %s report an identical (metric, p_value, sample_size) -- "
+            "downgrading all of them to INSUFFICIENT_DATA",
+            ", ".join(sorted(names)),
+        )
+        for i in indices:
+            others = sorted(n for n in names if n != rows[i].component)
+            out[i] = dataclasses.replace(
+                rows[i],
+                verdict="INSUFFICIENT_DATA",
+                reason=_DUPLICATE_AGENT_REASON.format(others=", ".join(others)),
+            )
+    return out
 
 
 def run(features: dict, prices, out_path: Path | None = None) -> list[ScorecardRow]:
     if out_path is None:
         out_path = Path("outputs/analyst") / f"proof_audit_{date.today().isoformat()}.json"
+
+    # eligible_dates does one point-in-time universe lookup per date and depends only on
+    # prices -- compute it once here instead of once per scored component.
+    try:
+        dates = eligible_dates(prices)
+    except Exception as exc:  # pragma: no cover -- defensive; a bad price matrix fails every row
+        log.warning("proof_audit: eligible_dates failed (%s) -- scoring per-component", exc)
+        dates = None
 
     rows: list[ScorecardRow] = []
     for c in COMPONENTS:
@@ -54,17 +151,32 @@ def run(features: dict, prices, out_path: Path | None = None) -> list[ScorecardR
             if c.method in _DEFERRED_REASON:
                 rows.append(_row_for_deferred(c.name, c.kind, c.method))
             elif c.kind == "alpha_sleeve":
-                rows.append(_row_from_result(c.name, c.kind, c.method, score_sleeve(c.name, features, prices)))
+                result = score_sleeve(c.name, features, prices, dates=dates)
+                rows.append(_row_from_result(c.name, c.kind, c.method, result))
             elif c.kind == "agent":
-                rows.append(_row_from_result(c.name, c.kind, c.method, score_agent(c.name, prices)))
+                result = score_agent(c.name, prices, dates=dates)
+                rows.append(_row_from_result(c.name, c.kind, c.method, result))
             elif c.kind == "subsystem":
-                rows.append(_row_from_result(c.name, c.kind, c.method, score_subsystem(c.name)))
+                rows.append(_row_from_result(
+                    c.name, c.kind, c.method, score_subsystem(c.name),
+                    reason=_SUBSYSTEM_REASONS.get(c.name),
+                ))
+        except DegenerateSignalError as exc:
+            reason = (
+                _MISSING_INPUT_REASON if c.name in _MISSING_INPUT_SLEEVES
+                else f"{exc}{_DEGENERATE_SUFFIX}"
+            )
+            log.warning("proof_audit: %s degenerate -- %s", c.name, reason)
+            rows.append(_failure_row(c, reason))
         except Exception as exc:
+            reason = (
+                f"{_MISSING_INPUT_REASON} ({exc})" if c.name in _MISSING_INPUT_SLEEVES
+                else f"scoring failed: {exc}"
+            )
             log.warning("proof_audit: %s failed (%s) -- marking INSUFFICIENT_DATA", c.name, exc)
-            rows.append(ScorecardRow(
-                component=c.name, kind=c.kind, method=c.method,
-                metric=None, p_value=None, sample_size=0, verdict="INSUFFICIENT_DATA",
-            ))
+            rows.append(_failure_row(c, reason))
+
+    rows = _flag_duplicate_agent_scores(rows)
 
     write_scorecard(rows, out_path)
     log.info("proof_audit: wrote %d rows to %s", len(rows), out_path)
@@ -74,9 +186,10 @@ def run(features: dict, prices, out_path: Path | None = None) -> list[ScorecardR
 def _dedupe_prices_by_calendar_day(price_df):
     """Collapse `prices_live` to one row per (symbol, calendar day).
 
-    `prices_live` recurrently carries two intraday timestamps for the same
-    trading day (e.g. 2022-12-21 19:00:00-05:00 and 2022-12-22 00:00:00-05:00),
-    with *different* symbols populated on each timestamp -- not identical
+    `prices_live` recurrently carries several intraday timestamps for the same
+    trading day (e.g. 2022-12-21 00:00:00-05:00, 2022-12-21 19:00:00-05:00 and
+    2022-12-21 20:00:00-05:00 -- all on the same calendar date; they do not
+    straddle midnight), with *different* symbols populated on each -- not identical
     duplicate rows, so a plain `~index.duplicated()` on the raw timestamp
     misses it. Once `pivot_prices()` pivots on the raw timestamp, this splits
     a single trading day across two index rows, each mostly-NaN, which starves

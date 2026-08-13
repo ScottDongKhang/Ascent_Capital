@@ -34,6 +34,7 @@ def test_write_scorecard_round_trips(tmp_path):
         ScorecardRow(
             component="ml", kind="alpha_sleeve", method="deferred",
             metric=None, p_value=None, sample_size=0, verdict="INSUFFICIENT_DATA",
+            reason="requires live-logged signal history",
         ),
     ]
     out = tmp_path / "scorecard.json"
@@ -43,3 +44,6 @@ def test_write_scorecard_round_trips(tmp_path):
     assert loaded[0]["component"] == "trend"
     assert loaded[0]["verdict"] == "KEEP"
     assert loaded[1]["metric"] is None
+    # A clean measurement carries no reason; anything else must say why.
+    assert loaded[0]["reason"] is None
+    assert loaded[1]["reason"] == "requires live-logged signal history"

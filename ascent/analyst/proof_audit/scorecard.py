@@ -34,6 +34,10 @@ class ScorecardRow:
     p_value: float | None
     sample_size: int
     verdict: str
+    # Why this row is not a clean KEEP/CUT off a full, trustworthy measurement: the deferral,
+    # the missing input, the approximation, or the guard that fired. None means the number
+    # stands on its own. A reader of the JSON alone must never have to guess.
+    reason: str | None = None
 
 
 def write_scorecard(rows: list[ScorecardRow], out_path: Path) -> None:

@@ -6,7 +6,8 @@
     "metric": -0.011727091940878646,
     "p_value": 0.024907414811181267,
     "sample_size": 1636,
-    "verdict": "CUT"
+    "verdict": "CUT",
+    "reason": null
   },
   {
     "component": "meanrev",
@@ -15,7 +16,8 @@
     "metric": 0.02294762540055171,
     "p_value": 2.5745153935224863e-06,
     "sample_size": 1634,
-    "verdict": "KEEP"
+    "verdict": "KEEP",
+    "reason": null
   },
   {
     "component": "volatility",
@@ -24,7 +26,8 @@
     "metric": -0.0004656710875304134,
     "p_value": 0.8760374424542847,
     "sample_size": 1592,
-    "verdict": "CUT"
+    "verdict": "CUT",
+    "reason": null
   },
   {
     "component": "statarb",
@@ -33,7 +36,8 @@
     "metric": 0.024329388804704782,
     "p_value": 5.401774105849449e-06,
     "sample_size": 1624,
-    "verdict": "KEEP"
+    "verdict": "KEEP",
+    "reason": null
   },
   {
     "component": "fundamental",
@@ -42,7 +46,8 @@
     "metric": null,
     "p_value": null,
     "sample_size": 0,
-    "verdict": "INSUFFICIENT_DATA"
+    "verdict": "INSUFFICIENT_DATA",
+    "reason": "requires fundamentals/earnings/analyst/options/insider/short input data not loaded by this CLI"
   },
   {
     "component": "earnings",
@@ -51,7 +56,8 @@
     "metric": null,
     "p_value": null,
     "sample_size": 0,
-    "verdict": "INSUFFICIENT_DATA"
+    "verdict": "INSUFFICIENT_DATA",
+    "reason": "requires fundamentals/earnings/analyst/options/insider/short input data not loaded by this CLI"
   },
   {
     "component": "analyst",
@@ -60,7 +66,8 @@
     "metric": null,
     "p_value": null,
     "sample_size": 0,
-    "verdict": "INSUFFICIENT_DATA"
+    "verdict": "INSUFFICIENT_DATA",
+    "reason": "requires fundamentals/earnings/analyst/options/insider/short input data not loaded by this CLI"
   },
   {
     "component": "options_flow",
@@ -69,7 +76,8 @@
     "metric": null,
     "p_value": null,
     "sample_size": 0,
-    "verdict": "INSUFFICIENT_DATA"
+    "verdict": "INSUFFICIENT_DATA",
+    "reason": "requires fundamentals/earnings/analyst/options/insider/short input data not loaded by this CLI"
   },
   {
     "component": "insider",
@@ -78,7 +86,8 @@
     "metric": null,
     "p_value": null,
     "sample_size": 0,
-    "verdict": "INSUFFICIENT_DATA"
+    "verdict": "INSUFFICIENT_DATA",
+    "reason": "requires fundamentals/earnings/analyst/options/insider/short input data not loaded by this CLI"
   },
   {
     "component": "short_interest",
@@ -87,7 +96,8 @@
     "metric": null,
     "p_value": null,
     "sample_size": 0,
-    "verdict": "INSUFFICIENT_DATA"
+    "verdict": "INSUFFICIENT_DATA",
+    "reason": "requires fundamentals/earnings/analyst/options/insider/short input data not loaded by this CLI"
   },
   {
     "component": "altdata",
@@ -96,7 +106,8 @@
     "metric": null,
     "p_value": null,
     "sample_size": 0,
-    "verdict": "INSUFFICIENT_DATA"
+    "verdict": "INSUFFICIENT_DATA",
+    "reason": "requires fundamentals/earnings/analyst/options/insider/short input data not loaded by this CLI"
   },
   {
     "component": "earnings_tone",
@@ -105,7 +116,8 @@
     "metric": null,
     "p_value": null,
     "sample_size": 0,
-    "verdict": "INSUFFICIENT_DATA"
+    "verdict": "INSUFFICIENT_DATA",
+    "reason": "requires fundamentals/earnings/analyst/options/insider/short input data not loaded by this CLI"
   },
   {
     "component": "ml",
@@ -114,7 +126,8 @@
     "metric": null,
     "p_value": null,
     "sample_size": 0,
-    "verdict": "INSUFFICIENT_DATA"
+    "verdict": "INSUFFICIENT_DATA",
+    "reason": "requires live-logged signal history, not re-simulation -- out of scope for this audit"
   },
   {
     "component": "llm_fundamental",
@@ -123,7 +136,8 @@
     "metric": null,
     "p_value": null,
     "sample_size": 0,
-    "verdict": "INSUFFICIENT_DATA"
+    "verdict": "INSUFFICIENT_DATA",
+    "reason": "requires live-logged signal history, not re-simulation -- out of scope for this audit"
   },
   {
     "component": "narrative",
@@ -132,7 +146,8 @@
     "metric": null,
     "p_value": null,
     "sample_size": 0,
-    "verdict": "INSUFFICIENT_DATA"
+    "verdict": "INSUFFICIENT_DATA",
+    "reason": "requires live-logged signal history, not re-simulation -- out of scope for this audit"
   },
   {
     "component": "us_equities_agent",
@@ -141,7 +156,8 @@
     "metric": null,
     "p_value": null,
     "sample_size": 0,
-    "verdict": "INSUFFICIENT_DATA"
+    "verdict": "INSUFFICIENT_DATA",
+    "reason": "covered by per-sleeve rows; not scored standalone"
   },
   {
     "component": "macro_agent",
@@ -150,7 +166,8 @@
     "metric": -0.011027492916177113,
     "p_value": 0.03862082479377218,
     "sample_size": 1634,
-    "verdict": "CUT"
+    "verdict": "INSUFFICIENT_DATA",
+    "reason": "identical to another agent's score (international_agent) -- signal matrices are not genuinely independent, likely a shared/wrong universe bug"
   },
   {
     "component": "international_agent",
@@ -159,7 +176,8 @@
     "metric": -0.011027492916177113,
     "p_value": 0.03862082479377218,
     "sample_size": 1634,
-    "verdict": "CUT"
+    "verdict": "INSUFFICIENT_DATA",
+    "reason": "identical to another agent's score (macro_agent) -- signal matrices are not genuinely independent, likely a shared/wrong universe bug"
   },
   {
     "component": "alternatives_agent",
@@ -168,7 +186,8 @@
     "metric": null,
     "p_value": null,
     "sample_size": 0,
-    "verdict": "INSUFFICIENT_DATA"
+    "verdict": "INSUFFICIENT_DATA",
+    "reason": "signal matrix has insufficient non-NaN density (0 of 2007 candidate dates carry at least 10 non-NaN values; need 30) -- likely missing feature inputs or wrong universe"
   },
   {
     "component": "regime_overlay",
@@ -177,7 +196,8 @@
     "metric": -0.0007040425531914894,
     "p_value": 0.3522627249121989,
     "sample_size": 47,
-    "verdict": "CUT"
+    "verdict": "CUT",
+    "reason": "approximated onto the same track pair as earned_authority pending a dedicated counterfactual track (see counterfactual_scorer.py docstring)"
   },
   {
     "component": "hedge_overlay",
@@ -186,7 +206,8 @@
     "metric": -0.0007040425531914894,
     "p_value": 0.3522627249121989,
     "sample_size": 47,
-    "verdict": "CUT"
+    "verdict": "CUT",
+    "reason": "approximated onto the same track pair as earned_authority pending a dedicated counterfactual track (see counterfactual_scorer.py docstring)"
   },
   {
     "component": "earned_authority",
@@ -195,7 +216,8 @@
     "metric": -0.0007040425531914894,
     "p_value": 0.3522627249121989,
     "sample_size": 47,
-    "verdict": "CUT"
+    "verdict": "CUT",
+    "reason": "canonical row for the (track_d, track_astar) pair; regime_overlay and hedge_overlay are approximated onto this same pair and report the same number"
   },
   {
     "component": "debate_judge_intervention",
@@ -204,6 +226,7 @@
     "metric": -0.0002967446808510637,
     "p_value": 0.7486262680167884,
     "sample_size": 47,
-    "verdict": "CUT"
+    "verdict": "CUT",
+    "reason": "track_b is total-return, track_d is split-only -- delta includes the dividend stream alongside the judge-intervention effect"
   }
 ]

@@ -3,7 +3,14 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from ascent.analyst.proof_audit.wf_scorer import score_agent, score_sleeve
+from ascent.analyst.proof_audit.wf_scorer import (
+    DegenerateSignalError,
+    MIN_DENSE_DATES,
+    N_LEGS,
+    score_agent,
+    score_signal_matrix,
+    score_sleeve,
+)
 
 
 def _planted_features_and_prices(n_days=40, n_symbols=25):
@@ -96,3 +103,57 @@ def test_score_agent_detects_planted_positive_ic(monkeypatch):
 def test_score_agent_unknown_name_raises():
     with pytest.raises(KeyError):
         score_agent("not_an_agent", pd.DataFrame())
+
+
+def test_score_signal_matrix_rejects_all_nan_signal():
+    """An all-NaN signal matrix must raise, not silently score whatever falls out.
+
+    This is the alternatives_agent failure mode: its composite depends on `vol_21d`, which is
+    universally NaN on the real prices_live matrix, so the whole signal comes back NaN.
+    """
+    _, prices = _planted_features_and_prices()
+    signal = pd.DataFrame(np.nan, index=prices.index, columns=prices.columns)
+    with pytest.raises(DegenerateSignalError) as exc_info:
+        score_signal_matrix(signal, prices, dates=list(prices.index[:-1]))
+    assert "density" in str(exc_info.value)
+    assert f"{N_LEGS * 2}" in str(exc_info.value)
+
+
+def test_score_signal_matrix_rejects_too_few_dense_dates():
+    """A signal with real values on only a handful of dates is degenerate too."""
+    _, prices = _planted_features_and_prices()
+    rng = np.random.default_rng(7)
+    signal = pd.DataFrame(np.nan, index=prices.index, columns=prices.columns)
+    dense_dates = prices.index[: MIN_DENSE_DATES - 1]
+    for d in dense_dates:
+        signal.loc[d] = rng.normal(size=len(prices.columns))
+    with pytest.raises(DegenerateSignalError):
+        score_signal_matrix(signal, prices, dates=list(prices.index[:-1]))
+
+
+def test_score_signal_matrix_rejects_too_few_non_nan_symbols_per_date():
+    """Dates carrying fewer than N_LEGS*2 real values do not count toward density."""
+    _, prices = _planted_features_and_prices()
+    rng = np.random.default_rng(11)
+    signal = pd.DataFrame(np.nan, index=prices.index, columns=prices.columns)
+    thin_symbols = list(prices.columns[: N_LEGS * 2 - 1])
+    for d in prices.index:
+        signal.loc[d, thin_symbols] = rng.normal(size=len(thin_symbols))
+    with pytest.raises(DegenerateSignalError):
+        score_signal_matrix(signal, prices, dates=list(prices.index[:-1]))
+
+
+def test_score_signal_matrix_accepts_precomputed_dates(monkeypatch):
+    """Passing `dates` skips the per-component point-in-time universe scan entirely."""
+    features, prices = _planted_features_and_prices()
+
+    def explode(date, universe_df=None):
+        raise AssertionError("get_universe_on_date must not be called when dates are supplied")
+
+    monkeypatch.setattr(
+        "ascent.analyst.proof_audit.forward_returns.get_universe_on_date", explode
+    )
+    result = score_signal_matrix(
+        features["toy_signal"], prices, dates=list(prices.index[:-1])
+    )
+    assert result.n > 0
