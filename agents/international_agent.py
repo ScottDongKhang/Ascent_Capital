@@ -61,6 +61,8 @@ def _fetch_international_prices(symbols: list, start: str = "2020-01-01") -> pd.
 
     if has_data(cache_name):
         cached    = load_parquet(cache_name)
+        if "date" in cached.columns:  # wide-format cache: restore DatetimeIndex
+            cached = cached.set_index("date")
         last_date = pd.Timestamp(cached.index.max())
         if (pd.Timestamp.now() - last_date).days <= 1:
             print(f"[Intl] Using cached prices ({len(cached)} rows, latest={last_date.date()})")
@@ -92,7 +94,10 @@ def _fetch_international_prices(symbols: list, start: str = "2020-01-01") -> pd.
         print(f"[Intl] Price fetch failed: {e}")
         if has_data(cache_name):
             print("[Intl] Falling back to stale cache")
-            return load_parquet(cache_name)
+            stale = load_parquet(cache_name)
+            if "date" in stale.columns:  # wide-format cache: restore DatetimeIndex
+                stale = stale.set_index("date")
+            return stale
         return pd.DataFrame()
 
 

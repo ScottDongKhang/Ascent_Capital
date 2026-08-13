@@ -257,6 +257,74 @@ def test_evening_stamp_object_dtype_variant_rolls_forward(store):
     assert len(out) == 1, f"expected object-dtype evening rollover to collapse, got {len(out)}"
 
 
+# ---------------------------------------------------------------------------
+# Wide-format DatetimeIndex caches (prices_macro / prices_international /
+# prices_alternatives) — save_parquet used to silently drop the index
+# ---------------------------------------------------------------------------
+
+def test_datetime_index_survives_round_trip(store):
+    """A wide-format DataFrame's DatetimeIndex must not be lost across
+    save/load. save_parquet converts it to a `date` column up front so the
+    existing id_cols/calendar-day-dedup machinery can handle it; load_parquet
+    itself stays generic and returns that `date` column (callers restore the
+    index, see agents/macro_agent.py et al.)."""
+    df = pd.DataFrame({"AAPL": [100.0, 101.0], "MSFT": [200.0, 201.0]},
+                       index=pd.date_range("2025-01-01", periods=2, freq="D"))
+    store.save_parquet(df, "test_wide_cache")
+    back = store.load_parquet("test_wide_cache")
+    assert isinstance(back.index, pd.RangeIndex)
+    assert "date" in back.columns
+    assert list(back["date"]) == list(pd.date_range("2025-01-01", periods=2, freq="D"))
+    assert back.set_index("date")["AAPL"].tolist() == [100.0, 101.0]
+    assert back.set_index("date")["MSFT"].tolist() == [200.0, 201.0]
+
+
+def test_rangeindex_dataframe_still_saves_without_index_column(store):
+    """Regression guard: existing long-format callers must see byte-identical
+    behavior — a plain RangeIndex input is untouched by the new DatetimeIndex
+    conversion."""
+    df = pd.DataFrame({
+        "symbol": ["AAPL", "MSFT"],
+        "date": [pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-02")],
+        "close": [100.0, 200.0],
+    })
+    store.save_parquet(df, "test_long_cache")
+    back = store.load_parquet("test_long_cache")
+    assert isinstance(back.index, pd.RangeIndex)  # unchanged from today
+    assert "date" in back.columns  # the column was already there, not index-derived
+    assert len(back) == 2
+
+
+def test_second_save_of_wide_dataframe_appends_and_dedupes_correctly(store):
+    """The read-modify-write path (path.exists() branch) must also preserve
+    the index — this is the test that would have caught the
+    ignore_index=True concat bug specifically."""
+    df1 = pd.DataFrame({"AAPL": [100.0]}, index=pd.date_range("2025-01-01", periods=1))
+    df2 = pd.DataFrame({"AAPL": [101.0]}, index=pd.date_range("2025-01-02", periods=1))
+    store.save_parquet(df1, "test_wide_append")
+    store.save_parquet(df2, "test_wide_append")
+    back = store.load_parquet("test_wide_append")
+    assert len(back) == 2, f"expected both dates to survive the append path, got {len(back)}"
+    assert sorted(back["date"].tolist()) == [
+        pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-02"),
+    ]
+    restored = back.set_index("date").sort_index()
+    assert restored["AAPL"].tolist() == [100.0, 101.0]
+
+
+def test_wide_dataframe_resave_of_same_day_replaces_not_duplicates(store):
+    """Re-saving the same calendar day for a wide-format cache (e.g. a
+    same-day re-fetch) must replace, not duplicate, keeping the dedup
+    guarantee that already holds for long-format caches."""
+    df1 = pd.DataFrame({"AAPL": [100.0]}, index=pd.date_range("2025-01-01", periods=1))
+    df2 = pd.DataFrame({"AAPL": [105.0]}, index=pd.date_range("2025-01-01", periods=1))
+    store.save_parquet(df1, "test_wide_resave")
+    store.save_parquet(df2, "test_wide_resave")
+    back = store.load_parquet("test_wide_resave")
+    assert len(back) == 1
+    assert back["AAPL"].iloc[0] == 105.0  # keep="last"
+
+
 def test_macro_series_id_cache_still_dedups(store):
     """Macro caches keyed on series_id (FRED/simulated ingest) must keep
     deduping correctly — the date-key rollover logic must not break the

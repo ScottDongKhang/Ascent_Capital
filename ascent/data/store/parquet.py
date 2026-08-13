@@ -98,9 +98,25 @@ def _calendar_day_key(s: pd.Series) -> pd.Series:
     return s.map(_one)
 
 
+_ID_LIKE_COLS = {"symbol", "date", "series_id", "series"}
+
+
 def save_parquet(df: pd.DataFrame, name: str) -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     path = _cache_path(name)
+    # Wide-format caches (prices_macro / prices_international / prices_alternatives:
+    # one column per symbol, dates live ONLY in a DatetimeIndex, no id column) used
+    # to lose their index entirely: pd.concat(..., ignore_index=True) below discards
+    # it on every append, and to_parquet(..., index=False) discards it on every
+    # write. With no `date`/`symbol`/etc column, id_cols also fell back to ALL
+    # columns (the price values themselves), so dedup keyed on price equality
+    # instead of date. Converting the DatetimeIndex into a real `date` column up
+    # front lets the existing id_cols / calendar-day-dedup logic below (already
+    # correct for long-format caches) handle wide-format caches too, with no
+    # further special-casing needed anywhere else in this function.
+    if isinstance(df.index, pd.DatetimeIndex) and not (_ID_LIKE_COLS & set(df.columns)):
+        idx_col = df.index.name or "index"
+        df = df.reset_index().rename(columns={idx_col: "date"})
     # FIX #3: include series_id in preferred id columns alongside symbol.
     # Before: only "series" was checked, which doesn't exist in either
     # simulated.py or fred.py output — those both write "series_id".
