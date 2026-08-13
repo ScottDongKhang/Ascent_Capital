@@ -107,7 +107,7 @@
     "p_value": null,
     "sample_size": 0,
     "verdict": "INSUFFICIENT_DATA",
-    "reason": "requires altdata/earnings-tone input data not loaded by this CLI"
+    "reason": "signal matrix has insufficient non-NaN density (0 of 0 candidate dates carry at least 10 non-NaN values; need 30) -- likely missing feature inputs or wrong universe"
   },
   {
     "component": "earnings_tone",
@@ -117,7 +117,7 @@
     "p_value": null,
     "sample_size": 0,
     "verdict": "INSUFFICIENT_DATA",
-    "reason": "requires altdata/earnings-tone input data not loaded by this CLI"
+    "reason": "signal matrix has insufficient non-NaN density (0 of 0 candidate dates carry at least 10 non-NaN values; need 30) -- likely missing feature inputs or wrong universe"
   },
   {
     "component": "ml",
@@ -167,7 +167,7 @@
     "p_value": 0.03862082479377218,
     "sample_size": 1634,
     "verdict": "INSUFFICIENT_DATA",
-    "reason": "identical to another agent's score (international_agent) -- signal matrices are not genuinely independent, likely a shared/wrong universe bug"
+    "reason": "own price cache prices_macro has no usable date index (see the save_parquet corruption note in CLAUDE.md) -- scored on the shared US-equity matrix as a fallback -- identical to another agent's score (international_agent) -- signal matrices are not genuinely independent, likely a shared/wrong universe bug"
   },
   {
     "component": "international_agent",
@@ -177,7 +177,7 @@
     "p_value": 0.03862082479377218,
     "sample_size": 1634,
     "verdict": "INSUFFICIENT_DATA",
-    "reason": "identical to another agent's score (macro_agent) -- signal matrices are not genuinely independent, likely a shared/wrong universe bug"
+    "reason": "own price cache prices_international has no usable date index (see the save_parquet corruption note in CLAUDE.md) -- scored on the shared US-equity matrix as a fallback -- identical to another agent's score (macro_agent) -- signal matrices are not genuinely independent, likely a shared/wrong universe bug"
   },
   {
     "component": "alternatives_agent",

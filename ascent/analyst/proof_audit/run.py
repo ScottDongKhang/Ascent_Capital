@@ -33,19 +33,32 @@ _DEFERRED_REASON = {
     "covered_by_sleeves": "covered by per-sleeve rows; not scored standalone",
 }
 
-# Sleeves whose signal functions need altdata / earnings-tone input frames that this CLI does
-# not load at all (no parquet cache wired up yet). The real-data CLI loads fundamentals,
-# earnings, analyst, options, insider and short-interest frames (see __main__ below), so those
-# six score for real now -- only altdata and earnings_tone remain a disclosed input gap rather
-# than a measured verdict.
-_MISSING_INPUT_SLEEVES = {"altdata", "earnings_tone"}
-_MISSING_INPUT_REASON = "requires altdata/earnings-tone input data not loaded by this CLI"
-
+# `altdata` and `earnings_tone` used to get a hardcoded "not loaded by this CLI" reason here.
+# That was wrong: both self-load from their own parquet caches independent of FeatureBuilder,
+# and neither source exists on disk at all (no `data_cache/altdata_*.parquet` files, no
+# `altdata_weights` key in active_alpha_config.json; `load_transcript_signals()` finds no
+# transcript panel). They correctly return an empty signal DataFrame, which trips the density
+# guard below (`DegenerateSignalError`) with an accurate message -- let that speak for itself
+# instead of asserting a CLI wiring gap that doesn't exist.
 _DEGENERATE_SUFFIX = " -- likely missing feature inputs or wrong universe"
 
 _DUPLICATE_AGENT_REASON = (
     "identical to another agent's score ({others}) -- signal matrices are not genuinely "
     "independent, likely a shared/wrong universe bug"
+)
+
+# Set by callers (see __main__ below) when an agent's own price cache was unusable and the row
+# was scored on the shared US-equity matrix instead -- see CLAUDE.md's save_parquet gotcha
+# (Non-obvious gotchas) for why prices_macro/prices_international/prices_alternatives can be
+# unusable. Threaded into the row BEFORE the duplicate-check reason below, so a reader of the
+# JSON alone learns *why* two fallback-scored agents ended up identical, not just that they did.
+_AGENT_FALLBACK_REASON_CORRUPT = (
+    "own price cache {cache_name} has no usable date index (see the save_parquet corruption "
+    "note in CLAUDE.md) -- scored on the shared US-equity matrix as a fallback"
+)
+_AGENT_FALLBACK_REASON_MISSING = (
+    "own price cache {cache_name} does not exist on disk -- scored on the shared US-equity "
+    "matrix as a fallback"
 )
 
 # Path B approximations, disclosed per-row so a reader of the JSON alone can see that three
@@ -124,11 +137,15 @@ def _flag_duplicate_agent_scores(rows: list[ScorecardRow]) -> list[ScorecardRow]
         )
         for i in indices:
             others = sorted(n for n in names if n != rows[i].component)
-            out[i] = dataclasses.replace(
-                rows[i],
-                verdict="INSUFFICIENT_DATA",
-                reason=_DUPLICATE_AGENT_REASON.format(others=", ".join(others)),
+            duplicate_reason = _DUPLICATE_AGENT_REASON.format(others=", ".join(others))
+            # A row that already carries a fallback reason (own cache unusable) is more
+            # informative than the generic duplicate-check message alone -- keep both so a
+            # reader of the JSON sees why the row is a fallback AND why it collided.
+            existing_reason = rows[i].reason
+            reason = (
+                f"{existing_reason} -- {duplicate_reason}" if existing_reason else duplicate_reason
             )
+            out[i] = dataclasses.replace(rows[i], verdict="INSUFFICIENT_DATA", reason=reason)
     return out
 
 
@@ -137,6 +154,7 @@ def run(
     prices,
     out_path: Path | None = None,
     agent_prices: dict | None = None,
+    agent_fallback_reasons: dict | None = None,
 ) -> list[ScorecardRow]:
     if out_path is None:
         out_path = Path("outputs/analyst") / f"proof_audit_{date.today().isoformat()}.json"
@@ -166,27 +184,25 @@ def run(
                 # `agent_prices` lets callers supply each agent's own deduped, pivoted
                 # price matrix; falls back to the shared `prices` when absent or
                 # missing that agent's key, preserving prior behavior for any caller
-                # (including tests) that doesn't pass it.
+                # (including tests) that doesn't pass it. `agent_fallback_reasons` is an
+                # optional, caller-supplied explanation for WHY that fallback happened
+                # (e.g. the agent's own cache is unusable) -- only set by the real-data
+                # CLI below, so tests that don't pass it get unchanged (reason=None) rows.
                 this_agent_prices = (agent_prices or {}).get(c.name, prices)
                 result = score_agent(c.name, this_agent_prices, dates=dates)
-                rows.append(_row_from_result(c.name, c.kind, c.method, result))
+                fallback_reason = (agent_fallback_reasons or {}).get(c.name)
+                rows.append(_row_from_result(c.name, c.kind, c.method, result, reason=fallback_reason))
             elif c.kind == "subsystem":
                 rows.append(_row_from_result(
                     c.name, c.kind, c.method, score_subsystem(c.name),
                     reason=_SUBSYSTEM_REASONS.get(c.name),
                 ))
         except DegenerateSignalError as exc:
-            reason = (
-                _MISSING_INPUT_REASON if c.name in _MISSING_INPUT_SLEEVES
-                else f"{exc}{_DEGENERATE_SUFFIX}"
-            )
+            reason = f"{exc}{_DEGENERATE_SUFFIX}"
             log.warning("proof_audit: %s degenerate -- %s", c.name, reason)
             rows.append(_failure_row(c, reason))
         except Exception as exc:
-            reason = (
-                f"{_MISSING_INPUT_REASON} ({exc})" if c.name in _MISSING_INPUT_SLEEVES
-                else f"scoring failed: {exc}"
-            )
+            reason = f"scoring failed: {exc}"
             log.warning("proof_audit: %s failed (%s) -- marking INSUFFICIENT_DATA", c.name, exc)
             rows.append(_failure_row(c, reason))
 
@@ -267,9 +283,10 @@ def _load_agent_price_matrix(agent_name: str, cache_name: str):
     re-appending on every run. There is no way to recover a dated price matrix from the
     files as currently persisted; fixing this would mean patching `save_parquet` (shared,
     live-trading-critical) and re-fetching over the network to regenerate the caches --
-    both out of scope for this caller-side fix (see task-2-report.md). This function
-    detects that state and returns None so the caller falls back to the shared `prices`
-    matrix rather than silently scoring against garbage.
+    both out of scope for this caller-side fix (see CLAUDE.md's save_parquet gotcha, under
+    "Non-obvious gotchas", for the durable writeup). This function detects that state and
+    returns None so the caller falls back to the shared `prices` matrix rather than
+    silently scoring against garbage.
     """
     cached = load_parquet(cache_name)
     if not isinstance(cached.index, pd.DatetimeIndex):
@@ -331,12 +348,19 @@ if __name__ == "__main__":
     ).compute_features()
 
     agent_prices = {}
+    agent_fallback_reasons = {}
     for agent_name, cache_name in _AGENT_PRICE_CACHES.items():
         if not has_data(cache_name):
             log.warning("proof_audit: %s missing -- %s falls back to shared prices", cache_name, agent_name)
+            agent_fallback_reasons[agent_name] = _AGENT_FALLBACK_REASON_MISSING.format(cache_name=cache_name)
             continue
         matrix = _load_agent_price_matrix(agent_name, cache_name)
         if matrix is not None:
             agent_prices[agent_name] = matrix
+        else:
+            agent_fallback_reasons[agent_name] = _AGENT_FALLBACK_REASON_CORRUPT.format(cache_name=cache_name)
 
-    run(features, prices, out_path=args.out, agent_prices=agent_prices)
+    run(
+        features, prices, out_path=args.out,
+        agent_prices=agent_prices, agent_fallback_reasons=agent_fallback_reasons,
+    )

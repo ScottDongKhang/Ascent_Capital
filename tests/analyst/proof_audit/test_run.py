@@ -225,11 +225,14 @@ def test_unknown_kind_is_not_silently_dropped(monkeypatch, tmp_path):
     assert [r.component for r in rows] == [c.name for c in COMPONENTS]
 
 
-def test_missing_input_sleeve_failure_names_the_missing_inputs(monkeypatch, tmp_path):
-    # "altdata" (not "fundamental") is the live example here: the real-data CLI now loads
-    # fundamentals/earnings/analyst/options/insider/short frames (see run.py's __main__), so
-    # "fundamental" scores for real and would fail this assertion. "altdata" has no parquet
-    # cache wired up at all, so it is still a genuine missing-input gap.
+def test_sleeve_scoring_exception_gets_a_generic_failure_reason(monkeypatch, tmp_path):
+    # There is no more special-cased "missing input" reason for any sleeve (including
+    # "altdata"/"earnings_tone") -- see run.py's module docstring comment above
+    # _DEGENERATE_SUFFIX. altdata's own self-loading logic returning empty on missing
+    # sources is exercised for real by the density guard (see
+    # test_degenerate_signal_gets_a_density_reason); this test just pins that a plain
+    # (non-DegenerateSignalError) exception from ANY sleeve gets the generic
+    # "scoring failed: ..." reason, naming the real exception, not an invented one.
     def failing_sleeve(name, features, prices, dates=None):
         if name == "altdata":
             raise KeyError("pe_ratio")
@@ -251,7 +254,8 @@ def test_missing_input_sleeve_failure_names_the_missing_inputs(monkeypatch, tmp_
     rows = run_module.run({}, pd.DataFrame(), out_path=tmp_path / "scorecard.json")
     row = _by_name(rows)["altdata"]
     assert row.verdict == "INSUFFICIENT_DATA"
-    assert "not loaded by this CLI" in row.reason
+    assert "scoring failed" in row.reason
+    assert "pe_ratio" in row.reason
 
 
 def test_run_without_agent_prices_falls_back_to_shared_prices(monkeypatch, tmp_path):
@@ -354,11 +358,12 @@ def test_dedupe_wide_prices_by_calendar_day_collapses_intraday_timestamps():
 
 
 def test_load_agent_price_matrix_skips_a_cache_with_no_date_index(monkeypatch, tmp_path):
-    """A currently-live data bug (see task-2-report.md): `save_parquet()` writes wide agent
-    price matrices with `index=False`, silently dropping the DatetimeIndex that carries the
-    only date information those caches have -- they load back with a bare RangeIndex.
-    `_load_agent_price_matrix` must detect that and return None (fall back to shared
-    prices) instead of scoring against a matrix with no real dates."""
+    """A currently-live data bug (see CLAUDE.md's save_parquet gotcha, under "Non-obvious
+    gotchas"): `save_parquet()` writes wide agent price matrices with `index=False`,
+    silently dropping the DatetimeIndex that carries the only date information those
+    caches have -- they load back with a bare RangeIndex. `_load_agent_price_matrix` must
+    detect that and return None (fall back to shared prices) instead of scoring against a
+    matrix with no real dates."""
     dateless = pd.DataFrame({"TLT": [100.0, 101.0, 102.0]})  # RangeIndex, no dates
     monkeypatch.setattr(run_module, "load_parquet", lambda name: dateless)
     assert run_module._load_agent_price_matrix("macro_agent", "prices_macro") is None
@@ -374,3 +379,61 @@ def test_load_agent_price_matrix_dedupes_a_cache_with_a_real_date_index(monkeypa
     assert out is not None
     assert len(out) == 2
     assert out.loc[pd.Timestamp("2022-12-21"), "TLT"] == pytest.approx(101.0)
+
+
+def test_agent_fallback_reason_is_disclosed_on_the_row(monkeypatch, tmp_path):
+    """When a caller (the real-data CLI) knows WHY an agent fell back to the shared prices
+    matrix -- e.g. its own cache has no usable date index -- that reason must land on the
+    row, not just a stderr log line. Distinct scores here (no duplicate-check collision)."""
+    # _run() doesn't thread agent_fallback_reasons; call run() directly instead.
+    _install_stub_scorers(
+        monkeypatch,
+        {
+            "macro_agent": ICResult(ic_mean=0.02, ic_t=3.0, p_value=0.003, sharpe=0.8, n=1634),
+            "international_agent": ICResult(
+                ic_mean=0.011, ic_t=2.4, p_value=0.017, sharpe=0.6, n=1630
+            ),
+            "alternatives_agent": ICResult(
+                ic_mean=-0.03, ic_t=-4.0, p_value=0.0001, sharpe=-1.1, n=1600
+            ),
+        },
+    )
+    rows = run_module.run(
+        {}, pd.DataFrame(), out_path=tmp_path / "scorecard.json",
+        agent_fallback_reasons={"macro_agent": "own price cache prices_macro has no usable date index"},
+    )
+    by_name = _by_name(rows)
+    assert "prices_macro" in by_name["macro_agent"].reason
+    assert "no usable date index" in by_name["macro_agent"].reason
+    # Agents with no fallback reason supplied are unaffected.
+    assert by_name["international_agent"].reason is None
+    assert by_name["alternatives_agent"].reason is None
+
+
+def test_agent_fallback_reason_survives_duplicate_downgrade(monkeypatch, tmp_path):
+    """If a fallback-scored agent ALSO collides with another agent's score, the row must
+    keep both the fallback explanation and the duplicate-check explanation -- a reader must
+    be able to tell the row is a fallback, not just that it looks suspicious."""
+    same = ICResult(ic_mean=-0.011, ic_t=-2.1, p_value=0.038, sharpe=-0.4, n=1634)
+    _install_stub_scorers(
+        monkeypatch,
+        {
+            "macro_agent": same,
+            "international_agent": same,
+            "alternatives_agent": ICResult(
+                ic_mean=0.004, ic_t=2.2, p_value=0.03, sharpe=0.5, n=1600
+            ),
+        },
+    )
+    rows = run_module.run(
+        {}, pd.DataFrame(), out_path=tmp_path / "scorecard.json",
+        agent_fallback_reasons={"macro_agent": "own price cache prices_macro has no usable date index"},
+    )
+    by_name = _by_name(rows)
+    assert by_name["macro_agent"].verdict == "INSUFFICIENT_DATA"
+    assert "no usable date index" in by_name["macro_agent"].reason
+    assert "identical" in by_name["macro_agent"].reason
+    # international_agent has no fallback reason of its own -- just the duplicate message.
+    assert by_name["international_agent"].reason is not None
+    assert "no usable date index" not in by_name["international_agent"].reason
+    assert "identical" in by_name["international_agent"].reason

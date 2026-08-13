@@ -69,8 +69,14 @@ target.
 
 ## Explicitly out of scope
 
-- `altdata_reddit.parquet` is missing (sec/transcripts/trends are present) — `altdata_alpha`
-  degrades gracefully per its own existing logic; not fetched or fixed here.
+- **Correction (post-implementation):** no `data_cache/altdata_*.parquet` files exist at all
+  on disk — not just `altdata_reddit`, none of sec/transcripts/reddit/trends. `altdata_weights`
+  is also absent from `active_alpha_config.json`, so `altdata_alpha` returns empty because no
+  source is configured, not because any one source is missing. `earnings_tone_alpha` similarly
+  self-loads via `load_transcript_signals()`, which finds no cached transcript panel and
+  returns empty. Both degrade gracefully per their own existing logic, surfacing as a
+  `DegenerateSignalError` density-guard message rather than a CLI wiring gap; not fetched or
+  fixed here.
 - Any change to sleeve/agent/subsystem scoring math, the verdict rule, or the component fixture.
 - `ml`, `llm_fundamental`, `narrative` stay deferred (per-fold retraining / LLM re-simulation is
   still out of scope, unchanged from sub-project 1's design).

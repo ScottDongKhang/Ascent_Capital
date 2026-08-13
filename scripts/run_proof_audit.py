@@ -9,6 +9,8 @@ from ascent.data.store.parquet import has_data, load_parquet
 from ascent.data.normalize.prices import pivot_prices
 from ascent.features.build_features import FeatureBuilder
 from ascent.analyst.proof_audit.run import (
+    _AGENT_FALLBACK_REASON_CORRUPT,
+    _AGENT_FALLBACK_REASON_MISSING,
     _AGENT_PRICE_CACHES,
     _dedupe_prices_by_calendar_day,
     _load_agent_price_matrix,
@@ -49,15 +51,19 @@ def main() -> int:
     ).compute_features()
 
     agent_prices = {}
+    agent_fallback_reasons = {}
     for agent_name, cache_name in _AGENT_PRICE_CACHES.items():
         if not has_data(cache_name):
             print(f"[proof_audit] {cache_name} missing -- {agent_name} falls back to shared prices")
+            agent_fallback_reasons[agent_name] = _AGENT_FALLBACK_REASON_MISSING.format(cache_name=cache_name)
             continue
         matrix = _load_agent_price_matrix(agent_name, cache_name)
         if matrix is not None:
             agent_prices[agent_name] = matrix
+        else:
+            agent_fallback_reasons[agent_name] = _AGENT_FALLBACK_REASON_CORRUPT.format(cache_name=cache_name)
 
-    rows = run(features, prices, agent_prices=agent_prices)
+    rows = run(features, prices, agent_prices=agent_prices, agent_fallback_reasons=agent_fallback_reasons)
 
     print(f"{'component':30s} {'kind':14s} {'method':16s} {'metric':>10s} {'p':>8s} {'n':>5s}  verdict")
     for r in sorted(rows, key=lambda r: (r.kind, r.component)):

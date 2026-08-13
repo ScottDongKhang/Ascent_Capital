@@ -178,6 +178,17 @@ See `docs/REPO_MAP.md` for what to grep for and which files are worth reading wh
   positions, the fallback force-trims the largest positions and renormalizes to 1.0 — which
   sells exactly the hedges the judge argued to protect. Diagnose transmission before
   concluding the AI PM's judgment was bad.
+- **`save_parquet` writes `index=False` unconditionally** — wide-format caches (`prices_macro`,
+  `prices_international`, `prices_alternatives`) store their date only in the DataFrame index,
+  not a column, so every save silently drops all date information. Confirmed on disk:
+  `index_columns=[]` in parquet metadata, reload produces a bare `RangeIndex` with implausible
+  row counts (176k/151k/150k rows for 9-13 symbols). This permanently breaks each agent's own
+  freshness check (`cached.index.max()` on a `RangeIndex` evaluates to garbage), causing an
+  unconditional refetch-and-append loop and unbounded cache growth in live production. Not yet
+  fixed — needs `save_parquet` to detect wide vs. long format and preserve the index
+  accordingly, plus a network re-fetch to regenerate the three corrupted caches.
+  `ascent/analyst/proof_audit/run.py::_load_agent_price_matrix` detects and safely degrades
+  around this for the proof-audit tool; the underlying agents are NOT protected.
 
 ---
 
