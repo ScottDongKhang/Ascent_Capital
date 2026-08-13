@@ -89,6 +89,22 @@ def test_build_analyst_panel_missing_columns_returns_empty():
     assert build_analyst_panel(bad_df, dates, ["A"]) == {}
 
 
+def test_build_analyst_panel_normalizes_non_midnight_signal_date():
+    """A signal_date with a nonzero time-of-day must still align with a midnight price index."""
+    from ascent.features.feature_defs import build_analyst_panel
+
+    dates = pd.date_range("2024-01-01", periods=10, freq="B")
+    syms = ["A"]
+
+    analyst_df = pd.DataFrame([
+        {"symbol": "A", "signal_date": dates[2] + pd.Timedelta(hours=16, minutes=30), "score": 1},
+    ])
+
+    result = build_analyst_panel(analyst_df, dates, syms, window=63)
+    panel = result["analyst_revision"]
+    assert panel.loc[dates[2], "A"] == 1.0
+
+
 # ── analyst_alpha ──────────────────────────────────────────────────────────────
 
 def test_analyst_alpha_returns_zscore():

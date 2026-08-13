@@ -125,6 +125,23 @@ def test_build_earnings_panel_strips_timezone():
     assert isinstance(result, dict)
 
 
+def test_build_earnings_panel_normalizes_non_midnight_signal_date():
+    """A signal_date with a nonzero time-of-day must still align with a midnight price index."""
+    from ascent.features.feature_defs import build_earnings_panel
+
+    earnings_df = pd.DataFrame([
+        {"symbol": "AAPL", "signal_date": pd.Timestamp("2025-01-02 16:30:00"),
+         "eps_estimate": 2.0, "reported_eps": 2.5, "surprise_pct": 25.0},
+    ])
+
+    date_index = pd.bdate_range(start="2025-01-01", periods=10)
+    result = build_earnings_panel(earnings_df, date_index, ["AAPL"])
+
+    es = result["earnings_surprise"]
+    assert pd.Timestamp("2025-01-02") in es.index
+    assert es.loc[pd.Timestamp("2025-01-02"), "AAPL"] == pytest.approx(25.0)
+
+
 # ── Task 3: Alpha Sleeve ──────────────────────────────────────────────────────
 
 def test_earnings_alpha_zscore():

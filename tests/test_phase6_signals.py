@@ -116,6 +116,21 @@ def test_insider_panel_empty_returns_empty():
     assert build_insider_panel(pd.DataFrame(), dates, _syms()) == {}
 
 
+def test_insider_panel_normalizes_non_midnight_signal_date():
+    """A signal_date with a nonzero time-of-day must still align with a midnight price index."""
+    from ascent.features.feature_defs import build_insider_panel
+
+    dates = _bdate(20)
+    syms = ["A"]
+
+    df = pd.DataFrame([
+        {"symbol": "A", "signal_date": dates[5] + pd.Timedelta(hours=9, minutes=15), "score": 1},
+    ])
+    result = build_insider_panel(df, dates, syms, window=63)
+    panel = result["insider_net_score"]
+    assert panel.loc[dates[5], "A"] == pytest.approx(1.0)
+
+
 # ── build_short_panel ─────────────────────────────────────────────────────────
 
 def test_short_panel_basic():

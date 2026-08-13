@@ -300,6 +300,7 @@ def build_earnings_panel(
         # Strip timezone from signal_date too
         if sub["signal_date"].dt.tz is not None:
             sub["signal_date"] = sub["signal_date"].dt.tz_localize(None)
+        sub["signal_date"] = sub["signal_date"].dt.normalize()
         sub = sub.dropna(subset=["surprise_pct"]).sort_values("signal_date")
         if sub.empty:
             continue
@@ -356,6 +357,7 @@ def build_analyst_panel(
         sub["signal_date"] = pd.to_datetime(sub["signal_date"])
         if sub["signal_date"].dt.tz is not None:
             sub["signal_date"] = sub["signal_date"].dt.tz_localize(None)
+        sub["signal_date"] = sub["signal_date"].dt.normalize()
         sub = sub.dropna(subset=["score"]).sort_values("signal_date")
         if sub.empty:
             continue
@@ -455,6 +457,7 @@ def build_insider_panel(
         sub["signal_date"] = pd.to_datetime(sub["signal_date"])
         if sub["signal_date"].dt.tz is not None:
             sub["signal_date"] = sub["signal_date"].dt.tz_localize(None)
+        sub["signal_date"] = sub["signal_date"].dt.normalize()
         sub = sub.dropna(subset=["score"]).sort_values("signal_date")
         if sub.empty:
             continue
