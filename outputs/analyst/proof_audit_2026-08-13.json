@@ -1,0 +1,232 @@
+[
+  {
+    "component": "trend",
+    "kind": "alpha_sleeve",
+    "method": "wf_ic",
+    "metric": -0.011727091940878646,
+    "p_value": 0.024907414811181267,
+    "sample_size": 1636,
+    "verdict": "CUT",
+    "reason": null
+  },
+  {
+    "component": "meanrev",
+    "kind": "alpha_sleeve",
+    "method": "wf_ic",
+    "metric": 0.02294762540055171,
+    "p_value": 2.5745153935224863e-06,
+    "sample_size": 1634,
+    "verdict": "KEEP",
+    "reason": null
+  },
+  {
+    "component": "volatility",
+    "kind": "alpha_sleeve",
+    "method": "wf_ic",
+    "metric": -0.0004656710875304134,
+    "p_value": 0.8760374424542847,
+    "sample_size": 1592,
+    "verdict": "CUT",
+    "reason": null
+  },
+  {
+    "component": "statarb",
+    "kind": "alpha_sleeve",
+    "method": "wf_ic",
+    "metric": 0.01316452215197472,
+    "p_value": 0.000571694923576833,
+    "sample_size": 1624,
+    "verdict": "KEEP",
+    "reason": null
+  },
+  {
+    "component": "fundamental",
+    "kind": "alpha_sleeve",
+    "method": "wf_ic",
+    "metric": -0.002154586465454215,
+    "p_value": 0.2761678291364747,
+    "sample_size": 283,
+    "verdict": "CUT",
+    "reason": null
+  },
+  {
+    "component": "earnings",
+    "kind": "alpha_sleeve",
+    "method": "wf_ic",
+    "metric": 0.001508791786183869,
+    "p_value": 0.36421422866648356,
+    "sample_size": 1221,
+    "verdict": "CUT",
+    "reason": null
+  },
+  {
+    "component": "analyst",
+    "kind": "alpha_sleeve",
+    "method": "wf_ic",
+    "metric": -0.002644411639023279,
+    "p_value": 0.8072678910025786,
+    "sample_size": 277,
+    "verdict": "CUT",
+    "reason": null
+  },
+  {
+    "component": "options_flow",
+    "kind": "alpha_sleeve",
+    "method": "wf_ic",
+    "metric": -0.030048464729056926,
+    "p_value": 0.07905465674582121,
+    "sample_size": 21,
+    "verdict": "INSUFFICIENT_DATA",
+    "reason": null
+  },
+  {
+    "component": "insider",
+    "kind": "alpha_sleeve",
+    "method": "wf_ic",
+    "metric": 0.006995890200617867,
+    "p_value": 0.18260609501633915,
+    "sample_size": 615,
+    "verdict": "CUT",
+    "reason": null
+  },
+  {
+    "component": "short_interest",
+    "kind": "alpha_sleeve",
+    "method": "wf_ic",
+    "metric": null,
+    "p_value": null,
+    "sample_size": 0,
+    "verdict": "INSUFFICIENT_DATA",
+    "reason": "signal matrix has insufficient non-NaN density (0 of 0 candidate dates carry at least 10 non-NaN values; need 30) -- likely missing feature inputs or wrong universe"
+  },
+  {
+    "component": "altdata",
+    "kind": "alpha_sleeve",
+    "method": "wf_ic",
+    "metric": null,
+    "p_value": null,
+    "sample_size": 0,
+    "verdict": "INSUFFICIENT_DATA",
+    "reason": "signal matrix has insufficient non-NaN density (0 of 0 candidate dates carry at least 10 non-NaN values; need 30) -- likely missing feature inputs or wrong universe"
+  },
+  {
+    "component": "earnings_tone",
+    "kind": "alpha_sleeve",
+    "method": "wf_ic",
+    "metric": -0.005561871489576918,
+    "p_value": 0.8238545627172859,
+    "sample_size": 29,
+    "verdict": "INSUFFICIENT_DATA",
+    "reason": null
+  },
+  {
+    "component": "ml",
+    "kind": "alpha_sleeve",
+    "method": "deferred",
+    "metric": null,
+    "p_value": null,
+    "sample_size": 0,
+    "verdict": "INSUFFICIENT_DATA",
+    "reason": "requires live-logged signal history, not re-simulation -- out of scope for this audit"
+  },
+  {
+    "component": "llm_fundamental",
+    "kind": "alpha_sleeve",
+    "method": "deferred",
+    "metric": null,
+    "p_value": null,
+    "sample_size": 0,
+    "verdict": "INSUFFICIENT_DATA",
+    "reason": "requires live-logged signal history, not re-simulation -- out of scope for this audit"
+  },
+  {
+    "component": "narrative",
+    "kind": "alpha_sleeve",
+    "method": "deferred",
+    "metric": null,
+    "p_value": null,
+    "sample_size": 0,
+    "verdict": "INSUFFICIENT_DATA",
+    "reason": "requires live-logged signal history, not re-simulation -- out of scope for this audit"
+  },
+  {
+    "component": "us_equities_agent",
+    "kind": "agent",
+    "method": "covered_by_sleeves",
+    "metric": null,
+    "p_value": null,
+    "sample_size": 0,
+    "verdict": "INSUFFICIENT_DATA",
+    "reason": "covered by per-sleeve rows; not scored standalone"
+  },
+  {
+    "component": "macro_agent",
+    "kind": "agent",
+    "method": "wf_ic",
+    "metric": 0.020405254761699573,
+    "p_value": 0.0606196410542296,
+    "sample_size": 1644,
+    "verdict": "CUT",
+    "reason": null
+  },
+  {
+    "component": "international_agent",
+    "kind": "agent",
+    "method": "wf_ic",
+    "metric": 0.010769219243325759,
+    "p_value": 0.2501758763423859,
+    "sample_size": 1644,
+    "verdict": "CUT",
+    "reason": null
+  },
+  {
+    "component": "alternatives_agent",
+    "kind": "agent",
+    "method": "wf_ic",
+    "metric": null,
+    "p_value": null,
+    "sample_size": 0,
+    "verdict": "INSUFFICIENT_DATA",
+    "reason": "signal matrix has insufficient non-NaN density (0 of 1649 candidate dates carry at least 10 non-NaN values; need 30) -- likely missing feature inputs or wrong universe"
+  },
+  {
+    "component": "regime_overlay",
+    "kind": "subsystem",
+    "method": "counterfactual",
+    "metric": -0.0007040425531914894,
+    "p_value": 0.3522627249121989,
+    "sample_size": 47,
+    "verdict": "CUT",
+    "reason": "approximated onto the same track pair as earned_authority pending a dedicated counterfactual track (see counterfactual_scorer.py docstring)"
+  },
+  {
+    "component": "hedge_overlay",
+    "kind": "subsystem",
+    "method": "counterfactual",
+    "metric": -0.0007040425531914894,
+    "p_value": 0.3522627249121989,
+    "sample_size": 47,
+    "verdict": "CUT",
+    "reason": "approximated onto the same track pair as earned_authority pending a dedicated counterfactual track (see counterfactual_scorer.py docstring)"
+  },
+  {
+    "component": "earned_authority",
+    "kind": "subsystem",
+    "method": "counterfactual",
+    "metric": -0.0007040425531914894,
+    "p_value": 0.3522627249121989,
+    "sample_size": 47,
+    "verdict": "CUT",
+    "reason": "canonical row for the (track_d, track_astar) pair; regime_overlay and hedge_overlay are approximated onto this same pair and report the same number"
+  },
+  {
+    "component": "debate_judge_intervention",
+    "kind": "subsystem",
+    "method": "counterfactual",
+    "metric": -0.0002967446808510637,
+    "p_value": 0.7486262680167884,
+    "sample_size": 47,
+    "verdict": "CUT",
+    "reason": "track_b is total-return, track_d is split-only -- delta includes the dividend stream alongside the judge-intervention effect"
+  }
+]
