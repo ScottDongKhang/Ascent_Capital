@@ -254,6 +254,68 @@ def test_missing_input_sleeve_failure_names_the_missing_inputs(monkeypatch, tmp_
     assert "not loaded by this CLI" in row.reason
 
 
+def test_run_without_agent_prices_falls_back_to_shared_prices(monkeypatch, tmp_path):
+    """run() must remain callable exactly as before -- `agent_prices` is additive, not
+    required. Every pre-existing call in this file omits it; this pins that fallback."""
+    from ascent.analyst.proof_audit.components import COMPONENTS
+
+    rows = _run(
+        monkeypatch,
+        tmp_path,
+        {
+            "macro_agent": ICResult(ic_mean=0.02, ic_t=3.0, p_value=0.003, sharpe=0.8, n=1634),
+            "international_agent": ICResult(
+                ic_mean=0.011, ic_t=2.4, p_value=0.017, sharpe=0.6, n=1630
+            ),
+            "alternatives_agent": ICResult(
+                ic_mean=-0.03, ic_t=-4.0, p_value=0.0001, sharpe=-1.1, n=1600
+            ),
+        },
+    )
+    assert [r.component for r in rows] == [c.name for c in COMPONENTS]
+    by_name = _by_name(rows)
+    assert by_name["macro_agent"].verdict == "KEEP"
+    assert by_name["international_agent"].verdict == "KEEP"
+    assert by_name["alternatives_agent"].verdict == "CUT"
+
+
+def test_agent_prices_routes_each_agent_to_its_own_matrix(monkeypatch, tmp_path):
+    """When `agent_prices` supplies a per-agent matrix, `score_agent` must be called with
+    THAT agent's own matrix, not the shared `prices` -- this is the actual fix: prior to it,
+    every agent was scored against the same 938-symbol US-equity matrix regardless of what
+    was passed in `agent_prices`."""
+    shared_prices = pd.DataFrame({"AAPL": [1.0, 2.0, 3.0]})
+    macro_prices = pd.DataFrame({"TLT": [10.0, 11.0, 12.0]})
+    intl_prices = pd.DataFrame({"EEM": [20.0, 21.0, 22.0]})
+    seen: dict[str, pd.DataFrame] = {}
+
+    def fake_score_sleeve(name, features, prices, dates=None):
+        return ICResult(ic_mean=0.02, ic_t=3.0, p_value=0.004, sharpe=0.9, n=400)
+
+    def fake_score_agent(name, prices, dates=None):
+        seen[name] = prices
+        return ICResult(ic_mean=0.02, ic_t=3.0, p_value=0.003, sharpe=0.8, n=1634)
+
+    def fake_score_subsystem(name):
+        return ICResult(ic_mean=-0.0007, ic_t=-0.9, p_value=0.35, sharpe=-0.3, n=47)
+
+    monkeypatch.setattr(run_module, "score_sleeve", fake_score_sleeve)
+    monkeypatch.setattr(run_module, "score_agent", fake_score_agent)
+    monkeypatch.setattr(run_module, "score_subsystem", fake_score_subsystem)
+
+    run_module.run(
+        {},
+        shared_prices,
+        out_path=tmp_path / "scorecard.json",
+        agent_prices={"macro_agent": macro_prices, "international_agent": intl_prices},
+    )
+
+    assert seen["macro_agent"] is macro_prices
+    assert seen["international_agent"] is intl_prices
+    # alternatives_agent has no entry in agent_prices -> falls back to the shared matrix.
+    assert seen["alternatives_agent"] is shared_prices
+
+
 def test_dedupe_prices_by_calendar_day_collapses_intraday_timestamps():
     """The helper lives in run.py; scripts/run_proof_audit.py must not carry a second copy."""
     price_df = pd.DataFrame(
@@ -275,3 +337,40 @@ def test_dedupe_prices_by_calendar_day_collapses_intraday_timestamps():
     aaa_21 = out[(out["symbol"] == "AAA") & (out["date"] == pd.Timestamp("2022-12-21"))]
     assert len(aaa_21) == 1
     assert aaa_21["close"].iloc[0] == pytest.approx(11.0)  # keep="last" by timestamp
+
+
+def test_dedupe_wide_prices_by_calendar_day_collapses_intraday_timestamps():
+    """Wide-format analogue: macro/international/alternatives caches are pivoted (symbol
+    columns) with the date as the DataFrame INDEX, not a `date` column, so they need their
+    own dedupe helper rather than reusing `_dedupe_prices_by_calendar_day`."""
+    idx = pd.to_datetime(
+        ["2022-12-21 00:00:00", "2022-12-21 19:00:00", "2022-12-22 00:00:00"]
+    )
+    price_df = pd.DataFrame({"TLT": [100.0, 101.0, 102.0]}, index=idx)
+    out = run_module._dedupe_wide_prices_by_calendar_day(price_df)
+    assert len(out) == 2
+    assert out.loc[pd.Timestamp("2022-12-21"), "TLT"] == pytest.approx(101.0)  # keep="last"
+    assert out.loc[pd.Timestamp("2022-12-22"), "TLT"] == pytest.approx(102.0)
+
+
+def test_load_agent_price_matrix_skips_a_cache_with_no_date_index(monkeypatch, tmp_path):
+    """A currently-live data bug (see task-2-report.md): `save_parquet()` writes wide agent
+    price matrices with `index=False`, silently dropping the DatetimeIndex that carries the
+    only date information those caches have -- they load back with a bare RangeIndex.
+    `_load_agent_price_matrix` must detect that and return None (fall back to shared
+    prices) instead of scoring against a matrix with no real dates."""
+    dateless = pd.DataFrame({"TLT": [100.0, 101.0, 102.0]})  # RangeIndex, no dates
+    monkeypatch.setattr(run_module, "load_parquet", lambda name: dateless)
+    assert run_module._load_agent_price_matrix("macro_agent", "prices_macro") is None
+
+
+def test_load_agent_price_matrix_dedupes_a_cache_with_a_real_date_index(monkeypatch):
+    idx = pd.to_datetime(
+        ["2022-12-21 00:00:00", "2022-12-21 19:00:00", "2022-12-22 00:00:00"]
+    )
+    dated = pd.DataFrame({"TLT": [100.0, 101.0, 102.0]}, index=idx)
+    monkeypatch.setattr(run_module, "load_parquet", lambda name: dated)
+    out = run_module._load_agent_price_matrix("macro_agent", "prices_macro")
+    assert out is not None
+    assert len(out) == 2
+    assert out.loc[pd.Timestamp("2022-12-21"), "TLT"] == pytest.approx(101.0)

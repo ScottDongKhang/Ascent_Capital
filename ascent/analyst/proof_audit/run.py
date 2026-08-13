@@ -16,12 +16,15 @@ from collections import defaultdict
 from datetime import date
 from pathlib import Path
 
+import pandas as pd
+
 from ascent.analyst.proof_audit.components import COMPONENTS
 from ascent.analyst.proof_audit.counterfactual_scorer import score_subsystem
 from ascent.analyst.proof_audit.forward_returns import eligible_dates
 from ascent.analyst.proof_audit.scorecard import DEFAULT_MIN_SAMPLE, ScorecardRow, verdict, write_scorecard
 from ascent.analyst.proof_audit.stats import ICResult
 from ascent.analyst.proof_audit.wf_scorer import DegenerateSignalError, score_agent, score_sleeve
+from ascent.data.store.parquet import has_data, load_parquet
 
 log = logging.getLogger(__name__)
 
@@ -129,7 +132,12 @@ def _flag_duplicate_agent_scores(rows: list[ScorecardRow]) -> list[ScorecardRow]
     return out
 
 
-def run(features: dict, prices, out_path: Path | None = None) -> list[ScorecardRow]:
+def run(
+    features: dict,
+    prices,
+    out_path: Path | None = None,
+    agent_prices: dict | None = None,
+) -> list[ScorecardRow]:
     if out_path is None:
         out_path = Path("outputs/analyst") / f"proof_audit_{date.today().isoformat()}.json"
 
@@ -150,7 +158,17 @@ def run(features: dict, prices, out_path: Path | None = None) -> list[ScorecardR
                 result = score_sleeve(c.name, features, prices, dates=dates)
                 rows.append(_row_from_result(c.name, c.kind, c.method, result))
             elif c.kind == "agent":
-                result = score_agent(c.name, prices, dates=dates)
+                # Each specialist agent trades its own real universe (macro ETFs,
+                # international ETFs, alternatives ETFs), not the shared US-equity
+                # `prices` matrix -- passing the wrong universe produced bit-identical
+                # or all-NaN scores for two of the three (caught by
+                # _flag_duplicate_agent_scores below, but never a real measurement).
+                # `agent_prices` lets callers supply each agent's own deduped, pivoted
+                # price matrix; falls back to the shared `prices` when absent or
+                # missing that agent's key, preserving prior behavior for any caller
+                # (including tests) that doesn't pass it.
+                this_agent_prices = (agent_prices or {}).get(c.name, prices)
+                result = score_agent(c.name, this_agent_prices, dates=dates)
                 rows.append(_row_from_result(c.name, c.kind, c.method, result))
             elif c.kind == "subsystem":
                 rows.append(_row_from_result(
@@ -209,10 +227,71 @@ def _dedupe_prices_by_calendar_day(price_df):
     return price_df
 
 
+def _dedupe_wide_prices_by_calendar_day(price_df):
+    """Collapse a wide (index=date, columns=symbol) agent price matrix to one row per
+    calendar day, keeping the chronologically last row.
+
+    `prices_macro`/`prices_international`/`prices_alternatives` are NOT long-format
+    symbol/date/close rows like `prices_live` -- each agent's own fetcher
+    (`agents/macro_agent.py::_fetch_macro_prices` and its international/alternatives
+    siblings) already pivots to symbol columns with the trading date as the DataFrame's
+    *index* before caching. `_dedupe_prices_by_calendar_day` above operates on the
+    long-format frame and does not apply here; this is its wide-format analogue, applying
+    the same tz-normalize + keep-last-by-calendar-day treatment directly to the index.
+
+    Only meaningful when `price_df.index` is actually a `DatetimeIndex` -- see the
+    `__main__` block below for a load-time guard against a currently-live data bug where
+    these three caches carry no date information at all.
+    """
+    idx = price_df.index
+    if isinstance(idx, pd.DatetimeIndex) and idx.tz is not None:
+        idx = idx.tz_localize(None)
+    out = price_df.set_axis(idx.normalize(), axis=0).sort_index()
+    return out[~out.index.duplicated(keep="last")]
+
+
+def _load_agent_price_matrix(agent_name: str, cache_name: str):
+    """Load one specialist agent's own real price cache as a dated wide matrix, or None.
+
+    DISCOVERED BUG (out of scope for this module -- lives in shared
+    `ascent/data/store/parquet.py`): `save_parquet()` unconditionally writes
+    `df.to_parquet(path, index=False)`. That's harmless for `prices_live`, whose date
+    lives in an explicit `date` column, but `prices_macro`/`prices_international`/
+    `prices_alternatives` carry their date ONLY in the DataFrame's index (see
+    `agents/macro_agent.py::_fetch_macro_prices`) -- so `index=False` silently drops it on
+    every save. Confirmed in this worktree's data_cache: all three caches load back with a
+    bare `RangeIndex` (no `DatetimeIndex`, no `date` column, `index_columns: []` in the
+    parquet metadata), with row counts (176k/151k/150k) far exceeding any plausible
+    trading-day count for ~10-13 symbols -- consistent with each agent's own freshness
+    check (`cached.index.max()`, expecting a real date) silently failing and re-fetching +
+    re-appending on every run. There is no way to recover a dated price matrix from the
+    files as currently persisted; fixing this would mean patching `save_parquet` (shared,
+    live-trading-critical) and re-fetching over the network to regenerate the caches --
+    both out of scope for this caller-side fix (see task-2-report.md). This function
+    detects that state and returns None so the caller falls back to the shared `prices`
+    matrix rather than silently scoring against garbage.
+    """
+    cached = load_parquet(cache_name)
+    if not isinstance(cached.index, pd.DatetimeIndex):
+        log.warning(
+            "proof_audit: %s has no usable date index (index dtype=%s) -- skipping; "
+            "%s will fall back to the shared prices matrix",
+            cache_name, cached.index.dtype, agent_name,
+        )
+        return None
+    return _dedupe_wide_prices_by_calendar_day(cached)
+
+
+_AGENT_PRICE_CACHES = {
+    "macro_agent": "prices_macro",
+    "international_agent": "prices_international",
+    "alternatives_agent": "prices_alternatives",
+}
+
+
 if __name__ == "__main__":
     import argparse
 
-    from ascent.data.store.parquet import has_data, load_parquet
     from ascent.data.normalize.prices import pivot_prices
     from ascent.features.build_features import FeatureBuilder
 
@@ -250,4 +329,14 @@ if __name__ == "__main__":
         insider_df=insider_df,
         short_df=short_df,
     ).compute_features()
-    run(features, prices, out_path=args.out)
+
+    agent_prices = {}
+    for agent_name, cache_name in _AGENT_PRICE_CACHES.items():
+        if not has_data(cache_name):
+            log.warning("proof_audit: %s missing -- %s falls back to shared prices", cache_name, agent_name)
+            continue
+        matrix = _load_agent_price_matrix(agent_name, cache_name)
+        if matrix is not None:
+            agent_prices[agent_name] = matrix
+
+    run(features, prices, out_path=args.out, agent_prices=agent_prices)
