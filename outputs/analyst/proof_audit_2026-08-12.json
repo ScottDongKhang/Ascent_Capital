@@ -43,11 +43,11 @@
     "component": "fundamental",
     "kind": "alpha_sleeve",
     "method": "wf_ic",
-    "metric": null,
-    "p_value": null,
-    "sample_size": 0,
-    "verdict": "INSUFFICIENT_DATA",
-    "reason": "requires fundamentals/earnings/analyst/options/insider/short input data not loaded by this CLI"
+    "metric": -0.002154586465454215,
+    "p_value": 0.2761678291364747,
+    "sample_size": 283,
+    "verdict": "CUT",
+    "reason": null
   },
   {
     "component": "earnings",
@@ -57,7 +57,7 @@
     "p_value": null,
     "sample_size": 0,
     "verdict": "INSUFFICIENT_DATA",
-    "reason": "requires fundamentals/earnings/analyst/options/insider/short input data not loaded by this CLI"
+    "reason": "scoring failed: need at least 10 points, got 0"
   },
   {
     "component": "analyst",
@@ -67,27 +67,27 @@
     "p_value": null,
     "sample_size": 0,
     "verdict": "INSUFFICIENT_DATA",
-    "reason": "requires fundamentals/earnings/analyst/options/insider/short input data not loaded by this CLI"
+    "reason": "scoring failed: need at least 10 points, got 0"
   },
   {
     "component": "options_flow",
     "kind": "alpha_sleeve",
     "method": "wf_ic",
-    "metric": null,
-    "p_value": null,
-    "sample_size": 0,
+    "metric": -0.030048464729056926,
+    "p_value": 0.07905465674582121,
+    "sample_size": 21,
     "verdict": "INSUFFICIENT_DATA",
-    "reason": "requires fundamentals/earnings/analyst/options/insider/short input data not loaded by this CLI"
+    "reason": null
   },
   {
     "component": "insider",
     "kind": "alpha_sleeve",
     "method": "wf_ic",
-    "metric": null,
-    "p_value": null,
-    "sample_size": 0,
-    "verdict": "INSUFFICIENT_DATA",
-    "reason": "requires fundamentals/earnings/analyst/options/insider/short input data not loaded by this CLI"
+    "metric": 0.006995890200617867,
+    "p_value": 0.18260609501633915,
+    "sample_size": 615,
+    "verdict": "CUT",
+    "reason": null
   },
   {
     "component": "short_interest",
@@ -97,7 +97,7 @@
     "p_value": null,
     "sample_size": 0,
     "verdict": "INSUFFICIENT_DATA",
-    "reason": "requires fundamentals/earnings/analyst/options/insider/short input data not loaded by this CLI"
+    "reason": "signal matrix has insufficient non-NaN density (0 of 0 candidate dates carry at least 10 non-NaN values; need 30) -- likely missing feature inputs or wrong universe"
   },
   {
     "component": "altdata",
@@ -107,7 +107,7 @@
     "p_value": null,
     "sample_size": 0,
     "verdict": "INSUFFICIENT_DATA",
-    "reason": "requires fundamentals/earnings/analyst/options/insider/short input data not loaded by this CLI"
+    "reason": "requires altdata/earnings-tone input data not loaded by this CLI"
   },
   {
     "component": "earnings_tone",
@@ -117,7 +117,7 @@
     "p_value": null,
     "sample_size": 0,
     "verdict": "INSUFFICIENT_DATA",
-    "reason": "requires fundamentals/earnings/analyst/options/insider/short input data not loaded by this CLI"
+    "reason": "requires altdata/earnings-tone input data not loaded by this CLI"
   },
   {
     "component": "ml",

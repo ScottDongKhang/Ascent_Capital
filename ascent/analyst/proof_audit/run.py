@@ -30,17 +30,13 @@ _DEFERRED_REASON = {
     "covered_by_sleeves": "covered by per-sleeve rows; not scored standalone",
 }
 
-# Sleeves whose signal functions need fundamentals / earnings / analyst / options / insider /
-# short-interest input frames. The real-data CLI loads prices only, so these cannot be scored
-# there -- a disclosed input gap, not a measured verdict.
-_MISSING_INPUT_SLEEVES = {
-    "fundamental", "earnings", "analyst", "options_flow",
-    "insider", "short_interest", "altdata", "earnings_tone",
-}
-_MISSING_INPUT_REASON = (
-    "requires fundamentals/earnings/analyst/options/insider/short input data "
-    "not loaded by this CLI"
-)
+# Sleeves whose signal functions need altdata / earnings-tone input frames that this CLI does
+# not load at all (no parquet cache wired up yet). The real-data CLI loads fundamentals,
+# earnings, analyst, options, insider and short-interest frames (see __main__ below), so those
+# six score for real now -- only altdata and earnings_tone remain a disclosed input gap rather
+# than a measured verdict.
+_MISSING_INPUT_SLEEVES = {"altdata", "earnings_tone"}
+_MISSING_INPUT_REASON = "requires altdata/earnings-tone input data not loaded by this CLI"
 
 _DEGENERATE_SUFFIX = " -- likely missing feature inputs or wrong universe"
 
@@ -225,6 +221,16 @@ if __name__ == "__main__":
     args = ap.parse_args()
 
     price_df = load_parquet("prices_live")
+    # Strip timezone from price dates -- yfinance returns tz-aware (America/New_York), but the
+    # fundamental/earnings/analyst/options/insider/short panels built inside FeatureBuilder
+    # strip tz internally (see ascent/features/feature_defs.py), so a tz-aware `close` index
+    # compared against those tz-naive panel indices raises
+    # "Cannot compare dtypes datetime64[us] and datetime64[us, America/New_York]" inside the
+    # alpha sleeve functions' own `.reindex(close.index, ...)` calls. Mirrors the identical fix
+    # already applied in ascent/main.py's run_pipeline (grep "Strip timezone from price dates").
+    if price_df["date"].dtype.tz is not None:
+        price_df = price_df.copy()
+        price_df["date"] = price_df["date"].dt.tz_localize(None)
     price_df = _dedupe_prices_by_calendar_day(price_df)
     prices = pivot_prices(price_df, field="close")
 

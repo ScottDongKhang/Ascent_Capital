@@ -226,8 +226,12 @@ def test_unknown_kind_is_not_silently_dropped(monkeypatch, tmp_path):
 
 
 def test_missing_input_sleeve_failure_names_the_missing_inputs(monkeypatch, tmp_path):
+    # "altdata" (not "fundamental") is the live example here: the real-data CLI now loads
+    # fundamentals/earnings/analyst/options/insider/short frames (see run.py's __main__), so
+    # "fundamental" scores for real and would fail this assertion. "altdata" has no parquet
+    # cache wired up at all, so it is still a genuine missing-input gap.
     def failing_sleeve(name, features, prices, dates=None):
-        if name == "fundamental":
+        if name == "altdata":
             raise KeyError("pe_ratio")
         return ICResult(ic_mean=0.02, ic_t=3.0, p_value=0.004, sharpe=0.9, n=400)
 
@@ -245,7 +249,7 @@ def test_missing_input_sleeve_failure_names_the_missing_inputs(monkeypatch, tmp_
     )
     monkeypatch.setattr(run_module, "score_sleeve", failing_sleeve)
     rows = run_module.run({}, pd.DataFrame(), out_path=tmp_path / "scorecard.json")
-    row = _by_name(rows)["fundamental"]
+    row = _by_name(rows)["altdata"]
     assert row.verdict == "INSUFFICIENT_DATA"
     assert "not loaded by this CLI" in row.reason
 

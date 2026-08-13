@@ -13,6 +13,16 @@ from ascent.analyst.proof_audit.run import _dedupe_prices_by_calendar_day, run
 
 def main() -> int:
     price_df = load_parquet("prices_live")
+    # Strip timezone from price dates -- yfinance returns tz-aware (America/New_York), but the
+    # fundamental/earnings/analyst/options/insider/short panels built inside FeatureBuilder
+    # strip tz internally (see ascent/features/feature_defs.py), so a tz-aware `close` index
+    # compared against those tz-naive panel indices raises
+    # "Cannot compare dtypes datetime64[us] and datetime64[us, America/New_York]" inside the
+    # alpha sleeve functions' own `.reindex(close.index, ...)` calls. Mirrors the identical fix
+    # already applied in ascent/main.py's run_pipeline (grep "Strip timezone from price dates").
+    if price_df["date"].dtype.tz is not None:
+        price_df = price_df.copy()
+        price_df["date"] = price_df["date"].dt.tz_localize(None)
     price_df = _dedupe_prices_by_calendar_day(price_df)
     prices = pivot_prices(price_df, field="close")
 
