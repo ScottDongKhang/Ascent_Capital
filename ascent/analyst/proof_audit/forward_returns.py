@@ -26,7 +26,19 @@ def eligible_dates(
     candidate_dates = prices.index[:-1]  # last date has no forward return
     out = []
     for d in candidate_dates:
-        universe = get_universe_on_date(d)
+        # get_universe_on_date compares against tz-naive start_date/end_date columns, so a
+        # tz-aware d (prices_live pivots to a tz-aware America/New_York index) raises
+        # "Invalid comparison between dtype=datetime64[us] and Timestamp". Coerce a LOCAL
+        # copy for the lookup only -- tz_localize(None) drops the offset annotation without
+        # converting the wall-clock time (unlike tz_convert, which would shift the calendar
+        # day -- see the documented America/New_York landmine), then normalize() zeros the
+        # time-of-day so the date lines up cleanly against start_date <= date <= end_date.
+        # `d` itself must stay unmodified: it still has to match prices.index / fwd.index
+        # keys exactly for downstream .loc lookups in wf_scorer.py.
+        lookup_date = pd.Timestamp(d)
+        if lookup_date.tz is not None:
+            lookup_date = lookup_date.tz_localize(None).normalize()
+        universe = get_universe_on_date(lookup_date)
         if len(universe) >= min_universe_size:
             out.append(d)
     return out
