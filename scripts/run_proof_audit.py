@@ -5,7 +5,7 @@
 """
 from __future__ import annotations
 
-from ascent.data.store.parquet import load_parquet
+from ascent.data.store.parquet import has_data, load_parquet
 from ascent.data.normalize.prices import pivot_prices
 from ascent.features.build_features import FeatureBuilder
 from ascent.analyst.proof_audit.run import _dedupe_prices_by_calendar_day, run
@@ -15,7 +15,23 @@ def main() -> int:
     price_df = load_parquet("prices_live")
     price_df = _dedupe_prices_by_calendar_day(price_df)
     prices = pivot_prices(price_df, field="close")
-    features = FeatureBuilder(price_df).compute_features()
+
+    fundamentals_df = load_parquet("fundamentals") if has_data("fundamentals") else None
+    earnings_df = load_parquet("earnings") if has_data("earnings") else None
+    analyst_df = load_parquet("analyst_revisions") if has_data("analyst_revisions") else None
+    options_df = load_parquet("options_flow") if has_data("options_flow") else None
+    insider_df = load_parquet("insider_transactions") if has_data("insider_transactions") else None
+    short_df = load_parquet("short_interest") if has_data("short_interest") else None
+
+    features = FeatureBuilder(
+        price_df,
+        fundamentals_df=fundamentals_df,
+        earnings_df=earnings_df,
+        analyst_df=analyst_df,
+        options_df=options_df,
+        insider_df=insider_df,
+        short_df=short_df,
+    ).compute_features()
     rows = run(features, prices)
 
     print(f"{'component':30s} {'kind':14s} {'method':16s} {'metric':>10s} {'p':>8s} {'n':>5s}  verdict")
