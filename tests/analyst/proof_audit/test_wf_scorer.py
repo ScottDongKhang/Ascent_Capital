@@ -1,4 +1,5 @@
 """score_sleeve wires signal + forward returns + stats.py together correctly."""
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -13,11 +14,20 @@ def _planted_features_and_prices(n_days=40, n_symbols=25):
         index=dates, columns=symbols,
     ).astype(float)
     # Prices constructed so tomorrow's return is proportional to today's signal
-    # (planted positive IC) plus small noise.
+    # (planted positive IC) plus per-symbol, per-date noise. The noise is essential:
+    # without it, tomorrow's return is an exact monotonic function of today's signal, so
+    # Spearman IC is exactly 1.0 on every single date -- zero variance across the daily-IC
+    # series, which drives scipy's ttest_1samp into catastrophic cancellation (a
+    # RuntimeWarning). Jitter breaks the perfect rank correlation so daily IC varies while
+    # staying reliably positive on average.
+    rng = np.random.default_rng(42)
+    noise = rng.normal(scale=1.5, size=(n_days, n_symbols))
     prices = pd.DataFrame(index=dates, columns=symbols, dtype=float)
     prices.iloc[0] = 100.0
     for i in range(1, n_days):
-        planted_ret = 0.01 * rng_signal.iloc[i - 1] / (rng_signal.iloc[i - 1].abs().max() or 1)
+        signal_row = rng_signal.iloc[i - 1]
+        denom = signal_row.abs().max() or 1
+        planted_ret = 0.01 * (signal_row + noise[i - 1]) / denom
         prices.iloc[i] = prices.iloc[i - 1] * (1 + planted_ret)
     features = {"toy_signal": rng_signal}
     return features, prices
