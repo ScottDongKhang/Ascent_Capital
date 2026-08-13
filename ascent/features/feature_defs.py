@@ -296,11 +296,8 @@ def build_earnings_panel(
         sub = earnings_df[earnings_df["symbol"] == sym].copy()
         if sub.empty:
             continue
-        sub["signal_date"] = pd.to_datetime(sub["signal_date"])
-        # Strip timezone from signal_date too
-        if sub["signal_date"].dt.tz is not None:
-            sub["signal_date"] = sub["signal_date"].dt.tz_localize(None)
-        sub["signal_date"] = sub["signal_date"].dt.normalize()
+        # Strip timezone and normalize to midnight to align with the price index
+        sub["signal_date"] = pd.to_datetime(sub["signal_date"]).dt.normalize().dt.tz_localize(None)
         sub = sub.dropna(subset=["surprise_pct"]).sort_values("signal_date")
         if sub.empty:
             continue
@@ -354,10 +351,7 @@ def build_analyst_panel(
         sub = analyst_df[analyst_df["symbol"] == sym].copy()
         if sub.empty:
             continue
-        sub["signal_date"] = pd.to_datetime(sub["signal_date"])
-        if sub["signal_date"].dt.tz is not None:
-            sub["signal_date"] = sub["signal_date"].dt.tz_localize(None)
-        sub["signal_date"] = sub["signal_date"].dt.normalize()
+        sub["signal_date"] = pd.to_datetime(sub["signal_date"]).dt.normalize().dt.tz_localize(None)
         sub = sub.dropna(subset=["score"]).sort_values("signal_date")
         if sub.empty:
             continue
@@ -454,10 +448,7 @@ def build_insider_panel(
         sub = insider_df[insider_df["symbol"] == sym].copy()
         if sub.empty:
             continue
-        sub["signal_date"] = pd.to_datetime(sub["signal_date"])
-        if sub["signal_date"].dt.tz is not None:
-            sub["signal_date"] = sub["signal_date"].dt.tz_localize(None)
-        sub["signal_date"] = sub["signal_date"].dt.normalize()
+        sub["signal_date"] = pd.to_datetime(sub["signal_date"]).dt.normalize().dt.tz_localize(None)
         sub = sub.dropna(subset=["score"]).sort_values("signal_date")
         if sub.empty:
             continue
