@@ -37,7 +37,8 @@ def test_negative_planted_ic_is_significant_and_negative():
 def test_sharpe_is_annualized():
     # constant positive daily return with zero variance is degenerate (std=0);
     # use a small planted variance instead so Sharpe is finite and computable.
-    daily_ic = [0.03] * 40
+    # Add variance to daily_ic too to avoid scipy precision warnings on zero-variance t-test.
+    daily_ic = [0.03 + 0.001 * math.sin(i) for i in range(40)]
     daily_ls_return = [0.001, 0.0008] * 20
     result = score_ic_series(daily_ic, daily_ls_return)
     assert result.sharpe > 0
