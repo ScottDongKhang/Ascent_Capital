@@ -296,9 +296,16 @@ def test_rangeindex_dataframe_still_saves_without_index_column(store):
 
 
 def test_second_save_of_wide_dataframe_appends_and_dedupes_correctly(store):
-    """The read-modify-write path (path.exists() branch) must also preserve
-    the index — this is the test that would have caught the
-    ignore_index=True concat bug specifically."""
+    """The read-modify-write path (path.exists() branch) must preserve BOTH
+    dates as a `date` column, not just a row count.
+
+    Scope note: the row-count assertion alone does NOT isolate the
+    ignore_index=True concat bug — two rows survived that path before the fix
+    too (they were just dateless). What this test adds over the pre-fix
+    behavior is the `date` column and its values; the dedup half of the
+    contract is guarded by
+    test_wide_dataframe_resave_of_same_day_replaces_not_duplicates, which goes
+    2 rows -> 1 and genuinely fails pre-fix."""
     df1 = pd.DataFrame({"AAPL": [100.0]}, index=pd.date_range("2025-01-01", periods=1))
     df2 = pd.DataFrame({"AAPL": [101.0]}, index=pd.date_range("2025-01-02", periods=1))
     store.save_parquet(df1, "test_wide_append")

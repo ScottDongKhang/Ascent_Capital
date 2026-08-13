@@ -178,17 +178,23 @@ See `docs/REPO_MAP.md` for what to grep for and which files are worth reading wh
   positions, the fallback force-trims the largest positions and renormalizes to 1.0 — which
   sells exactly the hedges the judge argued to protect. Diagnose transmission before
   concluding the AI PM's judgment was bad.
-- **`save_parquet` writes `index=False` unconditionally** — wide-format caches (`prices_macro`,
-  `prices_international`, `prices_alternatives`) store their date only in the DataFrame index,
-  not a column, so every save silently drops all date information. Confirmed on disk:
-  `index_columns=[]` in parquet metadata, reload produces a bare `RangeIndex` with implausible
-  row counts (176k/151k/150k rows for 9-13 symbols). This permanently breaks each agent's own
-  freshness check (`cached.index.max()` on a `RangeIndex` evaluates to garbage), causing an
-  unconditional refetch-and-append loop and unbounded cache growth in live production. Not yet
-  fixed — needs `save_parquet` to detect wide vs. long format and preserve the index
-  accordingly, plus a network re-fetch to regenerate the three corrupted caches.
-  `ascent/analyst/proof_audit/run.py::_load_agent_price_matrix` detects and safely degrades
-  around this for the proof-audit tool; the underlying agents are NOT protected.
+- **Wide-format caches carry their date in a `date` COLUMN, and every consumer restores the
+  index itself.** `prices_macro` / `prices_international` / `prices_alternatives` are wide
+  (one column per symbol, no id column). `save_parquet` now converts a `DatetimeIndex` input
+  into a `date` column up front — reusing the existing `id_cols` / calendar-day-dedup
+  machinery — because its `pd.concat(..., ignore_index=True)` and `to_parquet(index=False)`
+  otherwise dropped all date information on every save. `load_parquet` is deliberately
+  unchanged (it is generic, used by every cache) and returns that `date` column as-is on a
+  `RangeIndex`, so **each caller must do `df.set_index("date")` itself** — and `.sort_index()`
+  too if it slices positionally. Known call sites, all fixed:
+  `agents/macro_agent.py`, `agents/international_agent.py`, `agents/alternatives_agent.py`
+  (two per file: the fresh-cache read and the stale-cache fallback),
+  `ascent/analyst/proof_audit/run.py::_load_agent_price_matrix`, and
+  `ascent/risk/correlation_guard.py::_load_combined_prices` (sorts — its window is
+  `returns.iloc[-63:]`). Add the restore to any new consumer.
+  **Still true:** the three on-disk caches written before this fix are corrupt (dateless
+  `RangeIndex`, 176k/151k/150k rows for 9-13 symbols) and cannot be repaired in place —
+  deleting and re-fetching them is a separate planned data operation, not yet done.
 
 ---
 

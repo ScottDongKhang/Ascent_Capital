@@ -114,9 +114,22 @@ def save_parquet(df: pd.DataFrame, name: str) -> None:
     # front lets the existing id_cols / calendar-day-dedup logic below (already
     # correct for long-format caches) handle wide-format caches too, with no
     # further special-casing needed anywhere else in this function.
-    if isinstance(df.index, pd.DatetimeIndex) and not (_ID_LIKE_COLS & set(df.columns)):
-        idx_col = df.index.name or "index"
-        df = df.reset_index().rename(columns={idx_col: "date"})
+    if isinstance(df.index, pd.DatetimeIndex):
+        collision = _ID_LIKE_COLS & set(df.columns)
+        if collision:
+            # Ambiguous shape: a DatetimeIndex AND an id-like column. Converting
+            # would either clobber an existing `date` column or invent a second
+            # date axis, so the conversion is skipped deliberately — but this
+            # shape is not produced by any known writer, so make it visible
+            # rather than silently writing a frame whose index is dropped.
+            log.warning(
+                "[cache] %s: DatetimeIndex present alongside id column(s) %s — "
+                "skipping wide-format date conversion; the index will NOT be persisted",
+                name, sorted(collision),
+            )
+        else:
+            idx_col = df.index.name or "index"
+            df = df.reset_index().rename(columns={idx_col: "date"})
     # FIX #3: include series_id in preferred id columns alongside symbol.
     # Before: only "series" was checked, which doesn't exist in either
     # simulated.py or fred.py output — those both write "series_id".
