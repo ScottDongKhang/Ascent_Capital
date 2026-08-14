@@ -148,11 +148,15 @@ def test_string_regime_signal_accepted():
     assert meta3["hedge_weight"] == 0.0
 
 
-def test_run_all_agents_imports_hedge_overlay():
-    """run_all_agents.py must import and call apply_hedge_overlay after orchestration."""
+def test_run_all_agents_no_longer_calls_hedge_overlay():
+    """hedge_overlay scored CUT in the proof audit (2026-08-14 target-architecture,
+    Task 3) -- no proven value. The live pipeline in run_all_agents.py must no
+    longer import or call apply_hedge_overlay; the function itself stays intact
+    in ascent/portfolio/hedge_overlay.py (see the rest of this file) so it can
+    be reinstated if re-proven."""
     with open("run_all_agents.py") as f:
         src = f.read()
-    assert "apply_hedge_overlay" in src, \
-        "run_all_agents.py must call apply_hedge_overlay after orchestration"
-    assert "hedge_overlay" in src, \
-        "run_all_agents.py must import from ascent.portfolio.hedge_overlay"
+    assert "apply_hedge_overlay" not in src, \
+        "run_all_agents.py must not call apply_hedge_overlay -- hedge_overlay was cut"
+    assert "hedge_overlay" not in src, \
+        "run_all_agents.py must not import from ascent.portfolio.hedge_overlay"

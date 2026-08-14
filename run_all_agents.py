@@ -1197,42 +1197,6 @@ def main():
         print("[Runner] Orchestrator returned empty weights — aborting execution")
         return
 
-    # ── Step 5b: Apply Phase 4 hedge overlay ─────────────────────────────────
-    try:
-        from ascent.portfolio.hedge_overlay import apply_hedge_overlay
-        import json as _json
-
-        _hedge_regime = None
-        for _ao in agent_outputs:
-            if _ao.agent_id == "us_equities" and _ao.regime_signal is not None:
-                _hedge_regime = _ao.regime_signal
-                break
-        if _hedge_regime is None:
-            for _ao in agent_outputs:
-                if _ao.regime_signal is not None:
-                    _hedge_regime = _ao.regime_signal
-                    break
-
-        merged_weights, _hedge_meta = apply_hedge_overlay(merged_weights, _hedge_regime)
-
-        if _hedge_meta["hedge_weight"] > 0:
-            print(f"[Hedge] Overlay applied — regime={_hedge_meta['regime_label']} "
-                  f"confidence={_hedge_meta['confidence']:.2f} "
-                  f"VIXY={_hedge_meta['vixy_after']:.1%}")
-        else:
-            print(f"[Hedge] No overlay — regime={_hedge_meta['regime_label']} "
-                  f"(hedge_weight=0)")
-
-        # Append to hedge log
-        _hedge_log_path = Path("logs/hedge_log.jsonl")
-        _hedge_log_path.parent.mkdir(parents=True, exist_ok=True)
-        _hedge_entry = {"date": today.isoformat(), **_hedge_meta}
-        with open(_hedge_log_path, "a") as _hf:
-            _hf.write(_json.dumps(_hedge_entry) + "\n")
-
-    except Exception as _hedge_e:
-        print(f"[Hedge] Overlay skipped: {_hedge_e}")
-
     # ── Step 5c: 130/30 long-short overlay (kill-switched) ───────────────────
     if LONG_SHORT_ENABLED:
         try:
