@@ -112,7 +112,7 @@ See `docs/REPO_MAP.md` for what to grep for and which files are worth reading wh
    name.
 5. **Debate is advisory only** — nothing under `debate/` writes to alpha, portfolio, or
    execution. No exceptions. (Prior live-write exception via `apply_judge_position_change` was
-   removed 2026-08-14 after debate intervention scored a fail in the proof audit; debate is
+   removed 2026-08-14 after debate_judge_intervention scored CUT in the proof audit; debate is
    retained as an advisory auditing system, continuing to produce verdicts and position change
    suggestions for logging and offline analysis.)
 6. **Alpha sleeve set**: the active sleeves are `meanrev` and `statarb` (2 sleeves). Update
