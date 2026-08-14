@@ -110,18 +110,14 @@ See `docs/REPO_MAP.md` for what to grep for and which files are worth reading wh
    post-condition check.
 4. **Sector constraint**: under 80% coverage → skip caps and warn. Never collapse to a single
    name.
-5. **Debate is advisory only *at the module level*** — nothing under `debate/` writes to alpha,
-   portfolio, or execution. The single sanctioned exception: **at most one** judge position
-   change is applied by `run_all_agents.py` itself (grep `apply_judge_position_change`), not by
-   `debate/`. It takes only the first entry of the verdict's `position_changes` and never
-   iterates — the guard enforces both. It applies on the scheduled-rebalance path *and* the
-   discovery path, and is bounded by `_JUDGE_MAX_WEIGHT` / `_JUDGE_MIN_WEIGHT` plus earned
-   authority (`debate/adversarial_authority.py`, via `allowed_change_pct`), which stays at the
-   `low` tier — 1.0pp max per intervention — until a type reaches `MIN_SAMPLE_SUSPEND` scored
-   outcomes. Treat this as a bounded, authority-gated exception, not a licence for debate code
-   to acquire write access elsewhere.
-6. **New alpha sleeves**: update `DEFAULT_ALPHA_WEIGHTS` in BOTH `ascent/alpha/stack.py` AND
-   `ascent/research/self_improve.py`. The guard enforces that their key sets match.
+5. **Debate is advisory only** — nothing under `debate/` writes to alpha, portfolio, or
+   execution. No exceptions. (Prior live-write exception via `apply_judge_position_change` was
+   removed 2026-08-14 after debate intervention scored a fail in the proof audit; debate is
+   retained as an advisory auditing system, continuing to produce verdicts and position change
+   suggestions for logging and offline analysis.)
+6. **Alpha sleeve set**: the active sleeves are `meanrev` and `statarb` (2 sleeves). Update
+   `DEFAULT_ALPHA_WEIGHTS` in BOTH `ascent/alpha/stack.py` AND `ascent/research/self_improve.py`
+   if changing the set. The guard enforces that their key sets match.
 7. **Fundamental sleeve is disabled** (measured anti-signal). Do not re-enable without a
    positive, artifact-backed IC-t.
 
@@ -135,7 +131,6 @@ See `docs/REPO_MAP.md` for what to grep for and which files are worth reading wh
 - **`bdate_range(end="today")`** returns empty on weekends — use an explicit weekday rollback.
 - **Market dates**: the host runs at UTC+7, so `date.today()` is a day ahead of the US market
   for much of the day. Use `ascent/utils/market_time.py`.
-- **`apply_hedge_overlay`** must accept both a `RegimeSignal` and a plain `str`.
 - **ML sleeve cache** must store `feature_names` — XGBoost crashes on shape mismatch if the
   feature set changes between writes.
 - **AI PM is two-phase**: Phase 1 `run_ai_pm_prethesis()` uses `SONNET_MODEL` (breadth),
@@ -175,9 +170,9 @@ See `docs/REPO_MAP.md` for what to grep for and which files are worth reading wh
 - **The AI PM decision log only gets entries on scheduled rebalances.** Off-calendar discovery
   days run the daily-view path, not Phase 2 — a missing entry is expected, not a bug.
 - **`reduce_size` cannot reliably reduce size.** When the Haiku adjustment trims too few
-  positions, the fallback force-trims the largest positions and renormalizes to 1.0 — which
-  sells exactly the hedges the judge argued to protect. Diagnose transmission before
-  concluding the AI PM's judgment was bad.
+  positions, the fallback force-trims the largest positions and renormalizes to 1.0. Be aware
+  this may trim positions that align with the judge's advisory suggestions. Diagnose
+  transmission before concluding the AI PM's judgment was bad.
 - **Wide-format caches carry their date in a `date` COLUMN, and every consumer restores the
   index itself.** `prices_macro` / `prices_international` / `prices_alternatives` are wide
   (one column per symbol, no id column). `save_parquet` now converts a `DatetimeIndex` input
@@ -238,10 +233,8 @@ sufficient.
 
 1. **Reasoning behind the decision.** Read the day's `outputs/debate_log/verdict_<date>.json`
    (`verdict.reasoning`, `verdict.key_risks`) and the adversarial intervention. Explain why
-   *these* trades, which argument won which exchange, and what the judge explicitly declined
-   to do. **Then verify execution matched the reasoning** — the `reduce_size` fallback has
-   sold the exact positions the judge argued to protect. Quote the reasoning; don't paraphrase
-   it away.
+   *these* trades, which argument won which exchange. Note that the judge's verdict is advisory
+   only — it does not execute or veto positions. Quote the reasoning; don't paraphrase it away.
 2. **Things to watch for.** Live catalysts (FOMC, earnings, ex-div), positions on thin ice,
    guards that nearly fired, data sources that were down, anything that changes the next read.
 3. **Performance since the last rebalance.** Portfolio vs SPY over the window, with
