@@ -308,9 +308,11 @@ def test_phase6_floors_removed_from_self_improve():
         assert sleeve not in MIN_SLEEVE_WEIGHTS
 
 
-def test_phase6_floors_in_shadow_promoter():
+def test_phase6_floors_removed_from_shadow_promoter():
+    """options_flow/insider/short_interest are no longer live sleeves — their
+    _SLEEVE_FLOORS entries are pruned along with them (mirrors MIN_SLEEVE_WEIGHTS).
+    A stale floor here would force-reinject cut sleeves on every shadow promotion."""
     from ascent.research.shadow_promoter import _SLEEVE_FLOORS
 
     for sleeve in ("options_flow", "insider", "short_interest"):
-        assert sleeve in _SLEEVE_FLOORS
-        assert _SLEEVE_FLOORS[sleeve] >= 0.01
+        assert sleeve not in _SLEEVE_FLOORS

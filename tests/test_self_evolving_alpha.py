@@ -111,7 +111,7 @@ def test_shadow_promoter_promotes_expired_winner(tmp_path, monkeypatch):
 
     shadow = {
         "variant_id":        "v1_20260318",
-        "alpha_weights":     {"trend": 0.70, "meanrev": 0.05, "statarb": 0.15, "ml": 0.10, "volatility": 0.0},
+        "alpha_weights":     {"meanrev": 0.55, "statarb": 0.45},
         "oos_sharpe":        0.72,
         "edge_over_current": 0.20,
         "shadow_expires":    (date.today() - timedelta(days=1)).isoformat(),
@@ -130,13 +130,14 @@ def test_shadow_promoter_promotes_expired_winner(tmp_path, monkeypatch):
     config = json.loads(active_path.read_text())
     assert "global" in config, "promoted config must have 'global' key"
     g = config["global"]
-    # _restore_sleeve_floors adds floor=0.02 for fundamental and earnings when absent,
-    # then renormalizes — so trend will be slightly below the raw 0.70 input.
-    assert g.get("trend", 0) >= 0.10, "trend must be at or above its minimum floor"
-    # After restoring floor=0.02 for each of fundamental+earnings and renormalizing,
-    # actual value is ~0.019 (0.02 / 1.04). Check presence at near-floor level.
-    assert g.get("fundamental", 0) >= 0.015, "fundamental must be near its 0.02 floor after renorm"
-    assert g.get("earnings", 0) >= 0.015, "earnings must be near its 0.02 floor after renorm"
+    # _SLEEVE_FLOORS is empty post-reduction (meanrev/statarb have no floors) — a variant
+    # containing only the 2 surviving sleeves must pass through unchanged, and no cut
+    # legacy sleeve (trend/fundamental/earnings/analyst/options_flow/insider/short_interest)
+    # should get force-reinjected by _restore_sleeve_floors.
+    assert set(g.keys()) == {"meanrev", "statarb"}, \
+        f"promotion must not reinject cut legacy sleeves, got {set(g.keys())}"
+    assert abs(g["meanrev"] - 0.55) < 0.001
+    assert abs(g["statarb"] - 0.45) < 0.001
     total = sum(g.values())
     assert abs(total - 1.0) < 0.01, f"weights must sum to ~1.0, got {total:.4f}"
 

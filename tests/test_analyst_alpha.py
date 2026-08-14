@@ -200,8 +200,8 @@ def test_analyst_floor_removed_from_self_improve():
     assert "analyst" not in MIN_SLEEVE_WEIGHTS
 
 
-def test_analyst_floor_in_shadow_promoter():
-    """_SLEEVE_FLOORS in shadow_promoter must protect analyst sleeve."""
+def test_analyst_floor_removed_from_shadow_promoter():
+    """analyst is no longer a live sleeve — its _SLEEVE_FLOORS entry is pruned too
+    (mirrors MIN_SLEEVE_WEIGHTS)."""
     from ascent.research.shadow_promoter import _SLEEVE_FLOORS
-    assert "analyst" in _SLEEVE_FLOORS
-    assert _SLEEVE_FLOORS["analyst"] >= 0.01
+    assert "analyst" not in _SLEEVE_FLOORS
