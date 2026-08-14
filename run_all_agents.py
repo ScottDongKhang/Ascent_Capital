@@ -28,7 +28,7 @@ from ascent.portfolio.optimizer import SectorDataError
 from agents.ai_pm_agent import run_ai_pm, run_ai_pm_prethesis, AIPMResult, AIPreThesis
 from ascent.risk.pm_risk_validator import validate as validate_pm_proposal
 from memory.regime_memory import log_episode, update_outcomes
-from ascent.strategy.earned_authority import blend as authority_blend, update_authority, get_state as get_authority_state, rebuild_buffers_from_counterfactual
+from ascent.strategy.earned_authority import update_authority, get_state as get_authority_state, rebuild_buffers_from_counterfactual
 from ascent.strategy.thesis_formatter import format_thesis
 from ascent.monitoring.ai_pm_counterfactual import (
     snapshot_quant_star, snapshot_quant, snapshot_ai_pm,
@@ -1468,13 +1468,20 @@ def main():
             if ai_pm_result.fallback:
                 print("[Runner] AI PM fallback — using quant portfolio unchanged")
             else:
+                # Blend-into-merged_weights write path removed: earned_authority scored
+                # CUT (p=0.35, track_d vs track_astar) in the proof audit. merged_weights
+                # stays the quant book unchanged; validate_pm_proposal() still runs so the
+                # compliance record below keeps reporting whether the AI PM's proposal was
+                # book-valid, and update_authority() (below, in the daily learning brief)
+                # keeps advancing the ladder purely for measurement — it no longer gates a
+                # live write.
                 ok, violations = validate_pm_proposal(ai_pm_result.portfolio)
                 if ok:
                     ai_weight = get_authority_state().get("ai_weight", 0.0)
-                    merged_weights = authority_blend(ai_pm_result.portfolio, merged_weights)
-                    print(f"[Runner] AI PM blend applied (ai_weight={ai_weight * 100:.0f}%)")
+                    print(f"[Runner] AI PM blend NOT applied (write path removed; "
+                          f"ai_weight={ai_weight * 100:.0f}% for measurement only)")
                 else:
-                    print(f"[Runner] AI PM proposal rejected: {violations} — using quant 100%")
+                    print(f"[Runner] AI PM proposal failed validation: {violations} — using quant 100% (unchanged; blend already disabled)")
                 _snap_ai_weights = dict(ai_pm_result.portfolio)  # capture for authority snapshot
 
                 # Track D: snapshot pure AI PM portfolio (diagnostic)
