@@ -331,6 +331,55 @@ def test_check_halt_state_clears_files_on_valid_override(tmp_path):
     assert not override_path.exists(), "halt_override.json should be deleted after valid override"
 
 
+def test_daily_run_invokes_only_us_equities_agent():
+    """Regression for target-architecture task 4.
+
+    macro_agent/international_agent scored CUT on their real universes;
+    alternatives_agent is still unmeasured (excluded pending re-measurement).
+    run_all_agents.py's daily orchestration must build `agent_tasks` — and
+    therefore `agent_outputs` — with exactly one entry: us_equities. The
+    three excluded agent modules must still exist and be importable (their
+    run_*_agent() functions are not deleted, only uncalled from the daily
+    flow), but main() must not reference them.
+    """
+    import ast
+    import inspect
+    import run_all_agents
+
+    source = inspect.getsource(run_all_agents.main)
+    tree = ast.parse(source)
+    func_def = tree.body[0]
+    assert isinstance(func_def, ast.FunctionDef) and func_def.name == "main"
+
+    agent_tasks_assigns = [
+        node for node in ast.walk(func_def)
+        if isinstance(node, ast.Assign)
+        and any(isinstance(t, ast.Name) and t.id == "agent_tasks" for t in node.targets)
+    ]
+    assert len(agent_tasks_assigns) == 1, "expected exactly one agent_tasks assignment in main()"
+
+    value = agent_tasks_assigns[0].value
+    assert isinstance(value, ast.List), "agent_tasks must be a list literal"
+    assert len(value.elts) == 1, (
+        f"agent_tasks must have exactly one entry (us_equities), found {len(value.elts)}"
+    )
+
+    first_entry = value.elts[0]
+    assert isinstance(first_entry, ast.Tuple)
+    agent_name_node = first_entry.elts[0]
+    assert isinstance(agent_name_node, ast.Constant) and agent_name_node.value == "us_equities"
+
+    # macro/international/alternatives must not be invoked anywhere in main()
+    for banned in ("run_macro_agent", "run_international_agent", "run_alternatives_agent"):
+        assert banned not in source, f"{banned} must not be called from run_all_agents.main()"
+
+    # The excluded agent modules must still exist (not deleted) with their
+    # run_*_agent() entry points intact.
+    from agents.macro_agent import run_macro_agent  # noqa: F401
+    from agents.international_agent import run_international_agent  # noqa: F401
+    from agents.alternatives_agent import run_alternatives_agent  # noqa: F401
+
+
 def test_check_halt_state_blocks_override_predating_halt(tmp_path):
     """check_halt_state() returns False when override_date < halt_date."""
     import json, run_all_agents

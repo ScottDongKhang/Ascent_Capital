@@ -846,26 +846,17 @@ def main():
     )
 
     # ── Import agents (lazy, after startup validation) ───────────────────────
+    # macro_agent/international_agent scored CUT on their real universes (proof
+    # audit); alternatives_agent is still unmeasured (unexplained density issue,
+    # excluded pending future re-measurement, not proven negative). Only
+    # us_equities_agent allocates live capital — the other three agent modules
+    # are kept on disk (with their run_*_agent() entry points intact) but are
+    # no longer invoked from the daily orchestration flow.
     from agents.us_equities_agent import run_us_equities_agent
-    from agents.macro_agent import run_macro_agent
     from orchestrator.central_intelligence import run_orchestrator
     from ascent.monitoring.skill_tracker import export_skill_scores
     from ascent.monitoring.forward_pnl_tracker import run_forward_pnl_cycle
     from ascent.monitoring.pre_rebalance_checklist import run_checklist
-
-    _HAS_INTERNATIONAL = False
-    _HAS_ALTERNATIVES = False
-    try:
-        from agents.international_agent import run_international_agent
-        _HAS_INTERNATIONAL = True
-    except ImportError:
-        pass
-
-    try:
-        from agents.alternatives_agent import run_alternatives_agent
-        _HAS_ALTERNATIVES = True
-    except ImportError:
-        pass
 
     # ── Step 0b: Factor data + loadings update ───────────────────────────────
     try:
@@ -880,15 +871,10 @@ def main():
     except Exception as _fle:
         print(f"[FactorModel] Loadings update skipped: {_fle}")
 
-    # ── Step 1: Run all agents in parallel ───────────────────────────────────
+    # ── Step 1: Run agents (only us_equities allocates live capital) ─────────
     agent_tasks = [
         ("us_equities", run_us_equities_agent),
-        ("macro",       run_macro_agent),
     ]
-    if _HAS_INTERNATIONAL:
-        agent_tasks.append(("international", run_international_agent))
-    if _HAS_ALTERNATIVES:
-        agent_tasks.append(("alternatives", run_alternatives_agent))
 
     agent_outputs = []
     with ThreadPoolExecutor(max_workers=len(agent_tasks)) as executor:
@@ -1834,7 +1820,8 @@ def main():
         except Exception:
             pass
         # TODO: wire orchestrator_result.allocation when central_intelligence exposes it
-        _base_alloc = {"us_equities": 0.60, "macro": 0.15, "international": 0.15, "alternatives": 0.10}
+        # Only us_equities allocates live capital (see Step 1 above).
+        _base_alloc = {"us_equities": 1.0}
         _orch_alloc = merged_weights.get("allocation") if isinstance(merged_weights, dict) else None
         portfolio_state = {
             "date":              today.isoformat(),
@@ -1932,9 +1919,7 @@ def _log_run(today, merged_weights, agent_outputs, dry_run):
             for ao in agent_outputs
         },
         "allocation": {
-            ao.agent_id: round(
-                {"us_equities": 0.60, "macro": 0.15, "international": 0.15, "alternatives": 0.10}.get(ao.agent_id, 0.0), 2
-            )
+            ao.agent_id: round({"us_equities": 1.0}.get(ao.agent_id, 0.0), 2)
             for ao in agent_outputs
         },
         "merged_positions": len(merged_weights),

@@ -8,12 +8,19 @@ Upgrades over v1:
    Conviction tells you who is confident right now.
 2. Regime-conditional veto — in crisis regime, macro agent gets override
    authority. Merged weights are forced toward macro's positioning above a floor.
+   NOTE: macro_agent is no longer invoked from the daily run (scored CUT on its
+   real universe), so this veto (_apply_crisis_veto) is defined but not called —
+   see its module comment below.
 3. Partial contradiction detection — factor-level conflict check, not just
    hardcoded symbol pairs. Catches rate-sensitive clustering, sector crowding,
    and directional conflicts across agents even when instruments differ.
 
 Usage:
-    Called by run_all_agents.py — not run standalone.
+    Called by run_all_agents.py — not run standalone. Only us_equities_agent's
+    output feeds this module in production; macro_agent/international_agent/
+    alternatives_agent are excluded from the daily run (see run_all_agents.py)
+    but their AgentOutput shape and this module's merge functions still support
+    multiple agents, for tests and any future re-measurement/re-enablement.
 """
 
 import json
@@ -196,31 +203,20 @@ CONVICTION_MIN_AGENTS = 2      # need at least 2 agents to compute agreement
 CRISIS_VETO_FLOOR  = 0.40   # macro agent controls at least 40% of merged weights in crisis
 CRISIS_VETO_BLEND  = 0.60   # 60% macro, 40% remaining agents in crisis veto
 
-# Base capital allocation (when no skill data or agents warming up)
-# Raised US equity from 0.60 → 0.70 in calm_bull: realized beta was 0.827,
-# costing ~2.4% in the Apr–May rally. Macro/intl/alts trimmed proportionally.
-BASE_ALLOCATION = {
-    "us_equities":   0.70,
-    "macro":         0.10,
-    "international": 0.12,
-    "alternatives":  0.08,
-}
-
-# Stressed regime — shift toward macro and alternatives
-STRESSED_ALLOCATION = {
-    "us_equities":  0.45,
-    "macro":        0.25,
-    "international": 0.10,
-    "alternatives": 0.20,
-}
-
-# Crisis regime — maximum defensive positioning
-CRISIS_ALLOCATION = {
-    "us_equities":  0.30,
-    "macro":        0.30,
-    "international": 0.05,
-    "alternatives": 0.35,
-}
+# Base capital allocation (when no skill data or agents warming up).
+#
+# macro_agent/international_agent scored CUT on their real universes (proof
+# audit); alternatives_agent is still unmeasured, excluded pending future
+# re-measurement. Only us_equities_agent is invoked from the daily run now
+# (see run_all_agents.py), so it is the only key with a nonzero base share.
+# The regime-conditional BASE/STRESSED/CRISIS split that used to shift weight
+# toward macro/alternatives in stress no longer has other agents to shift
+# toward; _compute_allocation() renormalizes to 1.0 regardless of the value
+# here as long as it's positive, so a single flat allocation covers all
+# regimes.
+BASE_ALLOCATION = {"us_equities": 1.0}
+STRESSED_ALLOCATION = BASE_ALLOCATION
+CRISIS_ALLOCATION = BASE_ALLOCATION
 
 
 # ── Early-zero check ──────────────────────────────────────────────────────────
@@ -584,6 +580,12 @@ def merge_agent_outputs(
 
 
 # ── Crisis regime veto ────────────────────────────────────────────────────────
+# NOT CALLED from run_orchestrator() below — macro_agent is no longer invoked
+# from the daily run (it scored CUT on its real universe; see run_all_agents.py),
+# so this veto's trigger condition (a present macro agent output) can never be
+# met in production and calling it would just log "macro agent absent" every
+# crisis day. Left defined, not deleted, in case macro_agent is individually
+# re-measured and re-added later.
 
 def _apply_crisis_veto(
     merged: Dict[str, float],
@@ -783,12 +785,13 @@ def run_orchestrator(agent_outputs: List[AgentOutput]) -> Dict[str, float]:
     # Thesis coherence — symbol-level + factor-level partial contradictions
     merged = _check_thesis_coherence(merged, agent_outputs)
 
-    # Crisis veto — macro agent override authority in crisis regime
+    # Crisis veto (_apply_crisis_veto) is intentionally not called here — its
+    # trigger (a present macro agent output) can never fire now that macro_agent
+    # is excluded from the daily run. See the function's module comment above.
     us_regime = next(
         (ao.regime_signal for ao in agent_outputs if ao.agent_id == "us_equities"),
         None,
     )
-    merged = _apply_crisis_veto(merged, agent_outputs, us_regime)
 
     # Final position cap — correlation guard and thesis coherence can push names
     # above MAX_POSITION_WEIGHT through renormalization; re-cap before returning.
