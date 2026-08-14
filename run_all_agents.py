@@ -2925,9 +2925,9 @@ def _trigger_mini_rebalance(
         # This path used to additionally apply changes[0] via the shared
         # apply_judge_position_change helper after the candidate insert; that
         # call is gone. The verdict (including position_changes) is still
-        # fully written
-        # to outputs/debate_log/verdict_<date>.json by run_debate() above, so
-        # nothing here loses visibility -- it just no longer mutates new_weights.
+        # fully written to outputs/debate_log/verdict_<date>.json by
+        # run_debate() above, so nothing here loses visibility -- it just no
+        # longer mutates new_weights.
         _proposed = (verdict or {}).get("position_changes") or []
         if _proposed:
             _pc = _proposed[0]
