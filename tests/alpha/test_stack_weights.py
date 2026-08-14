@@ -28,6 +28,41 @@ def test_self_improve_weights_match_stack():
     )
 
 
+def test_build_alpha_stack_ignores_regime_signal():
+    """regime_overlay scored CUT (p=0.35) in the proof audit — build_alpha_stack()
+    must produce an identical composite regardless of what regime_signal is passed.
+    Regression guard for removing the regime-conditional weight-adjustment branch."""
+    import numpy as np
+    import pandas as pd
+    from types import SimpleNamespace
+    from enum import Enum
+    from ascent.alpha.stack import build_alpha_stack
+
+    syms = ["AAA", "BBB", "CCC", "DDD"]
+    dates = pd.bdate_range("2024-01-01", periods=60)
+    rng = np.random.RandomState(1)
+    close = pd.DataFrame(
+        100 * np.cumprod(1 + rng.normal(0, 0.01, size=(len(dates), len(syms))), axis=0),
+        index=dates, columns=syms,
+    )
+    features = {
+        "close": close,
+        "returns_1d": close.pct_change().fillna(0),
+        "mom_252d": close.pct_change(252).fillna(0),
+        "vol_21d": close.pct_change().rolling(21).std().fillna(0.01),
+    }
+
+    class _Label(Enum):
+        STRESSED = "stressed"
+
+    fake_regime_signal = SimpleNamespace(label=_Label.STRESSED)
+
+    composite_no_regime = build_alpha_stack(features, regime_signal=None)
+    composite_with_regime = build_alpha_stack(features, regime_signal=fake_regime_signal)
+
+    pd.testing.assert_frame_equal(composite_no_regime, composite_with_regime)
+
+
 def test_llm_fundamental_series_sleeve_does_not_crash_blend(monkeypatch):
     """llm_fundamental_alpha returns a cross-sectional (per-symbol) Series; the stack
     must broadcast it to a date×symbol panel before _cs_normalize (df.mean(axis=1)),

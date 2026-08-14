@@ -155,7 +155,9 @@ def build_alpha_stack(features, alpha_weights=None, regime_signal=None, agent_id
     Args:
         features:          Dict of feature DataFrames
         alpha_weights:     Optional override for sleeve mixing weights
-        regime_signal:     Optional regime signal for regime-aware weight adjustment
+        regime_signal:     Unused (kept for call-site compatibility). Regime-conditional
+                           weight adjustment was removed; regime_overlay scored CUT
+                           (no proven value) in the proof audit.
         agent_id:          Agent identifier passed to ML sleeve for model cache key.
         ai_prior:          AI PM sleeve weight adjustments (global IC deltas).
         return_breakdown:  If True, return (composite, breakdown_dict) where
@@ -165,23 +167,15 @@ def build_alpha_stack(features, alpha_weights=None, regime_signal=None, agent_id
                                "primary_sleeve": {symbol: str},  # sleeve with highest contribution
                            }
     """
+    # regime_signal is accepted for call-site compatibility but no longer used to
+    # adjust sleeve weights: regime_overlay scored CUT (p=0.35, no proven value) in
+    # the proof audit, so build_alpha_stack() always uses the flat
+    # DEFAULT_ALPHA_WEIGHTS (or an explicit override). See
+    # ascent.regime.integration.apply_regime_to_portfolio for the separate,
+    # in-scope regime overlay on the backtest path.
     if alpha_weights is None:
-        regime_label = None
-        if regime_signal is not None:
-            try:
-                regime_label = str(regime_signal.label.value).lower()
-            except Exception:
-                pass
-        alpha_weights = _load_active_alpha_weights(regime=regime_label, ai_prior=ai_prior)
+        alpha_weights = _load_active_alpha_weights(ai_prior=ai_prior)
         alpha_weights = _get_gated_weights(alpha_weights)
-    if regime_signal is not None:
-        try:
-            from ascent.regime import regime_adjust_sleeve_weights
-            alpha_weights = regime_adjust_sleeve_weights(
-                base_sleeve_weights=alpha_weights, signal=regime_signal)
-            log.info("alpha_stack: regime=%s", regime_signal.label.value)
-        except Exception as exc:
-            log.warning("regime adjustment failed: %s", exc)
     alphas = {}
     try:
         trend = trend_alpha(features)
