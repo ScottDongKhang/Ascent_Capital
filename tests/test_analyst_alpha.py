@@ -175,11 +175,11 @@ def test_grade_score_mapping():
 
 # ── stack integration ──────────────────────────────────────────────────────────
 
-def test_default_alpha_weights_include_analyst():
-    """DEFAULT_ALPHA_WEIGHTS in stack.py must include analyst at >= 0.02."""
+def test_default_alpha_weights_excludes_analyst():
+    """Post proof-audit reduction: analyst didn't clear the significance bar and is
+    excluded-unmeasured, not live-weighted. DEFAULT_ALPHA_WEIGHTS is meanrev/statarb only."""
     from ascent.alpha.stack import DEFAULT_ALPHA_WEIGHTS
-    assert "analyst" in DEFAULT_ALPHA_WEIGHTS
-    assert DEFAULT_ALPHA_WEIGHTS["analyst"] >= 0.02
+    assert "analyst" not in DEFAULT_ALPHA_WEIGHTS
     assert abs(sum(DEFAULT_ALPHA_WEIGHTS.values()) - 1.0) < 0.001
 
 
@@ -194,11 +194,10 @@ def test_self_improve_weights_match_stack():
         assert abs(stack_w[k] - si_w[k]) < 0.001, f"sleeve '{k}' mismatch"
 
 
-def test_analyst_floor_in_self_improve():
-    """MIN_SLEEVE_WEIGHTS must include analyst floor."""
+def test_analyst_floor_removed_from_self_improve():
+    """analyst is no longer a live sleeve — its MIN_SLEEVE_WEIGHTS floor is pruned."""
     from ascent.research.self_improve import MIN_SLEEVE_WEIGHTS
-    assert "analyst" in MIN_SLEEVE_WEIGHTS
-    assert MIN_SLEEVE_WEIGHTS["analyst"] >= 0.01
+    assert "analyst" not in MIN_SLEEVE_WEIGHTS
 
 
 def test_analyst_floor_in_shadow_promoter():

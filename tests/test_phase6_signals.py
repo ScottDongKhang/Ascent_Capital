@@ -277,15 +277,14 @@ def test_transaction_score_mapping():
 
 # ── stack integration ─────────────────────────────────────────────────────────
 
-def test_default_weights_include_phase6():
+def test_default_weights_exclude_phase6():
+    """Post proof-audit reduction: options_flow/insider/short_interest are excluded-
+    unmeasured, not live-weighted. DEFAULT_ALPHA_WEIGHTS is meanrev/statarb only."""
     from ascent.alpha.stack import DEFAULT_ALPHA_WEIGHTS
 
-    assert "options_flow"  in DEFAULT_ALPHA_WEIGHTS
-    assert "insider"       in DEFAULT_ALPHA_WEIGHTS
-    assert "short_interest" in DEFAULT_ALPHA_WEIGHTS
-    assert DEFAULT_ALPHA_WEIGHTS["options_flow"]  >= 0.01
-    assert DEFAULT_ALPHA_WEIGHTS["insider"]       >= 0.01
-    assert DEFAULT_ALPHA_WEIGHTS["short_interest"] >= 0.01
+    assert "options_flow"   not in DEFAULT_ALPHA_WEIGHTS
+    assert "insider"        not in DEFAULT_ALPHA_WEIGHTS
+    assert "short_interest" not in DEFAULT_ALPHA_WEIGHTS
     assert abs(sum(DEFAULT_ALPHA_WEIGHTS.values()) - 1.0) < 0.001
 
 
@@ -300,12 +299,13 @@ def test_self_improve_weights_match_stack():
         assert abs(stack_w[k] - si_w[k]) < 0.001, f"sleeve '{k}' mismatch"
 
 
-def test_phase6_floors_in_self_improve():
+def test_phase6_floors_removed_from_self_improve():
+    """options_flow/insider/short_interest are no longer live sleeves — their
+    MIN_SLEEVE_WEIGHTS floors are pruned along with them."""
     from ascent.research.self_improve import MIN_SLEEVE_WEIGHTS
 
     for sleeve in ("options_flow", "insider", "short_interest"):
-        assert sleeve in MIN_SLEEVE_WEIGHTS
-        assert MIN_SLEEVE_WEIGHTS[sleeve] >= 0.01
+        assert sleeve not in MIN_SLEEVE_WEIGHTS
 
 
 def test_phase6_floors_in_shadow_promoter():

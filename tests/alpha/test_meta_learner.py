@@ -192,12 +192,21 @@ def test_stack_uses_meta_learner_when_posteriors_exist(monkeypatch, tmp_path):
 
 def test_stack_falls_back_to_regime_defaults_when_meta_learner_returns_none(monkeypatch, tmp_path):
     """When meta-learner returns None (sparse data), defaults are used."""
+    # Isolate from the real repo's data_cache/active_alpha_config.json — without this,
+    # _load_active_alpha_weights's config_global_weights fallback picks up live state
+    # instead of exercising the flat-default path this test targets.
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "data_cache").mkdir()
+
     from ascent.alpha import meta_learner as _ml_mod
 
     p = tmp_path / "posteriors.json"
     p.write_text("{}")
     monkeypatch.setattr(_ml_mod, "POSTERIORS_PATH", p)
 
-    from ascent.alpha.stack import _load_active_alpha_weights, DEFAULT_ALPHA_WEIGHTS_BY_REGIME
+    from ascent.alpha.stack import _load_active_alpha_weights, DEFAULT_ALPHA_WEIGHTS
     weights = _load_active_alpha_weights(regime="calm_bull")
-    assert weights == DEFAULT_ALPHA_WEIGHTS_BY_REGIME["calm_bull"]
+    # DEFAULT_ALPHA_WEIGHTS_BY_REGIME was removed in the 2-sleeve reduction — with only
+    # meanrev/statarb live there is nothing left to regime-tilt, so the fallback is now
+    # the flat DEFAULT_ALPHA_WEIGHTS.
+    assert weights == DEFAULT_ALPHA_WEIGHTS

@@ -187,21 +187,22 @@ def test_earnings_alpha_handles_single_symbol():
 
 # ── Task 4: Stack / ML / Wiring ───────────────────────────────────────────────
 
-def test_default_alpha_weights_include_earnings():
-    """DEFAULT_ALPHA_WEIGHTS has earnings=0.05 and sums to 1.0."""
+def test_default_alpha_weights_excludes_earnings():
+    """Post proof-audit reduction: earnings (PEAD) didn't clear the significance bar and is
+    excluded-unmeasured. DEFAULT_ALPHA_WEIGHTS is meanrev/statarb only, summing to 1.0."""
     from ascent.alpha.stack import DEFAULT_ALPHA_WEIGHTS
 
-    assert "earnings" in DEFAULT_ALPHA_WEIGHTS
-    assert abs(DEFAULT_ALPHA_WEIGHTS["earnings"] - 0.05) < 1e-9
+    assert "earnings" not in DEFAULT_ALPHA_WEIGHTS
     total = sum(DEFAULT_ALPHA_WEIGHTS.values())
     assert abs(total - 1.0) < 1e-9, f"Weights sum to {total}, not 1.0"
 
 
-def test_default_alpha_weights_fundamental_disabled():
-    """fundamental weight is 0.00 — IC-t=-4.75 across 31 live days makes it an anti-signal."""
+def test_default_alpha_weights_excludes_fundamental():
+    """fundamental is measured-CUT (IC-t=-4.75 anti-signal) and is no longer a live key at all
+    — it's not just zeroed, it's absent from the reduced meanrev/statarb weight table."""
     from ascent.alpha.stack import DEFAULT_ALPHA_WEIGHTS
 
-    assert DEFAULT_ALPHA_WEIGHTS["fundamental"] == 0.00
+    assert "fundamental" not in DEFAULT_ALPHA_WEIGHTS
 
 
 def test_ml_features_include_earnings_surprise():

@@ -1,37 +1,37 @@
 """tests/test_alpha_stack_weights.py
-Weight integrity + stack skip-on-empty tests for the earnings_tone sleeve.
-Covers the 4 paths from the reconciled plan coverage diagram.
+Weight integrity + stack skip-on-empty tests.
+
+Post proof-audit reduction: DEFAULT_ALPHA_WEIGHTS carries only meanrev/statarb
+(the 2 of 15 sleeves that cleared the walk-forward significance bar). The
+earnings_tone-specific skip-on-empty regression and the DEFAULT_ALPHA_WEIGHTS_BY_REGIME
+sum check are gone with it: earnings_tone is no longer live-weighted, and there is
+nothing left to regime-tilt between two equal-weighted sleeves. The earnings_tone
+sleeve implementation itself is untouched and still importable.
 """
 import pandas as pd
 import pytest
 from unittest.mock import patch
 
 
-# ── test_stack_skips_empty_earnings_tone ──────────────────────────────────────
+# ── test_earnings_tone_sleeve_still_returns_empty_on_empty_cache ──────────────
+# (sleeve implementation code stays in the repo for future re-measurement;
+# this regression guard is kept even though the sleeve is no longer weighted)
 
-def test_stack_skips_empty_earnings_tone():
-    """Empty earnings_tone sleeve → stack skips it; blend still renormalizes to sum=1.0."""
-    from ascent.alpha.stack import DEFAULT_ALPHA_WEIGHTS
-
-    assert "earnings_tone" in DEFAULT_ALPHA_WEIGHTS, \
-        "earnings_tone must be registered in DEFAULT_ALPHA_WEIGHTS"
-
-    # Confirm empty sleeve is not in alphas dict (skipped), i.e. the block does not
-    # insert an empty DF. We test this by importing and calling earnings_tone_alpha
-    # with an empty loader, then verifying it returns empty.
+def test_earnings_tone_sleeve_still_returns_empty_on_empty_cache():
+    """earnings_tone_alpha still returns an empty DF on an empty transcript cache."""
     from ascent.alpha.earnings_tone import earnings_tone_alpha
     features = {"close": pd.DataFrame(150.0, index=pd.bdate_range("2026-01-05", periods=3), columns=["AAPL"])}
 
     with patch("ascent.alpha.earnings_tone.load_transcript_signals", return_value=pd.DataFrame()):
         result = earnings_tone_alpha(features)
 
-    assert result.empty, "Empty cache must produce empty DF so stack skips it"
+    assert result.empty, "Empty cache must produce empty DF"
 
 
 # ── test_default_weights_sum_to_one ──────────────────────────────────────────
 
 def test_default_weights_sum_to_one():
-    """DEFAULT_ALPHA_WEIGHTS in stack.py must sum to 1.0 after adding earnings_tone."""
+    """DEFAULT_ALPHA_WEIGHTS in stack.py must sum to 1.0."""
     from ascent.alpha.stack import DEFAULT_ALPHA_WEIGHTS
 
     total = sum(DEFAULT_ALPHA_WEIGHTS.values())
@@ -39,30 +39,15 @@ def test_default_weights_sum_to_one():
         f"DEFAULT_ALPHA_WEIGHTS must sum to 1.0, got {total}"
 
 
-# ── test_regime_variants_sum_to_one ──────────────────────────────────────────
+# ── test_default_alpha_weights_reduced_to_meanrev_statarb ─────────────────────
 
-def test_regime_variants_sum_to_one():
-    """Each regime variant in DEFAULT_ALPHA_WEIGHTS_BY_REGIME must sum to ~1.0."""
-    from ascent.alpha.stack import DEFAULT_ALPHA_WEIGHTS_BY_REGIME
-
-    for regime, weights in DEFAULT_ALPHA_WEIGHTS_BY_REGIME.items():
-        total = sum(weights.values())
-        assert abs(total - 1.0) < 1e-9, \
-            f"Regime '{regime}' weights sum to {total}, expected 1.0"
-
-
-# ── test_self_improve_has_earnings_tone ───────────────────────────────────────
-
-def test_self_improve_has_earnings_tone():
-    """self_improve.DEFAULT_ALPHA_WEIGHTS must include earnings_tone (integrity constraint #6)."""
+def test_default_alpha_weights_reduced_to_meanrev_statarb():
+    """Only meanrev/statarb cleared the proof audit's walk-forward significance bar."""
     from ascent.research.self_improve import DEFAULT_ALPHA_WEIGHTS as SI_WEIGHTS
     from ascent.alpha.stack import DEFAULT_ALPHA_WEIGHTS as STACK_WEIGHTS
 
-    assert "earnings_tone" in SI_WEIGHTS, \
-        "self_improve.DEFAULT_ALPHA_WEIGHTS missing 'earnings_tone' — violates constraint #6"
+    assert set(STACK_WEIGHTS) == set(SI_WEIGHTS) == {"meanrev", "statarb"}, \
+        "DEFAULT_ALPHA_WEIGHTS key sets must match between stack.py and self_improve.py " \
+        "(integrity constraint #6) and be reduced to {meanrev, statarb}"
 
-    assert "earnings_tone" in STACK_WEIGHTS, \
-        "stack.DEFAULT_ALPHA_WEIGHTS missing 'earnings_tone'"
-
-    assert SI_WEIGHTS["earnings_tone"] == STACK_WEIGHTS["earnings_tone"], \
-        "earnings_tone weight must match between stack.py and self_improve.py"
+    assert STACK_WEIGHTS == SI_WEIGHTS == {"meanrev": 0.50, "statarb": 0.50}

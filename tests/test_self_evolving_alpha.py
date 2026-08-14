@@ -59,8 +59,10 @@ def test_stack_falls_back_to_defaults_when_no_config(tmp_path, monkeypatch):
     importlib.reload(stack_mod)
 
     loaded = stack_mod._load_active_alpha_weights()
-    assert abs(loaded.get("trend", 0) - 0.41) < 0.001, \
-        "without config file, trend should be default 0.41"
+    assert abs(loaded.get("meanrev", 0) - 0.50) < 0.001, \
+        "without config file, meanrev should be default 0.50"
+    assert abs(loaded.get("statarb", 0) - 0.50) < 0.001, \
+        "without config file, statarb should be default 0.50"
 
 
 def test_stack_uses_regime_weights_when_regime_in_config(tmp_path, monkeypatch):
@@ -90,7 +92,7 @@ def test_stack_falls_back_to_global_for_unknown_regime(tmp_path, monkeypatch):
     import ascent.alpha.stack as stack_mod
     importlib.reload(stack_mod)
 
-    # Use a truly unknown regime name (euphoric/uncertain are now in DEFAULT_ALPHA_WEIGHTS_BY_REGIME)
+    # Use a regime name with no meta-learner posterior data — falls through to config global
     loaded = stack_mod._load_active_alpha_weights(regime="alien_regime")
     assert abs(loaded.get("trend", 0) - 0.70) < 0.001
 

@@ -44,7 +44,7 @@ import numpy as np
 
 from .portfolio_strategy import PortfolioBaseStrategy
 
-from ascent.alpha.stack import DEFAULT_ALPHA_WEIGHTS, DEFAULT_ALPHA_WEIGHTS_BY_REGIME, build_alpha_stack
+from ascent.alpha.stack import DEFAULT_ALPHA_WEIGHTS, build_alpha_stack
 from ascent.features.build_features import FeatureBuilder
 from ascent.portfolio.optimizer import sector_constrained_weighted, enforce_risk_budget_cap
 
@@ -637,10 +637,9 @@ class AscentPortfolioStrategy(PortfolioBaseStrategy):
           crisis   : trend capped at 0.30
         This prevents the optimizer from running full momentum into a crash.
         """
-        if regime and regime in DEFAULT_ALPHA_WEIGHTS_BY_REGIME:
-            base_defaults = dict(DEFAULT_ALPHA_WEIGHTS_BY_REGIME[regime])
-        else:
-            base_defaults = dict(DEFAULT_ALPHA_WEIGHTS)
+        # DEFAULT_ALPHA_WEIGHTS_BY_REGIME was removed (only meanrev/statarb survive
+        # the reduction, so there is nothing left to regime-tilt between).
+        base_defaults = dict(DEFAULT_ALPHA_WEIGHTS)
 
         if self.alpha_weights_override:
             base_defaults.update(self.alpha_weights_override)

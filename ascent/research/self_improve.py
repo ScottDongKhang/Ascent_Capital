@@ -35,21 +35,8 @@ ACTIVE_CONFIG_PATH = Path("data_cache/active_alpha_config.json")
 
 # Match current stack.py defaults exactly
 DEFAULT_ALPHA_WEIGHTS = {
-    "trend":           0.41,   # 0.43 - 0.02 donated to earnings_tone
-    "meanrev":         0.05,
-    "statarb":         0.15,
-    "ml":              0.10,
-    "volatility":      0.05,
-    "fundamental":     0.00,   # IC=-0.015, IC-t=-4.75 across 31 live days: anti-signal, disabled
-    "llm_fundamental": 0.03,
-    "earnings":        0.05,
-    "analyst":         0.05,
-    "options_flow":    0.02,
-    "insider":         0.02,
-    "short_interest":  0.02,
-    "altdata":         0.00,   # zero until first source passes IC gate
-    "narrative":       0.03,   # activate narrative alpha
-    "earnings_tone":   0.02,   # IC-gated; no floor (unvalidated — must remain prunable)
+    "meanrev": 0.50,
+    "statarb": 0.50,
 }
 
 PERTURB_RANGE  = 0.10   # max +/- 10% per sleeve per variant
@@ -64,14 +51,9 @@ OOS_WINDOW     = 63     # trading days (for future real eval)
 # fall within the ±10% perturbation range.
 # fundamental is excluded: IC-t=-4.75 makes it an anti-signal; the loop
 # must be free to keep it at zero.
-MIN_SLEEVE_WEIGHTS = {
-    "trend":          0.10,   # core signal — never drop below 10%
-    "earnings":       0.02,   # PEAD signal — floor at 2%
-    "analyst":        0.02,   # analyst revision signal — floor at 2%
-    "options_flow":   0.01,   # options sentiment — floor at 1%
-    "insider":        0.01,   # insider flow — floor at 1%
-    "short_interest": 0.01,   # short squeeze — floor at 1%
-}
+# meanrev/statarb (the only surviving sleeves) had no floors defined pre-reduction,
+# so there is nothing to carry forward here.
+MIN_SLEEVE_WEIGHTS = {}
 
 
 # ── Config I/O ─────────────────────────────────────────────────────────────────

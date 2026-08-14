@@ -125,11 +125,10 @@ def test_respects_45day_filing_lag(tmp_path):
     # Should not crash; data within 45-day lag is excluded silently
 
 
-def test_stack_includes_llm_fundamental_sleeve():
+def test_stack_excludes_llm_fundamental_sleeve():
+    """Post proof-audit reduction: llm_fundamental is excluded-unmeasured, not live-weighted."""
     from ascent.alpha.stack import DEFAULT_ALPHA_WEIGHTS
-    assert "llm_fundamental" in DEFAULT_ALPHA_WEIGHTS, \
-        "stack.py DEFAULT_ALPHA_WEIGHTS must include llm_fundamental sleeve"
-    assert DEFAULT_ALPHA_WEIGHTS["llm_fundamental"] > 0
+    assert "llm_fundamental" not in DEFAULT_ALPHA_WEIGHTS
     assert abs(sum(DEFAULT_ALPHA_WEIGHTS.values()) - 1.0) < 1e-6, \
         "Sleeve weights must sum to 1.0"
 

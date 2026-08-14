@@ -375,11 +375,11 @@ def test_altdata_alpha_combines_weighted(tmp_path):
 
 # ── Task 7 (stack integration) ───────────────────────────────────────────────
 
-def test_altdata_sleeve_in_stack_at_zero_weight():
-    """DEFAULT_ALPHA_WEIGHTS includes altdata key at 0.00 weight."""
+def test_altdata_sleeve_not_in_reduced_stack():
+    """Post proof-audit reduction, DEFAULT_ALPHA_WEIGHTS carries only meanrev/statarb —
+    altdata never passed the IC gate and is excluded-unmeasured, not live-weighted."""
     from ascent.alpha.stack import DEFAULT_ALPHA_WEIGHTS
-    assert "altdata" in DEFAULT_ALPHA_WEIGHTS
-    assert DEFAULT_ALPHA_WEIGHTS["altdata"] == 0.00
+    assert "altdata" not in DEFAULT_ALPHA_WEIGHTS
 
 
 # ── Task 1 (SEC detail JSON + freshness gate) ─────────────────────────────────

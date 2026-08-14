@@ -160,12 +160,12 @@ def test_fundamental_alpha_works_without_fundamentals():
 
 # ── Task 3 tests ───────────────────────────────────────────────────────────────
 
-def test_default_alpha_weights_include_fundamental():
+def test_default_alpha_weights_excludes_fundamental():
+    """Post proof-audit reduction: fundamental (IC-t=-4.75 anti-signal) and trend (unmeasured-
+    significant) are both absent. DEFAULT_ALPHA_WEIGHTS is meanrev/statarb only."""
     from ascent.alpha.stack import DEFAULT_ALPHA_WEIGHTS
-    assert "fundamental" in DEFAULT_ALPHA_WEIGHTS
-    # fundamental disabled: IC-t=-4.75 across 31 live days makes it an anti-signal
-    assert DEFAULT_ALPHA_WEIGHTS["fundamental"] == 0.00
-    assert abs(DEFAULT_ALPHA_WEIGHTS["trend"] - 0.41) < 0.001
+    assert "fundamental" not in DEFAULT_ALPHA_WEIGHTS
+    assert "trend" not in DEFAULT_ALPHA_WEIGHTS
     assert abs(sum(DEFAULT_ALPHA_WEIGHTS.values()) - 1.0) < 0.01
 
 
@@ -191,18 +191,9 @@ def test_feature_builder_accepts_fundamentals_df():
 import json
 
 
-def test_calm_bull_zeroes_fundamental():
-    from ascent.alpha.stack import _load_active_alpha_weights
-    weights = _load_active_alpha_weights(regime="calm_bull")
-    assert weights["fundamental"] == 0.0
-    assert weights["trend"] > 0.38
-
-
-def test_stressed_keeps_fundamental():
-    # fundamental restored in stressed/crisis regimes: quality premium works in risk-off
-    from ascent.alpha.stack import _load_active_alpha_weights
-    weights = _load_active_alpha_weights(regime="stressed")
-    assert weights["fundamental"] > 0.0  # intentionally re-enabled for risk-off regimes
+# test_calm_bull_zeroes_fundamental / test_stressed_keeps_fundamental removed: they tested
+# DEFAULT_ALPHA_WEIGHTS_BY_REGIME's fundamental/trend tilts, which no longer exist now that
+# DEFAULT_ALPHA_WEIGHTS carries only meanrev/statarb — there is nothing left to regime-tilt.
 
 
 def test_ic_gate_zeroes_negative_sleeve(tmp_path):

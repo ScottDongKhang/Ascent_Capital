@@ -14,53 +14,11 @@ from ascent.alpha.ml_sleeve import build_ml_alpha, build_ml_alpha_cpcv
 log = logging.getLogger(__name__)
 
 DEFAULT_ALPHA_WEIGHTS = {
-    "trend":           0.41,   # 0.43 - 0.02 donated to earnings_tone (IC-gated, unvalidated)
-    "meanrev":         0.05,
-    "volatility":      0.05,
-    "statarb":         0.15,
-    "ml":              0.10,
-    "fundamental":     0.00,   # IC=-0.015, IC-t=-4.75 across 31 live days: anti-signal, disabled
-    "llm_fundamental": 0.03,
-    "earnings":        0.05,
-    "analyst":         0.05,
-    "options_flow":    0.02,
-    "insider":         0.02,
-    "short_interest":  0.02,
-    "altdata":         0.00,   # zero until first source passes IC gate
-    "narrative":       0.03,   # activate narrative alpha
-    "earnings_tone":   0.02,   # IC-gated; offline panel built weekly; no floor (unvalidated)
+    "meanrev": 0.50,
+    "statarb": 0.50,
 }
 
 IC_GATE_THRESHOLD = -0.005  # tightened from -0.010: fundamental IC=-0.008 recently evaded the gate
-
-DEFAULT_ALPHA_WEIGHTS_BY_REGIME = {
-    "calm_bull": {
-        **DEFAULT_ALPHA_WEIGHTS,
-        "statarb":     0.00,
-        "trend":       0.56,   # absorbs statarb(0.15); trend base 0.41+0.15=0.56
-    },
-    "stressed": {
-        **DEFAULT_ALPHA_WEIGHTS,
-        "fundamental": 0.08,   # restored: quality premium works in risk-off regimes
-        "trend":       0.33,   # 0.41 - 0.08 (donated to fundamental)
-        # statarb kept at 0.15 — sector-residual mean reversion works in high-dispersion regimes
-    },
-    "crisis": {
-        **DEFAULT_ALPHA_WEIGHTS,
-        "fundamental": 0.08,   # restored: flight-to-quality in crisis
-        "trend":       0.28,   # 0.41 - 0.08 (fundamental) - 0.05 (volatility boost)
-        "volatility":  0.10,
-        # statarb kept at 0.15 — sector dispersion is highest in crisis
-    },
-    "euphoric": {
-        **DEFAULT_ALPHA_WEIGHTS,
-        "statarb":     0.00,
-        "trend":       0.56,   # same logic as calm_bull
-    },
-    "uncertain": {
-        **DEFAULT_ALPHA_WEIGHTS,
-    },
-}
 
 
 def _load_active_alpha_weights(regime: str = None, ai_prior: dict = None) -> dict:
@@ -83,7 +41,9 @@ def _load_active_alpha_weights(regime: str = None, ai_prior: dict = None) -> dic
         except Exception as exc:
             log.warning("_load_active_alpha_weights: failed to load config (%s) — using defaults", exc)
 
-    # Priority: config by_regime → meta-learner → DEFAULT_ALPHA_WEIGHTS_BY_REGIME → config global → flat default
+    # Priority: config by_regime → meta-learner → config global → flat default
+    # (DEFAULT_ALPHA_WEIGHTS_BY_REGIME was removed: with only meanrev/statarb live,
+    # there is nothing left to regime-tilt between.)
     if config_regime_weights is not None:
         return config_regime_weights
 
@@ -91,18 +51,14 @@ def _load_active_alpha_weights(regime: str = None, ai_prior: dict = None) -> dic
         regime_key = str(regime).lower()
         try:
             from ascent.alpha.meta_learner import SleeveMetaLearner, log_weight_proposal
-            regime_defaults = DEFAULT_ALPHA_WEIGHTS_BY_REGIME.get(regime_key, DEFAULT_ALPHA_WEIGHTS)
             ml = SleeveMetaLearner()
-            ml_weights = ml.get_weights(regime_key, regime_defaults, ai_prior=ai_prior)
+            ml_weights = ml.get_weights(regime_key, DEFAULT_ALPHA_WEIGHTS, ai_prior=ai_prior)
             if ml_weights is not None:
                 log.info("_load_active_alpha_weights: meta-learner weights for regime=%s", regime_key)
                 log_weight_proposal(regime_key, ml_weights, "meta_learner")
                 return ml_weights
         except Exception as exc:
             log.warning("_load_active_alpha_weights: meta-learner error (%s) — using regime defaults", exc)
-
-        if regime_key in DEFAULT_ALPHA_WEIGHTS_BY_REGIME:
-            return DEFAULT_ALPHA_WEIGHTS_BY_REGIME[regime_key].copy()
 
     if config_global_weights is not None:
         return config_global_weights

@@ -4,11 +4,13 @@ Test narrative alpha weight activation.
 import pytest
 
 
-def test_narrative_weight_nonzero():
-    from ascent.alpha.stack import DEFAULT_ALPHA_WEIGHTS
-    assert DEFAULT_ALPHA_WEIGHTS["narrative"] == 0.03, (
-        f"Expected narrative=0.03, got {DEFAULT_ALPHA_WEIGHTS['narrative']}"
-    )
+def test_default_alpha_weights_key_sets_match():
+    """Post-reduction: only meanrev/statarb survive, equal-weighted, in both files."""
+    from ascent.alpha.stack import DEFAULT_ALPHA_WEIGHTS as stack_w
+    from ascent.research.self_improve import DEFAULT_ALPHA_WEIGHTS as si_w
+
+    assert set(stack_w) == set(si_w) == {"meanrev", "statarb"}
+    assert stack_w == {"meanrev": 0.50, "statarb": 0.50}
 
 
 def test_weights_sum_to_one():
