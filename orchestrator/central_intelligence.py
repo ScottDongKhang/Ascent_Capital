@@ -24,6 +24,7 @@ Usage:
 """
 
 import json
+import logging
 from datetime import date
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -269,6 +270,19 @@ def _apply_early_zeros(
 
     Defensive agents (macro, alternatives) are exempt when regime is calm_bull
     or neutral — they are designed to underperform in risk-on regimes.
+
+    DEGENERATE CASE (the live one, since only us_equities allocates capital):
+    if EVERY present agent fails the check there are no survivors to
+    redistribute to, and the pre-existing code path returned an all-zero base.
+    With 4 agents that could not happen in practice; with 1 it turns a stale
+    `dashboard/agent_skill_scores.json` or an ordinary drawdown stretch into
+    `merged_weights == {}`, which aborts the entire run in run_all_agents.py —
+    a silent single point of total failure. This gate is a *relative*
+    reallocation tool: with nothing to reallocate to it has no opinion to
+    express, so it logs loudly at WARNING and applies nothing rather than
+    halting the pipeline. Reducing gross exposure on a bad Sharpe stretch is a
+    separate policy decision that belongs to the risk layer, not to a
+    redistribution helper.
     """
     zeroed = []
     for aid in agent_ids:
@@ -283,12 +297,32 @@ def _apply_early_zeros(
         return [], base
 
     zeroed_ids = [aid for aid, _ in zeroed]
+    survivors = [aid for aid in agent_ids if aid not in zeroed_ids]
+
+    if not survivors:
+        logging.warning(
+            "[Orchestrator] Early-zero gate NOT applied: every present agent "
+            "(%s) has a non-positive rolling Sharpe over >=%dd, leaving nobody "
+            "to redistribute to. Proceeding with the full base allocation "
+            "rather than halting the run. Sharpes: %s. Check "
+            "dashboard/agent_skill_scores.json is fresh, and treat this as a "
+            "real risk signal about the only capital-allocating agent.",
+            ", ".join(zeroed_ids),
+            EARLY_ZERO_MIN_DAYS,
+            ", ".join(f"{aid}={s:.3f}" for aid, s in zeroed),
+        )
+        print(
+            "[Orchestrator] WARNING: all agents failed the early-zero Sharpe "
+            f"check ({', '.join(f'{aid}={s:.3f}' for aid, s in zeroed)}) — "
+            "gate not applied, full base allocation stands"
+        )
+        return [], base
+
     for aid, sharpe in zeroed:
         print(f"[Orchestrator] Early-zero: {aid} Sharpe={sharpe:.3f} (≥{EARLY_ZERO_MIN_DAYS}d, negative) — zeroing allocation")
 
     # Redistribute freed base weight proportionally to surviving agents
     freed = sum(base.get(aid, 0.0) for aid in zeroed_ids)
-    survivors = [aid for aid in agent_ids if aid not in zeroed_ids]
     survivor_total = sum(base.get(aid, 0.0) for aid in survivors)
 
     adjusted = dict(base)
@@ -454,8 +488,26 @@ def _compute_allocation(
         print(f"[Orchestrator] {aid} skill={skill_scores[aid]:.3f} ≤ 0 — zeroing allocation")
 
     if not active_agents:
+        # INERT WITH A SINGLE AGENT — do not read this as a working defunding
+        # gate. The halved allocation is returned UN-normalized, and
+        # merge_agent_outputs() renormalizes the merged book back to 1.0. With
+        # several agents that halving was meaningful: the freed half went to the
+        # others. With only us_equities present there is nobody else, so
+        # {"us_equities": 0.5} renormalizes straight back to 100% of capital —
+        # an agent with a negative skill score still receives the whole book.
+        # Left as-is deliberately: what *should* happen to the only agent when
+        # its skill score turns negative (de-gross to cash? halt? ignore?) is a
+        # policy decision that needs its own evidence, not a silent behavioural
+        # change smuggled into a cleanup.
         allocation = {aid: base.get(aid, 0.0) * 0.5 for aid in agent_ids}
         print(f"[Orchestrator] All skill-scored agents non-positive — reduced base allocation: {allocation}")
+        if len(agent_ids) == 1:
+            logging.warning(
+                "[Orchestrator] %s has a non-positive skill score, but with a "
+                "single agent present the halved allocation is renormalized "
+                "back to 100%% downstream — this defunding gate is INERT.",
+                agent_ids[0],
+            )
         return allocation
 
     # Skill-weighted blend (50% skill, 50% base) for agents with data;

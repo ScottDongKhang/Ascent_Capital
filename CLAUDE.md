@@ -2,9 +2,13 @@
 
 ## What this project is
 
-Modular Python quant research and trading platform. Data → features → alpha → portfolio →
-walk-forward → regime → 4 specialist agents → orchestration → AI PM (earned autonomy) →
-debate → Alpaca paper trading.
+Modular Python quant research and trading platform. Data → features → alpha (2 sleeves) →
+portfolio → walk-forward → regime → **one** capital-allocating agent (`us_equities`) →
+orchestration → Alpaca paper trading. The AI PM, the debate layer, and the falsifier registry
+all still run, but **advisory only**: they produce theses, verdicts, and proposals that are
+logged and scored, and none of them writes to live weights (see integrity constraint #5). The
+other three specialist agents (`macro`, `international`, `alternatives`) are code-intact but
+not invoked in the daily run.
 
 **Daily command**: `.venv/bin/python run_all_agents.py` (branches on rebalance day)
 
@@ -110,11 +114,26 @@ See `docs/REPO_MAP.md` for what to grep for and which files are worth reading wh
    post-condition check.
 4. **Sector constraint**: under 80% coverage → skip caps and warn. Never collapse to a single
    name.
-5. **Debate is advisory only** — nothing under `debate/` writes to alpha, portfolio, or
-   execution. No exceptions. (Prior live-write exception via `apply_judge_position_change` was
-   removed 2026-08-14 after debate_judge_intervention scored CUT in the proof audit; debate is
-   retained as an advisory auditing system, continuing to produce verdicts and position change
-   suggestions for logging and offline analysis.)
+5. **The three judgment layers are advisory only — none of them writes to live weights.**
+   Named precisely, because "no exceptions" hides what is being excepted:
+   - **The debate judge's position change** (`apply_judge_position_change`). Both call sites
+     removed 2026-08-14; `debate_judge_intervention` scored CUT (p=0.75) in the proof audit.
+   - **The AI PM's earned-authority blend** (`ascent/strategy/earned_authority.py`
+     `authority_blend`/`blend`). Blend call site removed 2026-08-14; `earned_authority` scored
+     CUT (p=0.35, track_d vs track_astar).
+   - **The falsifier trim** (`_apply_falsifier_trim`). Its `run_eod_with_weights(...,
+     dry_run=False, force=True)` — a real order — was removed 2026-08-14. Not because it was
+     measured negative but because it was **never measured at all**: it is not one of the 23
+     components in `ascent/analyst/proof_audit/components.py`, and it was built entirely on
+     unmeasured AI PM output.
+
+   The rule behind all three: **an unproven or unmeasured live-write mechanism goes
+   advisory-only until it is actually proven.** All three keep running, keep producing
+   verdicts / theses / fired falsifiers, and keep recording their proposals
+   (`record_intervention(..., applied=False)`) so the counterfactual evidence for ever
+   reinstating them keeps accumulating. Nothing under `debate/` has ever written to alpha,
+   portfolio, or execution, and now nothing in `run_all_agents.py` does so on their behalf
+   either. Do not reinstate any of the three without an artifact-backed positive result.
 6. **Alpha sleeve set**: the active sleeves are `meanrev` and `statarb` (2 sleeves). Update
    `DEFAULT_ALPHA_WEIGHTS` in BOTH `ascent/alpha/stack.py` AND `ascent/research/self_improve.py`
    if changing the set. The guard enforces that their key sets match.
@@ -149,8 +168,13 @@ See `docs/REPO_MAP.md` for what to grep for and which files are worth reading wh
   silently disables those sleeves.
 - **PDF generation**: use `reportlab`. `weasyprint` is installed but fails to import here
   (missing system Pango/GObject).
-- **PDBC↔KMLM are highly correlated** and frequently trip the orchestrator correlation guard,
-  halving KMLM. Expected, not a bug.
+- **The cross-agent correlation guard can no longer fire.** `check_cross_agent_correlation`
+  in `orchestrator/central_intelligence.py` is gated on `len(agent_weights) >= 2`, and only
+  `us_equities` runs, so the guard is unreachable in the daily pipeline (the module and its
+  tests are intact). The historical PDBC↔KMLM example — the guard halving KMLM because the
+  macro and alternatives agents held correlated instruments — described exactly that
+  cross-agent case and can no longer happen. Concentration *within* one agent's book is
+  handled elsewhere (`_water_fill_cap`, the final position cap), not here.
 - **Kill switches** stay `False` pending paper validation: `EVENT_TRADING_ENABLED`,
   `TWAP_ENABLED`, `SELF_MODIFY_ENABLED`, `LONG_SHORT_ENABLED`. The code comment on
   `LONG_SHORT_ENABLED` carries the authoritative precondition (a minimum number of paper

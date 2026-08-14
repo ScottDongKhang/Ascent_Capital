@@ -402,6 +402,27 @@ def check_halt_state(today=None) -> bool:
     return True
 
 
+def _get_current_regime() -> str:
+    """Current regime label off dashboard/regime_signal.json ('unknown' on any
+    failure).
+
+    Module level, not nested inside main(): it used to be defined inside main()
+    while `_apply_falsifier_trim` (a module-level function) also called it, so
+    that call raised NameError on every fired falsifier. The NameError was
+    raised while evaluating an argument to `record_intervention` inside a
+    swallow-everything `try`, so falsifier trims submitted real orders and then
+    silently never recorded the intervention they were supposed to be scored on.
+    """
+    try:
+        import json as _gj
+        _gsig = _gj.loads(open("dashboard/regime_signal.json").read())
+        if isinstance(_gsig, list):
+            _gsig = _gsig[-1] if _gsig else {}
+        return str(_gsig.get("label", "unknown")).lower()
+    except Exception:
+        return "unknown"
+
+
 def _get_portfolio_symbols() -> list:
     """Return symbols with nonzero weight in the current merged portfolio."""
     try:
@@ -999,16 +1020,6 @@ def main():
             print(f"[Runner] Shadow promoter: {n_promoted} config(s) promoted to live")
     except Exception as e:
         print(f"[Runner] Shadow promotion failed: {type(e).__name__}: {e}")
-
-    def _get_current_regime() -> str:
-        try:
-            import json as _gj
-            _gsig = _gj.loads(open("dashboard/regime_signal.json").read())
-            if isinstance(_gsig, list):
-                _gsig = _gsig[-1] if _gsig else {}
-            return str(_gsig.get("label", "unknown")).lower()
-        except Exception:
-            return "unknown"
 
     # Self-improve: runs on Sundays with current regime
     try:
@@ -1872,13 +1883,14 @@ def main():
         # block used to additionally apply changes[0] to merged_weights via
         # apply_judge_position_change (the call is gone; the function is
         # untouched for any future reinstatement). Debate stays advisory-only
-        # end to end.
-        _proposed = (verdict or {}).get("position_changes") or []
-        if _proposed:
-            _pc = _proposed[0]
-            print(f"[AdvInt] Judge proposed a position change (NOT applied): "
-                  f"{_pc.get('symbol', '(none)')} -> {_pc.get('new_weight', '?')} "
-                  f"[{_pc.get('intervention_type', 'adversarial_thesis')}]")
+        # end to end. The proposal is still RECORDED (applied=False) so the
+        # authority ladder keeps accumulating scoreable evidence — that
+        # bookkeeping used to live inside apply_judge_position_change and died
+        # with its call sites.
+        _record_advisory_judge_proposal(
+            merged_weights, verdict, today,
+            portfolio_state=portfolio_state, tag="AdvInt",
+        )
 
     except Exception as e:
         print(f"[Runner] Debate failed ({e}) — proceeding to execution anyway")
@@ -2403,6 +2415,74 @@ def _apply_position_change_to_weights(weights: dict, change) -> tuple:
     return out, True
 
 
+def _record_advisory_judge_proposal(merged_weights: dict, verdict: dict, today,
+                                    portfolio_state=None, tag: str = "AdvInt") -> None:
+    """RECORD the judge's one proposed position change without applying it.
+
+    The judge's live write path (`apply_judge_position_change`) was removed —
+    `debate_judge_intervention` scored CUT in the proof audit. But
+    `record_intervention()` and `add_judge_falsifier()` lived *inside* that
+    function, so removing its two call sites also silently stopped
+    `debate/adversarial_authority.py`'s ladder from accumulating anything. The
+    design spec explicitly promised the measurement trail would keep running
+    "reporting-only"; this is that trail, re-hoisted.
+
+    Nothing here writes weights, orders, or execution/merged_weights.json. The
+    recorded row carries `applied=False`: it is a proposal that was MADE, with
+    a falsifiable 10-day prediction. Outcome scoring
+    (`score_pending_interventions`) only needs (date, symbol) and prices, so a
+    never-applied proposal scores exactly like an applied one — which is the
+    whole point: it is the evidence a future reinstatement would be judged on.
+
+    Applicability is checked with the same pure helper the removed write path
+    used, on a discarded copy. A proposal for an unheld symbol (or below the
+    floor) was never recorded historically either; recording it now would put
+    rows in the ladder that the existing trail does not contain.
+    """
+    changes = (verdict or {}).get("position_changes") or []
+    if not changes:
+        return
+
+    change = changes[0]  # at most one, exactly as the removed write path did
+    sym    = change.get("symbol", "")
+    itype  = change.get("intervention_type", "adversarial_thesis")
+    old_w  = float(merged_weights.get(sym, 0) or 0)
+
+    _discarded, applicable = _apply_position_change_to_weights(merged_weights, change)
+    if not applicable:
+        print(f"[{tag}] Judge proposal for {sym or '(none)'} not recorded "
+              f"(not in weights or below {_JUDGE_MIN_WEIGHT:.0%} floor)")
+        return
+
+    new_w = float(change.get("new_weight", 0))
+    print(f"[{tag}] Judge proposed a position change (ADVISORY — NOT applied): "
+          f"{sym} {old_w:.1%} → {new_w:.1%} [{itype}]")
+    print(f"[{tag}]   Reason: {change.get('reason', '')[:100]}")
+    print(f"[{tag}]   10d prediction: {change.get('prediction', '')[:100]}")
+
+    try:
+        from debate.adversarial_authority import record_intervention
+        record_intervention(
+            date_str=today.isoformat(),
+            symbol=sym,
+            intervention_type=itype,
+            from_weight=old_w,
+            to_weight=new_w,
+            prediction=change.get("prediction", ""),
+            regime=(portfolio_state or {}).get("us_regime", "unknown"),
+            applied=False,
+        )
+        print(f"[{tag}] Proposal logged for 10-day outcome tracking (not applied)")
+    except Exception as _ai_e:
+        print(f"[{tag}] Authority log failed: {_ai_e}")
+
+    try:
+        from ascent.strategy.falsifier_registry import add_judge_falsifier
+        add_judge_falsifier(sym, change.get("prediction", ""), today)
+    except Exception as _jf_e:
+        print(f"[Falsifier] Judge falsifier registration failed: {_jf_e}")
+
+
 def apply_judge_position_change(merged_weights: dict, verdict: dict, today,
                                 agent_outputs=None, portfolio_state=None,
                                 write_weights: bool = True) -> dict:
@@ -2737,24 +2817,42 @@ def _apply_stop_loss_to_book(target_weights: dict, today: str) -> tuple:
 
 def _apply_falsifier_trim(fired: list, current_weights: dict, today, dry_run: bool = False) -> None:
     """
-    Execute ONE bounded trim for the highest-priority fired falsifier:
-    reduce the position 25% (floor 4%), proceeds to cash (single sell order —
-    no intra-period churn in the rest of the book).
+    ADVISORY ONLY — computes and records ONE bounded trim for the
+    highest-priority fired falsifier (reduce the position 25%, floor 4%) but
+    does NOT submit it. Nothing here touches live capital.
 
-    Gates: shares the mini-rebalance 5-trading-day cooldown; skipped while the
-    'falsifier_trim' intervention type is suspended (win rate < 40% after 30
-    scored). Each trim is recorded via record_intervention and scored at 10
-    days exactly like judge interventions. One trim per falsifier entry.
+    History: this used to call
+    `run_eod_with_weights(new_weights, run_date=today, dry_run=False, force=True)`
+    — a real order-submitting write path built entirely on AI PM output
+    (Phase 1 `what_would_change_my_mind`, Phase 2 `pre_mortem`). `falsifier_trim`
+    was never one of the 23 components the proof audit measured
+    (`ascent/analyst/proof_audit/components.py`), so it has no evidence of
+    value-add at all — not even a CUT. This rebuild's policy is that unmeasured
+    or unproven live-write mechanisms go advisory-only until they are actually
+    proven, which is the same treatment the debate judge's position change and
+    the AI PM's earned-authority blend received. Applied here for consistency.
+
+    What survives: detection, the full log of the trim that WOULD have been
+    made, and `record_intervention(..., applied=False)` so the 10-day scoring
+    trail keeps accumulating the evidence a future reinstatement would need.
+
+    `dry_run` is retained for call-site compatibility and is now moot — no path
+    through this function submits an order.
+
+    Gate: skipped while the 'falsifier_trim' intervention type is suspended
+    (win rate < 40% after 30 scored). One record per falsifier entry.
+
+    NOTE: the shared 5-trading-day mini-rebalance cooldown is no longer read or
+    written here. It exists to space out *executions*; this path no longer
+    executes anything, and writing it would let an advisory event suppress the
+    live discovery mini-rebalance.
     """
     try:
-        if _check_mini_rebalance_cooldown():
-            print("[Falsifier] Cooldown active (shared with mini-rebalance) — no trim")
-            return
 
         from debate.adversarial_authority import get_authority, record_intervention
         auth = get_authority("falsifier_trim")
         if auth.get("suspended"):
-            print("[Falsifier] falsifier_trim authority SUSPENDED — alert only, no trim")
+            print("[Falsifier] falsifier_trim authority SUSPENDED — alert only, no record")
             return
 
         # Base = live book when available, else today's merged weights
@@ -2789,10 +2887,8 @@ def _apply_falsifier_trim(fired: list, current_weights: dict, today, dry_run: bo
             print(f"[Falsifier] {sym} trim too small ({w:.1%}→{new_w:.1%}) — skipped")
             return
 
-        new_weights = dict(book)
-        new_weights[sym] = new_w  # freed weight stays in cash until next rebalance
-
-        print(f"\n[Falsifier] TRIM: {sym} {w:.1%} → {new_w:.1%} "
+        print(f"\n[Falsifier] WOULD TRIM (ADVISORY — not submitted): "
+              f"{sym} {w:.1%} → {new_w:.1%} "
               f"[source={f.get('source')}, kind={f.get('kind')}]")
         print(f"[Falsifier] Condition: {f.get('raw_text', '')[:150]}")
         if f.get("fired_value") is not None:
@@ -2807,40 +2903,36 @@ def _apply_falsifier_trim(fired: list, current_weights: dict, today, dry_run: bo
                 to_weight=new_w,
                 prediction=f"falsifier fired: {f.get('raw_text', '')[:200]}",
                 regime=_get_current_regime(),
+                applied=False,
             )
         except Exception as _ri_e:
             print(f"[Falsifier] Intervention log failed: {_ri_e}")
 
+        # Still marked: "trimmed" now means "already acted on (advisorily)".
+        # Without it the same falsifier would be re-recorded every day it stays
+        # fired, inflating the ladder with duplicates of one event.
         try:
             from ascent.strategy.falsifier_registry import mark_trimmed
             mark_trimmed(f.get("id", ""))
         except Exception:
             pass
 
-        _write_mini_rebalance_log(sym, 0.0)  # start the shared cooldown
-
-        if dry_run:
-            print(f"[Falsifier] DRY RUN — would sell {sym} down to {new_w:.1%}")
-        else:
-            new_weights, _stopped_syms = _apply_stop_loss_to_book(
-                new_weights, today.isoformat()
-            )
-            from ascent.execution.eod_runner import run_eod_with_weights
-            run_eod_with_weights(new_weights, run_date=today, dry_run=False, force=True)
-
-        Path("logs/eod_log.jsonl").open("a").write(json.dumps({
-            "date": today.isoformat(),
-            "trigger": "falsifier_trim",
-            "symbol": sym,
-            "from_weight": round(w, 6),
-            "to_weight": new_w,
-            "source": f.get("source"),
-            "raw_text": f.get("raw_text", "")[:200],
-        }) + "\n")
-        print(f"[Falsifier] Trim complete — {sym} scored in 10 trading days")
+        with Path("logs/eod_log.jsonl").open("a") as _elog:
+            _elog.write(json.dumps({
+                "date": today.isoformat(),
+                "trigger": "falsifier_trim_advisory",
+                "applied": False,
+                "symbol": sym,
+                "from_weight": round(w, 6),
+                "to_weight": new_w,
+                "source": f.get("source"),
+                "raw_text": f.get("raw_text", "")[:200],
+            }) + "\n")
+        print(f"[Falsifier] Advisory trim recorded — {sym} scored in 10 trading "
+              f"days; the live book is unchanged")
 
     except Exception as exc:
-        print(f"[Falsifier] Trim failed: {exc}")
+        print(f"[Falsifier] Advisory trim failed: {exc}")
 
 
 def _trigger_mini_rebalance(
@@ -2934,13 +3026,13 @@ def _trigger_mini_rebalance(
         # call is gone. The verdict (including position_changes) is still
         # fully written to outputs/debate_log/verdict_<date>.json by
         # run_debate() above, so nothing here loses visibility -- it just no
-        # longer mutates new_weights.
-        _proposed = (verdict or {}).get("position_changes") or []
-        if _proposed:
-            _pc = _proposed[0]
-            print(f"[Discovery] Judge proposed a position change (NOT applied): "
-                  f"{_pc.get('symbol', '(none)')} -> {_pc.get('new_weight', '?')} "
-                  f"[{_pc.get('intervention_type', 'adversarial_thesis')}]")
+        # longer mutates new_weights. The proposal is still RECORDED
+        # (applied=False) against the post-insert book the judge actually saw,
+        # so the authority ladder keeps accumulating on this path too.
+        _record_advisory_judge_proposal(
+            new_weights, verdict, today,
+            portfolio_state=portfolio_state, tag="Discovery",
+        )
 
         # ── Safety assertion (fail-safe, not fail-open) ──────────────────────
         # An add-only discovery insert must never produce a complete exit from

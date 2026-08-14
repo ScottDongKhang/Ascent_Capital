@@ -133,9 +133,17 @@ def record_intervention(
     to_weight:         float,
     prediction:        str,
     regime:            str,
+    applied:           bool = True,
 ) -> None:
     """
-    Log a new intervention. Called immediately after the judge applies a change.
+    Log a new intervention — a falsifiable 10-day prediction to be scored later.
+
+    `applied=False` records a proposal that was NOT written to live weights.
+    Every live-write path this ladder used to gate (the judge's position change,
+    the AI PM's blend, the falsifier trim) is now advisory-only, so the honest
+    record is "this is what would have been done", not "this is what was done".
+    Outcome scoring is unaffected: it only needs (date, symbol) and prices, and
+    a never-applied proposal is exactly as scoreable as an applied one.
 
     Idempotent on (date, symbol): if an intervention for this symbol on this
     date is already logged, this is a no-op (no duplicate row written, no
@@ -157,6 +165,7 @@ def record_intervention(
         "to_weight":         round(to_weight, 6),
         "prediction":        prediction,
         "regime":            regime,
+        "applied":           bool(applied),
         "outcome_measured":  False,
         "outcome_date":      None,
         "outcome_correct":   None,

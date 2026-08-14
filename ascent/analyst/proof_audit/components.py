@@ -3,6 +3,16 @@
 Never populate this by scanning ascent/alpha/stack.py or agents/ at runtime -- an audit that
 silently drops a component because discovery missed it is worse than no audit. Add a component
 by editing this file.
+
+KNOWN INCOMPLETE — this list is not "every component that touches live capital". The
+2026-08-14 whole-branch review found `falsifier_trim` (`run_all_agents.py`
+`_apply_falsifier_trim`), which submitted real orders off AI PM output and was never in this
+fixture, so it has no audit verdict at all -- not even INSUFFICIENT_DATA. It has since been
+made advisory-only (CLAUDE.md constraint #5) rather than being retro-fitted into the audit's
+scope, because backfilling a component into a finished audit would misrepresent what that
+audit actually measured. Adding it here is a deliberate future decision with its own
+measurement design; do not assume the absence of a name below means the mechanism does not
+exist.
 """
 from __future__ import annotations
 

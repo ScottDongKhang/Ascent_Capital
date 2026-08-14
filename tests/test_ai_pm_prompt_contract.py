@@ -65,6 +65,27 @@ class TestAuthorityIsDisclosed:
         body = src[i:i + 6000]
         assert "authority_str" in body and "YOUR AUTHORITY" in body
 
+    def test_disclosure_does_not_claim_a_blend_that_no_longer_runs(self):
+        """The blend (`earned_authority`) scored CUT and was removed from the
+        live pipeline. `ai_pm_result.portfolio` (Track D) is now the only
+        evidence channel for whether it should ever be reinstated — a prompt
+        telling the model to size for a dilution factor that no longer exists
+        would systematically bias exactly that evidence."""
+        from agents.ai_pm_agent import _build_temporal_context
+
+        out = _build_temporal_context()
+        assert "It is blended against" not in out
+        assert "RANKED RELATIVE BETS" not in out
+        assert "typically lands as ~1pp" not in out
+
+    def test_disclosure_states_the_proposal_is_advisory_and_unblended(self):
+        from agents.ai_pm_agent import _build_temporal_context
+
+        out = _build_temporal_context()
+        assert "ADVISORY" in out
+        assert "not blended into the live book" in out
+        assert "counterfactual" in out
+
     def test_context_builds_without_raising(self):
         """It reads state off disk; a missing file must not break the prompt."""
         from agents.ai_pm_agent import _build_temporal_context

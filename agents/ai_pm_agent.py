@@ -1098,13 +1098,19 @@ def _build_temporal_context(feedback: dict | None = None) -> str:
     except Exception:
         pass
 
-    # Authority disclosure. The AI PM was never told what fraction of its
-    # proposal actually reaches the book, so it wrote 9-10% convictions believing
-    # they would be implemented when the most that could land was ~1pp. The
-    # debate judge IS told its cap and visibly reasons well about it ("Capped at
-    # 1% by unproven adversarial_thesis authority (n=9)"); this agent deserves
-    # the same input. Measured dilution over the real logged proposals was
-    # 11-45% of each intended delta, median ~14%.
+    # Authority disclosure. The agent must be told, accurately, what happens to
+    # its proposal — the debate judge IS told its cap and visibly reasons well
+    # about it ("Capped at 1% by unproven adversarial_thesis authority (n=9)").
+    #
+    # This block used to describe a blend: "your proposal is scaled so total
+    # active deviation equals {ai_weight}; a 10pp conviction lands as ~1pp; size
+    # your convictions as RANKED RELATIVE BETS". That blend was the
+    # `earned_authority` write path, which scored CUT (p=0.35, track_d vs
+    # track_astar) and was removed from the live pipeline. Telling the model to
+    # size for a dilution factor that no longer exists would systematically bias
+    # the only evidence channel left for deciding whether the blend is ever
+    # worth reinstating — so the disclosure now states the real situation:
+    # advisory, unblended, scored as a clean counterfactual.
     authority_str = ""
     try:
         from ascent.strategy.earned_authority import get_state as _get_auth
@@ -1112,14 +1118,20 @@ def _build_temporal_context(feedback: dict | None = None) -> str:
         _w = float(_a.get("ai_weight", 0.0) or 0.0)
         authority_str = (
             f"\nYOUR AUTHORITY: Level {_a.get('level', 0)} "
-            f"({_a.get('title', 'Shadow')}), tracking-error budget {_w:.0%}.\n"
-            f"  Your proposal is NOT implemented as written. It is blended against\n"
-            f"  the quant book so that total one-way active deviation equals {_w:.0%}.\n"
-            f"  Every delta you propose is scaled by the same factor, so a\n"
-            f"  10pp conviction typically lands as ~1pp and a full exit becomes a\n"
-            f"  trim. Size your convictions as RANKED RELATIVE BETS, not as target\n"
-            f"  weights: what survives is their ordering and relative magnitude.\n"
-            f"  Authority rises only with scored decisions that beat the quant."
+            f"({_a.get('title', 'Shadow')}), tracking-error budget {_w:.0%} — "
+            f"CURRENTLY UNUSED.\n"
+            f"  Your proposal is ADVISORY. It is not blended into the live book\n"
+            f"  and no part of it is submitted as an order. Nothing scales,\n"
+            f"  dilutes, or truncates it: it stands exactly as you write it.\n"
+            f"  So propose REAL TARGET WEIGHTS — the portfolio you would actually\n"
+            f"  run — not ranked relative bets sized for a dilution factor. A\n"
+            f"  conviction you would size at 10pp should be written as 10pp.\n"
+            f"  What your proposal buys: it is scored as a clean counterfactual\n"
+            f"  (your portfolio's 21-day return vs the pure-quant baseline's).\n"
+            f"  That wedge is the entire evidence base for whether this layer\n"
+            f"  ever earns write access to live capital back. Deliberately\n"
+            f"  over- or under-sizing to game a blend that no longer exists\n"
+            f"  corrupts the only measurement that could restore it."
         )
     except Exception:
         pass
