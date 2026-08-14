@@ -1858,13 +1858,20 @@ def main():
             _log_run(today, merged_weights, agent_outputs, dry_run)
             return
 
-        # ── Apply ONE adversarial position change (if warranted and not halted) ──
-        # Shared with the discovery mini-rebalance path, which previously ran the
-        # debate and discarded its position_changes entirely.
-        merged_weights = apply_judge_position_change(
-            merged_weights, verdict, today,
-            agent_outputs=agent_outputs, portfolio_state=portfolio_state,
-        )
+        # ── Judge position-change write path removed ──────────────────────────
+        # debate_judge_intervention scored CUT (p=0.75, n=47) in the proof audit.
+        # The verdict (including any position_changes) is still fully written to
+        # outputs/debate_log/verdict_<date>.json by run_debate() above — this
+        # block used to additionally apply changes[0] to merged_weights via
+        # apply_judge_position_change (the call is gone; the function is
+        # untouched for any future reinstatement). Debate stays advisory-only
+        # end to end.
+        _proposed = (verdict or {}).get("position_changes") or []
+        if _proposed:
+            _pc = _proposed[0]
+            print(f"[AdvInt] Judge proposed a position change (NOT applied): "
+                  f"{_pc.get('symbol', '(none)')} -> {_pc.get('new_weight', '?')} "
+                  f"[{_pc.get('intervention_type', 'adversarial_thesis')}]")
 
     except Exception as e:
         print(f"[Runner] Debate failed ({e}) — proceeding to execution anyway")
@@ -2913,22 +2920,20 @@ def _trigger_mini_rebalance(
             print("[Discovery] Debate: halt_and_review — mini-rebalance aborted")
             return
 
-        # ── Apply the judge's ONE position change on this path too ────────────
-        # This path used to honour only halt_and_review: it ran the full debate,
-        # wrote a verdict carrying a sized and falsifiable position change, then
-        # dropped it. 4 of 7 judge changes in history died here (06-15 PK,
-        # 06-22 BAX, 06-29 TLT, 07-27 VNQ), and because record_intervention()
-        # never ran they were never scored — so n_scored stayed 0 and the
-        # authority tier stayed pinned at its 1.0pp floor.
-        #
-        # Applied AFTER the candidate insert so the judge sees the book that will
-        # actually be submitted, and BEFORE the add-only safety assertion below
-        # so any change it makes is still checked. Same one-position,
-        # authority-capped bound as the scheduled path.
-        new_weights = apply_judge_position_change(
-            new_weights, verdict, today,
-            agent_outputs=prior_agent_outputs, portfolio_state=portfolio_state,
-        )
+        # ── Judge position-change write path removed ──────────────────────────
+        # debate_judge_intervention scored CUT (p=0.75, n=47) in the proof audit.
+        # This path used to additionally apply changes[0] via the shared
+        # apply_judge_position_change helper after the candidate insert; that
+        # call is gone. The verdict (including position_changes) is still
+        # fully written
+        # to outputs/debate_log/verdict_<date>.json by run_debate() above, so
+        # nothing here loses visibility -- it just no longer mutates new_weights.
+        _proposed = (verdict or {}).get("position_changes") or []
+        if _proposed:
+            _pc = _proposed[0]
+            print(f"[Discovery] Judge proposed a position change (NOT applied): "
+                  f"{_pc.get('symbol', '(none)')} -> {_pc.get('new_weight', '?')} "
+                  f"[{_pc.get('intervention_type', 'adversarial_thesis')}]")
 
         # ── Safety assertion (fail-safe, not fail-open) ──────────────────────
         # An add-only discovery insert must never produce a complete exit from

@@ -1,17 +1,24 @@
-"""The judge's position change must be applied on every path that runs a debate.
+"""The judge's position change must NOT be applied on any path, anywhere.
 
-Audit, 2026-07-27: the apply-and-record block lived only in the scheduled
-rebalance branch of run_all_agents.main(). The discovery mini-rebalance path
-called run_debate(), wrote a complete verdict file with a sized, reasoned,
-falsifiable position change — and then honoured only `halt_and_review`, never
-applying `position_changes` and never calling record_intervention().
+History: `debate_judge_intervention` scored CUT (p=0.75, n=47 — underpowered,
+but the same evidence bar applied consistently to every other component in
+this rebuild) in the proof audit. Both call sites of
+`apply_judge_position_change` in run_all_agents.py (the scheduled-rebalance
+branch and the discovery mini-rebalance path) were removed as a result.
 
-4 of 7 judge position changes in history died there (2026-06-15 PK, 06-22 BAX,
-06-29 TLT, 07-27 VNQ — all off-calendar days). Confirmed against executed
-weights: on 06-15 the judge said cut PK to 6.22% and PK executed at 0.072221,
-untouched. Because record_intervention() never ran, those predictions were never
-scored, so n_scored stayed 0 and the authority tier stayed frozen at the 1.0pp
-floor — a self-sealing loop.
+This file used to assert the opposite: that the write path reached both
+branches (extracted 2026-07-28 after discovering the discovery path silently
+dropped 4 of 7 judge position changes in history: 2026-06-15 PK, 06-22 BAX,
+06-29 TLT, 07-27 VNQ). That defect is now moot -- neither path applies a
+judge position change anymore, so there is nothing left to wire up.
+
+`apply_judge_position_change` and `_apply_position_change_to_weights` are
+left in place (untouched, still tested below for their own pure behaviour)
+in case the write path is reinstated later; they are simply uncalled from
+run_all_agents.main() and _trigger_mini_rebalance() now. `run_debate()` and
+verdict logging to outputs/debate_log/ are unaffected -- the verdict,
+including any position_changes, is still written in full; only the
+mutation of live weights is gone.
 """
 
 import datetime as dt
@@ -94,8 +101,8 @@ class TestRejections:
         assert w == before, "caller's dict must not be mutated in place"
 
 
-class TestDiscoveryPathIsWired:
-    """The whole point: the discovery path must go through the shared helper."""
+class TestNeitherPathAppliesTheJudgeChange:
+    """The whole point, inverted: neither path may call the write helper."""
 
     def _src(self):
         import os
@@ -103,17 +110,34 @@ class TestDiscoveryPathIsWired:
         with open(os.path.join(root, "run_all_agents.py")) as f:
             return f.read()
 
-    def test_apply_helper_is_called_more_than_once(self):
+    def test_apply_helper_has_no_call_sites_left(self):
         src = self._src()
-        assert src.count("apply_judge_position_change(") >= 3, (
-            "expected the definition plus at least two call sites "
-            "(scheduled rebalance and discovery mini-rebalance)"
+        # Exactly one occurrence: the `def apply_judge_position_change(` itself.
+        # Any call site would add a second `apply_judge_position_change(`
+        # occurrence (as a bare call, not a `def`).
+        assert src.count("apply_judge_position_change(") == 1, (
+            "expected only the function definition to remain -- both call "
+            "sites (scheduled rebalance and discovery mini-rebalance) must "
+            "stay removed"
         )
+        assert "def apply_judge_position_change(" in src
 
-    def test_discovery_path_no_longer_only_checks_halt(self):
+    def test_discovery_path_no_longer_calls_the_apply_helper(self):
         src = self._src()
         i = src.index("def _trigger_mini_rebalance")
         tail = src[i:i + 8000]
-        assert "apply_judge_position_change(" in tail, (
-            "_trigger_mini_rebalance runs a debate but never applies its verdict"
+        assert "apply_judge_position_change(" not in tail, (
+            "_trigger_mini_rebalance must not call apply_judge_position_change "
+            "-- the debate verdict may still be produced and logged, but its "
+            "position_changes must not be applied to live weights"
+        )
+
+    def test_scheduled_path_no_longer_calls_the_apply_helper(self):
+        src = self._src()
+        i = src.index("def main(")
+        j = src.index("def _log_run(")
+        body = src[i:j]
+        assert "apply_judge_position_change(" not in body, (
+            "main()'s scheduled-rebalance branch must not call "
+            "apply_judge_position_change -- debate stays advisory only"
         )
