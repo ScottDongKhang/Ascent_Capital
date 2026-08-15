@@ -2,13 +2,31 @@
 
 _get_gated_weights() previously redistributed freed weight (from a sleeve zeroed
 by the IC gate) ONLY to a hardcoded "trend" key. With the 2-sleeve meanrev/statarb
-stack, "trend" isn't a key in DEFAULT_ALPHA_WEIGHTS at all, so freed weight was
-silently dropped -- the portfolio ends up under-invested rather than reallocated.
+stack, "trend" isn't a key in DEFAULT_ALPHA_WEIGHTS at all, so that branch never
+fired and freed weight stayed at 0 in the dict.
 
-These tests pin the fixed behavior: freed weight redistributes proportionally
-among the surviving (non-gated, non-zero) sleeves by their existing weight share,
-and if every sleeve is gated simultaneously, the original weights are returned
-unchanged (fail-safe, not an all-zero dict).
+CORRECTED NARRATIVE (found during final review): this does NOT produce an
+under-invested portfolio in the common case. build_alpha_stack()'s blend step
+renormalizes by `alpha_weights.get(name) / sum(alpha_weights.get(k) for k in
+alphas)` -- a constant scale factor on every surviving weight is exactly
+cancelled by that renormalization, so the pre-fix and post-fix composite are
+bit-for-bit identical whenever at least one survivor exists. The ORIGINAL
+commit message and this file's original docstring overstated the live effect;
+this comment corrects the record for anyone diagnosing a future re-validation
+run using git blame.
+
+The one case this fix genuinely changes: if EVERY sleeve is gated
+simultaneously, the pre-fix code produced an all-zero dict, which renormalizes
+to `total_w == 0 -> total_w = 1.0 -> every weight = 0` -- a silent no-signal
+composite. Post-fix, the original (ungated) weights are returned instead, so
+the portfolio keeps the pre-gate signal rather than going dark. That fail-safe
+is the real, load-bearing effect of this commit.
+
+The proportional-redistribution semantics (vs. the old hardcoded "trend" name)
+are still worth keeping even though renormalization mostly cancels them out --
+they make the returned dict self-consistent for any future consumer that does
+NOT renormalize, and they remove a hardcoded dependency on a sleeve name that
+no longer exists.
 """
 import json
 
@@ -82,7 +100,6 @@ def test_all_sleeves_gated_returns_original_weights_unchanged(tmp_path):
     result = _get_gated_weights(base, ic_log_path=str(ic_log))
 
     assert result == base
-    assert result is not base or result == base  # value equality is what matters
     assert result["meanrev"] == 0.5
     assert result["statarb"] == 0.5
 
