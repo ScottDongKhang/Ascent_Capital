@@ -1,0 +1,11 @@
+Backup already exists at /Users/scott/IdeaProjects/ascent-capital/data_cache/prices_live.parquet.pre_phantom_repair_bak and is byte-identical to the current /Users/scott/IdeaProjects/ascent-capital/data_cache/prices_live.parquet -- resuming from a prior backup-then-interrupted run rather than re-copying.
+Loaded prices_live: 1,519,291 rows
+Before-repair pivot_prices(close).shape = (3298, 938)
+Real (00:00:00) rows: 1,430,450; phantom rows: 88,841
+Merged to 1,519,291 distinct (symbol, normalized-date) cells (0 rows collapsed away)
+Of those, 88,841 cells had NO real row and were kept from their phantom row (date rewritten to midnight)
+After-repair rows: 1,519,291
+After-repair pivot_prices(close).shape = (1650, 938)
+Post-repair pivot shape assertion PASSED (in [1600, 1700], < before)
+Non-midnight rows remaining after repair: 0
+reconcile_numbers.data_integrity(): {'path': 'data_cache/prices_live.parquet', 'rows': 1519291, 'symbols': 938, 'date_min': '2020-01-02', 'date_max': '2026-07-28', 'dup_rows': 0, 'dup_pct': 0.0, 'dup_symbols': 0, 'sources': {'yahoo': 1422530, 'yfinance_hub': 88841, 'yahoo_hub': 7920}}
