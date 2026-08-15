@@ -332,6 +332,65 @@ def test_wide_dataframe_resave_of_same_day_replaces_not_duplicates(store):
     assert back["AAPL"].iloc[0] == 105.0  # keep="last"
 
 
+# ---------------------------------------------------------------------------
+# validate_cache — phantom-row (non-midnight time-of-day) integrity guard
+# (2026-08-15 audit): defense-in-depth so this class of corruption cannot
+# recur silently in a cache validate_cache is asked to trust.
+# ---------------------------------------------------------------------------
+
+def test_validate_cache_fails_on_non_midnight_date_rows(store):
+    df = pd.DataFrame({
+        "symbol": ["AAPL", "MSFT"],
+        "date": [
+            pd.Timestamp("2024-06-03 00:00"),
+            pd.Timestamp("2024-06-03 19:00"),  # phantom-row corruption signature
+        ],
+        "close": [194.0, 420.0],
+    })
+    path = store.DATA_DIR / "t_validate_phantom.parquet"
+    store.DATA_DIR.mkdir(parents=True, exist_ok=True)
+    df.to_parquet(path, index=False)  # write directly, bypassing save_parquet's own dedup
+
+    ok, reason = store.validate_cache("t_validate_phantom", stale_days=0)
+    assert ok is False
+    assert "non-midnight" in reason
+    assert "1" in reason  # exactly one offending row
+
+
+def test_validate_cache_passes_all_midnight_date_rows(store):
+    df = pd.DataFrame({
+        "symbol": ["AAPL", "MSFT"],
+        "date": [pd.Timestamp("2024-06-03 00:00"), pd.Timestamp("2024-06-04 00:00")],
+        "close": [194.0, 420.0],
+    })
+    path = store.DATA_DIR / "t_validate_clean.parquet"
+    store.DATA_DIR.mkdir(parents=True, exist_ok=True)
+    df.to_parquet(path, index=False)
+
+    ok, reason = store.validate_cache("t_validate_clean", stale_days=0)
+    assert ok is True, reason
+
+
+def test_validate_cache_ignores_non_datetime_date_col(store):
+    """Gate confirmation: a date_col that is not datetime-like must not run
+    the phantom-row check at all (it would error on .dt access otherwise)."""
+    df = pd.DataFrame({
+        "series_id": ["DGS10", "DGS10"],
+        "date": ["not-a-real-date", "also-not-a-date"],
+        "value": [4.5, 4.6],
+    })
+    path = store.DATA_DIR / "t_validate_nondatetime.parquet"
+    store.DATA_DIR.mkdir(parents=True, exist_ok=True)
+    df.to_parquet(path, index=False)
+
+    ok, reason = store.validate_cache("t_validate_nondatetime", stale_days=0)
+    # Both values fail pd.to_datetime coercion -> "cache has no valid dates",
+    # not the phantom-row check; confirms the gate gracefully no-ops rather
+    # than erroring on a non-datetime column.
+    assert ok is False
+    assert reason == "cache has no valid dates"
+
+
 def test_macro_series_id_cache_still_dedups(store):
     """Macro caches keyed on series_id (FRED/simulated ingest) must keep
     deduping correctly — the date-key rollover logic must not break the

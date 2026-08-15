@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 import os
+from datetime import time
 from pathlib import Path
 from typing import Optional, List
 
@@ -207,6 +208,26 @@ def validate_cache(
     dates       = pd.to_datetime(df[date_col], errors="coerce").dropna()
     if dates.empty:
         return False, "cache has no valid dates"
+
+    # Phantom-row corruption signature (2026-08-15 audit): a bar written with a
+    # non-midnight time-of-day (e.g. 19:00 from an un-rolled hub stamp) that
+    # slipped past save_parquet's dedup. Gated on date_col actually being
+    # datetime-like so this never fires on caches where date_col holds
+    # something else, and gated with zero tolerance (not "a handful") because
+    # after the Task 2 repair prices_live has none — any count here means new
+    # corruption, not a legitimate tz-shifted row elsewhere in the codebase
+    # (those are handled by _calendar_day_key's rollover, not by writing
+    # non-midnight `date` values to disk).
+    if pd.api.types.is_datetime64_any_dtype(df[date_col]):
+        naive_dates = dates
+        if isinstance(naive_dates.dtype, pd.DatetimeTZDtype):
+            naive_dates = naive_dates.dt.tz_localize(None)
+        non_midnight = int((naive_dates.dt.time != time(0, 0)).sum())
+        if non_midnight > 0:
+            return False, (
+                f"{non_midnight} rows have non-midnight time-of-day "
+                "(phantom-row corruption)"
+            )
 
     cache_start = dates.min().normalize().tz_localize(None)
     cache_end   = dates.max().normalize().tz_localize(None)

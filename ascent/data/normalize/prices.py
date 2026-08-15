@@ -70,6 +70,16 @@ def pivot_prices(df: pd.DataFrame, field: str = "close") -> pd.DataFrame:
     Pivot normalized price data to wide format: dates × symbols.
     Used for cross-sectional feature computation.
     """
+    df = df.copy()
+    # Normalize the date column to midnight before pivoting. Under normal
+    # operation normalize_prices() already does this, but pivot_prices is
+    # called directly elsewhere too, and a same-day phantom row with a
+    # non-midnight time-of-day (see the parquet.py validate_cache guard)
+    # would otherwise pivot to a SEPARATE index entry instead of colliding
+    # with the real midnight row for that date. aggfunc="last" is kept so any
+    # remaining same-day collision after normalization resolves
+    # deterministically rather than silently fragmenting the date index.
+    df["date"] = pd.to_datetime(df["date"]).dt.normalize()
     pivot = df.pivot_table(index="date", columns="symbol", values=field, aggfunc="last")
     pivot = pivot.sort_index()
     return pivot
