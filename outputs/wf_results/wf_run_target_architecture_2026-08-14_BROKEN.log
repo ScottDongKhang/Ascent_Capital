@@ -1,0 +1,2627 @@
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] only 1 dates (need ≥100), skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] only 11 dates (need ≥100), skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] only 21 dates (need ≥100), skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] only 9 dates (need ≥100), skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] only 19 dates (need ≥100), skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] only 29 dates (need ≥100), skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] only 39 dates (need ≥100), skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] only 49 dates (need ≥100), skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] only 59 dates (need ≥100), skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] only 69 dates (need ≥100), skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] only 79 dates (need ≥100), skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] only 89 dates (need ≥100), skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] only 99 dates (need ≥100), skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[WF] WARNING: purge_days=5 < TARGET_HORIZON=21. Forcing purge_days=21 to prevent label leakage.
+======================================================================
+  WALK-FORWARD PIPELINE
+======================================================================
+[WF] Loaded prices from cache: prices_live
+[WF] Loaded macro from cache: macro_live
+
+[WF] Alpha data source availability:
+  fundamentals: 675 rows  [2025-01-14 → 2026-05-15]
+  earnings: 3,228 rows  [2008-01-18 → 2026-04-17]
+  analyst_revisions: 899 rows  [2016-05-23 → 2026-05-04]
+  options_flow: 3,916 rows  [2026-05-02 → 2026-07-01]
+  insider_transactions: 23,166 rows  [2013-03-15 → 2026-05-01]
+  short_interest: 900 rows  [2026-05-02 → 2026-05-02]
+
+[Data] 3298 dates, 938 symbols
+[Data] Range: 2020-01-01 to 2026-07-28
+[Setup] Train: up to 252 days, Purge: 21 days, Rebal freq: 10 days
+
+----------------------------------------------------------------------
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-01-01 | Train: partial history | Tradeable: 414 | Positions:  5
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-01-08 | Train: partial history | Tradeable: 414 | Positions: 12
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-01-15 | Train: partial history | Tradeable: 414 | Positions: 12
+[WF] targets injected, shape: (9, 415), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-01-23 | Train: 2020-01-01 to 2020-01-07 | Tradeable: 414 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (19, 415), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-01-30 | Train: 2020-01-01 to 2020-01-14 | Tradeable: 414 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (29, 415), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-02-06 | Train: 2020-01-01 to 2020-01-22 | Tradeable: 414 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (39, 415), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-02-13 | Train: 2020-01-01 to 2020-01-29 | Tradeable: 414 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (49, 415), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-02-23 | Train: 2020-01-01 to 2020-02-05 | Tradeable: 414 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (59, 415), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-03-01 | Train: 2020-01-01 to 2020-02-12 | Tradeable: 414 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (69, 416), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-03-08 | Train: 2020-01-01 to 2020-02-20 | Tradeable: 415 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (79, 416), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-03-15 | Train: 2020-01-01 to 2020-02-27 | Tradeable: 415 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (89, 416), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-03-22 | Train: 2020-01-01 to 2020-03-05 | Tradeable: 415 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (99, 416), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-03-29 | Train: 2020-01-01 to 2020-03-12 | Tradeable: 415 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (109, 418), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-04-05 | Train: 2020-01-01 to 2020-03-19 | Tradeable: 417 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (119, 418), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-04-13 | Train: 2020-01-01 to 2020-03-26 | Tradeable: 417 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (129, 418), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-04-20 | Train: 2020-01-01 to 2020-04-02 | Tradeable: 417 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (139, 418), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-04-27 | Train: 2020-01-01 to 2020-04-12 | Tradeable: 417 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (149, 418), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-05-04 | Train: 2020-01-01 to 2020-04-19 | Tradeable: 417 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (159, 418), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-05-11 | Train: 2020-01-01 to 2020-04-26 | Tradeable: 417 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (169, 420), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-05-18 | Train: 2020-01-01 to 2020-05-03 | Tradeable: 419 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (179, 420), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-05-26 | Train: 2020-01-01 to 2020-05-10 | Tradeable: 419 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (189, 420), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-06-02 | Train: 2020-01-01 to 2020-05-17 | Tradeable: 419 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (199, 420), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-06-09 | Train: 2020-01-01 to 2020-05-25 | Tradeable: 419 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (209, 420), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-06-16 | Train: 2020-01-01 to 2020-06-01 | Tradeable: 419 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (219, 422), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-06-23 | Train: 2020-01-01 to 2020-06-08 | Tradeable: 421 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (229, 422), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-06-30 | Train: 2020-01-01 to 2020-06-15 | Tradeable: 421 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (239, 422), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider'][Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+
+  Date 2020-07-08 | Train: 2020-01-01 to 2020-06-22 | Tradeable: 421 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (249, 422), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-07-15 | Train: 2020-01-01 to 2020-06-29 | Tradeable: 421 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 422), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-07-22 | Train: 2020-01-07 to 2020-07-07 | Tradeable: 421 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 422), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-07-29 | Train: 2020-01-14 to 2020-07-14 | Tradeable: 421 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 422), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-08-05 | Train: 2020-01-22 to 2020-07-21 | Tradeable: 421 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 422), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-08-12 | Train: 2020-01-29 to 2020-07-28 | Tradeable: 421 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 422), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-08-19 | Train: 2020-02-05 to 2020-08-04 | Tradeable: 421 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 422), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-08-26 | Train: 2020-02-12 to 2020-08-11 | Tradeable: 421 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 422), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-09-02 | Train: 2020-02-20 to 2020-08-18 | Tradeable: 421 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 422), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-09-10 | Train: 2020-02-27 to 2020-08-25 | Tradeable: 421 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 422), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-09-17 | Train: 2020-03-05 to 2020-09-01 | Tradeable: 421 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 423), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-09-24 | Train: 2020-03-12 to 2020-09-09 | Tradeable: 422 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 423), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-10-01 | Train: 2020-03-19 to 2020-09-16 | Tradeable: 422 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 424), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-10-08 | Train: 2020-03-26 to 2020-09-23 | Tradeable: 423 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 424), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-10-15 | Train: 2020-04-02 to 2020-09-30 | Tradeable: 423 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 424), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-10-22 | Train: 2020-04-09 to 2020-10-07 | Tradeable: 423 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 424), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-10-29 | Train: 2020-04-17 to 2020-10-14 | Tradeable: 423 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 424), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-11-05 | Train: 2020-04-24 to 2020-10-21 | Tradeable: 423 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 424), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-11-12 | Train: 2020-05-01 to 2020-10-28 | Tradeable: 423 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 424), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-11-19 | Train: 2020-05-08 to 2020-11-04 | Tradeable: 423 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 424), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-11-29 | Train: 2020-05-15 to 2020-11-11 | Tradeable: 423 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 424), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-12-06 | Train: 2020-05-22 to 2020-11-18 | Tradeable: 423 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 424), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-12-13 | Train: 2020-06-01 to 2020-11-26 | Tradeable: 423 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 424), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-12-20 | Train: 2020-06-08 to 2020-12-03 | Tradeable: 423 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 425), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2020-12-28 | Train: 2020-06-15 to 2020-12-10 | Tradeable: 424 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 425), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-01-05 | Train: 2020-06-22 to 2020-12-17 | Tradeable: 424 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 425), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-01-12 | Train: 2020-06-29 to 2020-12-27 | Tradeable: 424 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 425), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-01-20 | Train: 2020-07-07 to 2021-01-04 | Tradeable: 424 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 426), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-01-27 | Train: 2020-07-14 to 2021-01-11 | Tradeable: 425 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 426), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider'][Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+
+  Date 2021-02-03 | Train: 2020-07-21 to 2021-01-19 | Tradeable: 425 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 426), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-02-10 | Train: 2020-07-28 to 2021-01-26 | Tradeable: 425 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 427), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-02-18 | Train: 2020-08-04 to 2021-02-02 | Tradeable: 426 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 427), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-02-25 | Train: 2020-08-11 to 2021-02-09 | Tradeable: 426 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 427), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-03-04 | Train: 2020-08-18 to 2021-02-17 | Tradeable: 426 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 427), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-03-11 | Train: 2020-08-25 to 2021-02-24 | Tradeable: 426 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 427), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-03-18 | Train: 2020-09-01 to 2021-03-03 | Tradeable: 426 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 428), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-03-25 | Train: 2020-09-09 to 2021-03-10 | Tradeable: 427 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 428), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-04-04 | Train: 2020-09-16 to 2021-03-17 | Tradeable: 427 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 428), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-04-11 | Train: 2020-09-23 to 2021-03-24 | Tradeable: 427 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 428), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-04-18 | Train: 2020-09-30 to 2021-03-31 | Tradeable: 427 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 429), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-04-25 | Train: 2020-10-07 to 2021-04-08 | Tradeable: 428 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 429), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-05-02 | Train: 2020-10-14 to 2021-04-15 | Tradeable: 428 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 429), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-05-09 | Train: 2020-10-21 to 2021-04-22 | Tradeable: 428 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 430), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-05-16 | Train: 2020-10-28 to 2021-04-29 | Tradeable: 429 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 430), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-05-23 | Train: 2020-11-04 to 2021-05-06 | Tradeable: 429 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 430), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-05-31 | Train: 2020-11-11 to 2021-05-13 | Tradeable: 429 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 430), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-06-07 | Train: 2020-11-18 to 2021-05-20 | Tradeable: 429 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 430), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-06-14 | Train: 2020-11-25 to 2021-05-27 | Tradeable: 429 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 430), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-06-21 | Train: 2020-12-03 to 2021-06-06 | Tradeable: 429 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 430), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-06-28 | Train: 2020-12-10 to 2021-06-13 | Tradeable: 429 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 430), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-07-06 | Train: 2020-12-17 to 2021-06-20 | Tradeable: 429 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 430), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-07-13 | Train: 2020-12-24 to 2021-06-27 | Tradeable: 429 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 430), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-07-20 | Train: 2021-01-04 to 2021-07-05 | Tradeable: 429 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 431), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-07-27 | Train: 2021-01-11 to 2021-07-12 | Tradeable: 430 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 431), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-08-03 | Train: 2021-01-19 to 2021-07-19 | Tradeable: 430 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 431), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-08-10 | Train: 2021-01-26 to 2021-07-26 | Tradeable: 430 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 431), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-08-17 | Train: 2021-02-02 to 2021-08-02 | Tradeable: 430 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 431), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-08-24 | Train: 2021-02-09 to 2021-08-09 | Tradeable: 430 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 432), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider'][Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+
+  Date 2021-08-31 | Train: 2021-02-17 to 2021-08-16 | Tradeable: 431 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 432), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-09-08 | Train: 2021-02-24 to 2021-08-23 | Tradeable: 431 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 432), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-09-15 | Train: 2021-03-03 to 2021-08-30 | Tradeable: 431 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 433), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-09-22 | Train: 2021-03-10 to 2021-09-07 | Tradeable: 432 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 433), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-09-29 | Train: 2021-03-17 to 2021-09-14 | Tradeable: 432 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 433), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-10-06 | Train: 2021-03-24 to 2021-09-21 | Tradeable: 432 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 433), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-10-13 | Train: 2021-03-31 to 2021-09-28 | Tradeable: 432 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 433), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-10-20 | Train: 2021-04-08 to 2021-10-05 | Tradeable: 432 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 433), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-10-27 | Train: 2021-04-15 to 2021-10-12 | Tradeable: 432 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 433), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-11-03 | Train: 2021-04-22 to 2021-10-19 | Tradeable: 432 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 433), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-11-10 | Train: 2021-04-29 to 2021-10-26 | Tradeable: 432 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 433), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-11-17 | Train: 2021-05-06 to 2021-11-02 | Tradeable: 432 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 433), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-11-25 | Train: 2021-05-13 to 2021-11-09 | Tradeable: 432 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 433), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-12-02 | Train: 2021-05-20 to 2021-11-16 | Tradeable: 432 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 433), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-12-09 | Train: 2021-05-27 to 2021-11-23 | Tradeable: 432 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 434), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-12-16 | Train: 2021-06-04 to 2021-12-01 | Tradeable: 433 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 435), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2021-12-26 | Train: 2021-06-11 to 2021-12-08 | Tradeable: 434 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 435), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-01-02 | Train: 2021-06-18 to 2021-12-15 | Tradeable: 434 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 435), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-01-09 | Train: 2021-06-25 to 2021-12-22 | Tradeable: 434 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 435), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-01-17 | Train: 2021-07-02 to 2021-12-30 | Tradeable: 434 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 435), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-01-24 | Train: 2021-07-12 to 2022-01-06 | Tradeable: 434 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 435), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-01-31 | Train: 2021-07-19 to 2022-01-13 | Tradeable: 434 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 436), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-02-07 | Train: 2021-07-26 to 2022-01-23 | Tradeable: 435 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 436), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-02-14 | Train: 2021-08-02 to 2022-01-30 | Tradeable: 435 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 437), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-02-22 | Train: 2021-08-09 to 2022-02-06 | Tradeable: 436 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 437), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-03-01 | Train: 2021-08-16 to 2022-02-13 | Tradeable: 436 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 437), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-03-08 | Train: 2021-08-23 to 2022-02-21 | Tradeable: 436 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 437), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-03-15 | Train: 2021-08-30 to 2022-02-28 | Tradeable: 436 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 437), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-03-22 | Train: 2021-09-07 to 2022-03-07 | Tradeable: 436 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 437), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider'][Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+
+  Date 2022-03-29 | Train: 2021-09-14 to 2022-03-14 | Tradeable: 436 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 438), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-04-05 | Train: 2021-09-21 to 2022-03-21 | Tradeable: 437 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 439), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-04-12 | Train: 2021-09-28 to 2022-03-28 | Tradeable: 438 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 439), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-04-20 | Train: 2021-10-05 to 2022-04-04 | Tradeable: 438 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 439), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-04-27 | Train: 2021-10-12 to 2022-04-11 | Tradeable: 438 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 439), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-05-04 | Train: 2021-10-19 to 2022-04-19 | Tradeable: 438 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 439), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-05-11 | Train: 2021-10-26 to 2022-04-26 | Tradeable: 438 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 439), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-05-18 | Train: 2021-11-02 to 2022-05-03 | Tradeable: 438 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 439), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-05-25 | Train: 2021-11-09 to 2022-05-10 | Tradeable: 438 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 439), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-06-02 | Train: 2021-11-16 to 2022-05-17 | Tradeable: 438 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 440), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-06-09 | Train: 2021-11-23 to 2022-05-24 | Tradeable: 439 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 440), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-06-16 | Train: 2021-12-01 to 2022-06-01 | Tradeable: 439 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 441), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-06-26 | Train: 2021-12-08 to 2022-06-08 | Tradeable: 440 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 441), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-07-04 | Train: 2021-12-15 to 2022-06-15 | Tradeable: 440 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 441), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-07-11 | Train: 2021-12-22 to 2022-06-23 | Tradeable: 440 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 441), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-07-18 | Train: 2021-12-30 to 2022-06-30 | Tradeable: 440 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 441), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-07-25 | Train: 2022-01-06 to 2022-07-10 | Tradeable: 440 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 441), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-08-01 | Train: 2022-01-13 to 2022-07-17 | Tradeable: 440 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 441), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-08-08 | Train: 2022-01-21 to 2022-07-24 | Tradeable: 440 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 441), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-08-15 | Train: 2022-01-28 to 2022-07-31 | Tradeable: 440 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 441), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-08-22 | Train: 2022-02-04 to 2022-08-07 | Tradeable: 440 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 441), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-08-29 | Train: 2022-02-11 to 2022-08-14 | Tradeable: 440 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 441), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-09-06 | Train: 2022-02-18 to 2022-08-21 | Tradeable: 440 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 441), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-09-13 | Train: 2022-02-28 to 2022-08-28 | Tradeable: 440 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 443), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-09-20 | Train: 2022-03-07 to 2022-09-05 | Tradeable: 442 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 443), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-09-27 | Train: 2022-03-14 to 2022-09-12 | Tradeable: 442 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 445), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-10-04 | Train: 2022-03-21 to 2022-09-19 | Tradeable: 444 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 445), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-10-11 | Train: 2022-03-28 to 2022-09-26 | Tradeable: 444 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 446), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-10-18 | Train: 2022-04-04 to 2022-10-03 | Tradeable: 445 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 446), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider'][Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+
+  Date 2022-10-25 | Train: 2022-04-11 to 2022-10-10 | Tradeable: 445 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 447), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-11-01 | Train: 2022-04-19 to 2022-10-17 | Tradeable: 446 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 447), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-11-08 | Train: 2022-04-26 to 2022-10-24 | Tradeable: 446 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 447), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-11-15 | Train: 2022-05-03 to 2022-10-31 | Tradeable: 446 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 447), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-11-22 | Train: 2022-05-10 to 2022-11-07 | Tradeable: 446 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 447), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-11-30 | Train: 2022-05-17 to 2022-11-14 | Tradeable: 446 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 447), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-12-07 | Train: 2022-05-24 to 2022-11-21 | Tradeable: 446 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 447), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-12-14 | Train: 2022-06-01 to 2022-11-29 | Tradeable: 446 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 448), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-12-21 | Train: 2022-06-08 to 2022-12-06 | Tradeable: 447 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 449), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2022-12-29 | Train: 2022-06-15 to 2022-12-13 | Tradeable: 448 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 450), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-01-08 | Train: 2022-06-23 to 2022-12-20 | Tradeable: 449 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 450), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-01-16 | Train: 2022-06-30 to 2022-12-28 | Tradeable: 449 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 450), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-01-23 | Train: 2022-07-08 to 2023-01-05 | Tradeable: 449 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 450), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-01-30 | Train: 2022-07-15 to 2023-01-12 | Tradeable: 449 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 450), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-02-06 | Train: 2022-07-22 to 2023-01-22 | Tradeable: 449 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 450), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-02-13 | Train: 2022-07-29 to 2023-01-29 | Tradeable: 449 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 450), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-02-21 | Train: 2022-08-05 to 2023-02-05 | Tradeable: 449 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 450), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-02-28 | Train: 2022-08-12 to 2023-02-12 | Tradeable: 449 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 450), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-03-07 | Train: 2022-08-19 to 2023-02-20 | Tradeable: 449 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 450), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-03-14 | Train: 2022-08-26 to 2023-02-27 | Tradeable: 449 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 452), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-03-21 | Train: 2022-09-02 to 2023-03-06 | Tradeable: 451 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 452), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-03-28 | Train: 2022-09-12 to 2023-03-13 | Tradeable: 451 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 452), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-04-04 | Train: 2022-09-19 to 2023-03-20 | Tradeable: 451 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 452), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-04-12 | Train: 2022-09-26 to 2023-03-27 | Tradeable: 451 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 452), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-04-19 | Train: 2022-10-03 to 2023-04-03 | Tradeable: 451 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 452), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-04-26 | Train: 2022-10-10 to 2023-04-11 | Tradeable: 451 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 452), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-05-03 | Train: 2022-10-17 to 2023-04-18 | Tradeable: 451 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 453), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-05-10 | Train: 2022-10-24 to 2023-04-25 | Tradeable: 452 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 453), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-05-17 | Train: 2022-10-31 to 2023-05-02 | Tradeable: 452 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 453), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider'][Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+
+  Date 2023-05-24 | Train: 2022-11-07 to 2023-05-09 | Tradeable: 452 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 453), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-06-01 | Train: 2022-11-14 to 2023-05-16 | Tradeable: 452 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 453), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-06-08 | Train: 2022-11-21 to 2023-05-23 | Tradeable: 452 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 453), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-06-15 | Train: 2022-11-29 to 2023-05-31 | Tradeable: 452 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 454), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-06-25 | Train: 2022-12-06 to 2023-06-07 | Tradeable: 453 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 454), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-07-02 | Train: 2022-12-13 to 2023-06-14 | Tradeable: 453 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 454), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-07-10 | Train: 2022-12-20 to 2023-06-22 | Tradeable: 453 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 454), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-07-17 | Train: 2022-12-28 to 2023-06-29 | Tradeable: 453 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 454), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-07-24 | Train: 2023-01-05 to 2023-07-09 | Tradeable: 453 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 454), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-07-31 | Train: 2023-01-12 to 2023-07-16 | Tradeable: 453 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 454), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-08-07 | Train: 2023-01-20 to 2023-07-23 | Tradeable: 453 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 454), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-08-14 | Train: 2023-01-27 to 2023-07-30 | Tradeable: 453 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 454), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-08-21 | Train: 2023-02-03 to 2023-08-06 | Tradeable: 453 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 455), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-08-28 | Train: 2023-02-10 to 2023-08-13 | Tradeable: 454 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 455), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-09-05 | Train: 2023-02-17 to 2023-08-20 | Tradeable: 454 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 455), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-09-12 | Train: 2023-02-27 to 2023-08-27 | Tradeable: 454 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 457), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-09-19 | Train: 2023-03-06 to 2023-09-04 | Tradeable: 456 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 457), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-09-26 | Train: 2023-03-13 to 2023-09-11 | Tradeable: 456 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 457), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-10-03 | Train: 2023-03-20 to 2023-09-18 | Tradeable: 457 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 457), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-10-10 | Train: 2023-03-27 to 2023-09-25 | Tradeable: 457 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 457), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-10-17 | Train: 2023-04-03 to 2023-10-02 | Tradeable: 457 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 460), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-10-24 | Train: 2023-04-11 to 2023-10-09 | Tradeable: 459 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 460), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-10-31 | Train: 2023-04-18 to 2023-10-16 | Tradeable: 459 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 460), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-11-07 | Train: 2023-04-25 to 2023-10-23 | Tradeable: 459 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 460), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-11-14 | Train: 2023-05-02 to 2023-10-30 | Tradeable: 459 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 460), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-11-21 | Train: 2023-05-09 to 2023-11-06 | Tradeable: 459 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 460), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-11-29 | Train: 2023-05-16 to 2023-11-13 | Tradeable: 459 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 460), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-12-06 | Train: 2023-05-23 to 2023-11-20 | Tradeable: 459 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 460), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-12-13 | Train: 2023-05-31 to 2023-11-28 | Tradeable: 459 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 462), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider'][Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+
+  Date 2023-12-20 | Train: 2023-06-07 to 2023-12-05 | Tradeable: 461 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 462), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2023-12-28 | Train: 2023-06-14 to 2023-12-12 | Tradeable: 461 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 462), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2024-01-07 | Train: 2023-06-22 to 2023-12-19 | Tradeable: 461 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 462), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2024-01-15 | Train: 2023-06-29 to 2023-12-27 | Tradeable: 461 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 462), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2024-01-22 | Train: 2023-07-07 to 2024-01-04 | Tradeable: 461 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 462), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2024-01-29 | Train: 2023-07-14 to 2024-01-11 | Tradeable: 461 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 462), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2024-02-05 | Train: 2023-07-21 to 2024-01-21 | Tradeable: 461 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 462), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2024-02-12 | Train: 2023-07-28 to 2024-01-28 | Tradeable: 461 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 462), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2024-02-20 | Train: 2023-08-04 to 2024-02-04 | Tradeable: 461 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 462), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2024-02-27 | Train: 2023-08-11 to 2024-02-11 | Tradeable: 461 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 462), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2024-03-05 | Train: 2023-08-18 to 2024-02-19 | Tradeable: 461 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 462), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2024-03-12 | Train: 2023-08-25 to 2024-02-26 | Tradeable: 461 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 464), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2024-03-19 | Train: 2023-09-01 to 2024-03-04 | Tradeable: 463 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 464), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2024-03-26 | Train: 2023-09-11 to 2024-03-11 | Tradeable: 463 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 464), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2024-04-03 | Train: 2023-09-18 to 2024-03-18 | Tradeable: 465 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 464), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2024-04-10 | Train: 2023-09-25 to 2024-03-25 | Tradeable: 465 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 466), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2024-04-17 | Train: 2023-10-02 to 2024-04-02 | Tradeable: 465 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 466), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2024-04-24 | Train: 2023-10-09 to 2024-04-09 | Tradeable: 465 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 466), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'narrative']  skipped=['ml', 'insider']
+  Date 2024-05-01 | Train: 2023-10-16 to 2024-04-16 | Tradeable: 465 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 467), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2024-05-08 | Train: 2023-10-23 to 2024-04-23 | Tradeable: 466 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 467), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2024-05-15 | Train: 2023-10-30 to 2024-04-30 | Tradeable: 466 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 467), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2024-05-22 | Train: 2023-11-06 to 2024-05-07 | Tradeable: 466 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 467), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2024-05-30 | Train: 2023-11-13 to 2024-05-14 | Tradeable: 466 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 467), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2024-06-06 | Train: 2023-11-20 to 2024-05-21 | Tradeable: 466 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 467), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2024-06-13 | Train: 2023-11-28 to 2024-05-29 | Tradeable: 466 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 467), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2024-06-23 | Train: 2023-12-05 to 2024-06-05 | Tradeable: 466 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 470), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2024-06-30 | Train: 2023-12-12 to 2024-06-12 | Tradeable: 469 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 471), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2024-07-08 | Train: 2023-12-19 to 2024-06-20 | Tradeable: 470 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 471), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2024-07-15 | Train: 2023-12-27 to 2024-06-27 | Tradeable: 470 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 471), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml'][Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+fundamental alpha returned empty
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+
+  Date 2024-07-22 | Train: 2024-01-04 to 2024-07-07 | Tradeable: 470 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 471), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2024-07-29 | Train: 2024-01-11 to 2024-07-14 | Tradeable: 470 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 471), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2024-08-05 | Train: 2024-01-19 to 2024-07-21 | Tradeable: 470 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 471), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2024-08-12 | Train: 2024-01-26 to 2024-07-28 | Tradeable: 470 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 471), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2024-08-19 | Train: 2024-02-02 to 2024-08-04 | Tradeable: 470 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 471), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2024-08-26 | Train: 2024-02-09 to 2024-08-11 | Tradeable: 470 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 471), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2024-09-03 | Train: 2024-02-16 to 2024-08-18 | Tradeable: 470 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 471), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2024-09-10 | Train: 2024-02-26 to 2024-08-25 | Tradeable: 470 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 471), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2024-09-17 | Train: 2024-03-04 to 2024-09-02 | Tradeable: 470 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 474), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2024-09-24 | Train: 2024-03-11 to 2024-09-09 | Tradeable: 473 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 474), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2024-10-01 | Train: 2024-03-18 to 2024-09-16 | Tradeable: 473 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 474), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2024-10-08 | Train: 2024-03-25 to 2024-09-23 | Tradeable: 473 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 474), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2024-10-15 | Train: 2024-04-02 to 2024-09-30 | Tradeable: 473 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 474), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2024-10-22 | Train: 2024-04-09 to 2024-10-07 | Tradeable: 473 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 474), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2024-10-29 | Train: 2024-04-16 to 2024-10-14 | Tradeable: 473 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 474), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2024-11-05 | Train: 2024-04-23 to 2024-10-21 | Tradeable: 473 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 474), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2024-11-12 | Train: 2024-04-30 to 2024-10-28 | Tradeable: 473 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 474), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2024-11-19 | Train: 2024-05-07 to 2024-11-04 | Tradeable: 473 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 475), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2024-11-26 | Train: 2024-05-14 to 2024-11-11 | Tradeable: 474 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 475), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2024-12-04 | Train: 2024-05-21 to 2024-11-18 | Tradeable: 474 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 475), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2024-12-11 | Train: 2024-05-29 to 2024-11-25 | Tradeable: 474 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 475), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2024-12-18 | Train: 2024-06-05 to 2024-12-03 | Tradeable: 474 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 478), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2024-12-26 | Train: 2024-06-12 to 2024-12-10 | Tradeable: 477 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 478), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-01-05 | Train: 2024-06-20 to 2024-12-17 | Tradeable: 477 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 478), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-01-13 | Train: 2024-06-27 to 2024-12-25 | Tradeable: 477 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 478), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-01-21 | Train: 2024-07-05 to 2025-01-02 | Tradeable: 477 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 478), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-01-28 | Train: 2024-07-12 to 2025-01-12 | Tradeable: 477 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 478), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-02-04 | Train: 2024-07-19 to 2025-01-20 | Tradeable: 477 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 478), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-02-11 | Train: 2024-07-26 to 2025-01-27 | Tradeable: 477 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 478), valid rows: 0[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-02-19 | Train: 2024-08-02 to 2025-02-03 | Tradeable: 477 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 478), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-02-26 | Train: 2024-08-09 to 2025-02-10 | Tradeable: 477 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 478), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-03-05 | Train: 2024-08-16 to 2025-02-18 | Tradeable: 477 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 478), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-03-12 | Train: 2024-08-23 to 2025-02-25 | Tradeable: 477 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 478), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-03-19 | Train: 2024-08-30 to 2025-03-04 | Tradeable: 477 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 482), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-03-26 | Train: 2024-09-09 to 2025-03-11 | Tradeable: 481 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 482), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-04-02 | Train: 2024-09-16 to 2025-03-18 | Tradeable: 481 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 482), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-04-09 | Train: 2024-09-23 to 2025-03-25 | Tradeable: 481 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 482), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-04-16 | Train: 2024-09-30 to 2025-04-01 | Tradeable: 481 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 482), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-04-24 | Train: 2024-10-07 to 2025-04-08 | Tradeable: 481 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 482), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-05-01 | Train: 2024-10-14 to 2025-04-15 | Tradeable: 481 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 482), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-05-08 | Train: 2024-10-21 to 2025-04-23 | Tradeable: 481 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 482), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-05-15 | Train: 2024-10-28 to 2025-04-30 | Tradeable: 481 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 483), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-05-22 | Train: 2024-11-04 to 2025-05-07 | Tradeable: 482 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 483), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-06-01 | Train: 2024-11-11 to 2025-05-14 | Tradeable: 482 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 483), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-06-08 | Train: 2024-11-18 to 2025-05-21 | Tradeable: 482 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 483), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-06-15 | Train: 2024-11-25 to 2025-05-29 | Tradeable: 482 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 483), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-06-23 | Train: 2024-12-03 to 2025-06-05 | Tradeable: 482 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 483), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-06-30 | Train: 2024-12-10 to 2025-06-12 | Tradeable: 482 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 483), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-07-08 | Train: 2024-12-17 to 2025-06-22 | Tradeable: 482 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 484), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-07-15 | Train: 2024-12-24 to 2025-06-29 | Tradeable: 483 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 485), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-07-22 | Train: 2025-01-02 to 2025-07-07 | Tradeable: 484 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 486), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-07-29 | Train: 2025-01-10 to 2025-07-14 | Tradeable: 485 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 486), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-08-05 | Train: 2025-01-17 to 2025-07-21 | Tradeable: 485 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 486), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-08-12 | Train: 2025-01-27 to 2025-07-28 | Tradeable: 485 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 486), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-08-19 | Train: 2025-02-03 to 2025-08-04 | Tradeable: 485 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 486), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-08-26 | Train: 2025-02-10 to 2025-08-11 | Tradeable: 485 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 487), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml'][Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+
+  Date 2025-09-03 | Train: 2025-02-18 to 2025-08-18 | Tradeable: 486 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 487), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-09-10 | Train: 2025-02-25 to 2025-08-25 | Tradeable: 486 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 487), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-09-17 | Train: 2025-03-04 to 2025-09-02 | Tradeable: 486 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 490), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-09-24 | Train: 2025-03-11 to 2025-09-09 | Tradeable: 489 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 490), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-10-01 | Train: 2025-03-18 to 2025-09-16 | Tradeable: 489 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 490), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-10-08 | Train: 2025-03-25 to 2025-09-23 | Tradeable: 489 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 490), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-10-15 | Train: 2025-04-01 to 2025-09-30 | Tradeable: 489 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 490), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-10-22 | Train: 2025-04-08 to 2025-10-07 | Tradeable: 489 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 490), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-10-29 | Train: 2025-04-15 to 2025-10-14 | Tradeable: 489 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 490), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-11-05 | Train: 2025-04-23 to 2025-10-21 | Tradeable: 490 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 491), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-11-12 | Train: 2025-04-30 to 2025-10-28 | Tradeable: 490 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 491), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-11-19 | Train: 2025-05-07 to 2025-11-04 | Tradeable: 490 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 491), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-11-27 | Train: 2025-05-14 to 2025-11-11 | Tradeable: 490 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 492), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-12-04 | Train: 2025-05-21 to 2025-11-18 | Tradeable: 491 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 493), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-12-11 | Train: 2025-05-29 to 2025-11-25 | Tradeable: 492 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 493), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-12-18 | Train: 2025-06-05 to 2025-12-03 | Tradeable: 492 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 496), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2025-12-28 | Train: 2025-06-12 to 2025-12-10 | Tradeable: 495 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 496), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2026-01-05 | Train: 2025-06-20 to 2025-12-17 | Tradeable: 495 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 496), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2026-01-12 | Train: 2025-06-27 to 2025-12-25 | Tradeable: 495 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 496), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2026-01-20 | Train: 2025-07-07 to 2026-01-04 | Tradeable: 495 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 496), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2026-01-27 | Train: 2025-07-14 to 2026-01-11 | Tradeable: 495 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 496), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'narrative']  skipped=['ml']
+  Date 2026-02-03 | Train: 2025-07-21 to 2026-01-19 | Tradeable: 495 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 497), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'earnings_tone', 'narrative']  skipped=['ml']
+  Date 2026-02-10 | Train: 2025-07-28 to 2026-01-26 | Tradeable: 496 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 497), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'earnings_tone', 'narrative']  skipped=['ml']
+  Date 2026-02-18 | Train: 2025-08-04 to 2026-02-02 | Tradeable: 496 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 497), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'earnings_tone', 'narrative']  skipped=['ml']
+  Date 2026-02-25 | Train: 2025-08-11 to 2026-02-09 | Tradeable: 496 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 497), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'earnings_tone', 'narrative']  skipped=['ml']
+  Date 2026-03-04 | Train: 2025-08-18 to 2026-02-17 | Tradeable: 496 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 497), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'earnings_tone', 'narrative']  skipped=['ml']
+  Date 2026-03-11 | Train: 2025-08-25 to 2026-02-24 | Tradeable: 496 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 497), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'earnings_tone', 'narrative']  skipped=['ml'][Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+[Stack] IC gate: zeroing meanrev (rolling mean_ic=-0.0140 < -0.005)
+[Stack] IC gate: zeroing insider (rolling mean_ic=-0.0532 < -0.005)
+[ML-CPCV] no aligned feature+target rows — skipping
+ML sleeve returned empty (CPCV reliability guard or insufficient data)
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/Users/scott/IdeaProjects/ascent-capital/ascent/research/walk_forward_runner.py", line 543, in walk_forward_pipeline
+    from ascent.dashboard.export_dashboard_data import export_to_dashboard
+ModuleNotFoundError: No module named 'ascent.dashboard.export_dashboard_data'
+
+  Date 2026-03-18 | Train: 2025-09-02 to 2026-03-03 | Tradeable: 496 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 501), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'earnings_tone', 'narrative']  skipped=['ml']
+  Date 2026-03-25 | Train: 2025-09-09 to 2026-03-10 | Tradeable: 500 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 501), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'earnings_tone', 'narrative']  skipped=['ml']
+  Date 2026-04-01 | Train: 2025-09-16 to 2026-03-17 | Tradeable: 500 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 502), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'earnings_tone', 'narrative']  skipped=['ml']
+  Date 2026-04-09 | Train: 2025-09-23 to 2026-03-24 | Tradeable: 501 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 502), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'earnings_tone', 'narrative']  skipped=['ml']
+  Date 2026-04-16 | Train: 2025-09-30 to 2026-03-31 | Tradeable: 501 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 502), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'earnings_tone', 'narrative']  skipped=['ml']
+  Date 2026-04-23 | Train: 2025-10-07 to 2026-04-08 | Tradeable: 501 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 502), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'earnings_tone', 'narrative']  skipped=['ml']
+  Date 2026-04-30 | Train: 2025-10-14 to 2026-04-15 | Tradeable: 501 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 502), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'earnings_tone', 'narrative']  skipped=['ml']
+  Date 2026-05-07 | Train: 2025-10-21 to 2026-04-22 | Tradeable: 501 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 502), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'earnings_tone', 'narrative']  skipped=['ml']
+  Date 2026-05-14 | Train: 2025-10-28 to 2026-04-29 | Tradeable: 501 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 502), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'earnings_tone', 'narrative']  skipped=['ml']
+  Date 2026-05-21 | Train: 2025-11-04 to 2026-05-06 | Tradeable: 501 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 502), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'earnings_tone', 'narrative']  skipped=['ml']
+  Date 2026-05-31 | Train: 2025-11-11 to 2026-05-13 | Tradeable: 501 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 502), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'insider', 'earnings_tone', 'narrative']  skipped=['ml']
+  Date 2026-06-07 | Train: 2025-11-18 to 2026-05-20 | Tradeable: 501 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 502), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'options_flow', 'insider', 'earnings_tone', 'narrative']  skipped=['ml']
+  Date 2026-06-14 | Train: 2025-11-25 to 2026-05-28 | Tradeable: 501 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 502), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'options_flow', 'insider', 'earnings_tone', 'narrative']  skipped=['ml']
+  Date 2026-06-22 | Train: 2025-12-03 to 2026-06-04 | Tradeable: 501 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 502), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'options_flow', 'insider', 'earnings_tone', 'narrative']  skipped=['ml']
+  Date 2026-06-29 | Train: 2025-12-10 to 2026-06-11 | Tradeable: 501 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 502), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'options_flow', 'insider', 'earnings_tone', 'narrative']  skipped=['ml']
+  Date 2026-07-07 | Train: 2025-12-17 to 2026-06-21 | Tradeable: 501 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 502), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'options_flow', 'insider', 'earnings_tone', 'narrative']  skipped=['ml']
+  Date 2026-07-14 | Train: 2025-12-24 to 2026-06-28 | Tradeable: 501 | Positions: 12 | Regime: none
+[WF] targets injected, shape: (252, 502), valid rows: 0
+[alpha_stack] loaded=['trend', 'meanrev', 'volatility', 'statarb', 'fundamental', 'earnings', 'analyst', 'options_flow', 'insider', 'earnings_tone', 'narrative']  skipped=['ml']
+  Date 2026-07-21 | Train: 2026-01-02 to 2026-07-06 | Tradeable: 501 | Positions: 12 | Regime: none
+----------------------------------------------------------------------
+
+[WF] FOLD SUMMARY:
+  Total folds:             330
+  Succeeded:               330
+  Skipped (thin universe): 0
+  Failed:                  0
+  Avg universe size:       453.0 symbols
+
+[Walk-Forward] Combined OOS weights: 330 rebalance dates → 3291 daily rows (ffilled)
+[Walk-Forward] OOS period: 2020-01-01 to 2026-07-21
+
+======================================================================
+  OUT-OF-SAMPLE BACKTEST
+======================================================================
+
+============================================================
+  PERFORMANCE REPORT
+============================================================
+  Total Return:     -10.40%
+  CAGR:             -0.84%
+  Volatility:       1.93%
+  Sharpe Ratio:     -0.433
+  Sortino Ratio:    -0.184
+  Max Drawdown:     -13.13%
+  Calmar Ratio:     -0.064
+  Hit Rate:         4.6%
+  Profit Factor:    0.79
+------------------------------------------------------------
+  Trading Days:     3291
+  Best Day:         +1.42%
+  Worst Day:        -1.74%
+------------------------------------------------------------
+  Benchmark CAGR:   +0.00%
+  Alpha:            -0.84%
+  Beta:             0.000
+  Excess Sharpe:    -0.433
+------------------------------------------------------------
+  Avg Turnover:     3.14% per day
+  Avg Positions:    11.9
+============================================================
