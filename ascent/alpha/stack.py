@@ -73,7 +73,10 @@ def _get_gated_weights(
     """
     Read last `window` unique-date entries from sleeve_ic_log.jsonl.
     Zero out any sleeve whose rolling mean IC < IC_GATE_THRESHOLD.
-    Freed weight redistributed to trend.
+    Freed weight is redistributed proportionally among the surviving
+    (non-gated, non-zero) sleeves, by their existing weight share. If every
+    sleeve ends up gated (no survivors), the original alpha_weights are
+    returned unchanged rather than producing an all-zero dict.
     """
     import json as _json
     from collections import defaultdict as _defaultdict
@@ -124,8 +127,20 @@ def _get_gated_weights(
             sleeve, avg_ic, IC_GATE_THRESHOLD,
         )
         result[sleeve] = 0.0
-    if freed > 0 and "trend" in result and result.get("trend", 0) > 0:
-        result["trend"] = round(result["trend"] + freed, 4)
+
+    survivors = {s: w for s, w in result.items() if s not in gated and w > 0}
+    survivors_total = sum(survivors.values())
+
+    if freed > 0 and survivors_total > 0:
+        for sleeve, weight in survivors.items():
+            result[sleeve] = round(weight + freed * (weight / survivors_total), 4)
+    elif freed > 0 and survivors_total <= 0:
+        # Every sleeve gated: fail safe, don't return an all-zero dict.
+        log.warning(
+            "[Stack] IC gate: all sleeves gated (%s) -- keeping original weights unchanged",
+            sorted(gated),
+        )
+        return alpha_weights
 
     return result
 
