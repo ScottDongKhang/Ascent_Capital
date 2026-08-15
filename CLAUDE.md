@@ -226,14 +226,23 @@ Cache-name provenance — never obscure it: `prices_live` (Yahoo live), `prices_
 Point-in-time joins: always use `as_of_join()` / `as_of_merge()` from
 `ascent/data/store/point_in_time.py` for cross-dataset alignment.
 
-**`prices_live` duplicate rows have recurred twice.** `save_parquet` dedups on a
+**`prices_live` duplicate rows have recurred three times.** `save_parquet` dedups on a
 `_calendar_day_key`, the live read path additionally defends itself with
 `~index.duplicated(keep="last")` in `ascent/main.py`, and first-write dedup plus an
 evening-stamp rollover were added after the second recurrence. **Do not treat the cache as
 clean on trust** — a previous cleanup had already been reported as holding when it was not.
-Measure it: `scripts/reconcile_numbers.py` reports the live duplicate count in its
-data-integrity section. This matters most for backtests, because the walk-forward framework
-does **not** dedupe on read; only the live pipeline does.
+The third occurrence (2026-08-15 audit) was structurally different from the first two: a
+same-day duplicate stamped at a non-midnight intraday timestamp (a late hub fetch, typically
+19:00/20:00) with disjoint symbol coverage from the midnight row for that day — not caught by
+the existing dedup mechanisms because `pivot_prices()`'s plain `.dt.normalize()` disagreed with
+`_calendar_day_key`'s evening-rollover rule on which trading day the phantom row belonged to.
+Fixed by the Task 2 repair (commit `9fd74ea`, which merged the two row populations per
+(symbol, trading day) and rewrote phantom-only cells to midnight) plus the `pivot_prices`/
+`validate_cache` hardening (commit `9f145fc`, both now grouping/checking against
+`_calendar_day_key` consistently). Measure it: `scripts/reconcile_numbers.py` reports the live
+duplicate count AND the non-midnight (phantom-row) row count in its data-integrity section.
+This matters most for backtests, because the walk-forward framework does **not** dedupe on
+read; only the live pipeline does.
 
 ---
 

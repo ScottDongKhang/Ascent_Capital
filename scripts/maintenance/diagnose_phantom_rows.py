@@ -48,6 +48,19 @@ CSV_PATH = REPO_ROOT / "outputs/wf_results/phantom_only_cells_2026-08-15.csv"
 
 
 def main() -> int:
+    # Refuse to clobber a prior report: the cache is now repaired, so a
+    # re-run today would produce a trivial "0 phantom rows found" report and
+    # silently destroy the evidence artifact that Task 2's repair-script
+    # justification cites. Matches the backup-file guard convention in
+    # scripts/maintenance/repair_prices_live_phantom_rows.py (fail loudly
+    # instead of silently overwriting).
+    if REPORT_PATH.exists():
+        raise SystemExit(
+            f"Refusing to overwrite existing report at {REPORT_PATH}: it is "
+            "evidence cited by the Task 2 repair-script justification. "
+            "Delete or move it first if you intentionally want to regenerate it."
+        )
+
     df = load_parquet("prices_live")
     n_total = len(df)
 

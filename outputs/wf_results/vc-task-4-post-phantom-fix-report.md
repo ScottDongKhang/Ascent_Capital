@@ -96,7 +96,7 @@ effectively gone** (99% → ~1%, and the remainder is explainable by legitimate 
 
 **These numbers look like a plausible real 2-sleeve equity strategy result, not an obviously
 broken pipeline.** Sharpe 0.415, hit rate 52.3%, non-zero benchmark CAGR/beta with beta ≈ 0.95
-(sensible for a long-only concentrated book), positive but benchmark-lagging alpha (-3.62%,
+(sensible for a long-only concentrated book), negative, benchmark-lagging alpha (-3.62%,
 consistent with CLAUDE.md's documented raw-return lag vs SPY from defensive sleeves/vol-targeting/
 200MA cuts — though note this specific run is the *equity-only* 2-sleeve walk-forward, not the
 full multi-sleeve production stack), and a max drawdown (-45.65%) that is large but falls within

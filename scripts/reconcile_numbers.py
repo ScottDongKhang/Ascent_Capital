@@ -248,6 +248,7 @@ def data_integrity() -> dict:
         return out
 
     from ascent.data.store.parquet import _calendar_day_key
+    from datetime import time as _time
 
     out["rows"] = len(df)
     out["symbols"] = int(df["symbol"].nunique())
@@ -262,6 +263,24 @@ def data_integrity() -> dict:
     out["dup_rows"] = int(dup_mask.sum())
     out["dup_pct"] = out["dup_rows"] / max(1, out["rows"])
     out["dup_symbols"] = int(key[key.duplicated(keep=False)]["symbol"].nunique())
+
+    # Phantom-row corruption signature (2026-08-15 audit): a bar written with
+    # a non-midnight time-of-day slips past the calendar-day-collapsing dedup
+    # above (that's exactly why this check reads `dup_rows: 0` even on a
+    # fully phantom-corrupted cache -- the dedup key already collapses the
+    # corruption away before counting). Mirrors the check in
+    # ascent/data/store/parquet.py::validate_cache: handle a tz-aware column
+    # by localizing to naive before comparing .dt.time, and gate on
+    # is_datetime64_any_dtype so a mixed-dtype object column doesn't crash.
+    non_midnight_rows = 0
+    if pd.api.types.is_datetime64_any_dtype(df["date"]):
+        dates = pd.to_datetime(df["date"], errors="coerce").dropna()
+        naive_dates = dates
+        if isinstance(naive_dates.dtype, pd.DatetimeTZDtype):
+            naive_dates = naive_dates.dt.tz_localize(None)
+        non_midnight_rows = int((naive_dates.dt.time != _time(0, 0)).sum())
+    out["non_midnight_rows"] = non_midnight_rows
+    out["non_midnight_pct"] = non_midnight_rows / max(1, out["rows"])
     if "source" in df.columns:
         out["sources"] = {str(k): int(v) for k, v in
                           df["source"].value_counts().head(6).items()}
@@ -280,6 +299,9 @@ def render_data_integrity(d: dict) -> str:
     L.append(f"| Duplicate (symbol, market-calendar-day) rows | "
              f"**{d['dup_rows']:,}** ({d['dup_pct'] * 100:.1f}% of rows), "
              f"across {d['dup_symbols']:,} symbols |")
+    if "non_midnight_rows" in d:
+        L.append(f"| Non-midnight time-of-day rows (phantom-row signature) | "
+                 f"**{d['non_midnight_rows']:,}** ({d['non_midnight_pct'] * 100:.1f}% of rows) |")
     if d.get("sources"):
         srcs = ", ".join(f"`{k}` {v:,}" for k, v in d["sources"].items())
         L.append(f"| Source generations present | {srcs} |")

@@ -226,7 +226,10 @@ def validate_cache(
         if non_midnight > 0:
             return False, (
                 f"{non_midnight} rows have non-midnight time-of-day "
-                "(phantom-row corruption)"
+                "(phantom-row corruption) -- refetch-and-append will NOT remove "
+                "these rows (they keep their own dedup key and survive "
+                "save_parquet's append); run "
+                "scripts/maintenance/repair_prices_live_phantom_rows.py to fix"
             )
 
     cache_start = dates.min().normalize().tz_localize(None)

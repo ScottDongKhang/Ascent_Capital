@@ -70,17 +70,36 @@ def pivot_prices(df: pd.DataFrame, field: str = "close") -> pd.DataFrame:
     Pivot normalized price data to wide format: dates × symbols.
     Used for cross-sectional feature computation.
     """
-    df = df.copy()
-    # Normalize the date column to midnight before pivoting. Under normal
-    # operation normalize_prices() already does this, but pivot_prices is
-    # called directly elsewhere too, and a same-day phantom row with a
-    # non-midnight time-of-day (see the parquet.py validate_cache guard)
-    # would otherwise pivot to a SEPARATE index entry instead of colliding
-    # with the real midnight row for that date. aggfunc="last" is kept so any
-    # remaining same-day collision after normalization resolves
-    # deterministically rather than silently fragmenting the date index.
-    df["date"] = pd.to_datetime(df["date"]).dt.normalize()
-    pivot = df.pivot_table(index="date", columns="symbol", values=field, aggfunc="last")
+    # Group on the TRADING day (_calendar_day_key), not a plain
+    # .dt.normalize(). Both the repaired prices_live cache and
+    # save_parquet's own dedup already group on _calendar_day_key, which
+    # rolls a bar stamped >=17:00 local forward onto the NEXT calendar day
+    # (that stamp is that day's already-closed bar, fetched and recorded
+    # late -- see _calendar_day_key's docstring). A plain normalize()
+    # disagrees with that: it would merge a same-day phantom row into the
+    # WRONG trading day and, combined with aggfunc="last", could silently
+    # overwrite a real close with a value that actually belongs to the next
+    # day -- a worse, silent failure mode than the old fragmented-index
+    # symptom (which at least produced an obviously-wrong ~2x row count).
+    from ascent.data.store.parquet import _calendar_day_key
+
+    raw_date = pd.to_datetime(df["date"])
+    day_key = _calendar_day_key(raw_date)
+    # Only derive the small pieces pivot_table actually needs -- avoid
+    # copying the whole (potentially 1.5M-row) frame just to overwrite one
+    # column.
+    small = pd.DataFrame({
+        "date": day_key,
+        "symbol": df["symbol"].values,
+        field: df[field].values,
+    })
+    # Same-day collisions must resolve by ACTUAL timestamp, not by input row
+    # order: aggfunc="last" picks the last row per group as pivot_table sees
+    # it, so sort by the original (un-normalized) timestamp first -- that
+    # makes "last" mean "latest-stamped value wins" regardless of how the
+    # input frame was ordered.
+    small = small.assign(_raw_date=raw_date.values).sort_values("_raw_date")
+    pivot = small.pivot_table(index="date", columns="symbol", values=field, aggfunc="last")
     pivot = pivot.sort_index()
     return pivot
 
