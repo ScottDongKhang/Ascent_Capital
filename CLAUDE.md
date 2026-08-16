@@ -7,8 +7,11 @@ portfolio → walk-forward → regime → **one** capital-allocating agent (`us_
 orchestration → Alpaca paper trading. The AI PM, the debate layer, and the falsifier registry
 all still run, but **advisory only**: they produce theses, verdicts, and proposals that are
 logged and scored, and none of them writes to live weights (see integrity constraint #5). The
-other three specialist agents (`macro`, `international`, `alternatives`) are code-intact but
-not invoked in the daily run.
+other three specialist agents (`macro`, `international`, `alternatives`) are not invoked
+directly by `run_all_agents.py`, but the AI PM's `run_quant_agent` tool
+(`agents/ai_pm_agent.py`) requires calling all four agents ("Required: run_quant_agent for all
+four agents") — so on a scheduled rebalance day, Phase 2 of the AI PM actually does execute
+all three "dormant" agents' full pipelines via that tool, at real wall-clock/API cost.
 
 **Daily command**: `.venv/bin/python run_all_agents.py` (branches on rebalance day)
 
@@ -211,9 +214,18 @@ See `docs/REPO_MAP.md` for what to grep for and which files are worth reading wh
   `ascent/analyst/proof_audit/run.py::_load_agent_price_matrix`, and
   `ascent/risk/correlation_guard.py::_load_combined_prices` (sorts — its window is
   `returns.iloc[-63:]`). Add the restore to any new consumer.
-  **Still true:** the three on-disk caches written before this fix are corrupt (dateless
-  `RangeIndex`, 176k/151k/150k rows for 9-13 symbols) and cannot be repaired in place —
-  deleting and re-fetching them is a separate planned data operation, not yet done.
+  **Repaired:** the three caches have been deleted and re-fetched; each now loads with a
+  proper `date` column, ~1662 rows, spanning 2020-01-02 onward. Do not describe them as
+  dateless/corrupt going forward.
+
+  `macro_agent`'s proof-audit result is a **positive point estimate that is not proven**, not
+  a negative one — `outputs/analyst/proof_audit_2026-08-13.json` shows IC=+0.0204, two-sided
+  p=0.061, n=1644 (the CUT verdict is the two-sided-significance gate; one-sided p≈0.03 would
+  pass, but its universe is only 12 symbols so treat the significance test as low-powered
+  either way). `alternatives_agent` is **structurally unmeasurable by the current harness**,
+  not evidence of bad data or bad signal: its universe is 7 symbols and the harness requires
+  ≥10 for long-short leg construction, hence `INSUFFICIENT_DATA` — the underlying
+  `prices_alternatives` cache above is valid.
 
 ---
 
