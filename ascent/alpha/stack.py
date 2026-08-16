@@ -192,13 +192,14 @@ def build_alpha_stack(features, alpha_weights=None, regime_signal=None, agent_id
         alpha_weights = _load_active_alpha_weights(ai_prior=ai_prior)
         alpha_weights = _get_gated_weights(alpha_weights)
     alphas = {}
-    try:
-        trend = trend_alpha(features)
-        if not trend.empty:
-            alphas["trend"] = trend
-            log.info("trend alpha loaded shape=%s", trend.shape)
-    except Exception as exc:
-        log.error("trend alpha failed: %s", exc)
+    if alpha_weights.get("trend", 0) > 0:
+        try:
+            trend = trend_alpha(features)
+            if not trend.empty:
+                alphas["trend"] = trend
+                log.info("trend alpha loaded shape=%s", trend.shape)
+        except Exception as exc:
+            log.error("trend alpha failed: %s", exc)
     try:
         mr = meanrev_alpha(features)
         if not mr.empty:
@@ -206,25 +207,26 @@ def build_alpha_stack(features, alpha_weights=None, regime_signal=None, agent_id
             log.info("meanrev alpha loaded shape=%s", mr.shape)
     except Exception as exc:
         log.error("meanrev alpha failed: %s", exc)
-    if "vol_of_vol_21d" in features and "vol_trend_10d" in features:
-        try:
-            # Vol-regime alpha: long names with declining vol AND stable vol-of-vol.
-            # Signal = -(vol_trend) / (vol_of_vol + epsilon)
-            # Positive when vol is falling stably; orthogonal to raw momentum.
-            vov   = features["vol_of_vol_21d"].copy().replace(0, np.nan)
-            vtrnd = features["vol_trend_10d"].copy()
-            vol_alpha = _cs_normalize(-vtrnd / (vov + 1e-6))
-            alphas["volatility"] = vol_alpha
-            log.info("vol-regime alpha loaded shape=%s", vol_alpha.shape)
-        except Exception as exc:
-            log.error("vol-regime alpha failed: %s", exc)
-    elif "vol_21d" in features:
-        try:
-            vol_alpha = -_cs_normalize(features["vol_21d"].copy())
-            alphas["volatility"] = vol_alpha
-            log.info("volatility alpha (low-vol fallback) loaded shape=%s", vol_alpha.shape)
-        except Exception as exc:
-            log.error("volatility alpha failed: %s", exc)
+    if alpha_weights.get("volatility", 0) > 0:
+        if "vol_of_vol_21d" in features and "vol_trend_10d" in features:
+            try:
+                # Vol-regime alpha: long names with declining vol AND stable vol-of-vol.
+                # Signal = -(vol_trend) / (vol_of_vol + epsilon)
+                # Positive when vol is falling stably; orthogonal to raw momentum.
+                vov   = features["vol_of_vol_21d"].copy().replace(0, np.nan)
+                vtrnd = features["vol_trend_10d"].copy()
+                vol_alpha = _cs_normalize(-vtrnd / (vov + 1e-6))
+                alphas["volatility"] = vol_alpha
+                log.info("vol-regime alpha loaded shape=%s", vol_alpha.shape)
+            except Exception as exc:
+                log.error("vol-regime alpha failed: %s", exc)
+        elif "vol_21d" in features:
+            try:
+                vol_alpha = -_cs_normalize(features["vol_21d"].copy())
+                alphas["volatility"] = vol_alpha
+                log.info("volatility alpha (low-vol fallback) loaded shape=%s", vol_alpha.shape)
+            except Exception as exc:
+                log.error("volatility alpha failed: %s", exc)
     try:
         sector_map = _load_sector_map()
         sa = statarb_alpha(features, sector_map=sector_map)
@@ -253,26 +255,28 @@ def build_alpha_stack(features, alpha_weights=None, regime_signal=None, agent_id
             log.warning("ML sleeve skipped - targets not in features dict")
     except Exception as exc:
         log.warning("ML sleeve failed: %s", exc)
-    try:
-        from ascent.alpha.fundamental import fundamental_alpha
-        fund = fundamental_alpha(features)
-        if fund is not None and not fund.empty:
-            alphas["fundamental"] = fund
-            log.info("fundamental alpha loaded shape=%s", fund.shape)
-        else:
-            log.warning("fundamental alpha returned empty")
-    except Exception as exc:
-        log.error("fundamental alpha failed: %s", exc)
-    try:
-        from ascent.alpha.earnings import earnings_alpha
-        earn = earnings_alpha(features)
-        if earn is not None and not earn.empty:
-            alphas["earnings"] = earn
-            log.info("earnings alpha (PEAD) loaded shape=%s", earn.shape)
-        else:
-            log.debug("earnings alpha returned empty — cache absent or no recent surprises")
-    except Exception as exc:
-        log.error("earnings alpha failed: %s", exc)
+    if alpha_weights.get("fundamental", 0) > 0:
+        try:
+            from ascent.alpha.fundamental import fundamental_alpha
+            fund = fundamental_alpha(features)
+            if fund is not None and not fund.empty:
+                alphas["fundamental"] = fund
+                log.info("fundamental alpha loaded shape=%s", fund.shape)
+            else:
+                log.warning("fundamental alpha returned empty")
+        except Exception as exc:
+            log.error("fundamental alpha failed: %s", exc)
+    if alpha_weights.get("earnings", 0) > 0:
+        try:
+            from ascent.alpha.earnings import earnings_alpha
+            earn = earnings_alpha(features)
+            if earn is not None and not earn.empty:
+                alphas["earnings"] = earn
+                log.info("earnings alpha (PEAD) loaded shape=%s", earn.shape)
+            else:
+                log.debug("earnings alpha returned empty — cache absent or no recent surprises")
+        except Exception as exc:
+            log.error("earnings alpha failed: %s", exc)
     # LLM Fundamental sleeve (Chicago Booth 6-step CoT via Haiku)
     if alpha_weights.get("llm_fundamental", 0) > 0:
         try:
@@ -301,46 +305,50 @@ def build_alpha_stack(features, alpha_weights=None, regime_signal=None, agent_id
                 log.debug("[Stack] LLM fundamental sleeve returned empty — cache absent or API unavailable")
         except Exception as _e:
             log.warning("[Stack] LLM fundamental sleeve failed: %s", _e)
-    try:
-        from ascent.alpha.analyst import analyst_alpha
-        anl = analyst_alpha(features)
-        if anl is not None and not anl.empty:
-            alphas["analyst"] = anl
-            log.info("analyst revision alpha loaded shape=%s", anl.shape)
-        else:
-            log.debug("analyst alpha returned empty — cache absent or no revision data")
-    except Exception as exc:
-        log.error("analyst alpha failed: %s", exc)
-    try:
-        from ascent.alpha.options_flow import options_flow_alpha
-        opt = options_flow_alpha(features)
-        if opt is not None and not opt.empty:
-            alphas["options_flow"] = opt
-            log.info("options flow alpha loaded shape=%s", opt.shape)
-        else:
-            log.debug("options flow alpha returned empty — cache absent or insufficient data")
-    except Exception as exc:
-        log.error("options flow alpha failed: %s", exc)
-    try:
-        from ascent.alpha.insider import insider_alpha
-        ins = insider_alpha(features)
-        if ins is not None and not ins.empty:
-            alphas["insider"] = ins
-            log.info("insider alpha loaded shape=%s", ins.shape)
-        else:
-            log.debug("insider alpha returned empty — cache absent or no transactions")
-    except Exception as exc:
-        log.error("insider alpha failed: %s", exc)
-    try:
-        from ascent.alpha.short_interest import short_interest_alpha
-        si = short_interest_alpha(features)
-        if si is not None and not si.empty:
-            alphas["short_interest"] = si
-            log.info("short interest alpha loaded shape=%s", si.shape)
-        else:
-            log.debug("short interest alpha returned empty — cache absent or no data")
-    except Exception as exc:
-        log.error("short interest alpha failed: %s", exc)
+    if alpha_weights.get("analyst", 0) > 0:
+        try:
+            from ascent.alpha.analyst import analyst_alpha
+            anl = analyst_alpha(features)
+            if anl is not None and not anl.empty:
+                alphas["analyst"] = anl
+                log.info("analyst revision alpha loaded shape=%s", anl.shape)
+            else:
+                log.debug("analyst alpha returned empty — cache absent or no revision data")
+        except Exception as exc:
+            log.error("analyst alpha failed: %s", exc)
+    if alpha_weights.get("options_flow", 0) > 0:
+        try:
+            from ascent.alpha.options_flow import options_flow_alpha
+            opt = options_flow_alpha(features)
+            if opt is not None and not opt.empty:
+                alphas["options_flow"] = opt
+                log.info("options flow alpha loaded shape=%s", opt.shape)
+            else:
+                log.debug("options flow alpha returned empty — cache absent or insufficient data")
+        except Exception as exc:
+            log.error("options flow alpha failed: %s", exc)
+    if alpha_weights.get("insider", 0) > 0:
+        try:
+            from ascent.alpha.insider import insider_alpha
+            ins = insider_alpha(features)
+            if ins is not None and not ins.empty:
+                alphas["insider"] = ins
+                log.info("insider alpha loaded shape=%s", ins.shape)
+            else:
+                log.debug("insider alpha returned empty — cache absent or no transactions")
+        except Exception as exc:
+            log.error("insider alpha failed: %s", exc)
+    if alpha_weights.get("short_interest", 0) > 0:
+        try:
+            from ascent.alpha.short_interest import short_interest_alpha
+            si = short_interest_alpha(features)
+            if si is not None and not si.empty:
+                alphas["short_interest"] = si
+                log.info("short interest alpha loaded shape=%s", si.shape)
+            else:
+                log.debug("short interest alpha returned empty — cache absent or no data")
+        except Exception as exc:
+            log.error("short interest alpha failed: %s", exc)
     # Alternative data sleeve — active only when sources pass IC gate
     if alpha_weights.get("altdata", 0) > 0:
         try:
@@ -354,42 +362,44 @@ def build_alpha_stack(features, alpha_weights=None, regime_signal=None, agent_id
         except Exception as exc:
             log.warning("[Stack] altdata sleeve failed: %s", exc)
     # Earnings-tone alpha — offline panel built weekly; parquet read only in hot path
-    try:
-        from ascent.alpha.earnings_tone import earnings_tone_alpha
-        et = earnings_tone_alpha(features)
-        if et is not None and not et.empty:
-            alphas["earnings_tone"] = et
-            log.info("[Stack] earnings_tone sleeve loaded shape=%s", et.shape)
-        else:
-            log.debug("[Stack] earnings_tone sleeve returned empty — cache absent or no data")
-    except Exception as exc:
-        log.warning("[Stack] earnings_tone sleeve failed: %s", exc)
+    if alpha_weights.get("earnings_tone", 0) > 0:
+        try:
+            from ascent.alpha.earnings_tone import earnings_tone_alpha
+            et = earnings_tone_alpha(features)
+            if et is not None and not et.empty:
+                alphas["earnings_tone"] = et
+                log.info("[Stack] earnings_tone sleeve loaded shape=%s", et.shape)
+            else:
+                log.debug("[Stack] earnings_tone sleeve returned empty — cache absent or no data")
+        except Exception as exc:
+            log.warning("[Stack] earnings_tone sleeve failed: %s", exc)
     # Narrative alpha — 0% weight until narrative cache has ≥30 days history
-    try:
-        from ascent.alpha.narrative_alpha import build_narrative_alpha
-        _symbols = list(features.get("mom_252d", pd.DataFrame()).columns) if "mom_252d" in features else []
-        if _symbols:
-            narr = build_narrative_alpha(_symbols)
-            if narr is not None and not narr.empty:
-                # Convert Series to DataFrame matching features shape if needed
-                if isinstance(narr, pd.Series):
-                    # Stack needs a DataFrame indexed by date×symbol; create a single-row DF
-                    if "mom_252d" in features:
-                        _idx = features["mom_252d"].index
-                        narr_df = pd.DataFrame(
-                            {sym: narr.get(sym, 0.0) for sym in narr.index},
-                            index=_idx,
-                        )
+    if alpha_weights.get("narrative", 0) > 0:
+        try:
+            from ascent.alpha.narrative_alpha import build_narrative_alpha
+            _symbols = list(features.get("mom_252d", pd.DataFrame()).columns) if "mom_252d" in features else []
+            if _symbols:
+                narr = build_narrative_alpha(_symbols)
+                if narr is not None and not narr.empty:
+                    # Convert Series to DataFrame matching features shape if needed
+                    if isinstance(narr, pd.Series):
+                        # Stack needs a DataFrame indexed by date×symbol; create a single-row DF
+                        if "mom_252d" in features:
+                            _idx = features["mom_252d"].index
+                            narr_df = pd.DataFrame(
+                                {sym: narr.get(sym, 0.0) for sym in narr.index},
+                                index=_idx,
+                            )
+                        else:
+                            narr_df = narr.to_frame().T
+                        alphas["narrative"] = narr_df
                     else:
-                        narr_df = narr.to_frame().T
-                    alphas["narrative"] = narr_df
-                else:
-                    alphas["narrative"] = narr
-                log.info("[Stack] narrative alpha sleeve: %d symbols", len(narr))
-        else:
-            log.debug("[Stack] narrative alpha skipped — no symbols available")
-    except Exception as exc:
-        log.warning("[Stack] narrative_alpha failed: %s", exc)
+                        alphas["narrative"] = narr
+                    log.info("[Stack] narrative alpha sleeve: %d symbols", len(narr))
+            else:
+                log.debug("[Stack] narrative alpha skipped — no symbols available")
+        except Exception as exc:
+            log.warning("[Stack] narrative_alpha failed: %s", exc)
     loaded = list(alphas.keys())
     skipped = [k for k in alpha_weights if k not in loaded]
     print(f"[alpha_stack] loaded={loaded}  skipped={skipped}")
