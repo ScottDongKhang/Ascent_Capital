@@ -35,7 +35,7 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 #: The verified walk-forward run. Superseding this pointer is a deliberate act:
 #: update it only alongside CURRENT_VERIFIED_NUMBERS.md, and only for a run on a
 #: clean single-source cache whose figures have been independently recomputed.
-CANONICAL_WF_ARTIFACT = "outputs/wf_results/wf_report_clean_2026-06-22.json"
+CANONICAL_WF_ARTIFACT = "outputs/wf_results/wf_report_clean_2026-08-15.json"
 
 
 class MissingArtifact(RuntimeError):
@@ -53,7 +53,7 @@ class WalkForwardRecord:
     beta: float
     alpha: float
     win_rate: float
-    wfe: float
+    wfe: Optional[float]
     volatility: float
     n_folds: int
     n_oos_days: int
@@ -105,10 +105,19 @@ def load_wf_report(rel: str = CANONICAL_WF_ARTIFACT) -> WalkForwardRecord:
 
     meta = d.get("_meta", {}) or {}
 
+    wfe_raw = d.get("wfe")
+    wfe = float(wfe_raw) if wfe_raw is not None else None
+
     caveats = []
-    if d.get("wfe", 0) < 0:
+    if wfe is not None and wfe < 0:
         caveats.append("WFE is negative: the in-sample optimizer adds no "
                        "out-of-sample value. Disclose as overfit.")
+    elif wfe is None:
+        caveats.append("WFE not computed for this artifact: its producing "
+                       "framework (ascent/research/walk_forward_runner.py) "
+                       "does not track per-fold in-sample Sharpe, unlike the "
+                       "retired wf_framework/ pipeline. Do not report a WFE "
+                       "figure for this run.")
     if meta.get("llm_disabled"):
         caveats.append("LLM-driven sleeves were zeroed for this run.")
 
@@ -120,7 +129,7 @@ def load_wf_report(rel: str = CANONICAL_WF_ARTIFACT) -> WalkForwardRecord:
         beta=float(d["beta"]),
         alpha=float(d["alpha"]),
         win_rate=float(d["win_rate"]),
-        wfe=float(d["wfe"]),
+        wfe=wfe,
         volatility=float(d["volatility"]),
         n_folds=int(d["n_folds"]),
         n_oos_days=int(d["n_oos_days"]),

@@ -1,0 +1,37 @@
+{
+  "cagr": 0.102,
+  "volatility": 0.2458,
+  "sharpe": 0.415,
+  "sortino": 0.551,
+  "max_drawdown": -0.4565,
+  "win_rate": 0.523,
+  "wfe": null,
+  "n_folds": 165,
+  "n_oos_days": 1641,
+  "alpha": -0.0362,
+  "beta": 0.947,
+  "_meta": {
+    "source_log": "outputs/wf_results/wf_run_target_architecture_2026-08-15_post_phantom_fix.log",
+    "source_report": "outputs/wf_results/vc-task-4-post-phantom-fix-report.md",
+    "framework": "ascent/research/walk_forward_runner.py (walk_forward_pipeline)",
+    "llm_disabled": null,
+    "alpha_overrides": {
+      "meanrev": 0.5,
+      "statarb": 0.5
+    },
+    "oos_window": "2020-01-02 -> 2026-07-15",
+    "oos_years": null,
+    "spy_cagr_same_window": 0.1382,
+    "strat_cagr_recomputed": null,
+    "excess_cagr_vs_spy": -0.0362,
+    "n_symbols": null,
+    "avg_universe_size": 452.9,
+    "total_return": 0.8826,
+    "calmar_ratio": 0.223,
+    "profit_factor": 1.11,
+    "avg_turnover_per_day": 0.1001,
+    "avg_positions": 10.9,
+    "excess_sharpe": -0.222,
+    "notes": "Replaces CANONICAL_WF_ARTIFACT's prior pointer at wf_report_clean_2026-06-22.json, which was produced by scripts/run_ascent_wf.py / ascent/research/wf_framework/ -- a framework with a confirmed, still-open bug: it force-injects the CUT `trend` sleeve and bypasses the IC gate entirely (see ascent_strategy.py::_make_alpha_weights). This artifact instead packages a clean run of the actual shipped 2-sleeve system via ascent/research/walk_forward_runner.py, independently re-verified twice in this session. Sortino here is NOT annualization-corrected the way ascent/research/wf_framework/metrics.py's sortino() is -- it is read verbatim from walk_forward_runner.py's own report, a different implementation. verified_numbers.py does not surface sortino at all (WalkForwardRecord has no sortino field), so this does not affect canonical_wf() output; it is included here only for completeness against the old artifact's schema."
+  }
+}

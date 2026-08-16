@@ -704,7 +704,7 @@ def _wf_honesty_line() -> str:
         return ""
     line = (f"Walk-forward OOS Sharpe {wf.sharpe_str} ({wf.oos_window}, "
             f"{wf.n_folds} folds) is the rigorous figure.")
-    if wf.wfe < 0:
+    if wf.wfe is not None and wf.wfe < 0:
         line += (f" Walk-forward efficiency is {wf.wfe:.2f}: the in-sample "
                  f"optimizer adds no out-of-sample value.")
     return line
