@@ -820,11 +820,11 @@ different impression of the risk controls than reading the call graph.
 
 | Component | Status |
 |---|---|
-| **Regime `risk_multiplier`** (calm 1.00 → crisis 0.40) | Computed, attached to the signal, printed, **dashboard-published — and never multiplied into any weight anywhere.** The only code that would, `apply_regime_to_portfolio`, is imported at `ascent/main.py:420` and never called. Gross exposure comes solely from the 200MA cut and vol targeting. |
+| **Regime `risk_multiplier`** (calm 1.00 → crisis 0.40) | Computed, attached to the signal, printed, **dashboard-published — and never multiplied into any weight anywhere.** The only code that would, `apply_regime_to_portfolio` (along with `regime_scale_weights` and `regime_adjust_sleeve_weights`), was confirmed to have zero live callers and was **deleted 2026-08-16** — not merely present-but-uncalled anymore. Gross exposure comes solely from the 200MA cut and vol targeting. |
 | **Regime per-name max weight** | Reachable only via `sector_constrained_weighted(regime_signal=...)`, and `main.py:772` passes `None`. The MVO path *accepts* `regime_label` and never reads it. The live per-name cap is a constant 0.10, never tightened. |
 | **Config sleeve adjustments** | `types.py` defines nonzero deltas; `settings.py:207-213` overrides **every entry to 0.00**. Confirmed: `sleeve_*` columns are `0.0` on every row of `regime_labels.csv`. |
-| **Factor risk constraints** | Fully implemented with regime-tightened bounds. `main.py:752` passes `factor_constraints=None`. No production caller. |
-| **`ai_pm_guardrails.apply_guardrails`** | The per-level `max_change` / `max_new` / `max_te` / short-selling gate table is **dead code** — only `tests/` calls it. Production uses only the validator + blend. |
+| **Factor risk constraints** (`ascent.risk.factor_constraints.build_factor_constraints`) | Was fully implemented with regime-tightened bounds; `main.py:752` always passed `factor_constraints=None`. Confirmed zero live callers and **deleted 2026-08-16** — the `factor_constraints` parameter itself stays live in `mvo_optimizer.py`/`optimizer.py` for a future builder, but there is no code left to populate it. |
+| **`ai_pm_guardrails.apply_guardrails`** | The per-level `max_change` / `max_new` / `max_te` / short-selling gate table had zero non-test callers and was **deleted 2026-08-16**, along with its private helpers (`_rolling_corr`, `_apply_tracking_error_cap`) and `_LEVEL_CONFIG`. Production uses only the validator + blend. |
 | **`as_of_join` / `as_of_merge`** | Both **dead**, zero callers outside the guard that checks they're *defined*. Real PIT slicing is ad hoc. CLAUDE.md says "always use" these. |
 | `portfolio/regime_covariance.py`, `risk/covariance.py::shrinkage_covariance`, `risk/regime.py::classify_regime` | Zero callers |
 | `should_refit`, `check_and_run_emergency_refit`, `update_particle_filter` | Zero call sites — the only live refit is the 5-day staleness check |
