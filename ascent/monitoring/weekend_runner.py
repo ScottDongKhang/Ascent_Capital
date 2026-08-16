@@ -314,33 +314,6 @@ def _job_memory_ingestion() -> None:
         print(f"[Memory/Weekend] Ingestion skipped: {e}")
 
 
-def _job_causal_macro_dag() -> None:
-    """Run causal discovery on FRED + sector ETFs → macro_causal_dag.json."""
-    from ascent.causal.causal_discovery import run_discovery
-    try:
-        from pathlib import Path as _Path
-        import json as _json
-        rfile = _Path("dashboard/regime_signal.json")
-        regime = "calm_bull"
-        if rfile.exists():
-            regime = _json.loads(rfile.read_text()).get("regime", "calm_bull")
-    except Exception:
-        regime = "calm_bull"
-    dag = run_discovery(regime=regime)
-    n_edges = len(dag.get("edges", []))
-    print(f"  [CausalDiscovery] DAG built: {n_edges} edges, regime={regime}")
-
-
-def _job_causal_graph_builder(portfolio_symbols: list) -> None:
-    """Build/refresh Haiku causal graphs for all current holdings."""
-    from ascent.causal.dag_builder import build_portfolio_graphs
-    if not portfolio_symbols:
-        print("  [DagBuilder] No portfolio symbols — skipping")
-        return
-    results = build_portfolio_graphs(portfolio_symbols)
-    print(f"  [DagBuilder] Processed {len(results)} symbols")
-
-
 # ── Main entry point ──────────────────────────────────────────────────────────
 
 def run_weekend(dry_run: bool = False) -> None:
@@ -405,18 +378,6 @@ def run_weekend(dry_run: bool = False) -> None:
                 lambda: _job_ai_pm_research(all_symbols),
                 once_per_weekend=True):
         completed.append("ai_pm_research")
-
-    # 7b. Causal macro DAG — once per weekend (~30s, no LLM)
-    if _run_job("causal_macro_dag", _job_causal_macro_dag, once_per_weekend=True):
-        completed.append("causal_macro_dag")
-
-    # 7c. Causal graph builder — once per weekend (~$0.015)
-    if _run_job(
-        "causal_graph_builder",
-        lambda: _job_causal_graph_builder(portfolio_symbols),
-        once_per_weekend=True,
-    ):
-        completed.append("causal_graph_builder")
 
     # 8. Weekly debrief — every run (captures any new data from earlier jobs)
     debrief = None

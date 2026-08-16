@@ -1247,8 +1247,8 @@ def main():
             print(f"[AdvMonitor] Skipped: {_am_e}")
 
         # Gate 4 — falsifier enforcement: evaluate every registered
-        # "what would prove me wrong" condition (prethesis, judge, pre-mortem,
-        # causal early exits) and act on the first fired one with a bounded
+        # "what would prove me wrong" condition (prethesis, judge, pre-mortem)
+        # and act on the first fired one with a bounded
         # 25% trim. Replaces the old shadow-log-only early-exit check.
         try:
             from ascent.strategy.falsifier_registry import check_all as _falsifier_check
@@ -1454,14 +1454,6 @@ def main():
             from ascent.llm.client import SONNET_MODEL
             _phase2_model_used = SONNET_MODEL
 
-        # Load causal track record for Phase 2 synthesis context
-        _causal_track_record = None
-        try:
-            from ascent.causal.tracker import get_track_record as _get_track_record
-            _causal_track_record = _get_track_record()
-        except Exception:
-            pass
-
         _ai_pm_force_sealed = False
         try:
             print("[Runner] AI PM Phase 2 — synthesising pre-thesis with quant validation...")
@@ -1469,7 +1461,6 @@ def main():
                 quant_outputs=agent_outputs,
                 merged_weights=merged_weights,
                 prethesis=_ai_prethesis,
-                causal_track_record=_causal_track_record,
                 sentiment_block=_sentiment_block,
                 news_context_arg=_news_context,
             )
@@ -1849,10 +1840,6 @@ def main():
             "allocation":        _orch_alloc or {ao.agent_id: round(_base_alloc.get(ao.agent_id, 0.0), 2)
                                  for ao in agent_outputs},
             "weights":           merged_weights,
-            "causal_mechanisms": [
-                (vars(m) if hasattr(m, "__dict__") else m)
-                for m in (_ai_prethesis.causal_mechanisms if _ai_prethesis else [])
-            ],
             "mirofish_sentiment": (
                 ai_pm_result.thesis.get("mirofish_sentiment")
                 if ai_pm_result and hasattr(ai_pm_result, "thesis") and ai_pm_result.thesis
@@ -2779,7 +2766,7 @@ def _apply_falsifier_trim(fired: list, current_weights: dict, today, dry_run: bo
             print("[Falsifier] No book available — no trim")
             return
 
-        # Priority: hard evidence (price/causal/relative_price/macro) before news
+        # Priority: hard evidence (price/relative_price/macro) before news
         ordered = sorted(fired, key=lambda f: f.get("kind") == "news")
         target = None
         for f in ordered:

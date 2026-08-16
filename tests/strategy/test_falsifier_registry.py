@@ -17,9 +17,8 @@ import ascent.strategy.falsifier_registry as fr
 
 @pytest.fixture
 def tmp_registry(tmp_path, monkeypatch):
-    """Redirect registry + caches into tmp; disable LLM and causal exits."""
+    """Redirect registry + caches into tmp; disable LLM."""
     monkeypatch.setattr(fr, "REGISTRY_PATH", tmp_path / "active_falsifiers.json")
-    monkeypatch.setattr(fr, "_causal_early_exits", lambda: [])
     # Default: Haiku structuring unavailable → news fallback
     monkeypatch.setattr(
         fr, "_structure_with_haiku",
@@ -149,14 +148,6 @@ class TestCheckAll:
         monkeypatch.setattr(fr, "_latest_macro", lambda m: 34.5)
         fired = fr.check_all(date(2026, 6, 20))
         assert len(fired) == 1 and fired[0]["fired_value"] == 34.5
-
-    def test_causal_early_exit_folds_in(self, tmp_registry, monkeypatch):
-        self._seed([])
-        monkeypatch.setattr(fr, "_causal_early_exits", lambda: ["VICR"])
-        monkeypatch.setattr(fr, "_load_close_panel", lambda: None)
-        fired = fr.check_all(date(2026, 6, 20))
-        assert len(fired) == 1
-        assert fired[0]["symbol"] == "VICR" and fired[0]["source"] == "causal"
 
     def test_no_llm_news_does_not_fire(self, tmp_registry, monkeypatch):
         """News conditions need the LLM; without it they must stay silent."""

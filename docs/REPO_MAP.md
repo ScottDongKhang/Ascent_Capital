@@ -30,7 +30,7 @@ Order submission funnels through `ascent/execution/eod_runner.py` (`run_eod`, `r
 
 | Package | Owns | Key symbols to grep |
 |---|---|---|
-| `ascent/config` | Typed config + API keys. Never `Config()` directly. | `get_config`, `Config`, `APIKeys`, `BacktestConfig`, `RegimeConfig`, `AgentOutput`, `CausalMechanism` |
+| `ascent/config` | Typed config + API keys. Never `Config()` directly. | `get_config`, `Config`, `APIKeys`, `BacktestConfig`, `RegimeConfig`, `AgentOutput` |
 | `ascent/data/ingest` | One module per vendor/source (yahoo, tiingo, polygon, fred, sec_filings, earnings_transcripts, cboe_options, cftc_positioning, google_trends, insider, short_interest, analyst, famafrench_factors, reddit_sentiment, capitol_trades, edgar_listener, simulated). | `fetch_daily_bars`, `fetch_universe_daily`, `fetch_all_macro`, `update_sec_signals`, `update_transcript_signals`, `update_cot_cache`, `run_supplementary_ingest` |
 | `ascent/data/store` | Parquet cache + point-in-time joins + optional TimescaleDB. | `save_parquet`, `load_parquet`, `validate_cache`, `_calendar_day_key`, `as_of_join`, `as_of_merge` |
 | `ascent/data` (top) | Parallel fetch hub, universe membership. | `run_hub`, `hub_is_fresh`, `get_universe_on_date`, `build_historical_universe`, `get_removed_symbols` |
@@ -46,7 +46,6 @@ Order submission funnels through `ascent/execution/eod_runner.py` (`run_eod`, `r
 | `ascent/monitoring` | Post-trade tracking, counterfactuals, alerts, briefs, weekend/weekly cycles. | `run_forward_pnl_cycle`, `export_skill_scores`, `score_daily`, `snapshot_quant_star`, `check_alerts`, `run_checklist`, `generate_rebalance_brief`, `run_daily_intelligence`, `compute_position_health`, `run_attribution`, `compute_signal_health`, `run_exit_alerts`, `run_weekend`, `run_weekly_debrief`, `run_scenario_planning`, `build_quant_context` |
 | `ascent/strategy` | AI PM scaffolding: authority, guardrails, calibration, falsifiers, discovery. | `update_authority`, `blend`, `get_state`, `LEVEL_WEIGHTS`, `evaluate` (conviction_gate), `build_registry`, `check_all`, `add_judge_falsifier`, `log_prediction`, `get_calibration_report`, `run_discovery`, `format_thesis`, `compute_feedback` |
 | `ascent/llm` | Single Anthropic wrapper. Import model constants from here. | `DEFAULT_MODEL`, `SONNET_MODEL`, `HAIKU_MODEL`, `extract_text`, `chat_completion`, `generate_structured`, `extended_thinking_completion`, `tool_completion`, `_MIN_TOKENS_WITH_THINKING`, `_FINAL_TURN_NUDGE`, `log_costs` |
-| `ascent/causal` | Macro DAG discovery, mechanism tracking, regime compatibility. | `discover_macro_dag`, `run_pc`, `build_graph`, `load_or_build`, `write_predictions`, `check_outcomes`, `regime_compatible`, `mechanism_velocity_score` |
 | `ascent/reporting` | Debriefs, blind spots, investor letter/report, verified-number loader. | `write_debrief`, `detect_blind_spots`, `generate_monthly_letter`, `generate_monthly_report`, `scan_catalysts`, `load_wf_report`, `canonical_wf`, `MissingArtifact` |
 | `ascent/integrations` | External non-market services. | `MiroFishClient`, `get_mirofish_sentiment`, `fetch_news` (exa), `fetch_symbol` / `get_live_macro` / `get_cot_snapshot` (openbb), `get_sentiment` (stocktwits), `find_analogues` |
 | `ascent/memory` | Override decision memory. | `ingest_override`, `query`, `OverrideRecord`, `OVERRIDE_TYPES` |
@@ -84,11 +83,9 @@ Re-extract fresh at any time:
 | 1129 | `_strip_prethesis_for_phase2` |
 | 1156 / 1227 | `_PRE_THESIS_PROMPT` / `_SYNTHESIS_PROMPT_TEMPLATE` |
 | 1292 / 1307 | `_build_system_prompt` / `_get_calibration_ic_safe` |
-| 1331-2068 | tool implementations, all named `_tool_*`: `_tool_get_regime_state` 1331, `_tool_run_quant_agent` 1368, `_tool_get_past_verdicts` 1521, `_tool_get_rebalance_brief` 1633, `_tool_propose_portfolio` 1773, `_tool_get_crowding_signal` 1833, `_tool_get_causal_graph` 1936, `_tool_get_cot_positioning` 2011, `_tool_propose_prethesis` 2068 |
+| 1331-2068 | tool implementations, all named `_tool_*`: `_tool_get_regime_state` 1331, `_tool_run_quant_agent` 1368, `_tool_get_past_verdicts` 1521, `_tool_get_rebalance_brief` 1633, `_tool_propose_portfolio` 1773, `_tool_get_crowding_signal` 1833, `_tool_get_cot_positioning` 2011, `_tool_propose_prethesis` 2068 |
 | 2077 / 2085 | `_PRETHESIS_RESEARCH_TOOLS` / `_PRETHESIS_RESEARCH_CAP` |
 | 2088 / 2132 | `_make_prethesis_executor` / `_make_executor` |
-| 2200 | `_assemble_causal_mechanisms` |
-| 2245 | `_build_velocity_context` |
 | 2284 | `run_ai_pm_prethesis` (Phase 1, Sonnet) |
 | 2432 | `_format_prethesis_for_prompt` |
 | 2473 | `run_ai_pm` (Phase 2, Opus) |

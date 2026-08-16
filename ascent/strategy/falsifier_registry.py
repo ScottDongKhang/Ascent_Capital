@@ -4,8 +4,7 @@ Falsifier enforcement layer — the AI layer's own "what would prove me wrong"
 conditions, checked daily and acted on.
 
 The system already collects falsifiable conditions everywhere and acts on none
-of them: prethesis `what_would_change_my_mind` per conviction name, causal
-graph falsification conditions (Gate 4 flags them into a log nobody reads),
+of them: prethesis `what_would_change_my_mind` per conviction name,
 judge 10-day predictions, and the AI PM pre-mortem. This module:
 
   1. build_registry()      — on rebalance day, structures those conditions into
@@ -17,7 +16,7 @@ judge 10-day predictions, and the AI PM pre-mortem. This module:
   3. check_all()           — daily: price/macro conditions evaluated IN CODE
                              from the parquet caches (no LLM); news watches
                              evaluated with ONE Haiku call against the day's
-                             headlines; causal early-exit flags folded in.
+                             headlines.
 
 Fired falsifiers are returned to run_all_agents.py, which executes a bounded
 25% trim (floor 4%) through the mini-rebalance path, records a
@@ -310,7 +309,7 @@ def check_all(today: date, news_context: Optional[dict] = None) -> list:
     reg = _load_registry()
     active = [f for f in reg.get("falsifiers", [])
               if not f.get("fired") and f.get("expires", "9999") >= today.isoformat()]
-    if not active and not _causal_early_exits():
+    if not active:
         return []
 
     panel = _load_close_panel()
@@ -347,19 +346,6 @@ def check_all(today: date, news_context: Optional[dict] = None) -> list:
         for f in _check_news_batch(news_batch, news_context):
             fired.append(f)
 
-    # Causal early exits (Gate 4) fold in as falsifiers
-    for sym in _causal_early_exits():
-        already = any(f.get("symbol") == sym and f.get("source") == "causal"
-                      for f in reg.get("falsifiers", []))
-        entry = {"id": f"causal-{sym}-{today.isoformat()}", "symbol": sym,
-                 "source": "causal", "kind": "causal",
-                 "raw_text": "causal mechanism broken (early-exit threshold breached)",
-                 "expires": (today + timedelta(days=_EXPIRY_DAYS)).isoformat(),
-                 "fired": False, "trimmed": False}
-        if not already:
-            reg["falsifiers"].append(entry)
-            fired.append(entry)
-
     for f in fired:
         f["fired"] = True
         f["fired_date"] = today.isoformat()
@@ -369,14 +355,6 @@ def check_all(today: date, news_context: Optional[dict] = None) -> list:
         log.info("[Falsifier] %d falsifier(s) fired: %s",
                  len(fired), [(f.get("symbol"), f.get("source")) for f in fired])
     return fired
-
-
-def _causal_early_exits() -> list:
-    try:
-        from ascent.causal.tracker import check_early_exits
-        return check_early_exits() or []
-    except Exception:
-        return []
 
 
 def _check_news_batch(batch: list, news_context: dict) -> list:

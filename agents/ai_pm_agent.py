@@ -359,7 +359,6 @@ class AIPreThesis:
     sleeve_weight_prior: Dict = field(default_factory=dict)  # {sleeve: delta_ic}
     market_character: str = ""                               # e.g. "momentum_continuation"
     raw: Dict = field(default_factory=dict)
-    causal_mechanisms: List = field(default_factory=list)    # List[CausalMechanism] — Phase B
     conviction_reasons: List[Dict] = field(default_factory=list)  # [{symbol, claim, source, data_date}]
     sector_thesis: List[Dict] = field(default_factory=list)       # [{sector, view, conviction, reason, source, data_date}]
     directional_stance: Dict = field(default_factory=dict)        # {direction, thesis, upside_case_pct, downside_case_pct, falsifier, horizon_days}
@@ -657,26 +656,6 @@ AI_PM_TOOLS = [
         },
     },
     {
-        "name": "get_causal_graph",
-        "description": (
-            "Look up the cached causal graph for a portfolio holding. "
-            "The graph contains 1-3 causal mechanisms explaining why the stock "
-            "should move, with timing (priced_in / not_yet_priced / catalyst_imminent) "
-            "and falsification conditions. Use before making a high-conviction call "
-            "to understand the causal thesis, not just correlation. "
-            "catalyst_imminent = trigger expected within 21 days. "
-            "not_yet_priced = mechanism valid but not yet reflected in price. "
-            "priced_in = mechanism already reflected; quant momentum handles it."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "symbol": {"type": "string", "description": "Ticker symbol"},
-            },
-            "required": ["symbol"],
-        },
-    },
-    {
         "name": "get_mirofish_sentiment",
         "description": (
             "Run a MiroFish crowd-intelligence simulation for your AMPLIFY picks. "
@@ -919,7 +898,6 @@ PRE_THESIS_TOOLS = [
         "get_sec_signal", "get_transcript_signal", "get_earnings_signal",
         "get_narrative_shift", "get_scenario_plan", "get_weekend_research",
         "get_crowding_signal", "get_attribution_history", "get_calibration_report",
-        "get_causal_graph",
         # get_alpha_wedge's own description says "Call in Phase 1 to calibrate how
         # aggressively to override the quant this session" — but it was absent from
         # this set, so in the live two-phase path Phase 1 literally could not call
@@ -1190,7 +1168,6 @@ def _strip_prethesis_for_phase2(prethesis) -> dict:
         "sector_thesis":         getattr(prethesis, "sector_thesis", []),
         "conviction_reasons":    valid_reasons,   # sourced + fresh only
         "regime_assessment":     getattr(prethesis, "regime_assessment", {}),
-        "causal_mechanisms":     getattr(prethesis, "causal_mechanisms", []),
         # Freeform prose intentionally excluded — prevents Phase 2 amplifying hallucinations
     }
 
@@ -2029,31 +2006,6 @@ def _tool_get_crowding_signal(inputs: dict) -> str:
     return "\n".join(lines)
 
 
-def _tool_get_causal_graph(inputs: dict) -> str:
-    """Return the cached causal graph for a symbol, or a 'not available' message."""
-    try:
-        from ascent.causal.dag_builder import load_or_build, get_quarter_end
-        symbol = inputs.get("symbol", "").upper()
-        if not symbol:
-            return "Error: symbol required"
-        quarter_end = get_quarter_end(symbol)
-        graph = load_or_build(symbol, quarter_end)
-        if not graph.get("mechanisms"):
-            return f"No causal graph available for {symbol}. Build one by running the weekend pipeline."
-        lines = [f"Causal graph for {symbol} (quarter_end={quarter_end}):"]
-        for i, m in enumerate(graph["mechanisms"], 1):
-            lines.append(
-                f"\n[Mechanism {i}] {m.get('mechanism', 'N/A')}\n"
-                f"  Timing: {m.get('timing', 'N/A')}\n"
-                f"  Intervention: {m.get('intervention', 'N/A')}\n"
-                f"  Falsification: {m.get('falsification_condition', 'N/A')}\n"
-                f"  Horizon: {m.get('horizon_days', 'N/A')} trading days"
-            )
-        return "\n".join(lines)
-    except Exception as exc:
-        return f"get_causal_graph failed: {exc}"
-
-
 def _tool_get_mirofish_sentiment(inputs: dict) -> str:
     """Delegate to the get_mirofish_sentiment tool executor."""
     try:
@@ -2176,7 +2128,6 @@ _PRETHESIS_RESEARCH_TOOLS = {
     "get_transcript_signal", "get_attribution_history", "get_earnings_signal",
     "get_regime_memory", "get_narrative_shift", "get_calibration_report",
     "get_scenario_plan", "get_weekend_research", "get_crowding_signal",
-    "get_causal_graph",
 }
 _PRETHESIS_RESEARCH_CAP = 7  # hard cap; 8th call must be propose_prethesis
 
@@ -2199,7 +2150,6 @@ def _make_prethesis_executor(result_store: list):
         "get_scenario_plan":        _tool_get_scenario_plan,
         "get_weekend_research":     _tool_get_weekend_research,
         "get_crowding_signal":      _tool_get_crowding_signal,
-        "get_causal_graph":         _tool_get_causal_graph,
         "propose_prethesis":        lambda i: _tool_propose_prethesis(i, result_store),
     }
     _research_calls = [0]  # mutable counter
@@ -2291,90 +2241,6 @@ def _make_executor(result_store: list, precomputed: dict | None = None, failures
     return executor
 
 
-# ── Causal helpers (Phase B) ───────────────────────────────────────────────────
-
-def _assemble_causal_mechanisms(
-    high_conviction_symbols: list,
-    regime: str,
-    cache_dir=None,
-) -> list:
-    """
-    After propose_prethesis, assemble CausalMechanism objects for all
-    high-conviction symbols. Applies Gate 1 (compatibility) + Gate 2 (priced_in).
-    Returns list[CausalMechanism].
-    """
-    try:
-        from ascent.causal.dag_builder import load_or_build, get_quarter_end
-        from ascent.causal.compatibility import regime_compatible
-        from ascent.config.types import CausalMechanism
-
-        results = []
-        for symbol in high_conviction_symbols:
-            quarter_end = get_quarter_end(symbol)
-            graph = load_or_build(symbol, quarter_end, cache_dir)
-            for m in graph.get("mechanisms", []):
-                mtype = m.get("mechanism_type", "")
-                if not regime_compatible(mtype, regime):
-                    continue
-                if m.get("timing") == "priced_in":
-                    continue
-                results.append(CausalMechanism(
-                    symbol=symbol,
-                    mechanism=m.get("mechanism", ""),
-                    intervention=m.get("intervention", ""),
-                    falsification_condition=m.get("falsification_condition", ""),
-                    horizon_days=int(m.get("horizon_days", 63)),
-                    timing=m.get("timing", "not_yet_priced"),
-                    velocity=0.0,
-                    mechanism_type=mtype,
-                    regime_compatible=True,
-                ))
-        return results
-    except Exception as exc:
-        log.warning("[AIPMAgent] _assemble_causal_mechanisms failed: %s", exc)
-        return []
-
-
-_TIMING_PRIORITY = {"catalyst_imminent": 2, "not_yet_priced": 1, "priced_in": 0}
-
-
-def _build_velocity_context(
-    symbols: list,
-    regime: str,
-    cache_dir=None,
-) -> list:
-    """
-    Build a ranked list of causal context lines for injection into Phase 1 prompt.
-    Returns list of strings, sorted by timing priority (catalyst_imminent first).
-    """
-    try:
-        from ascent.causal.dag_builder import load_or_build, get_quarter_end
-        from ascent.causal.compatibility import regime_compatible
-
-        candidates = []
-        for symbol in symbols:
-            quarter_end = get_quarter_end(symbol)
-            graph = load_or_build(symbol, quarter_end, cache_dir)
-            for m in graph.get("mechanisms", []):
-                mtype = m.get("mechanism_type", "")
-                timing = m.get("timing", "not_yet_priced")
-                if not regime_compatible(mtype, regime):
-                    continue
-                if timing == "priced_in":
-                    continue
-                priority = _TIMING_PRIORITY.get(timing, 0)
-                candidates.append((priority, symbol, m.get("mechanism", ""), timing))
-
-        candidates.sort(key=lambda x: x[0], reverse=True)
-        return [
-            f"  {sym} [{timing}]: {mechanism}"
-            for _, sym, mechanism, timing in candidates
-        ]
-    except Exception as exc:
-        log.warning("[AIPMAgent] _build_velocity_context failed: %s", exc)
-        return []
-
-
 # ── Entry point ────────────────────────────────────────────────────────────────
 
 def run_ai_pm_prethesis(
@@ -2388,20 +2254,7 @@ def run_ai_pm_prethesis(
     result_store: list = []
     executor = _make_prethesis_executor(result_store)
 
-    # Inject causal context for current portfolio holdings
-    _current_regime = _get_current_regime()
     _portfolio_symbols = _load_current_holdings()
-
-    _causal_lines = _build_velocity_context(_portfolio_symbols, _current_regime)
-    _causal_context = ""
-    if _causal_lines:
-        _causal_context = (
-            "\n\n══ CAUSAL INTELLIGENCE (regime-compatible, catalyst not yet priced) ══\n"
-            "Top causal mechanisms for current holdings, ranked by timing priority.\n"
-            "Use them to AMPLIFY where mechanism + quant agree. "
-            "Call get_causal_graph(symbol) for full falsification conditions.\n"
-            + "\n".join(_causal_lines)
-        )
 
     # Load feedback for temporal context injection
     _p1_feedback: dict = {}
@@ -2439,7 +2292,6 @@ def run_ai_pm_prethesis(
             user_prompt=(
                 f"Today is {date.today()}. Read the available data and form your original "
                 "investment thesis for the next rebalance. Call propose_prethesis when ready."
-                + _causal_context
             ),
             tools=PRE_THESIS_TOOLS,
             tool_executor=executor,
@@ -2475,7 +2327,6 @@ def run_ai_pm_prethesis(
                 messages=[{"role": "user", "content": (
                     f"Today is {date.today()}. Seal your investment thesis now. "
                     "Base it on the regime, macro, and portfolio data in the system prompt."
-                    + _causal_context
                 )}],
                 tools=[_PROPOSE_PRETHESIS_TOOL],
                 tool_choice={"type": "tool", "name": "propose_prethesis"},
@@ -2508,16 +2359,6 @@ def run_ai_pm_prethesis(
         sector_thesis=list(raw.get("sector_thesis") or []),
         directional_stance=dict(raw.get("directional_stance") or {}),
     )
-
-    # Populate causal_mechanisms with Gate 1 + Gate 2 filtered mechanisms
-    try:
-        prethesis.causal_mechanisms = _assemble_causal_mechanisms(
-            high_conviction_symbols=prethesis.conviction_symbols,
-            regime=_current_regime,
-        )
-        log.info("[AIPMAgent] Pre-thesis: %d causal mechanisms assembled", len(prethesis.causal_mechanisms))
-    except Exception as exc:
-        log.warning("[AIPMAgent] Causal mechanism assembly failed: %s", exc)
 
     log.info(
         "[AIPMAgent] Pre-thesis complete: %d conviction names, macro_view=%s...",
@@ -2564,7 +2405,6 @@ def run_ai_pm(
     quant_outputs: Optional[list] = None,
     merged_weights: Optional[Dict[str, float]] = None,
     prethesis: Optional[AIPreThesis] = None,
-    causal_track_record: Optional[dict] = None,
     model_override: Optional[str] = None,
     sentiment_block: str = "",
     news_context_arg: dict | None = None,
@@ -2651,26 +2491,9 @@ def run_ai_pm(
                 "Prefer quant confirmation over your own overrides. Stand down when quant contradicts "
                 "your thesis unless you have a specific dated catalyst.\n\n" + _system
             )
-        _causal_track_context = ""
-        if causal_track_record and causal_track_record.get("total", 0) >= 3:
-            acc = causal_track_record.get("accuracy_pct", 0)
-            total = causal_track_record.get("total", 0)
-            conf = causal_track_record.get("confirmed", 0)
-            fals = causal_track_record.get("falsified", 0)
-            verdict = (
-                "High accuracy — trust your causal mechanisms when velocity > 0.70."
-                if acc >= 60 else
-                "Below-target accuracy — only concentrate when mechanism velocity > 0.70 AND timing=catalyst_imminent."
-            )
-            _causal_track_context = (
-                f"\n\n══ CAUSAL THESIS TRACK RECORD ══\n"
-                f"{total} resolved: {conf} confirmed, {fals} falsified, accuracy={acc:.1f}%.\n"
-                f"{verdict}"
-            )
         user_prompt = (
             f"Today is {date.today()}. Your pre-thesis is sealed above. "
             "Now run the quant agents, validate your thesis, and submit your final portfolio."
-            + _causal_track_context
         )
         log.info("[AIPMAgent] Using two-phase synthesis mode (%d pre-thesis names)",
                  len(prethesis.high_conviction_names))

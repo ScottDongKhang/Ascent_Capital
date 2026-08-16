@@ -63,19 +63,3 @@ class AgentOutput:
         )
 
 
-@dataclass
-class CausalMechanism:
-    """
-    A single causal mechanism for one holding, built by dag_builder.py (Haiku).
-    Stored in AIPreThesis.causal_mechanisms and logged to causal_predictions.jsonl.
-    """
-    symbol: str
-    mechanism: str              # "X causes Y via Z"
-    intervention: str           # "IF [trigger] THEN [expected outcome]"
-    falsification_condition: str  # "IF [observable] < [threshold], thesis broken"
-    horizon_days: int
-    timing: str                 # "priced_in" | "not_yet_priced" | "catalyst_imminent"
-    velocity: float             # 0.0–1.0, Python-computed at build time
-    mechanism_type: str         # "momentum_catalyst" | "quality_defensive" | "macro_hedge" |
-                                # "mean_reversion" | "valuation" | "supply_demand_inflection"
-    regime_compatible: bool     # gate 1 result, set by compatibility.py

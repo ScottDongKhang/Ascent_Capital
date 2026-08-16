@@ -615,21 +615,6 @@ def run_devils_advocate(portfolio_state: dict) -> str:
         user_prompt += f"\n\n{cred_context}"
     user_prompt += "\n\nWhat is the most dangerous blind spot? Use the scenario numbers."
 
-    # Format causal mechanisms for devil's advocate attack context
-    _causal_context = ""
-    causal_mechanisms = portfolio_state.get("causal_mechanisms", [])
-    if causal_mechanisms:
-        lines = ["══ AI PM CAUSAL MECHANISMS (attack these if the thesis is broken) ══"]
-        for m in causal_mechanisms:
-            sym = m.get("symbol", "?") if isinstance(m, dict) else getattr(m, "symbol", "?")
-            mech = m.get("mechanism", "") if isinstance(m, dict) else getattr(m, "mechanism", "")
-            falsif = m.get("falsification_condition", "") if isinstance(m, dict) else getattr(m, "falsification_condition", "")
-            timing = m.get("timing", "") if isinstance(m, dict) else getattr(m, "timing", "")
-            lines.append(f"  {sym} [{timing}]: {mech}")
-            if falsif:
-                lines.append(f"    Falsification: {falsif}")
-        _causal_context = "\n" + "\n".join(lines)
-
     # MiroFish crowd timing context
     _mirofish_context = ""
     mirofish_sent = portfolio_state.get("mirofish_sentiment")
@@ -663,18 +648,13 @@ def run_devils_advocate(portfolio_state: dict) -> str:
         "low, flag the 'calm before the storm' explicitly.\n"
         "3. VIA NEGATIVA: What single event — NOT priced in by the quant model — would "
         "most harm this portfolio? Fat tails come from the events the model doesn't see.\n"
-        "4. CAUSAL MECHANISM ATTACK: If AI PM causal mechanisms are listed, find the one "
-        "most vulnerable to a fat-tail shock. Which mechanism assumes Gaussian conditions? "
-        "Supply shocks, liquidity gaps, and correlation spikes happen in the tails, not "
-        "the middle of the distribution.\n"
-        "5. COHERENCE FRAGILITY: Do the portfolio clusters all break together under the "
+        "4. COHERENCE FRAGILITY: Do the portfolio clusters all break together under the "
         "same tail event? If so, the 15 positions are really one bet.\n"
         "Use Taleb's vocabulary: antifragile, convexity, barbell, turkey problem, "
         "via negativa, fat tail, Lindy effect. Cite the Monte Carlo numbers. "
         "Be specific. Keep under 150 words."
         f"{track_record}"
         f"{_EVIDENCE_RULE}"  # EVIDENCE RULE — see module-level _EVIDENCE_RULE constant
-        f"{_causal_context}"
         f"{_mirofish_context}"
     )
     try:
