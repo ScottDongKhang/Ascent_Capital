@@ -1881,9 +1881,9 @@ def main():
         # The verdict (including any position_changes) is still fully written to
         # outputs/debate_log/verdict_<date>.json by run_debate() above — this
         # block used to additionally apply changes[0] to merged_weights via
-        # apply_judge_position_change (the call is gone; the function is
-        # untouched for any future reinstatement). Debate stays advisory-only
-        # end to end. The proposal is still RECORDED (applied=False) so the
+        # apply_judge_position_change -- deleted 2026-08-15 (zero call sites;
+        # see CLAUDE.md constraint #5). Debate stays advisory-only end to end.
+        # The proposal is still RECORDED (applied=False) so the
         # authority ladder keeps accumulating scoreable evidence — that
         # bookkeeping used to live inside apply_judge_position_change and died
         # with its call sites.
