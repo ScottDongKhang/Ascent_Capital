@@ -991,7 +991,11 @@ After Phase 1 tools, WRITE:
   SELF-ASSESSMENT: What has your AI PM track record been? Are you adding or subtracting value?
 
 ══ PHASE 2 — QUANT BASELINE ══
-Required: run_quant_agent for all four agents. Then call get_position_momentum on ALL combined names.
+Required: run_quant_agent for us_equities — it is the only agent whose output feeds live
+capital allocation. Optional: run_quant_agent for macro / international / alternatives if you
+want additional market context for your qualitative judgment — their signal is not proven bad,
+it's simply not wired to live weights, so calling them costs real wall-clock/API time for
+context only, not for sizing. Then call get_position_momentum on ALL combined names you have.
 
 EXTENDED names (252d momentum > 200%) are the quant's HIGHEST CONVICTION picks. They have the most alpha signal behind them. Do not target them for reduction — verify if they are crowded.
 
@@ -1306,7 +1310,10 @@ AMPLIFY:
   → Any name where quant confirms + crowding=CLEAN + positive text signal → 9–10%.
 
 ══ PHASE 2 TOOLS ══
-Required: run_quant_agent ×4. Then get_position_momentum on all combined names.
+Required: run_quant_agent for us_equities — the only agent that feeds live capital. Optional:
+run_quant_agent for macro / international / alternatives for extra context (not proven bad,
+just unused for sizing — each additional call has real wall-clock/API cost). Then
+get_position_momentum on all combined names you have.
 Optional (up to 4 additional): get_crowding_signal, get_factor_exposures, get_var_estimate,
   get_sector_concentration, get_attribution_history, query_decision_history, check_override_conviction.
 
