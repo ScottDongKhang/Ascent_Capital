@@ -19,7 +19,15 @@ regime_adjust_sleeve_weights(), and the composite apply_regime_to_portfolio().
 All three were confirmed to have zero live callers (deleted 2026-08-16) —
 regime_signal was already accepted-but-unused by build_alpha_stack(), and
 apply_regime_to_portfolio was imported but never called in ascent/main.py.
-regime_max_weight() below is a separate, still-live cap-tightening mechanism.
+regime_max_weight() below is a separate cap-tightening mechanism, but it is NOT
+currently reachable: ascent/regime/__init__.py does not export it, and its sole
+call site (ascent/portfolio/optimizer.py, `from ascent.regime import
+regime_max_weight`) is wrapped in a bare `try/except Exception: pass`, so the
+ImportError is raised and silently swallowed on every call. The cap-tightening
+therefore silently no-ops in production. This predates the 2026-08-16 deletion
+above (the export was already missing before that commit) and is left
+unfixed here deliberately -- adding the export would change live position-cap
+behavior, which is not a doc-cleanup decision.
 """
 from __future__ import annotations
 
