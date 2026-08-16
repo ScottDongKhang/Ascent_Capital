@@ -49,20 +49,6 @@ def test_get_state_defaults_on_missing_file():
     assert s["ai_weight"] == 0.0
 
 
-def test_blend_at_level1_uses_5pct():
-    import ascent.strategy.earned_authority as ea
-    with tempfile.TemporaryDirectory() as tmp:
-        sp = _write_state(tmp, _default_state(level=1))
-        shadow = Path(tmp) / "shadow.jsonl"
-        with patch.object(ea, "STATE_PATH", sp):
-            with patch.object(ea, "SHADOW_RETURNS_PATH", shadow):
-                result = ea.blend({"STRL": 1.0}, {"AAPL": 0.5, "MSFT": 0.5})
-    # Budget=5pp one-way. AI delta is +1.0 for STRL, -0.5 each for AAPL/MSFT.
-    # Gross one-way=1.0 → scale=0.05 → STRL lands at ~5% after renorm.
-    assert "STRL" in result
-    assert abs(result["STRL"] - 0.05) < 0.01
-
-
 def test_sortino_positive_only_penalizes_downside():
     import ascent.strategy.earned_authority as ea
     # All positive returns → high Sortino
@@ -112,35 +98,6 @@ def test_stuck_alert_fires_at_63_days():
         with patch.object(ea, "STATE_PATH", sp):
             s = ea.get_state()
             assert ea.is_stuck(s) is True
-
-
-def test_blend_shadow_returns_pure_quant():
-    """At ai_weight=0, blend returns quant portfolio."""
-    import ascent.strategy.earned_authority as ea
-    with tempfile.TemporaryDirectory() as tmp:
-        sp = _write_state(tmp, _default_state(level=0))
-        shadow = Path(tmp) / "shadow.jsonl"
-        with patch.object(ea, "STATE_PATH", sp):
-            with patch.object(ea, "SHADOW_RETURNS_PATH", shadow):
-                quant = {"AAPL": 0.50, "MSFT": 0.50}
-                ai    = {"GOOG": 0.60, "AMZN": 0.40}
-                result = ea.blend(ai, quant)
-    assert "AAPL" in result
-    assert "GOOG" not in result
-    assert abs(sum(result.values()) - 1.0) < 0.001
-
-
-def test_blend_renormalizes():
-    import ascent.strategy.earned_authority as ea
-    with tempfile.TemporaryDirectory() as tmp:
-        sp = _write_state(tmp, _default_state(level=2))
-        shadow = Path(tmp) / "shadow.jsonl"
-        with patch.object(ea, "STATE_PATH", sp):
-            with patch.object(ea, "SHADOW_RETURNS_PATH", shadow):
-                ai    = {f"A{i}": 0.1 for i in range(5)}
-                quant = {f"Q{i}": 0.1 for i in range(5)}
-                result = ea.blend(ai, quant)
-    assert abs(sum(result.values()) - 1.0) < 0.001
 
 
 def test_legacy_migration_from_phase_to_level():

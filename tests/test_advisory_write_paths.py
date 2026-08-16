@@ -232,14 +232,18 @@ class TestBothAdvisoryCallSitesRecord:
         assert "_record_advisory_judge_proposal(" in tail
 
     def test_record_intervention_reaches_a_live_call_site(self):
-        """Regression: after the write path was removed, the only remaining
-        record_intervention() calls sat inside the now-uncalled
-        apply_judge_position_change."""
+        """Regression: record_intervention() must be reachable from the
+        advisory recorder. apply_judge_position_change (the old write path
+        that used to hold the only other call site) was deleted 2026-08-15
+        after a repo-wide confirm of zero callers."""
         src = _run_all_agents_src()
-        i = src.index("def apply_judge_position_change")
+        assert "def apply_judge_position_change" not in src, (
+            "apply_judge_position_change was deleted as dead code"
+        )
+        i = src.index("def _record_advisory_judge_proposal")
         j = src.index("def already_ran_for_session")
-        outside = src[:i] + src[j:]
-        assert "record_intervention(" in outside
+        body = src[i:j]
+        assert "record_intervention(" in body
 
 
 # ── Fix 3: a single agent's failed Sharpe gate must not halt the pipeline ─────
