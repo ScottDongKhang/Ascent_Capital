@@ -581,8 +581,22 @@ def check_repo_map_pointers_resolve() -> Result:
 
 
 def check_verified_numbers_matches_artifact() -> Result:
-    """Every WF figure in CURRENT_VERIFIED_NUMBERS.md must match its artifact."""
-    art_rel = "outputs/wf_results/wf_report_clean_2026-06-22.json"
+    """Every WF figure in CURRENT_VERIFIED_NUMBERS.md must match its artifact.
+
+    The artifact path is read from CANONICAL_WF_ARTIFACT in
+    ascent/reporting/verified_numbers.py rather than hardcoded here -- a
+    hardcoded path drifts silently the moment the loader is repointed (this
+    check itself hardcoded the wrong filename for a day after the loader was
+    repointed to wf_report_clean_2026-08-15.json, which is exactly the
+    failure mode this dynamic read exists to prevent).
+    """
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    try:
+        from ascent.reporting.verified_numbers import CANONICAL_WF_ARTIFACT
+    except ImportError as exc:
+        return False, f"could not import CANONICAL_WF_ARTIFACT: {exc}"
+    art_rel = CANONICAL_WF_ARTIFACT
     try:
         art = json.loads(_read(art_rel))
     except FileNotFoundError:

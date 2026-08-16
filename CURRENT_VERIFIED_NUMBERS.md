@@ -25,33 +25,63 @@ judgment and caveats outside them.
 
 ## 1. Quant engine — Walk-Forward OOS backtest (SYSTEM 1)
 
-**STATUS: ✅ VERIFIED (2026-06-22) on a freshly re-fetched clean price cache.**
+**STATUS: ✅ VERIFIED (2026-08-15) — clean run of the actual shipped 2-sleeve system via
+`ascent/research/walk_forward_runner.py`, independently re-verified twice. This supersedes the
+2026-06-22 artifact below, which was produced by `ascent/research/wf_framework/` — a framework
+with a confirmed, still-open bug: it force-injects the CUT `trend` sleeve and bypasses the IC
+gate entirely (`ascent_strategy.py::_make_alpha_weights`). `CANONICAL_WF_ARTIFACT` in
+`ascent/reporting/verified_numbers.py` was repointed to the new artifact on 2026-08-15
+(commit `9856c73`); the figures below come from `canonical_wf()` reading that pointer.**
 
 | Metric (OOS) | Value | Source | Verified |
 |---|---|---|---|
-| Sharpe ratio | **0.41** (engine 0.412; independent recompute 0.417) | `wf_report_clean_2026-06-22.json` | 2026-06-22 |
-| CAGR | **+10.3%** (engine 0.1030; independent recompute +10.4%) | same | 2026-06-22 |
-| Excess CAGR vs SPY | **+1.0pp** (strategy 10.42% − SPY 9.41%, identical window) | `wf_equity_clean_2026-06-22.csv` | 2026-06-22 |
-| Regression alpha vs SPY | **+2.24%/yr** (annualized intercept) | `wf_report_clean_2026-06-22.json` | 2026-06-22 |
-| Max drawdown | **−32.9%** | same | 2026-06-22 |
-| Beta vs SPY | **0.73** | same | 2026-06-22 |
-| Win rate | **50.2%** | same | 2026-06-22 |
-| OOS window | **2021-01-08 → 2026-01-14** (1134 OOS days, 21 rolling folds) | same | 2026-06-22 |
-| Walk-forward efficiency | **−0.65 (OVERFIT — disclose)** | same | 2026-06-22 |
+| Sharpe ratio | **0.41** (0.415) | `wf_report_clean_2026-08-15.json` | 2026-08-15 |
+| CAGR | **+10.2%** (0.1020) | same | 2026-08-15 |
+| Excess CAGR vs SPY | **−3.62pp** (strategy 10.20% − SPY 13.82%, identical window; artifact's `alpha` field is this same excess-CAGR figure, not a regression intercept) | same | 2026-08-15 |
+| Max drawdown | **−45.65%** | same | 2026-08-15 |
+| Beta vs SPY | **0.95** (0.947) | same | 2026-08-15 |
+| Win rate | **52.3%** | same | 2026-08-15 |
+| OOS window | **2020-01-02 → 2026-07-15** (1641 OOS days, 165 rolling folds) | same | 2026-08-15 |
+| Walk-forward efficiency | **not computable for this artifact** — see caveat below | same | 2026-08-15 |
 
-**How this number was produced (and why it's now trustworthy):**
-- Price cache re-fetched fresh from a **single source** (yfinance, `auto_adjust=True` → consistently split+dividend adjusted OHLC), 936 symbols, 2020-01-02 → 2026-06-22, into `data_cache/prices_live_clean_refetch.parquet`. Verified clean: **0 duplicate (symbol,date) rows, 0 implausible jumps** (worst remaining single-day moves are all real events — GME meme days, CAR +108% Nov-2021 squeeze, SHC +99.7% Jan-2023 settlement, LUMN +93% Aug-2024). Only **1 symbol dropped** (CHRD — irreparable source-side ticker-reuse history), vs the corrupted run's 12.
-- LLM alpha sleeves **explicitly zeroed** (`alpha_overrides={"llm_fundamental":0.0,"narrative":0.0}`; runner logged `skipped=[... 'llm_fundamental' ...]` every fold). WF code path is pure quant — no `ai_pm`/`debate`/`counterfactual`/`anthropic` references in `ascent/research/wf_framework/` (grep-verified).
-- **Same window and fold structure (1134 OOS days, 21 folds, beta 0.733) as the canonical `wf_report_2026-06-04.json`** → a true apples-to-apples comparison; the only thing that changed is data cleanliness.
+**Why WFE is not reported:** `walk_forward_runner.py` (the framework that produced this
+artifact) does not track per-fold in-sample Sharpe, unlike the retired `wf_framework/`
+pipeline that produced the superseded 2026-06-22 number. `wfe` is `null` in the artifact and
+`canonical_wf().wfe` returns `None`. Do not invent or carry forward a WFE figure for this run;
+report the gap, not a number.
 
 **Methodology notes / caveats — read before citing:**
-- **Walk-forward efficiency is −0.65:** the in-sample param optimizer adds no OOS value (fixed params would do as well). The Sharpe above is the realistic *post-overfit* OOS figure, but the overfit flag must be disclosed alongside it.
-- This is a **modest** edge (Sharpe ~0.4) and a **thin** +1pp/yr excess return over SPY at defensive beta (0.73). A single backtest, **not a live track record**.
-- **Sortino: the stored `0.042` in this artifact is wrong; the correct value for this run is ≈0.67.** Root cause found and fixed on 2026-07-28: `PerformanceAnalyzer.sortino` annualized both the numerator and the downside deviation, dividing every result by √252 (`0.042 × √252 = 0.666`). Fixed in `ascent/research/wf_framework/metrics.py`, pinned by two regression tests in `tests/test_wf_framework/test_metrics.py`, and guarded by `verify_docs.py::sortino_annualized_once`. **Artifacts written before 2026-07-28 still carry the wrong field** — multiply by √252, or re-run. Newly written artifacts are correct.
-- I switched `close` to **total-return adjusted** (the original used split-only close). This adds dividends ~equally to strategy and SPY → it mainly lifts absolute CAGR and leaves Sharpe/alpha ~unchanged. Even so, the clean CAGR (10.3%) is **below** the corrupted run's 12.61% — confirming the corruption was inflating returns by more than the dividend boost.
-- **Supersedes** "Sharpe 0.483 / CAGR +12.61%" (corrupted cache, inflated) and the contaminated −0.14 repaired run. Prior values −23.4% DD and +2.54% alpha matched no artifact and are dead.
+- This is a **modest** edge (Sharpe ~0.42) and the strategy now trails SPY over the full window
+  (**−3.62pp** CAGR spread) at a beta close to 1 (0.95) — a materially different risk profile
+  from the superseded 2026-06-22 run (beta 0.73, +1.0pp excess CAGR). A single backtest, **not
+  a live track record**.
+- Alpha-sleeve weighting for this run: `meanrev` 0.5 / `statarb` 0.5 (`_meta.alpha_overrides`
+  in the artifact), consistent with the 2-sleeve set in `CLAUDE.md` integrity constraint #6.
+- The artifact also carries `sortino: 0.551`, `calmar_ratio: 0.223`, `profit_factor: 1.11`,
+  `excess_sharpe: -0.222`, and `avg_turnover_per_day: 0.1001` — none of these are surfaced by
+  `WalkForwardRecord` (no `sortino` field on it) and are not part of this table; see the raw
+  artifact if needed.
+- **Supersedes** the 2026-06-22 figures below (Sharpe 0.41 / CAGR +10.3% / max DD −32.9% /
+  beta 0.73 / +1.0pp excess CAGR / WFE −0.65) — not because that run was disproven on its own
+  terms, but because its producing framework has a confirmed bug (see STATUS line above). Also
+  still dead, per that run's own note: "Sharpe 0.483 / CAGR +12.61%" (corrupted cache) and the
+  contaminated −0.14 repaired run.
 
-**Production cache note:** the clean data was written to a *staging* file (`prices_live_clean_refetch.parquet`), **not** swapped into the live `prices_live.parquet`, because the clean re-fetch uses total-return-adjusted close which would change live momentum signals right before the June 24 rebalance. The corrupted cache is backed up (`data_cache/_corrupt_backup_20260622-222216/`) and the live pipeline dedupes on read. Swapping production is a separate, deliberate decision (flagged for the user).
+**Prior artifact (2026-06-22), retained for reference only — do not cite, superseded above:**
+Sharpe 0.41 (engine 0.412), CAGR +10.3%, excess CAGR vs SPY +1.0pp, max DD −32.9%, beta 0.73,
+win rate 50.2%, OOS window 2021-01-08 → 2026-01-14 (1134 days, 21 folds), WFE −0.65 (overfit).
+Source: `wf_report_clean_2026-06-22.json`, produced from a freshly re-fetched clean price
+cache (`data_cache/prices_live_clean_refetch.parquet`, 936 symbols, 0 duplicate rows) with LLM
+alpha sleeves explicitly zeroed. Full methodology detail for this run has been trimmed here
+since it no longer describes the canonical artifact; see git history for the prior prose if
+needed.
+
+**Production cache note:** the clean data referenced by the prior (2026-06-22) run was written
+to a *staging* file (`prices_live_clean_refetch.parquet`), **not** swapped into the live
+`prices_live.parquet`, because the clean re-fetch uses total-return-adjusted close which would
+change live momentum signals right before the June 24 rebalance. The corrupted cache is backed
+up (`data_cache/_corrupt_backup_20260622-222216/`) and the live pipeline dedupes on read.
+Swapping production is a separate, deliberate decision (flagged for the user).
 
 ---
 <!-- BEGIN GENERATED live-book: reconcile_numbers.py -->
@@ -79,12 +109,12 @@ judgment and caveats outside them.
 
 ### Walk-forward artifact cross-check
 
-Section 1 above must match `outputs/wf_results/wf_report_clean_2026-06-22.json`:
+Section 1 above must match `outputs/wf_results/wf_report_clean_2026-08-15.json` (the current
+`CANONICAL_WF_ARTIFACT`):
 
-    Sharpe 0.41, CAGR +10.3%, max DD -32.9%, beta 0.73 (OOS 2021-01-08 -> 2026-01-14, 21 folds, 1134 days) [outputs/wf_results/wf_report_clean_2026-06-22.json]
+    Sharpe 0.41, CAGR +10.2%, max DD -45.6%, beta 0.95 (OOS 2020-01-02 -> 2026-07-15, 165 folds, 1641 days) [outputs/wf_results/wf_report_clean_2026-08-15.json]
 
-- WFE is negative: the in-sample optimizer adds no out-of-sample value. Disclose as overfit.
-- LLM-driven sleeves were zeroed for this run.
+- WFE not computed for this artifact: its producing framework (`ascent/research/walk_forward_runner.py`) does not track per-fold in-sample Sharpe, unlike the retired `wf_framework/` pipeline. Do not report a WFE figure for this run.
 
 <!-- END GENERATED live-book -->
 
