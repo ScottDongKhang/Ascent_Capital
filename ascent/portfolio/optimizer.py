@@ -530,7 +530,9 @@ def sector_constrained_weighted_mvo(
         for fc in factor_constraints:
             # Each fc["loadings_vector"] is aligned to the full symbol list.
             # We need to know what symbols that corresponds to — constraints
-            # carry a "symbols" key when built by build_factor_constraints().
+            # carry a "symbols" key when built by a factor-constraint builder
+            # (ascent.risk.factor_constraints.build_factor_constraints, deleted
+            # 2026-08-16 as unused — no builder currently populates this param).
             # If missing, skip the constraint rather than crash.
             fc_syms = fc.get("symbols")
             if fc_syms is not None:

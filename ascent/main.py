@@ -417,7 +417,7 @@ def run_pipeline(
 
     if not _regime_from_json:
         try:
-            from ascent.regime import RegimeEngine, apply_regime_to_portfolio
+            from ascent.regime import RegimeEngine
 
             spy_wide = (
                 benchmark_df.set_index("date")["close"]

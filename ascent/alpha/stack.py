@@ -185,9 +185,10 @@ def build_alpha_stack(features, alpha_weights=None, regime_signal=None, agent_id
     # regime_signal is accepted for call-site compatibility but no longer used to
     # adjust sleeve weights: regime_overlay scored CUT (p=0.35, no proven value) in
     # the proof audit, so build_alpha_stack() always uses the flat
-    # DEFAULT_ALPHA_WEIGHTS (or an explicit override). See
-    # ascent.regime.integration.apply_regime_to_portfolio for the separate,
-    # in-scope regime overlay on the backtest path.
+    # DEFAULT_ALPHA_WEIGHTS (or an explicit override).
+    # ascent.regime.integration.apply_regime_to_portfolio was the mechanism this
+    # used to reference; it was confirmed to have zero live callers (only ever
+    # imported, never invoked, in ascent/main.py) and deleted 2026-08-16.
     if alpha_weights is None:
         alpha_weights = _load_active_alpha_weights(ai_prior=ai_prior)
         alpha_weights = _get_gated_weights(alpha_weights)

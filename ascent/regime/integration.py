@@ -5,21 +5,21 @@ Connects regime signals into Ascent's portfolio construction pipeline.
 
 This module translates RegimeSignal objects into concrete portfolio-level
 modifications:
-  A. Gross exposure control  (risk_multiplier on position sizing)
-  B. Sleeve reweighting      (alpha stack weight adjustments)
   C. Trade threshold control (signal threshold, rebalance band widening)
   D. Risk constraint changes (sector caps, max name weight)
   E. Covariance settings     (volatility half-life tightening in stress)
 
-API contract:
-  regime_adjust_portfolio(weights, signal, config) -> adjusted_weights
-  regime_adjust_alpha_weights(base_weights, signal) -> adjusted_weights
-  regime_get_constraints(signal, base_constraints) -> modified_constraints
-  regime_covariance_halflife(signal, base_halflife) -> halflife_days
-
 All functions are pure or nearly pure — they take inputs and return
 outputs without side effects. The caller (stack.py or optimizer) decides
 when to call them.
+
+Note: gross exposure scaling (risk_multiplier) and alpha-sleeve reweighting
+(sleeve_adjustments) used to live here as regime_scale_weights(),
+regime_adjust_sleeve_weights(), and the composite apply_regime_to_portfolio().
+All three were confirmed to have zero live callers (deleted 2026-08-16) —
+regime_signal was already accepted-but-unused by build_alpha_stack(), and
+apply_regime_to_portfolio was imported but never called in ascent/main.py.
+regime_max_weight() below is a separate, still-live cap-tightening mechanism.
 """
 from __future__ import annotations
 
@@ -32,96 +32,6 @@ import pandas as pd
 from .types import RegimeLabel, RegimeSignal, REGIME_CONFIG_DEFAULTS
 
 log = logging.getLogger(__name__)
-
-# ── Base alpha sleeve weights (must sum to 1) ─────────────────────────────
-_BASE_SLEEVE_WEIGHTS: Dict[str, float] = {
-    "trend": 0.45,
-    "statarb": 0.35,
-    "meanrev": 0.10,
-    "volatility": 0.10,
-}
-
-# ── A. Gross exposure control ─────────────────────────────────────────────
-
-def regime_scale_weights(
-    weights: pd.Series,
-    signal: RegimeSignal,
-) -> pd.Series:
-    """
-    Apply the regime risk multiplier to a portfolio weight vector.
-
-    Parameters
-    ----------
-    weights : pd.Series
-        Raw portfolio weights (may sum to < 1 already after optimizer).
-    signal : RegimeSignal
-        Current regime signal.
-
-    Returns
-    -------
-    pd.Series
-        Scaled weights. Long-only constraint enforced (no short positions).
-    """
-    if signal is None:
-        return weights
-
-    mult = signal.risk_multiplier
-    scaled = weights * mult
-    # Clamp to positive (long-only)
-    scaled = scaled.clip(lower=0.0)
-
-    if mult != 1.0:
-        log.info(
-            f"regime.integration: gross exposure scaled by {mult:.2f} "
-            f"(regime={signal.label.value})"
-        )
-    return scaled
-
-
-# ── B. Alpha sleeve reweighting ───────────────────────────────────────────
-
-def regime_adjust_sleeve_weights(
-    base_sleeve_weights: Optional[Dict[str, float]] = None,
-    signal: Optional[RegimeSignal] = None,
-    adjustment_scale: float = 1.0,
-) -> Dict[str, float]:
-    """
-    Return regime-adjusted alpha sleeve weights.
-
-    Parameters
-    ----------
-    base_sleeve_weights : dict, optional
-        Base sleeve weights. Defaults to _BASE_SLEEVE_WEIGHTS.
-    signal : RegimeSignal, optional
-        Current regime signal. If None, returns base weights.
-    adjustment_scale : float
-        Scale the adjustments (0 = no change, 1 = full regime adjustment).
-
-    Returns
-    -------
-    dict
-        Adjusted sleeve weights normalized to sum to 1.
-    """
-    base = dict(base_sleeve_weights or _BASE_SLEEVE_WEIGHTS)
-
-    if signal is None or not signal.sleeve_adjustments:
-        return base
-
-    adjusted = {}
-    for sleeve, base_w in base.items():
-        delta = signal.sleeve_adjustments.get(sleeve, 0.0) * adjustment_scale
-        adjusted[sleeve] = max(0.0, base_w + delta)
-
-    # Renormalize
-    total = sum(adjusted.values())
-    if total <= 0:
-        log.warning("regime.integration: sleeve weights summed to zero — using base")
-        return base
-
-    normalized = {k: v / total for k, v in adjusted.items()}
-    log.debug(f"regime.integration: sleeve weights adjusted for {signal.label.value}: {normalized}")
-    return normalized
-
 
 # ── C. Signal threshold and rebalance band widening ───────────────────────
 
@@ -235,52 +145,6 @@ def regime_covariance_halflife(
     }
     new_halflife = int(base_halflife * multiplier.get(signal.label.value, 1.0))
     return max(10, new_halflife)  # floor at 10 days
-
-
-# ── Composite portfolio adjustment ────────────────────────────────────────
-
-def apply_regime_to_portfolio(
-    weights: pd.Series,
-    signal: Optional[RegimeSignal],
-    base_max_weight: float = 0.15,
-) -> Tuple[pd.Series, Dict]:
-    """
-    Apply all regime adjustments to a portfolio weight vector in one call.
-
-    Returns
-    -------
-    adjusted_weights : pd.Series
-    metadata : dict
-        Summary of what was applied (for logging / dashboard).
-    """
-    if signal is None:
-        return weights, {"regime": "none", "adjustments": "none"}
-
-    # Step 1: scale gross exposure
-    w = regime_scale_weights(weights, signal)
-
-    # Step 2: enforce per-name cap with iterative redistribution
-    max_w = regime_max_weight(base_max_weight, signal)
-    # Iterative clip-and-renormalize (converges in a few passes)
-    target_sum = signal.risk_multiplier
-    for _ in range(10):
-        total = w.sum()
-        if total > 1e-9:
-            w = w / total * target_sum
-        over_mask = w > max_w
-        if not over_mask.any():
-            break
-        w = w.clip(upper=max_w)
-
-    metadata = {
-        "regime": signal.label.value,
-        "risk_multiplier": signal.risk_multiplier,
-        "max_weight_cap": max_w,
-        "entropy": signal.entropy,
-        "dwell_days": signal.dwell_days,
-        "transition": signal.transition_flag,
-    }
-    return w, metadata
 
 
 # ── Helper: build regime signal series from a pre-built signal DataFrame ──

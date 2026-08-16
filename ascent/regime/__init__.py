@@ -1,3 +1,1 @@
 from ascent.regime.engine import RegimeEngine
-from ascent.regime.integration import apply_regime_to_portfolio
-from ascent.regime.integration import apply_regime_to_portfolio, regime_adjust_sleeve_weights

@@ -250,47 +250,6 @@ def test_check_factor_bounds_violation():
     assert any("Momentum" in v for v in violations)
 
 
-# ── Task 5: Factor Constraints ────────────────────────────────────────────────
-
-def test_factor_constraints_builder_returns_list():
-    """build_factor_constraints returns a list of constraint dicts."""
-    from ascent.risk.factor_constraints import build_factor_constraints
-    from ascent.risk.factor_model import BETA_COLS
-    from ascent.risk import factor_model as fm
-
-    syms = ["A", "B", "C"]
-    idx = pd.MultiIndex.from_tuples(
-        [(pd.Timestamp("2026-04-30"), s) for s in syms],
-        names=["date", "symbol"],
-    )
-    data = np.random.randn(3, 6) * 0.3
-    loadings = pd.DataFrame(data, index=idx, columns=BETA_COLS)
-
-    cache_path = Path("/tmp/test_loadings_constraints.parquet")
-    loadings.to_parquet(cache_path)
-
-    with patch.object(fm, "LOADINGS_PATH", cache_path):
-        constraints = build_factor_constraints(syms, "2026-04-30", "calm_bull")
-
-    assert isinstance(constraints, list)
-    assert len(constraints) == 6
-    for c in constraints:
-        assert "loadings_vector" in c
-        assert "lb" in c and "ub" in c
-        assert "factor" in c
-
-
-def test_regime_factor_bounds_tighter_in_crisis():
-    """Crisis bounds are narrower than calm_bull bounds."""
-    from ascent.risk.factor_constraints import get_regime_factor_bounds
-    calm = get_regime_factor_bounds("calm_bull")
-    crisis = get_regime_factor_bounds("crisis")
-    for factor in calm:
-        calm_range = calm[factor][1] - calm[factor][0]
-        crisis_range = crisis[factor][1] - crisis[factor][0]
-        assert crisis_range < calm_range, f"{factor}: crisis should be tighter than calm_bull"
-
-
 # ── Task 6/7: Attribution + Debate ───────────────────────────────────────────
 
 def test_attribution_log_includes_factor_fields():

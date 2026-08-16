@@ -20,9 +20,6 @@ Usage pattern (from main.py or walk-forward runner):
     # At each rebalance date:
     signal = engine.get_signal(as_of_date)
 
-    # Apply to portfolio:
-    weights, meta = apply_regime_to_portfolio(raw_weights, signal)
-
     # For walk-forward: call engine.fit() on training slice, then
     # engine.get_signal() on each test date.
 """
@@ -41,7 +38,7 @@ from .features import RegimeFeatureBuilder
 from .model import RegimeModel, walk_forward_model_select
 from .breaks import BreakDetector
 from .decision import RegimeDecisionEngine
-from .integration import get_signal_for_date, apply_regime_to_portfolio
+from .integration import get_signal_for_date
 from .types import (
     RegimeSignal, RegimeLabel, RegimeScorecard, REGIME_CONFIG_DEFAULTS
 )

@@ -52,7 +52,12 @@ def optimize_mvo(
     MVO portfolio optimizer.
 
     Returns a weight Series summing to 1.0, or None if infeasible.
-    factor_constraints: list of dicts from ascent.risk.factor_constraints.build_factor_constraints()
+    factor_constraints: list of dicts, each {"loadings_vector": np.ndarray, "lb": float,
+        "ub": float, "factor": str} (optionally "symbols"). The builder that used to
+        produce these (ascent.risk.factor_constraints.build_factor_constraints) had
+        zero live callers and was deleted 2026-08-16; the sole production call site
+        (ascent/main.py) always passes factor_constraints=None. This parameter itself
+        stays live — a future builder could populate it in this format.
     vols: optional per-symbol trailing annualized realized vol (Series indexed
         like alpha_scores). Used to build a per-name diagonal covariance proxy
         when `covariance` is unavailable, instead of a single flat estimate

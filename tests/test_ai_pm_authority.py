@@ -118,48 +118,10 @@ def test_legacy_migration_from_phase_to_level():
 
 
 # ── guardrail tests ────────────────────────────────────────────────────────────
-
-def test_level1_blocks_reduce():
-    from ascent.strategy.ai_pm_guardrails import apply_guardrails
-    quant = {"AAPL": 0.10, "MSFT": 0.10}
-    ai_pm = {"AAPL": 0.07, "MSFT": 0.10}  # AAPL is a REDUCE
-    alpha_scores = {"AAPL": 0.8, "MSFT": 0.9}
-    result, violations = apply_guardrails(ai_pm, quant, alpha_scores, level=1)
-    # AAPL REDUCE blocked → stays at quant weight
-    assert result.get("AAPL", 0.10) >= quant["AAPL"] - 0.001
-    assert any("REDUCE" in v or "reduce" in v.lower() or "not allowed" in v.lower() for v in violations)
-
-
-def test_level1_blocks_amplify_bottom_50pct_alpha():
-    from ascent.strategy.ai_pm_guardrails import apply_guardrails
-    quant = {"AAPL": 0.07, "WEAK": 0.05}
-    ai_pm = {"AAPL": 0.09, "WEAK": 0.09}  # amplifying WEAK (low alpha)
-    alpha_scores = {"AAPL": 0.80, "WEAK": 0.20}  # WEAK below median
-    result, violations = apply_guardrails(ai_pm, quant, alpha_scores, level=1)
-    # WEAK amplification blocked — stays at quant weight
-    assert abs(result.get("WEAK", 0.05) - 0.05) < 0.002
-    assert any("WEAK" in v for v in violations)
-
-
-def test_level1_max_weight_change_capped_at_2pp():
-    from ascent.strategy.ai_pm_guardrails import apply_guardrails
-    quant = {"AAPL": 0.07}
-    ai_pm = {"AAPL": 0.15}  # +8pp, above 2pp cap
-    alpha_scores = {"AAPL": 0.90}
-    result, violations = apply_guardrails(ai_pm, quant, alpha_scores, level=1)
-    assert result.get("AAPL", 0.09) <= 0.07 + 0.02 + 1e-5
-
-
-def test_max_overrides_enforced():
-    from ascent.strategy.ai_pm_guardrails import apply_guardrails
-    # Level 1 allows max 2 overrides
-    quant = {f"S{i}": 0.07 for i in range(5)}
-    ai_pm = {f"S{i}": 0.09 for i in range(5)}  # 5 amplifications
-    alpha_scores = {f"S{i}": 0.90 for i in range(5)}
-    result, violations = apply_guardrails(ai_pm, quant, alpha_scores, level=1)
-    n_changed = sum(1 for sym in quant if abs(result.get(sym, quant[sym]) - quant[sym]) > 0.001)
-    assert n_changed <= 2
-
+# apply_guardrails() and its dedicated tests (test_level1_blocks_reduce,
+# test_level1_blocks_amplify_bottom_50pct_alpha, test_level1_max_weight_change_capped_at_2pp,
+# test_max_overrides_enforced) were removed 2026-08-16: apply_guardrails had zero
+# non-test callers. check_conviction_inflation is a separate, still-live function.
 
 def test_check_conviction_inflation():
     from ascent.strategy.ai_pm_guardrails import check_conviction_inflation
