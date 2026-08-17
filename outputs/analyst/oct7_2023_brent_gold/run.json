@@ -1,0 +1,47 @@
+{
+  "question": "How did Brent crude and Gold move during Hamas attack on Israel (2023-10-09)?",
+  "params": {
+    "event_key": "oct7_2023",
+    "event_name": "Hamas attack on Israel",
+    "event_date": "2023-10-09",
+    "asset_a_ticker": "BZ=F",
+    "asset_a_label": "Brent crude",
+    "asset_b_ticker": "GC=F",
+    "asset_b_label": "Gold",
+    "start": "2023-04-12",
+    "end": "2024-02-06",
+    "horizons": [
+      1,
+      5,
+      20,
+      60
+    ]
+  },
+  "tasks": {
+    "load_asset_a": {
+      "state": "done",
+      "attempts": 1,
+      "error": ""
+    },
+    "load_asset_b": {
+      "state": "done",
+      "attempts": 1,
+      "error": ""
+    },
+    "asset_a_chart": {
+      "state": "done",
+      "attempts": 1,
+      "error": ""
+    },
+    "calc_asset_moves": {
+      "state": "done",
+      "attempts": 1,
+      "error": ""
+    },
+    "asset_moves_table": {
+      "state": "done",
+      "attempts": 1,
+      "error": ""
+    }
+  }
+}

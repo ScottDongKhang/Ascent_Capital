@@ -1,0 +1,47 @@
+{
+  "question": "How did WTI crude and Gold move during Iranian missile and drone strike on Israel (2024-04-15)?",
+  "params": {
+    "event_key": "iran_israel_2024",
+    "event_name": "Iranian missile and drone strike on Israel",
+    "event_date": "2024-04-15",
+    "asset_a_ticker": "CL=F",
+    "asset_a_label": "WTI crude",
+    "asset_b_ticker": "GC=F",
+    "asset_b_label": "Gold",
+    "start": "2023-10-18",
+    "end": "2024-08-13",
+    "horizons": [
+      1,
+      5,
+      20,
+      60
+    ]
+  },
+  "tasks": {
+    "load_asset_a": {
+      "state": "done",
+      "attempts": 1,
+      "error": ""
+    },
+    "load_asset_b": {
+      "state": "done",
+      "attempts": 1,
+      "error": ""
+    },
+    "asset_a_chart": {
+      "state": "done",
+      "attempts": 2,
+      "error": ""
+    },
+    "calc_asset_moves": {
+      "state": "done",
+      "attempts": 1,
+      "error": ""
+    },
+    "asset_moves_table": {
+      "state": "done",
+      "attempts": 1,
+      "error": ""
+    }
+  }
+}

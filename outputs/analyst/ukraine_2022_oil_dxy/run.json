@@ -1,0 +1,47 @@
+{
+  "question": "How did WTI crude and US dollar index move during Russian full-scale invasion of Ukraine (2022-02-24)?",
+  "params": {
+    "event_key": "ukraine_2022",
+    "event_name": "Russian full-scale invasion of Ukraine",
+    "event_date": "2022-02-24",
+    "asset_a_ticker": "CL=F",
+    "asset_a_label": "WTI crude",
+    "asset_b_ticker": "DX-Y.NYB",
+    "asset_b_label": "US dollar index",
+    "start": "2021-08-28",
+    "end": "2022-06-24",
+    "horizons": [
+      1,
+      5,
+      20,
+      60
+    ]
+  },
+  "tasks": {
+    "load_asset_a": {
+      "state": "done",
+      "attempts": 1,
+      "error": ""
+    },
+    "load_asset_b": {
+      "state": "done",
+      "attempts": 1,
+      "error": ""
+    },
+    "asset_a_chart": {
+      "state": "done",
+      "attempts": 1,
+      "error": ""
+    },
+    "calc_asset_moves": {
+      "state": "done",
+      "attempts": 1,
+      "error": ""
+    },
+    "asset_moves_table": {
+      "state": "done",
+      "attempts": 1,
+      "error": ""
+    }
+  }
+}
