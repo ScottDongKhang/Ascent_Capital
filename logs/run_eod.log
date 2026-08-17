@@ -14947,3 +14947,115 @@ Traceback (most recent call last):
   File "/Users/scott/IdeaProjects/ascent-capital/run_all_agents.py", line 1986, in _log_run
 OSError: [Errno 24] Too many open files: 'logs/multi_agent_run.jsonl'
 Fri Jul 31 09:10:31 +07 2026: Run complete.
+Sat Aug  1 09:00:00 +07 2026: Starting multi-agent EOD run...
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  OUTAGE DETECTED — refusing to auto-execute
+  ========================================================
+  Last logged run is 4 trading day(s) stale.
+  Missed trading days: 2026-07-28, 2026-07-29, 2026-07-30, 2026-07-31
+
+  RECOVERY: re-run with --catch-up to compute ONE fresh
+  rebalance on today's data. Missed dates will NOT be replayed
+  (stale intent + double transaction costs).
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+Sat Aug  1 09:00:01 +07 2026: Run complete.
+Tue Aug  4 09:00:01 +07 2026: Starting multi-agent EOD run...
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  OUTAGE DETECTED — refusing to auto-execute
+  ========================================================
+  Last logged run is 5 trading day(s) stale.
+  Missed trading days: 2026-07-28, 2026-07-29, 2026-07-30, 2026-07-31, 2026-08-03
+
+  RECOVERY: re-run with --catch-up to compute ONE fresh
+  rebalance on today's data. Missed dates will NOT be replayed
+  (stale intent + double transaction costs).
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+Tue Aug  4 09:00:02 +07 2026: Run complete.
+Wed Aug  5 09:00:01 +07 2026: Starting multi-agent EOD run...
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  OUTAGE DETECTED — refusing to auto-execute
+  ========================================================
+  Last logged run is 6 trading day(s) stale.
+  Missed trading days: 2026-07-28, 2026-07-29, 2026-07-30, 2026-07-31, 2026-08-03, 2026-08-04
+
+  RECOVERY: re-run with --catch-up to compute ONE fresh
+  rebalance on today's data. Missed dates will NOT be replayed
+  (stale intent + double transaction costs).
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+Wed Aug  5 09:00:02 +07 2026: Run complete.
+Wed Aug  5 19:00:05 PDT 2026: Starting multi-agent EOD run...
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  OUTAGE DETECTED — refusing to auto-execute
+  ========================================================
+  Last logged run is 7 trading day(s) stale.
+  Missed trading days: 2026-07-28, 2026-07-29, 2026-07-30, 2026-07-31, 2026-08-03, 2026-08-04, 2026-08-05
+
+  RECOVERY: re-run with --catch-up to compute ONE fresh
+  rebalance on today's data. Missed dates will NOT be replayed
+  (stale intent + double transaction costs).
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+Wed Aug  5 19:00:06 PDT 2026: Run complete.
+Thu Aug  6 19:00:03 PDT 2026: Starting multi-agent EOD run...
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  OUTAGE DETECTED — refusing to auto-execute
+  ========================================================
+  Last logged run is 8 trading day(s) stale.
+  Missed trading days: 2026-07-28, 2026-07-29, 2026-07-30, 2026-07-31, 2026-08-03, 2026-08-04, 2026-08-05, 2026-08-06
+
+  RECOVERY: re-run with --catch-up to compute ONE fresh
+  rebalance on today's data. Missed dates will NOT be replayed
+  (stale intent + double transaction costs).
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+Thu Aug  6 19:00:04 PDT 2026: Run complete.
+Fri Aug  7 19:05:01 PDT 2026: Starting multi-agent EOD run...
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  OUTAGE DETECTED — refusing to auto-execute
+  ========================================================
+  Last logged run is 9 trading day(s) stale.
+  Missed trading days: 2026-07-28, 2026-07-29, 2026-07-30, 2026-07-31, 2026-08-03, 2026-08-04, 2026-08-05, 2026-08-06, 2026-08-07
+
+  RECOVERY: re-run with --catch-up to compute ONE fresh
+  rebalance on today's data. Missed dates will NOT be replayed
+  (stale intent + double transaction costs).
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+Fri Aug  7 19:05:02 PDT 2026: Run complete.
+Mon Aug 10 21:01:38 CDT 2026: Starting multi-agent EOD run...
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  OUTAGE DETECTED — refusing to auto-execute
+  ========================================================
+  Last logged run is 10 trading day(s) stale.
+  Missed trading days: 2026-07-28, 2026-07-29, 2026-07-30, 2026-07-31, 2026-08-03, 2026-08-04, 2026-08-05, 2026-08-06, 2026-08-07, 2026-08-10
+
+  RECOVERY: re-run with --catch-up to compute ONE fresh
+  rebalance on today's data. Missed dates will NOT be replayed
+  (stale intent + double transaction costs).
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+Mon Aug 10 21:01:39 CDT 2026: Run complete.
+Tue Aug 11 19:00:03 PDT 2026: Starting multi-agent EOD run...
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  OUTAGE DETECTED — refusing to auto-execute
+  ========================================================
+  Last logged run is 11 trading day(s) stale.
+  Missed trading days: 2026-07-28, 2026-07-29, 2026-07-30, 2026-07-31, 2026-08-03, 2026-08-04, 2026-08-05, 2026-08-06, 2026-08-07, 2026-08-10, 2026-08-11
+
+  RECOVERY: re-run with --catch-up to compute ONE fresh
+  rebalance on today's data. Missed dates will NOT be replayed
+  (stale intent + double transaction costs).
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+Tue Aug 11 19:00:04 PDT 2026: Run complete.

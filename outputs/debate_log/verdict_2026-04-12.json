@@ -1,7 +1,7 @@
 {
   "date": "2026-04-12",
   "data_as_of": "2026-04-12",
-  "timestamp": "2026-07-31T11:12:37.850062",
+  "timestamp": "2026-08-16T12:20:50.093025",
   "portfolio_state": {
     "date": "2026-04-12",
     "us_regime": "calm_bull",
@@ -71,12 +71,12 @@
     "adversarial_engine": {
       "adversarial_scores": {
         "AAPL": {
-          "short_thesis": "Deteriorating risk trend signals margin compression ahead. Services growth slowing; iPhone saturation in developed markets pressures revenue. Valuation stretched at 30x earnings.",
+          "short_thesis": "Deteriorating risk trend signals margin compression ahead. Services growth masks iPhone saturation; China exposure vulnerable to geopolitical escalation.",
           "adversarial_score": 0.58,
           "flagged": false
         },
         "MSFT": {
-          "short_thesis": "AI hype cycle peaking; Azure growth decelerating. Enterprise software spending cycles turning. Cloud margin expansion limited by competition and capex intensity.",
+          "short_thesis": "AI hype cycle peaking; Azure growth deceleration risk. Enterprise software faces macro headwinds; valuation stretched on speculative Copilot monetization.",
           "adversarial_score": 0.52,
           "flagged": false
         }
