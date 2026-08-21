@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import json
 import time
+from datetime import date
 from pathlib import Path
 
 import pandas as pd
@@ -322,7 +323,6 @@ def run_pipeline(
             s for s in extra_symbols if s not in cfg.universe.symbols
         ]
     if not cfg.backtest.end_date:
-        from datetime import date
         _today = pd.Timestamp.today().normalize()
         _days_back = max(0, _today.weekday() - 4)
         cfg.backtest.end_date = (_today - pd.Timedelta(days=_days_back)).strftime("%Y-%m-%d")
