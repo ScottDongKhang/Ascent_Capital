@@ -183,6 +183,40 @@ class TestDivergence4_OrderSubmittedAlwaysAudited:
         }]
 
 
+class TestAuditFailureDoesNotMisclassifySubmittedOrder:
+    """Task-5 review finding (Important): the order_submitted audit call
+    used to sit inside the same try block as the broker submission. If
+    audit_trail.record() raised (disk full, permissions, lock contention --
+    only import failure is guarded by _audit's own no-op fallback), the
+    outer except caught it and filed a genuinely-submitted order into
+    `skipped` instead of `executed`, even though the broker call had already
+    succeeded. Fixed by giving the _audit() call its own try/except so a
+    submitted order's bookkeeping is unconditional."""
+
+    def test_audit_raising_still_lands_order_in_executed_not_skipped(self, monkeypatch):
+        monkeypatch.setattr(kill_switch, "check", lambda current_nav=None: {})
+        monkeypatch.setattr(
+            "ascent.execution.order_engine._get_approx_price",
+            lambda symbol, positions: 100.0,
+        )
+        monkeypatch.setattr(runner, "submit_order", lambda **kw: {"id": "abc123"})
+
+        def _boom(event_type, payload):
+            raise OSError("disk full")
+
+        monkeypatch.setattr(runner, "_audit", _boom)
+
+        executed, skipped = runner._execute_order_batch(
+            [_order(symbol="AAA")], pd.DataFrame(), 100_000.0, "2026-08-20",
+        )
+
+        assert executed == [{
+            "symbol": "AAA", "side": "buy", "qty": 50.0,
+            "dollar_amount": 5_000.0, "order_id": "abc123",
+        }], "a broker-submitted order must stay executed even if the audit log write fails"
+        assert skipped == []
+
+
 class TestDivergence5_SkippedEntriesAreDictsWithReason:
     """Step-1 divergence #5: run_eod()'s `skipped` entries were always
     {"symbol", "reason"} dicts; run_eod_with_weights()'s were bare symbol

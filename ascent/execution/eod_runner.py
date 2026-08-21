@@ -883,11 +883,25 @@ def _execute_order_batch(
             # submission via _audit('order_submitted', ...); run_eod_with_
             # weights() never did. Unified to always audit (log-only side
             # effect, same reasoning as the kill-switch audit above).
-            _audit("order_submitted", {
-                "symbol": o.symbol, "side": o.side, "qty": qty,
-                "dollar_amount": round(o.dollar_amount, 2),
-                "order_id": order_id, "date": today_str,
-            })
+            #
+            # The broker call above has already succeeded by this point, so
+            # the order is genuinely live -- an audit-log failure (disk full,
+            # permissions, lock contention; audit_trail.record() does real
+            # file I/O under a lock) must never cause this order to fall into
+            # `skipped` and be misreported as not submitted. Bookkeeping for
+            # a successful broker call is therefore unconditional, and the
+            # audit write gets its own try/except so it can't reach the outer
+            # handler.
+            try:
+                _audit("order_submitted", {
+                    "symbol": o.symbol, "side": o.side, "qty": qty,
+                    "dollar_amount": round(o.dollar_amount, 2),
+                    "order_id": order_id, "date": today_str,
+                })
+            except Exception as _audit_exc:
+                print(f"{log_prefix} WARNING: audit log failed for {o.symbol} "
+                      f"(order already submitted, order_id={order_id}): {_audit_exc}")
+
             executed.append({
                 "symbol":        o.symbol,
                 "side":          o.side,
