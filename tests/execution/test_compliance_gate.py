@@ -6,9 +6,12 @@ approval, buying-power tie-break -- plus a wiring test confirming
 eod_runner.py's shadow-mode call site logs rejections without altering the
 `orders` list that actually gets submitted.
 """
+import json
+
 import pandas as pd
 import pytest
 
+import ascent.execution.compliance_gate as compliance_gate
 from ascent.execution.compliance_gate import check_batch, GateDecision, LARGE_TRADE_APPROVAL_PCT
 from ascent.execution.order_engine import Order
 
@@ -139,6 +142,138 @@ class TestBuyingPowerTieBreak:
             live_positions=pd.DataFrame(),
         )
         assert all(d.approved for d in decisions)
+
+
+class TestBuyingPowerSellProceeds:
+    def test_same_batch_sell_proceeds_increase_available_buying_power(self):
+        portfolio_value = 10_000_000.0
+        orders = [
+            _order("BUYME", "buy", 40_000.0),
+            _order("SELLME", "sell", 30_000.0),
+        ]
+        # buying_power alone (10,000) cannot cover the 40,000 buy, but
+        # buying_power + same-batch sell proceeds (10,000 + 30,000 = 40,000)
+        # exactly covers it -- without the fix this buy would be rejected.
+        decisions = check_batch(
+            orders, portfolio_value=portfolio_value, buying_power=10_000.0,
+            live_positions=pd.DataFrame(),
+        )
+        by_symbol = {d.order_id: d for d in decisions}
+        assert by_symbol["BUYME"].approved, by_symbol["BUYME"].reason
+        assert by_symbol["SELLME"].approved
+
+    def test_without_sell_proceeds_the_same_buy_would_be_rejected(self):
+        # Control: same buy, no offsetting sell in the batch -- must still
+        # be rejected on insufficient buying power.
+        portfolio_value = 10_000_000.0
+        orders = [_order("BUYME", "buy", 40_000.0)]
+        decisions = check_batch(
+            orders, portfolio_value=portfolio_value, buying_power=10_000.0,
+            live_positions=pd.DataFrame(),
+        )
+        assert not decisions[0].approved
+        assert decisions[0].reason == "insufficient_buying_power"
+
+    def test_sell_proceeds_insufficient_to_cover_buy_still_rejects(self):
+        portfolio_value = 10_000_000.0
+        orders = [
+            _order("BUYME", "buy", 40_000.0),
+            _order("SELLME", "sell", 5_000.0),
+        ]
+        # 10,000 + 5,000 = 15,000 < 40,000 -- still short.
+        decisions = check_batch(
+            orders, portfolio_value=portfolio_value, buying_power=10_000.0,
+            live_positions=pd.DataFrame(),
+        )
+        by_symbol = {d.order_id: d for d in decisions}
+        assert not by_symbol["BUYME"].approved
+        assert by_symbol["BUYME"].reason == "insufficient_buying_power"
+        assert by_symbol["SELLME"].approved
+
+
+class TestLargeTradeApprovalFile:
+    def test_large_order_with_matching_approval_entry_is_not_rejected(self, tmp_path, monkeypatch):
+        portfolio_value = 1_000_000.0
+        big_notional = portfolio_value * 0.03  # 3% > 2.0% threshold
+        approvals_path = tmp_path / "large_trade_approvals.json"
+        approvals_path.write_text(json.dumps([
+            {
+                "symbol": "AAA",
+                "date": "2026-08-20",
+                "max_notional": big_notional,
+                "approved_by": "scott",
+            }
+        ]))
+        monkeypatch.setattr(compliance_gate, "LARGE_TRADE_APPROVAL_PATH", approvals_path)
+
+        orders = [_order("AAA", "buy", big_notional)]
+        decisions = check_batch(
+            orders, portfolio_value=portfolio_value, buying_power=big_notional * 2,
+            live_positions=pd.DataFrame(),
+            trade_date="2026-08-20",
+        )
+        assert decisions[0].approved
+
+    def test_large_order_without_matching_approval_entry_is_still_rejected(self, tmp_path, monkeypatch):
+        portfolio_value = 1_000_000.0
+        big_notional = portfolio_value * 0.03
+        approvals_path = tmp_path / "large_trade_approvals.json"
+        # Entry exists but for a different symbol -- must not match.
+        approvals_path.write_text(json.dumps([
+            {
+                "symbol": "OTHER",
+                "date": "2026-08-20",
+                "max_notional": big_notional,
+                "approved_by": "scott",
+            }
+        ]))
+        monkeypatch.setattr(compliance_gate, "LARGE_TRADE_APPROVAL_PATH", approvals_path)
+
+        orders = [_order("AAA", "buy", big_notional)]
+        decisions = check_batch(
+            orders, portfolio_value=portfolio_value, buying_power=big_notional * 2,
+            live_positions=pd.DataFrame(),
+            trade_date="2026-08-20",
+        )
+        assert not decisions[0].approved
+        assert "large_order_requires_approval" in decisions[0].reason
+
+    def test_missing_approval_file_rejects_as_before(self, tmp_path, monkeypatch):
+        portfolio_value = 1_000_000.0
+        big_notional = portfolio_value * 0.03
+        monkeypatch.setattr(
+            compliance_gate, "LARGE_TRADE_APPROVAL_PATH", tmp_path / "does_not_exist.json"
+        )
+
+        orders = [_order("AAA", "buy", big_notional)]
+        decisions = check_batch(
+            orders, portfolio_value=portfolio_value, buying_power=big_notional * 2,
+            live_positions=pd.DataFrame(),
+            trade_date="2026-08-20",
+        )
+        assert not decisions[0].approved
+
+    def test_approval_date_mismatch_does_not_approve(self, tmp_path, monkeypatch):
+        portfolio_value = 1_000_000.0
+        big_notional = portfolio_value * 0.03
+        approvals_path = tmp_path / "large_trade_approvals.json"
+        approvals_path.write_text(json.dumps([
+            {
+                "symbol": "AAA",
+                "date": "2026-08-19",  # wrong date
+                "max_notional": big_notional,
+                "approved_by": "scott",
+            }
+        ]))
+        monkeypatch.setattr(compliance_gate, "LARGE_TRADE_APPROVAL_PATH", approvals_path)
+
+        orders = [_order("AAA", "buy", big_notional)]
+        decisions = check_batch(
+            orders, portfolio_value=portfolio_value, buying_power=big_notional * 2,
+            live_positions=pd.DataFrame(),
+            trade_date="2026-08-20",
+        )
+        assert not decisions[0].approved
 
 
 class TestEodRunnerShadowWiring:

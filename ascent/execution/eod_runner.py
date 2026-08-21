@@ -822,6 +822,7 @@ def _execute_order_batch(
             orders, portfolio_value,
             buying_power=_buying_power,
             live_positions=current_positions,
+            trade_date=today_str,
         )
         for _gd in _gate_decisions:
             if not _gd.approved:
