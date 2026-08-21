@@ -8,10 +8,11 @@ orchestration → Alpaca paper trading. The AI PM, the debate layer, and the fal
 all still run, but **advisory only**: they produce theses, verdicts, and proposals that are
 logged and scored, and none of them writes to live weights (see integrity constraint #5). The
 other three specialist agents (`macro`, `international`, `alternatives`) are not invoked
-directly by `run_all_agents.py`, but the AI PM's `run_quant_agent` tool
-(`agents/ai_pm_agent.py`) requires calling all four agents ("Required: run_quant_agent for all
-four agents") — so on a scheduled rebalance day, Phase 2 of the AI PM actually does execute
-all three "dormant" agents' full pipelines via that tool, at real wall-clock/API cost.
+directly by `run_all_agents.py`, and the AI PM's `run_quant_agent` tool
+(`agents/ai_pm_agent.py`) only requires calling `us_equities` ("Required: run_quant_agent for
+us_equities — it is the only agent whose output feeds live"), with the other three optional /
+context-only — so on a scheduled rebalance day, Phase 2 of the AI PM is not guaranteed to
+execute the three "dormant" agents' full pipelines via that tool.
 
 **Daily command**: `.venv/bin/python run_all_agents.py` (branches on rebalance day)
 

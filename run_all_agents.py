@@ -40,6 +40,12 @@ from ascent.strategy.ai_pm_perf_feedback import (
     derive_overrides,
 )
 
+try:
+    from compliance.audit_trail import record_event as _audit
+except Exception:
+    def _audit(event_type, payload):  # type: ignore[misc]
+        pass
+
 
 SECTOR_OVERRIDE_LOG  = Path("logs/sector_override.jsonl")
 HALT_STATE_PATH      = Path("execution/halt_state.json")
@@ -383,6 +389,12 @@ def check_halt_state(today=None) -> bool:
             f"[HALT] Create execution/halt_override.json to resume trading.\n"
             f"[HALT] See verdict: {halt.get('verdict_path', 'outputs/debate_log/')}"
         )
+        _audit("halt_triggered", {
+            "halt_date":    halt.get("halt_date"),
+            "reason":       halt.get("reason", ""),
+            "verdict_path": halt.get("verdict_path", "outputs/debate_log/"),
+            "date":         today.isoformat(),
+        })
         return False
 
     override = json.loads(HALT_OVERRIDE_PATH.read_text())
@@ -392,11 +404,25 @@ def check_halt_state(today=None) -> bool:
             f"[HALT] Override date {override['override_date']} predates "
             f"halt date {halt['halt_date']} — invalid override. Recreate the file."
         )
+        _audit("halt_triggered", {
+            "halt_date":     halt.get("halt_date"),
+            "reason":        halt.get("reason", ""),
+            "verdict_path":  halt.get("verdict_path", "outputs/debate_log/"),
+            "date":          today.isoformat(),
+            "invalid_override_date": override.get("override_date", ""),
+        })
         return False
 
     # Valid override — clear both files
     print(f"[HALT] Override accepted by {override.get('override_by', 'unknown')} — halt cleared. "
           "NOTE: today's debate may still issue a new halt.")
+    _audit("halt_overridden", {
+        "halt_date":     halt.get("halt_date"),
+        "reason":        halt.get("reason", ""),
+        "override_date": override.get("override_date", ""),
+        "override_by":   override.get("override_by", "unknown"),
+        "date":          today.isoformat(),
+    })
     HALT_STATE_PATH.unlink(missing_ok=True)
     HALT_OVERRIDE_PATH.unlink(missing_ok=True)
     return True

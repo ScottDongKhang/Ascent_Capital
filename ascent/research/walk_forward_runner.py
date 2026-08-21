@@ -540,8 +540,18 @@ def walk_forward_pipeline(
     )
 
     print("\n" + format_metrics(result.summary()))
-    from ascent.dashboard.export_dashboard_data import export_to_dashboard
     try:
+        # NOTE: pre-existing bug found while testing the persistence patch
+        # below -- ascent/dashboard/export_dashboard_data.py was deleted in
+        # commit ab392bb ("chore: remove dashboard HTML, 20in20 reports, and
+        # unused UI/reporting modules") but this import was left outside the
+        # try/except, so it raised ModuleNotFoundError unconditionally and
+        # crashed the pipeline before it could reach the ledger/report saves
+        # below. Moved inside the try (previously already the intended
+        # failure-handling for this block) so a missing/broken dashboard
+        # exporter degrades gracefully instead of aborting the whole run.
+        # Not part of the requested persistence change; flagged separately.
+        from ascent.dashboard.export_dashboard_data import export_to_dashboard
         export_to_dashboard(result, regime_engine=None)
         print('[Dashboard] Export complete')
     except Exception as e:
@@ -555,6 +565,38 @@ def walk_forward_pipeline(
     if result.holdings_ledger is not None:
         result.holdings_ledger.to_csv("ascent_holdings_ledger.csv", index=False)
         print("[Saved] ascent_holdings_ledger.csv")
+
+    # --- Persistence: daily strategy + benchmark return series -------------
+    # docs/target_architecture/24_beta_decomposition_analysis.md found that no
+    # per-day OOS return series was ever persisted alongside the summary-stat
+    # report, forcing a prior audit to ALGEBRAICALLY estimate a beta-hedged
+    # Sharpe from aggregate stats. result.portfolio_returns (net daily strategy
+    # return) and result.benchmark_returns (SPY daily pct-change, same
+    # common_dates index) already hold exactly that series in memory inside
+    # BacktestEngine.run() / BacktestResult above. This writes them out
+    # verbatim, additively -- it does not change any existing computation,
+    # the existing JSON summary report, or the existing ledger CSVs.
+    try:
+        from ascent.utils.market_time import market_today
+        _run_date = market_today().isoformat()
+    except Exception:
+        _run_date = pd.Timestamp.now().strftime("%Y-%m-%d")
+
+    daily_returns_path = os.path.join(
+        "outputs", "wf_results", f"wf_daily_returns_{_run_date}.csv"
+    )
+    try:
+        os.makedirs(os.path.dirname(daily_returns_path), exist_ok=True)
+        _daily_df = pd.DataFrame({"strategy_return": result.portfolio_returns})
+        if result.benchmark_returns is not None:
+            _daily_df["benchmark_return"] = result.benchmark_returns.reindex(
+                _daily_df.index
+            )
+        _daily_df.index.name = "date"
+        _daily_df.to_csv(daily_returns_path)
+        print(f"\n[Saved] {daily_returns_path} ({len(_daily_df)} rows)")
+    except Exception as _pe:
+        print(f"[WF] WARNING: failed to persist daily returns series: {_pe}")
 
     print("")
     print("=" * 70)

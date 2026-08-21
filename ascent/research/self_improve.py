@@ -22,6 +22,8 @@ import numpy as np
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+from ascent.research.hypothesis_registry import was_previously_rejected, record_verdict
+
 # Hard gate on self-modification. Keep False until OOS Sharpe is positive
 # for 30 consecutive trading days on a flat config. Set to True only
 # after that condition is confirmed manually.
@@ -270,6 +272,15 @@ def run_self_improve(current_regime: str = None):
 
     results = []
     for v in variants:
+        prior = was_previously_rejected(v.get("alpha_weights", {}))
+        if prior is not None:
+            print(f"  {v['variant_id']}: skipping evaluation -- already tested and "
+                  f"rejected on {prior.get('date', 'unknown date')} "
+                  f"(prior variant_id={prior.get('variant_id')}, "
+                  f"oos_sharpe={prior.get('oos_sharpe')})")
+            v["oos_sharpe"] = prior.get("oos_sharpe", float("-inf"))
+            results.append(v)
+            continue
         sharpe      = evaluate_variant(v)
         v["oos_sharpe"] = sharpe
         results.append(v)
@@ -309,6 +320,17 @@ def run_self_improve(current_regime: str = None):
         f.write(json.dumps(log_entry) + "\n")
 
     print(f"[SelfImprove] Logged to {LOG_PATH}")
+
+    # Rejected-hypothesis registry: one verdict per variant, reusing the
+    # already-computed edge/promoted values -- no new evaluation logic.
+    for v in results:
+        record_verdict(
+            variant_config=v.get("alpha_weights", {}),
+            variant_id=v["variant_id"],
+            oos_sharpe=v["oos_sharpe"],
+            edge=edge,
+            promoted=edge > MIN_SHARPE_EDGE,
+        )
 
     # Per-regime promotion: if a regime is specified and best variant exceeds MIN_SHARPE_EDGE
     if current_regime and results:
