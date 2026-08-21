@@ -707,16 +707,18 @@ def sector_constrained_weighted(
 
     Bug 2 fix: weight cap enforced via water-filling, not clip-and-renormalize.
 
-    If regime_signal is provided, max_weight is tightened based on the
-    current regime (e.g. 0.08 cap in crisis vs 0.15 in calm bull).
+    regime_signal is accepted but currently NOT used to tighten max_weight.
+    ascent/regime/integration.py's regime_max_weight() would do that, but
+    ascent/regime/__init__.py deliberately does not export it: this call site
+    is the only caller reachable from walk_forward_runner.py's canonical
+    walk-forward runs, and wiring it up would silently change those already-
+    cited numbers. See ascent/regime/integration.py's module docstring for
+    the full rationale. Removed here (2026-08-20) rather than papered over
+    with a narrower except, per docs/target_architecture/12_phase0_execution_
+    checklist.md item 4 and 00_institutional_audit.md's "regime risk
+    multiplier" finding — the previous bare `except Exception: pass` made
+    this docstring lie about current behavior.
     """
-    if regime_signal is not None:
-        try:
-            from ascent.regime import regime_max_weight
-            max_weight = regime_max_weight(max_weight, regime_signal)
-        except Exception:
-            pass
-
     if sector_map is None:
         sector_map = {}
 

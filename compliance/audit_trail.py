@@ -38,6 +38,8 @@ VALID_EVENT_TYPES = {
     "config_modified",
     "audit_integrity_check",
     "ai_pm_proposal",
+    "halt_triggered",
+    "halt_overridden",
 }
 
 _GENESIS_HASH = "0" * 64  # sentinel for first entry

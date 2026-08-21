@@ -65,6 +65,40 @@ class TestInverseVolTilt:
             assert row["S0"] <= w_flat.loc[dt, "S0"] + 1e-12
 
 
+class _FakeRegimeLabel:
+    value = "crisis"
+
+
+class _FakeRegimeSignal:
+    label = _FakeRegimeLabel()
+
+
+class TestRegimeSignalNoOp:
+    """
+    regime_signal is accepted by sector_constrained_weighted but does not
+    tighten max_weight (see the function's docstring for why: the caller
+    that would matter, walk_forward_runner.py, already treats regime_signal
+    as fold-local, and wiring in regime_max_weight() would silently change
+    the canonical walk-forward numbers rather than just fixing a doc lie).
+    This test locks in that current behavior: passing a regime_signal must
+    never raise, and must produce identical output to passing None, so a
+    future change to this call site is a deliberate decision, not a
+    regression.
+    """
+
+    def test_regime_signal_does_not_raise_and_is_a_noop(self):
+        symbols = [f"S{i}" for i in range(6)]
+        alpha = _alpha_panel(symbols)
+        w_with_signal = sector_constrained_weighted(
+            alpha, n=4, max_weight=0.15, sector_map={},
+            regime_signal=_FakeRegimeSignal(),
+        )
+        w_without_signal = sector_constrained_weighted(
+            alpha, n=4, max_weight=0.15, sector_map={}, regime_signal=None,
+        )
+        pd.testing.assert_frame_equal(w_with_signal, w_without_signal)
+
+
 class TestClusterCap:
     def _returns(self, n=63, seed=11):
         rng = np.random.default_rng(seed)

@@ -44,9 +44,6 @@ try:
 except Exception:
     check_alerts = None  # type: ignore[assignment]
 
-# Task 8: large-trade approval threshold
-LARGE_TRADE_THRESHOLD_PCT = 2.0  # % of portfolio NAV
-
 
 def run_intraday_trigger_check(portfolio_state: dict = None, market_data: dict = None) -> list:
     """
@@ -287,14 +284,22 @@ def run_eod(dry_run: bool = False, as_of_date: str = None):
             print("[EOD] No orders above threshold. Done.")
             return
 
-        # Kill switch check
+        # Kill switch check -> Task 4 compliance gate (shadow) ->
+        # cancel_all_orders -> order submission loop -> per-order audit.
+        # Shared with run_eod_with_weights() via _execute_order_batch() --
+        # see that function's docstring for the full Step-1 divergence list
+        # and how each was resolved (Task 5, min-viable-cut completion plan).
         try:
-            kill_switch.check(current_nav=portfolio_value)
+            executed, skipped = _execute_order_batch(
+                orders, current_positions, portfolio_value, today,
+                dry_run=dry_run,
+                log_prefix="[EOD]",
+                # run_eod() never had a close_position() special case for
+                # full-liquidation sells -- preserve that exactly (see
+                # DIVERGENCE #3 in _execute_order_batch).
+                use_close_position_for_full_liquidation=False,
+            )
         except kill_switch.KillSwitchTriggered:
-            _audit("kill_switch_triggered", {
-                "nav": portfolio_value, "date": today,
-                "threshold": kill_switch.HARD_STOP_PCT,
-            })
             log_run(
                 run_date=today,
                 run_type="error",
@@ -324,46 +329,6 @@ def run_eod(dry_run: bool = False, as_of_date: str = None):
                 notes="Dry run — no orders submitted.",
             )
             return
-
-
-        cancel_all_orders()
-        print("[EOD] Cancelled open orders.")
-
-        executed = []
-        skipped  = []
-
-        for o in orders:
-            from ascent.execution.order_engine import _get_approx_price
-            price = _get_approx_price(o.symbol, current_positions)
-            if price is None:
-                print(f"[EOD] Skipping {o.symbol} — price unavailable")
-                skipped.append({"symbol": o.symbol, "reason": "price unavailable"})
-                continue
-
-            qty = round(o.dollar_amount / price, 6)
-            if qty < 0.001:
-                skipped.append({"symbol": o.symbol, "reason": "qty too small"})
-                continue
-
-            try:
-                resp = submit_order(symbol=o.symbol, qty=qty, side=o.side)
-                order_id = resp.get("id") if resp else None
-                print(f"[EOD] {o.side.upper()} {qty:.4f} {o.symbol}  (${o.dollar_amount:,.0f})")
-                _audit("order_submitted", {
-                    "symbol": o.symbol, "side": o.side, "qty": qty,
-                    "dollar_amount": round(o.dollar_amount, 2),
-                    "order_id": order_id, "date": today,
-                })
-                executed.append({
-                    "symbol":        o.symbol,
-                    "side":          o.side,
-                    "qty":           qty,
-                    "dollar_amount": o.dollar_amount,
-                    "order_id":      order_id,
-                })
-            except Exception as e:
-                print(f"[EOD] Failed {o.symbol}: {e}")
-                skipped.append({"symbol": o.symbol, "reason": str(e)})
 
         # ── Task 5: Slippage tracking (post-fill) ────────────────────────────
         # Only runs when orders were actually submitted (not dry-run, not non-rebalance).
@@ -763,6 +728,203 @@ def _apply_verdict_adjustments(merged_weights: dict, verdict: dict,
         print(f"[Debate] Weight adjustment failed ({e}) — using original weights")
         return merged_weights
 
+# ── Task 5: shared order-submission path ────────────────────────────────────
+# Collapses run_eod()'s and run_eod_with_weights()'s independent
+# kill-switch-check -> [Task 4 compliance gate] -> cancel-all-orders ->
+# submit-loop -> per-order-audit sequences into one helper both call. Extracted
+# 2026-08-20 (Task 5 of the min-viable-cut completion plan); see that plan's
+# task-5-report.md for the full Step-1 divergence list. Every behavioral
+# difference the two functions used to have is called out at its resolution
+# point below with a DIVERGENCE comment -- none was dropped silently.
+def _execute_order_batch(
+    orders: list,
+    current_positions: pd.DataFrame,
+    portfolio_value: float,
+    today_str: str,
+    *,
+    dry_run: bool = False,
+    log_prefix: str = "[EOD]",
+    use_close_position_for_full_liquidation: bool = False,
+) -> tuple:
+    """
+    Run the shared kill-switch-check -> Task 4 compliance-gate(shadow) ->
+    cancel-all-orders -> submit-loop -> per-order-audit sequence used by both
+    run_eod() and run_eod_with_weights().
+
+    Does NOT change what order gets submitted, at what size, or on what
+    schedule versus either caller's pre-refactor behavior -- see the
+    `use_close_position_for_full_liquidation` DIVERGENCE note below for the
+    one place that distinction is preserved rather than unified.
+
+    Returns (executed, skipped): both lists of dicts (`executed` has
+    symbol/side/qty/dollar_amount/order_id; `skipped` has symbol/reason).
+    Both are empty when dry_run is True or the kill switch has NOT tripped
+    but no orders were actually submitted for another reason -- callers
+    decide what to log from the returned lists themselves, since run_eod()
+    and run_eod_with_weights() log to different schemas (log_run vs
+    _log_multi_run).
+
+    Raises kill_switch.KillSwitchTriggered if the kill switch fires --
+    already audited (see below) by the time it propagates, so callers only
+    need to catch it and do their own run-specific logging/return. Any OTHER
+    exception raised by kill_switch.check() propagates unmodified.
+
+    DIVERGENCE (Step 1, #1 -- the known one): run_eod_with_weights() used to
+    catch every exception from kill_switch.check(), and for anything that
+    was NOT KillSwitchTriggered it printed a warning and fell through to
+    keep trading; run_eod() only ever caught KillSwitchTriggered and let
+    everything else propagate to its outer try/except (which logs and
+    re-raises). Resolved to run_eod()'s stricter behavior: silently
+    continuing an order-submission loop past an unknown, unclassified
+    failure from the portfolio-level circuit breaker is the riskier of the
+    two defaults, and "print a warning and keep trading" is not a safe
+    fallback for a function whose entire job is deciding whether trading is
+    safe to continue.
+    """
+    # ── Kill switch check ────────────────────────────────────────────────
+    try:
+        kill_switch.check(current_nav=portfolio_value)
+    except kill_switch.KillSwitchTriggered:
+        # DIVERGENCE (Step 1, #2): only run_eod() called _audit() on a
+        # kill-switch trigger; run_eod_with_weights() went straight to
+        # _log_multi_run() and skipped the compliance audit trail entirely.
+        # _audit() is a log-only side effect (compliance/audit_trail.py) --
+        # calling it uniformly cannot change what gets submitted, so this is
+        # unified to "always audit" rather than kept as a per-caller gap.
+        _audit("kill_switch_triggered", {
+            "nav": portfolio_value, "date": today_str,
+            "threshold": kill_switch.HARD_STOP_PCT,
+        })
+        raise
+
+    # ── Task 4: Pre-Trade Compliance Checker -- SHADOW MODE ONLY. ──────────
+    # This block computes and logs what compliance_gate.check_batch() would
+    # reject (restricted symbols, orders needing large-trade approval,
+    # buying-power overflow) but deliberately does NOT remove anything from
+    # `orders` yet -- it must not change what gets submitted, at what size,
+    # or on what schedule. A follow-up task promotes this to enforcing once
+    # the shadow-mode log output has been reviewed.
+    #
+    # Verbatim carry-forward from Task 4 (commit 46761e8), which added this
+    # only inside run_eod_with_weights(). Task 5 moves it here unchanged so
+    # it now also fires from run_eod() -- previously run_eod() had no
+    # compliance-gate call at all, which is exactly the "would otherwise
+    # need to be built twice" gap Task 5 exists to close, not a new
+    # divergence introduced by this refactor.
+    try:
+        from ascent.execution.compliance_gate import check_batch
+        try:
+            _buying_power = float(get_account().get("buying_power"))
+        except Exception as _bp_exc:
+            print(f"[ComplianceGate] buying_power lookup failed ({_bp_exc}) — buying-power check skipped this run")
+            _buying_power = None
+        _gate_decisions = check_batch(
+            orders, portfolio_value,
+            buying_power=_buying_power,
+            live_positions=current_positions,
+        )
+        for _gd in _gate_decisions:
+            if not _gd.approved:
+                print(f"[ComplianceGate][SHADOW] Would reject {_gd.order_id}: {_gd.reason}")
+    except Exception as _cg_exc:
+        print(f"[ComplianceGate] check_batch failed ({_cg_exc}) — shadow mode, continuing")
+
+    if dry_run:
+        # Both callers already print/log their own dry-run message using
+        # their own schema right after this helper returns; nothing to
+        # submit or audit here.
+        return [], []
+
+    cancel_all_orders()
+    print(f"{log_prefix} Cancelled open orders.")
+
+    executed: list = []
+    skipped:  list = []
+
+    for o in orders:
+        from ascent.execution.order_engine import _get_approx_price
+        price = _get_approx_price(o.symbol, current_positions)
+        if price is None:
+            print(f"{log_prefix} Skipping {o.symbol} — price unavailable")
+            skipped.append({"symbol": o.symbol, "reason": "price unavailable"})
+            continue
+
+        qty = round(o.dollar_amount / price, 6)
+        if qty < 0.001:
+            skipped.append({"symbol": o.symbol, "reason": "qty too small"})
+            continue
+
+        try:
+            # DIVERGENCE (Step 1, #3): run_eod_with_weights() used
+            # close_position() instead of submit_order() for full-liquidation
+            # sells (target_weight == 0.0), specifically to avoid a 403 from
+            # a qty-rounding mismatch between estimated and actual share
+            # count (see alpaca_broker.close_position()'s docstring).
+            # run_eod() always used submit_order(), with no close_position()
+            # special case. This is a genuine "what gets submitted to the
+            # broker" difference, which the plan forbids changing for either
+            # path -- so it is intentionally NOT unified either way and
+            # stays a per-caller flag (`use_close_position_for_full_liquidation`)
+            # instead.
+            if use_close_position_for_full_liquidation and o.side == "sell" and o.target_weight == 0.0:
+                from ascent.execution.alpaca_broker import close_position
+                resp = close_position(o.symbol)
+                order_id = resp.get("id") if isinstance(resp, dict) else None
+                print(f"{log_prefix} CLOSE {o.symbol}  (${o.dollar_amount:,.0f})")
+            else:
+                resp = submit_order(symbol=o.symbol, qty=qty, side=o.side)
+                order_id = resp.get("id") if resp else None
+                print(f"{log_prefix} {o.side.upper()} {qty:.4f} {o.symbol}  (${o.dollar_amount:,.0f})")
+
+            # DIVERGENCE (Step 1, #4): run_eod() audited every successful
+            # submission via _audit('order_submitted', ...); run_eod_with_
+            # weights() never did. Unified to always audit (log-only side
+            # effect, same reasoning as the kill-switch audit above).
+            #
+            # The broker call above has already succeeded by this point, so
+            # the order is genuinely live -- an audit-log failure (disk full,
+            # permissions, lock contention; audit_trail.record() does real
+            # file I/O under a lock) must never cause this order to fall into
+            # `skipped` and be misreported as not submitted. Bookkeeping for
+            # a successful broker call is therefore unconditional, and the
+            # audit write gets its own try/except so it can't reach the outer
+            # handler.
+            try:
+                _audit("order_submitted", {
+                    "symbol": o.symbol, "side": o.side, "qty": qty,
+                    "dollar_amount": round(o.dollar_amount, 2),
+                    "order_id": order_id, "date": today_str,
+                })
+            except Exception as _audit_exc:
+                print(f"{log_prefix} WARNING: audit log failed for {o.symbol} "
+                      f"(order already submitted, order_id={order_id}): {_audit_exc}")
+
+            executed.append({
+                "symbol":        o.symbol,
+                "side":          o.side,
+                "qty":           qty,
+                "dollar_amount": o.dollar_amount,
+                "order_id":      order_id,
+            })
+        except Exception as e:
+            # DIVERGENCE (Step 1, #6): run_eod() printed per-order submission
+            # failures as "Failed {sym}: {e}"; run_eod_with_weights() printed
+            # them as "{sym} FAILED: {e}". Both formats were cosmetic with no
+            # behavioral impact. Unified to run_eod()'s "Failed {sym}: {e}"
+            # format (the slightly-more-natural reading order).
+            print(f"{log_prefix} Failed {o.symbol}: {e}")
+            skipped.append({"symbol": o.symbol, "reason": str(e)})
+
+    # DIVERGENCE (Step 1, #5): run_eod()'s `skipped` entries were always
+    # {"symbol", "reason"} dicts; run_eod_with_weights()'s were bare symbol
+    # strings with no reason recorded anywhere (price-unavailable, qty-too-
+    # small, and submit failures were all indistinguishable downstream).
+    # Unified to the richer dict shape -- run_eod_with_weights() only ever
+    # used len(skipped) and the bare symbol for its own note string, both of
+    # which still work unchanged against a dict list (see its call site).
+    return executed, skipped
+
+
 def run_eod_with_weights(merged_weights: dict, run_date=None, dry_run: bool = False, precomputed_verdict: dict = None, force: bool = False):
     """
     Execute EOD with pre-computed weights from the orchestrator.
@@ -958,7 +1120,9 @@ def run_eod_with_weights(merged_weights: dict, run_date=None, dry_run: bool = Fa
             print(f"[EOD-Multi] Debate failed ({_debate_exc}) -- proceeding without debate gate")
 
     # 2. Get current positions and portfolio value
-    from ascent.execution.alpaca_broker import get_positions, get_portfolio_value, cancel_all_orders, submit_order, close_position
+    # cancel_all_orders / submit_order / close_position moved into
+    # _execute_order_batch() (Task 5) -- no longer needed locally here.
+    from ascent.execution.alpaca_broker import get_positions, get_portfolio_value
     portfolio_value   = get_portfolio_value()
     current_positions = get_positions()
     print(f"[EOD-Multi] Portfolio value: ${portfolio_value:,.2f}")
@@ -1007,52 +1171,30 @@ def run_eod_with_weights(merged_weights: dict, run_date=None, dry_run: bool = Fa
 
     print(f"\n[EOD-Multi] Order plan:\n{summarise_orders(orders)}\n")
 
-    # 5. Kill switch check
+    # 5/5b/6. Kill switch check -> Task 4 compliance gate (shadow) ->
+    # cancel_all_orders -> order submission loop -> per-order audit.
+    # Shared with run_eod() via _execute_order_batch() -- see that function's
+    # docstring for the full Step-1 divergence list and how each was
+    # resolved (Task 5, min-viable-cut completion plan).
     try:
-        from ascent.execution import kill_switch
-        kill_switch.check(current_nav=portfolio_value)
-    except Exception as _ks_exc:
-        from ascent.execution import kill_switch as _ks
-        if isinstance(_ks_exc, _ks.KillSwitchTriggered):
-            print(f"[EOD-Multi] KILL SWITCH TRIGGERED — aborting")
-            _log_multi_run(today_str, merged_weights, rebalanced=False, note="kill_switch_triggered")
-            return
-        else:
-            print(f"[EOD-Multi] Kill switch check error: {_ks_exc} — continuing")
+        executed, skipped = _execute_order_batch(
+            orders, current_positions, portfolio_value, today_str,
+            dry_run=dry_run,
+            log_prefix="[EOD-Multi]",
+            # run_eod_with_weights() always used close_position() for
+            # full-liquidation sells -- preserve that exactly (see
+            # DIVERGENCE #3 in _execute_order_batch).
+            use_close_position_for_full_liquidation=True,
+        )
+    except kill_switch.KillSwitchTriggered:
+        print("[EOD-Multi] KILL SWITCH TRIGGERED — aborting")
+        _log_multi_run(today_str, merged_weights, rebalanced=False, note="kill_switch_triggered")
+        return
 
-    # 6. Submit orders (or dry-run)
     if dry_run:
         print("[EOD-Multi] DRY RUN — orders NOT submitted to Alpaca")
         _log_multi_run(today_str, merged_weights, rebalanced=True, note="dry_run")
         return
-
-    cancel_all_orders()
-    print("[EOD-Multi] Cancelled open orders.")
-
-    executed = []
-    skipped  = []
-    for order in orders:
-        from ascent.execution.order_engine import _get_approx_price
-        price = _get_approx_price(order.symbol, current_positions)
-        if price is None:
-            skipped.append(order.symbol)
-            continue
-        qty = round(order.dollar_amount / price, 6)
-        if qty < 0.001:
-            skipped.append(order.symbol)
-            continue
-        try:
-            # Full liquidation: use close_position() to avoid qty rounding mismatch → 403
-            if order.side == "sell" and order.target_weight == 0.0:
-                close_position(order.symbol)
-                print(f"[EOD-Multi] CLOSE {order.symbol}  (${order.dollar_amount:,.0f})")
-            else:
-                submit_order(order.symbol, qty=qty, side=order.side)
-                print(f"[EOD-Multi] {order.side.upper()} {qty:.4f} {order.symbol}  (${order.dollar_amount:,.0f})")
-            executed.append(order.symbol)
-        except Exception as _e:
-            print(f"[EOD-Multi] {order.symbol} FAILED: {_e}")
-            skipped.append(order.symbol)
 
     # 8. Slippage tracking
     if executed:

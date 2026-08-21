@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import json
 import time
+from datetime import date
 from pathlib import Path
 
 import pandas as pd
@@ -165,8 +166,14 @@ def _log_sleeve_ic(features: dict, targets: dict) -> None:
         print(f"[Alpha] Per-sleeve IC logging failed: {exc}")
 
 
-def load_or_fetch_prices(cfg: Config, live: bool) -> tuple[pd.DataFrame, str]:
-    """Returns (price_df, cache_name_used)."""
+def load_or_fetch_prices(cfg: Config, live: bool) -> tuple[pd.DataFrame, str, str]:
+    """Returns (price_df, cache_name_used, reason).
+
+    ``reason`` is the ``validate_cache()`` failure-reason string (empty
+    string means the cache validated cleanly / the hub-fresh fast path was
+    taken), surfaced so callers (the Model Risk Reviewer) can act on it as
+    a structured artifact instead of only a print().
+    """
     cache_name       = "prices_live" if live else "prices_simulated"
     stale_days       = _LIVE_STALE_DAYS if live else _SIM_STALE_DAYS
     required_symbols = cfg.universe.symbols + [cfg.universe.benchmark]
@@ -182,7 +189,7 @@ def load_or_fetch_prices(cfg: Config, live: bool) -> tuple[pd.DataFrame, str]:
                 df = load_parquet(cache_name)
                 if not df.empty:
                     print("[Data] Hub data is fresh — loading prices_live.parquet (skipping re-fetch)")
-                    return df, cache_name
+                    return df, cache_name, ""
         except Exception:
             pass  # fall through to validate_cache path
 
@@ -196,7 +203,7 @@ def load_or_fetch_prices(cfg: Config, live: bool) -> tuple[pd.DataFrame, str]:
 
     if ok:
         print("[Data] Loading cached price data...")
-        return load_parquet(cache_name), cache_name
+        return load_parquet(cache_name), cache_name, reason
 
     print(f"[Data] Cache invalid ({reason}) — refreshing...")
 
@@ -243,7 +250,7 @@ def load_or_fetch_prices(cfg: Config, live: bool) -> tuple[pd.DataFrame, str]:
                 f"'{fallback_cache}' (NOT prices_live). "
                 "Walk-forward will use simulated data."
             )
-            return df, fallback_cache
+            return df, fallback_cache, reason
 
     else:
         print("[Data] Generating simulated price data...")
@@ -256,7 +263,11 @@ def load_or_fetch_prices(cfg: Config, live: bool) -> tuple[pd.DataFrame, str]:
     df = normalize_prices(df)
     save_parquet(df, cache_name)
     print(f"[Data] {len(df)} rows, {df['symbol'].nunique()} symbols cached")
-    return df, cache_name
+    # The cache was just successfully refreshed and re-saved, so it is
+    # genuinely fresh now — the pre-refresh validate_cache() failure reason
+    # no longer describes its state. Returning it stale would make the MRR
+    # cache-freshness check fail on every normal refresh cycle.
+    return df, cache_name, ""
 
 
 def load_or_fetch_macro(cfg: Config, live: bool) -> tuple[pd.DataFrame, str]:
@@ -316,7 +327,6 @@ def run_pipeline(
             s for s in extra_symbols if s not in cfg.universe.symbols
         ]
     if not cfg.backtest.end_date:
-        from datetime import date
         _today = pd.Timestamp.today().normalize()
         _days_back = max(0, _today.weekday() - 4)
         cfg.backtest.end_date = (_today - pd.Timedelta(days=_days_back)).strftime("%Y-%m-%d")
@@ -335,8 +345,23 @@ def run_pipeline(
 
     # FIX #2: capture the cache name actually used so we can pass it to
     # walk_forward_pipeline — avoiding hardcoded "prices_live" lookups later
-    price_df, price_cache_name = load_or_fetch_prices(cfg, live)
+    price_df, price_cache_name, price_cache_reason = load_or_fetch_prices(cfg, live)
     macro_df, macro_cache_name = load_or_fetch_macro(cfg, live)
+
+    # Model Risk Reviewer (IRM Phase 1) — shadow mode: logs a verdict, never
+    # alters control flow or falls back to a different weights source. See
+    # docs/target_architecture/14_phase1_model_risk_reviewer_skeleton.md.
+    try:
+        from ascent.risk.irm.model_risk_reviewer import check as _mrr_check
+        _cache_verdict = _mrr_check(
+            price_cache_name=price_cache_name,
+            price_cache_reason=price_cache_reason,
+            feature_panels={}, sparse_exempt=set(), as_of_date=date.today(),
+        )
+        if not _cache_verdict.passed:
+            print(f"[IRM] Model Risk Reviewer cache check failed: {_cache_verdict.reason}")
+    except Exception as _mrr_exc:
+        print(f"[IRM] Model Risk Reviewer cache check errored (non-fatal): {_mrr_exc}")
 
     # Strip timezone from price dates — yfinance returns tz-aware (America/New_York),
     # but fundamental/earnings panels strip tz, causing DatetimeIndex → plain Index
@@ -605,6 +630,30 @@ def run_pipeline(
 
     print(f"[Features] Computed {len(features)} features across {len(builder.symbols)} symbols")
     print(f"[Features] Date range: {builder.dates.min().date()} → {builder.dates.max().date()}")
+
+    # Model Risk Reviewer (IRM Phase 1), pass 2 — NaN-rate check over the
+    # computed feature panels. Shadow mode: logs a verdict only, never alters
+    # control flow.
+    try:
+        from ascent.risk.irm.model_risk_reviewer import check as _mrr_check
+        from ascent.alpha.ml_sleeve import _SPARSE_FILL_ZERO
+        # Cache freshness was already checked and logged by pass 1 above
+        # (against the real price_cache_name/price_cache_reason). Passing
+        # those same values here would re-run and re-log that same
+        # cache-freshness sub-check under this pass's "feature check" label,
+        # duplicating the verdict and letting a stale cache-check outcome
+        # contaminate the NaN check's independent pass/fail signal. Pass the
+        # "already verified fresh" sentinel instead so this pass's verdict
+        # reflects only the NaN-rate check.
+        _feature_verdict = _mrr_check(
+            price_cache_name="prices_live",
+            price_cache_reason="",
+            feature_panels=features, sparse_exempt=_SPARSE_FILL_ZERO, as_of_date=date.today(),
+        )
+        if not _feature_verdict.passed:
+            print(f"[IRM] Model Risk Reviewer feature check failed: {_feature_verdict.reason}")
+    except Exception as _mrr_exc:
+        print(f"[IRM] Model Risk Reviewer feature check errored (non-fatal): {_mrr_exc}")
 
     print("\n" + "=" * 70)
     print("  STEP 3: ALPHA GENERATION")

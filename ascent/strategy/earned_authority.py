@@ -87,6 +87,7 @@ def get_state() -> dict:
             s.setdefault("days_at_level", 0)
             s.setdefault("days_stuck", 0)
             s.setdefault("disable_sleeve_priors", False)
+            s.setdefault("days_since_last_buffer_append", 0)
             return s
         except Exception as exc:
             log.warning("[EarnedAuthority] Corrupt state, resetting: %s", exc)
@@ -101,6 +102,7 @@ def get_state() -> dict:
         "track_d_returns": [], "track_astar_returns": [],
         "ai_returns_21d": [], "quant_returns_21d": [],  # legacy compat
         "disable_sleeve_priors": False,
+        "days_since_last_buffer_append": 0,
     }
 
 
@@ -165,11 +167,21 @@ def update_authority(
     # Guard: only append to buffers when both returns are real numbers (not None)
     if track_d_return is None or track_astar_return is None:
         log.debug("[EarnedAuthority] Skipping buffer append — Track D or A★ return is None")
+        state["days_since_last_buffer_append"] = state.get("days_since_last_buffer_append", 0) + 1
+        cfg_stalled = PROMOTION_CONFIG.get((level, level + 1))
+        if cfg_stalled and state["days_since_last_buffer_append"] >= 2 * cfg_stalled["window"]:
+            log.warning(
+                "[EarnedAuthority] PROMOTION_PATH_STALLED: %d days since last buffer append "
+                "(>= 2x promotion window of %d for Level %d → %d) — promotion path is "
+                "mechanically stalled, not necessarily unearned",
+                state["days_since_last_buffer_append"], cfg_stalled["window"], level, level + 1,
+            )
         state["last_updated"] = today
         _save_state(state)
         return state
 
     # Update rolling buffers (keep last 63 days for Level 3+ windows)
+    state["days_since_last_buffer_append"] = 0
     d_buf  = (state.get("track_d_returns", [])     + [float(track_d_return)])[-63:]
     as_buf = (state.get("track_astar_returns", []) + [float(track_astar_return)])[-63:]
     state["track_d_returns"]     = d_buf
