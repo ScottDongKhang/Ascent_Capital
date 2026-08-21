@@ -1020,6 +1020,31 @@ def run_eod_with_weights(merged_weights: dict, run_date=None, dry_run: bool = Fa
         else:
             print(f"[EOD-Multi] Kill switch check error: {_ks_exc} — continuing")
 
+    # 5b. Pre-Trade Compliance Checker -- SHADOW MODE ONLY.
+    # This block computes and logs what compliance_gate.check_batch() would reject
+    # (restricted symbols, orders needing large-trade approval, buying-power overflow)
+    # but deliberately does NOT remove anything from `orders` yet -- it must not change
+    # what gets submitted, at what size, or on what schedule. A follow-up task promotes
+    # this to enforcing once the shadow-mode log output has been reviewed. Self-contained
+    # block: safe to lift as-is into a future shared helper.
+    try:
+        from ascent.execution.compliance_gate import check_batch
+        try:
+            _buying_power = float(get_account().get("buying_power"))
+        except Exception as _bp_exc:
+            print(f"[ComplianceGate] buying_power lookup failed ({_bp_exc}) — buying-power check skipped this run")
+            _buying_power = None
+        _gate_decisions = check_batch(
+            orders, portfolio_value,
+            buying_power=_buying_power,
+            live_positions=current_positions,
+        )
+        for _gd in _gate_decisions:
+            if not _gd.approved:
+                print(f"[ComplianceGate][SHADOW] Would reject {_gd.order_id}: {_gd.reason}")
+    except Exception as _cg_exc:
+        print(f"[ComplianceGate] check_batch failed ({_cg_exc}) — shadow mode, continuing")
+
     # 6. Submit orders (or dry-run)
     if dry_run:
         print("[EOD-Multi] DRY RUN — orders NOT submitted to Alpaca")
