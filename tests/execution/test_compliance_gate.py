@@ -89,8 +89,8 @@ class TestLargeOrderApproval:
         )
         assert decisions[0].approved
 
-    def test_uses_eod_runner_constant_not_a_duplicate(self):
-        from ascent.execution.eod_runner import LARGE_TRADE_THRESHOLD_PCT
+    def test_constant_defined_locally_not_imported(self):
+        from ascent.execution.compliance_gate import LARGE_TRADE_THRESHOLD_PCT
         assert LARGE_TRADE_APPROVAL_PCT == LARGE_TRADE_THRESHOLD_PCT
 
 

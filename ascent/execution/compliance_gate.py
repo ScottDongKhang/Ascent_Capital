@@ -30,7 +30,10 @@ but is not otherwise used yet.
 """
 from dataclasses import dataclass
 
-from ascent.execution.eod_runner import LARGE_TRADE_THRESHOLD_PCT as LARGE_TRADE_APPROVAL_PCT
+# Large-trade approval threshold: orders with notional > this % of portfolio NAV
+# require manual approval, so they are rejected in shadow mode until enforced.
+LARGE_TRADE_THRESHOLD_PCT = 2.0  # % of portfolio NAV
+LARGE_TRADE_APPROVAL_PCT = LARGE_TRADE_THRESHOLD_PCT  # Alias for use in this module
 
 
 @dataclass

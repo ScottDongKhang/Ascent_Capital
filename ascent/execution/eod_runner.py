@@ -44,9 +44,6 @@ try:
 except Exception:
     check_alerts = None  # type: ignore[assignment]
 
-# Task 8: large-trade approval threshold
-LARGE_TRADE_THRESHOLD_PCT = 2.0  # % of portfolio NAV
-
 
 def run_intraday_trigger_check(portfolio_state: dict = None, market_data: dict = None) -> list:
     """
@@ -910,6 +907,11 @@ def _execute_order_batch(
                 "order_id":      order_id,
             })
         except Exception as e:
+            # DIVERGENCE (Step 1, #6): run_eod() printed per-order submission
+            # failures as "Failed {sym}: {e}"; run_eod_with_weights() printed
+            # them as "{sym} FAILED: {e}". Both formats were cosmetic with no
+            # behavioral impact. Unified to run_eod()'s "Failed {sym}: {e}"
+            # format (the slightly-more-natural reading order).
             print(f"{log_prefix} Failed {o.symbol}: {e}")
             skipped.append({"symbol": o.symbol, "reason": str(e)})
 
