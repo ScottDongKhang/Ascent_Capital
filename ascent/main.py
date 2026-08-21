@@ -263,7 +263,11 @@ def load_or_fetch_prices(cfg: Config, live: bool) -> tuple[pd.DataFrame, str, st
     df = normalize_prices(df)
     save_parquet(df, cache_name)
     print(f"[Data] {len(df)} rows, {df['symbol'].nunique()} symbols cached")
-    return df, cache_name, reason
+    # The cache was just successfully refreshed and re-saved, so it is
+    # genuinely fresh now — the pre-refresh validate_cache() failure reason
+    # no longer describes its state. Returning it stale would make the MRR
+    # cache-freshness check fail on every normal refresh cycle.
+    return df, cache_name, ""
 
 
 def load_or_fetch_macro(cfg: Config, live: bool) -> tuple[pd.DataFrame, str]:
@@ -633,9 +637,17 @@ def run_pipeline(
     try:
         from ascent.risk.irm.model_risk_reviewer import check as _mrr_check
         from ascent.alpha.ml_sleeve import _SPARSE_FILL_ZERO
+        # Cache freshness was already checked and logged by pass 1 above
+        # (against the real price_cache_name/price_cache_reason). Passing
+        # those same values here would re-run and re-log that same
+        # cache-freshness sub-check under this pass's "feature check" label,
+        # duplicating the verdict and letting a stale cache-check outcome
+        # contaminate the NaN check's independent pass/fail signal. Pass the
+        # "already verified fresh" sentinel instead so this pass's verdict
+        # reflects only the NaN-rate check.
         _feature_verdict = _mrr_check(
-            price_cache_name=price_cache_name,
-            price_cache_reason=price_cache_reason,
+            price_cache_name="prices_live",
+            price_cache_reason="",
             feature_panels=features, sparse_exempt=_SPARSE_FILL_ZERO, as_of_date=date.today(),
         )
         if not _feature_verdict.passed:

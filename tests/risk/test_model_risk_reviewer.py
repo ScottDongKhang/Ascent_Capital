@@ -12,6 +12,7 @@ import pytest
 
 from ascent.risk.irm.model_risk_reviewer import (
     CACHE_STALE_FAIL_DAYS,
+    NAN_RATE_EVAL_WINDOW,
     NAN_RATE_FAIL_THRESHOLD,
     ModelRiskVerdict,
     check,
@@ -194,6 +195,77 @@ class TestNanRateSparseExemption:
             as_of_date=date(2026, 8, 19),
         )
         assert verdict2.checks["nan_rate::panel"]["ok"] is False
+
+
+class TestNanRateWarmupWindow:
+    """Regression tests for the whole-branch review finding: measuring NaN
+    rate over the entire panel history (instead of the trailing evaluation
+    window that actually feeds the alpha stage) structurally fails on every
+    real feature panel because rolling-window warm-up (e.g. a 252d momentum
+    feature is NaN for its first ~252 rows by construction) dominates the
+    average. Empirically measured against prices_live: 7 of 27 non-exempt
+    panels exceeded the 5% threshold purely from warm-up."""
+
+    def _warmup_panel(self, n_rows: int, warmup_rows: int, shape_cols: int = 10) -> pd.DataFrame:
+        """A panel shaped like a real rolling-window feature: NaN for the
+        first `warmup_rows` rows (warm-up), then fully populated (clean) for
+        the remainder -- mirroring e.g. mom_252d on a long price history."""
+        data = np.zeros((n_rows, shape_cols))
+        data[:warmup_rows, :] = np.nan
+        return pd.DataFrame(data)
+
+    def test_long_warmup_panel_with_clean_trailing_window_passes(self):
+        # 300 rows of history, first 252 NaN (mom_252d-style warm-up), last
+        # 48 rows fully populated. Full-panel NaN rate is 252/300 = 84% --
+        # would fail under the old whole-history measurement. The trailing
+        # NAN_RATE_EVAL_WINDOW (21) rows are entirely within the clean tail,
+        # so the check must pass.
+        panel = self._warmup_panel(n_rows=300, warmup_rows=252)
+        full_history_nan_rate = float(panel.isna().mean().mean())
+        assert full_history_nan_rate > NAN_RATE_FAIL_THRESHOLD, (
+            "test setup sanity check: full-history NaN rate should exceed "
+            "the threshold to prove this scenario would have failed under "
+            "the old (whole-panel) measurement"
+        )
+        verdict = check(
+            price_cache_name="prices_live",
+            price_cache_reason="",
+            feature_panels={"mom_252d": panel},
+            sparse_exempt=SPARSE_EXEMPT,
+            as_of_date=date(2026, 8, 19),
+        )
+        assert verdict.passed is True
+        assert verdict.checks["nan_rate::mom_252d"]["ok"] is True
+        assert f"trailing {NAN_RATE_EVAL_WINDOW}d" in verdict.checks["nan_rate::mom_252d"]["detail"]
+
+    def test_nan_within_trailing_window_still_fails(self):
+        # Warm-up extends INTO the trailing evaluation window (e.g. a very
+        # short history, or a much longer-lookback feature) -- this must
+        # still fail, proving the fix narrows the measurement window rather
+        # than disabling the check.
+        panel = self._warmup_panel(n_rows=30, warmup_rows=25)
+        verdict = check(
+            price_cache_name="prices_live",
+            price_cache_reason="",
+            feature_panels={"mom_252d": panel},
+            sparse_exempt=SPARSE_EXEMPT,
+            as_of_date=date(2026, 8, 19),
+        )
+        assert verdict.passed is False
+        assert verdict.checks["nan_rate::mom_252d"]["ok"] is False
+
+    def test_panel_shorter_than_window_uses_whole_panel(self):
+        # A panel with fewer rows than NAN_RATE_EVAL_WINDOW: tail() degrades
+        # gracefully to the whole panel, not an error.
+        panel = self._warmup_panel(n_rows=10, warmup_rows=10)
+        verdict = check(
+            price_cache_name="prices_live",
+            price_cache_reason="",
+            feature_panels={"mom_252d": panel},
+            sparse_exempt=SPARSE_EXEMPT,
+            as_of_date=date(2026, 8, 19),
+        )
+        assert verdict.checks["nan_rate::mom_252d"]["ok"] is False
 
 
 class TestRegimeStalenessInformational:

@@ -91,6 +91,38 @@ class TestLoadOrFetchPricesReturnsReason:
         assert cache_name == "prices_live_fallback_simulated"
         assert reason == stale_reason
 
+    def test_refetch_succeeded_path_returns_empty_reason(self, monkeypatch):
+        # Regression test for a whole-branch review finding: live=True,
+        # validate_cache() reports the cache invalid (e.g. stale), the live
+        # Yahoo fetch succeeds, and the freshly-fetched data is re-saved.
+        # The cache is genuinely fresh at that point, but the function used
+        # to return the PRE-refresh validate_cache() failure reason
+        # alongside it -- making the downstream MRR cache-freshness check
+        # falsely fail on every normal refresh cycle. It must return "".
+        stale_reason = "cache latest date 2026-08-10 is 9 calendar days old (limit=1)"
+        monkeypatch.setattr(main_mod, "validate_cache", lambda *a, **k: (False, stale_reason))
+
+        fetched_df = pd.DataFrame({
+            "symbol": ["AAA", "SPY"],
+            "date": [pd.Timestamp("2026-08-18")] * 2,
+            "close": [1.0, 2.0],
+        })
+
+        import ascent.data.ingest.yahoo as yahoo_mod
+        monkeypatch.setattr(yahoo_mod, "fetch_universe_daily", lambda *a, **k: fetched_df)
+        monkeypatch.setattr(main_mod, "normalize_prices", lambda df: df)
+        monkeypatch.setattr(main_mod, "save_parquet", lambda df, name: None)
+
+        cfg = main_mod.get_config()
+        df, cache_name, reason = main_mod.load_or_fetch_prices(cfg, live=True)
+
+        assert cache_name == "prices_live"
+        assert reason == "", (
+            "load_or_fetch_prices() must return an empty reason after a "
+            "successful refetch+resave -- the cache is fresh now, and the "
+            "pre-refresh validate_cache() failure string no longer applies"
+        )
+
 
 class TestWiredIntoPipeline:
     """Asserting on source text: run_pipeline() is too heavy to execute in
@@ -139,6 +171,57 @@ class TestWiredIntoPipeline:
         src = _root_src()
         assert "feature_panels=features, sparse_exempt=_SPARSE_FILL_ZERO" in src
         assert "from ascent.alpha.ml_sleeve import _SPARSE_FILL_ZERO" in src
+
+    def test_second_call_does_not_recheck_cache_freshness(self):
+        """Regression test for a whole-branch review finding: the second
+        (post-feature) _mrr_check call used to pass the SAME
+        price_cache_name/price_cache_reason as the first call, so the
+        cache-freshness sub-check was silently recomputed and folded into
+        the second verdict -- printing the cache verdict twice under
+        confusingly different labels and letting a stale cache-check
+        outcome contaminate the NaN check's independent pass/fail signal.
+        The second call site must instead pass the "already verified
+        fresh" sentinel (price_cache_name="prices_live",
+        price_cache_reason="") rather than the real
+        price_cache_name/price_cache_reason variables captured from
+        load_or_fetch_prices()."""
+        src = _root_src()
+        first_call_idx = src.index("_mrr_check(")
+        second_call_idx = src.index("_mrr_check(", first_call_idx + 1)
+
+        first_call_block = src[first_call_idx: first_call_idx + 300]
+        second_call_block = src[second_call_idx: second_call_idx + 300]
+
+        # First call site still checks the real cache verdict.
+        assert "price_cache_name=price_cache_name" in first_call_block
+        assert "price_cache_reason=price_cache_reason" in first_call_block
+
+        # Second call site must NOT re-pass the real (possibly stale)
+        # price_cache_name/price_cache_reason variables -- it should use
+        # the sentinel instead.
+        assert "price_cache_name=price_cache_name" not in second_call_block
+        assert "price_cache_reason=price_cache_reason" not in second_call_block
+        assert 'price_cache_name="prices_live"' in second_call_block
+        assert 'price_cache_reason=""' in second_call_block
+
+    def test_second_call_sentinel_verdict_has_no_cache_failure(self, capsys):
+        """Functional counterpart: with the sentinel values, a feature-only
+        failure (bad NaN rate) must not get a cache_freshness failure folded
+        in, even though the caller's real price_cache_name/reason (as would
+        be captured from a stale-cache-refresh scenario) would have failed
+        that sub-check."""
+        nan_panel = pd.DataFrame([[float("nan")] * 5] * 30)
+        verdict = mrr_check(
+            price_cache_name="prices_live",
+            price_cache_reason="",
+            feature_panels={"momentum": nan_panel},
+            sparse_exempt=set(),
+            as_of_date=date(2026, 8, 20),
+        )
+        assert verdict.checks["cache_freshness"]["ok"] is True
+        assert verdict.passed is False
+        assert "nan_rate::momentum" in verdict.reason
+        assert "cache_freshness" not in verdict.reason
 
 
 class TestMrrCallShapeFunctional:

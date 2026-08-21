@@ -56,6 +56,8 @@ except ImportError:  # pragma: no cover
 NAN_RATE_FAIL_THRESHOLD = 0.05        # >5% NaN in a REQUIRED (non-sparse-exempt) panel -> fail
 CACHE_STALE_FAIL_DAYS = 1             # prices_live older than 1 calendar day -> fail (direct-date path)
 REGIME_LABEL_STALE_WARN_DAYS = 3      # informational only, per CLAUDE.md's documented tolerated lag
+NAN_RATE_EVAL_WINDOW = 21             # trailing rows (dates) actually consumed by the alpha stage;
+                                       # measuring over full history counts rolling-window warm-up NaN
 
 # Cache names considered "live/fresh" for the purposes of check 1. Anything
 # else (prices_simulated, prices_live_fallback_simulated, ...) is degraded
@@ -94,18 +96,29 @@ def _cache_direct_date_check(cache_latest_date: date, as_of_date: date) -> dict:
 
 
 def _nan_rate_check(panel) -> dict:
+    # Feature panels are shaped (dates × symbols) — rows are dates. Measuring
+    # NaN rate over the entire history double-counts rolling-window warm-up
+    # (e.g. a 252d momentum feature is NaN for its first ~252 rows by
+    # construction), which structurally fails the threshold on every real
+    # panel regardless of data quality. What actually feeds the alpha stage
+    # is only the trailing evaluation window, so measure NaN rate there.
     if pd is not None and isinstance(panel, pd.DataFrame):
-        if panel.size == 0:
+        window = panel.tail(NAN_RATE_EVAL_WINDOW)
+        if window.size == 0:
             nan_rate = 0.0
         else:
-            nan_rate = float(panel.isna().mean().mean())
+            nan_rate = float(window.isna().mean().mean())
     elif pd is not None and isinstance(panel, pd.Series):
-        nan_rate = float(panel.isna().mean()) if panel.size else 0.0
+        window = panel.tail(NAN_RATE_EVAL_WINDOW)
+        nan_rate = float(window.isna().mean()) if window.size else 0.0
     else:
         # Best-effort fallback for plain nested sequences / None.
         nan_rate = 0.0 if panel is None else 0.0
     ok = nan_rate <= NAN_RATE_FAIL_THRESHOLD
-    detail = f"{nan_rate:.1%} NaN (threshold={NAN_RATE_FAIL_THRESHOLD:.0%})"
+    detail = (
+        f"{nan_rate:.1%} NaN over trailing {NAN_RATE_EVAL_WINDOW}d "
+        f"(threshold={NAN_RATE_FAIL_THRESHOLD:.0%})"
+    )
     return {"ok": ok, "detail": detail}
 
 
