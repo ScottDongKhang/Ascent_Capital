@@ -184,16 +184,22 @@ class TestEodRunnerShadowWiring:
         assert [o.symbol for o in orders] == original_symbols
         assert len(orders) == 2
 
-    def test_run_eod_with_weights_source_only_logs_does_not_filter_orders(self):
-        """Static guard: the shadow-mode block in eod_runner.py must not
-        reassign `orders = [...]` from the gate decisions. Only Task 5's
-        follow-up (or a future enforcing task) is allowed to do that."""
+    def test_shared_helper_source_only_logs_does_not_filter_orders(self):
+        """Static guard: the shadow-mode block must not reassign
+        `orders = [...]` from the gate decisions. Only a future enforcing
+        task is allowed to do that.
+
+        Task 5 (min-viable-cut completion plan) moved this block out of
+        run_eod_with_weights() and into the shared _execute_order_batch()
+        helper that both run_eod() and run_eod_with_weights() now call, so
+        the guard reads the helper's source instead of
+        run_eod_with_weights()'s own."""
         import inspect
         import ascent.execution.eod_runner as runner
 
-        src = inspect.getsource(runner.run_eod_with_weights)
+        src = inspect.getsource(runner._execute_order_batch)
         gate_block_start = src.index("Pre-Trade Compliance Checker")
-        gate_block_end = src.index("# 6. Submit orders")
+        gate_block_end = src.index("if dry_run:")
         gate_block = src[gate_block_start:gate_block_end]
 
         assert "check_batch(" in gate_block
