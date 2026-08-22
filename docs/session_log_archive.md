@@ -5,6 +5,13 @@ durable rules only, so that its cost is paid once per session and never on stale
 
 ---
 
+### 2026-08-21 (scheduler pause confirmed intentional — closes the loop from PROJECT_STATE_2026-08-21.md)
+- **Goal**: resolve the open question `PROJECT_STATE_2026-08-21.md` raised — is the unloaded launchd scheduler an oversight or a deliberate hold — by asking the user directly, then documenting the answer. Documentation only; no code, config, or launchd state touched.
+- **User decision**: keep the scheduler paused. `com.ascentcapital.eod.plist` and `com.ascentcapital.heartbeat.plist` remain unloaded (last run 2026-07-27, 25 days idle as of this entry) — this was not an oversight. This **extends the 2026-08-15 hold decision** (live trading held despite the walk-forward blocker clearing that day); it is the same decision continued, not a new one.
+- **`logs/liveness.json` staleness (last regenerated 2026-08-12, reads CRITICAL) is a byproduct of the pause, not a new monitoring failure.** The liveness check has nothing to observe while the scheduler is unloaded, so a stale CRITICAL reading is the correct, honest state of the file — it was left as-is deliberately, not fake-refreshed to mask the pause.
+- **No launchd jobs were reloaded, no trade-submitting scripts were run, and `logs/liveness.json` was not modified.** `PROJECT_STATE_2026-08-21.md` is left as-is (a point-in-time report, not a living doc). `CLAUDE.md`'s "Current state" section was checked and needs no edit — it already directs readers to `logs/eod_log.jsonl` for what actually ran rather than asserting a date or number itself, so it already handles this correctly.
+- Open: none — this closes the ambiguity the state report flagged. Resuming the scheduler remains a separate, explicit decision the user has not made.
+
 ### 2026-07-28 (dev-effectiveness pass: token cost, doc drift guard, three real number bugs)
 - **Goal**: lower per-session token cost, reduce hallucination, make CLAUDE.md research reliable.
 - **CLAUDE.md 8,003 -> ~3,995 tokens (-51%)**, paid on every session. Session log moved wholly to this archive; the file now carries durable rules only. Removed **every performance number, date, and line-number citation** from it: those go stale in days, and a stale figure in an always-loaded file is a confidently-wrong belief rather than a typo. It now points at `CURRENT_VERIFIED_NUMBERS.md`, `docs/REPO_MAP.md`, and this archive.
