@@ -57,14 +57,14 @@ The adversarial debate engine makes exactly one falsifiable weight change per re
 <!-- LIVE_STATS_START -->
 | Metric | Value |
 |--------|-------|
-| Current NAV | $106,177 |
-| Total Return | +5.32% |
-| Alpha vs SPY | -11.37% |
-| Sharpe (Ann.) | 0.705 |
+| Current NAV | $107,004 |
+| Total Return | +6.14% |
+| Alpha vs SPY | -11.02% |
+| Sharpe (Ann.) | 0.79 |
 | Max Drawdown | -10.64% |
-| Days Live | 98 |
+| Days Live | 99 |
 | Open Positions | 23 |
-| Last Updated | 2026-08-20 |
+| Last Updated | 2026-08-23 |
 <!-- LIVE_STATS_END -->
 
 *The Sharpe standard error at this sample size is large — not statistically significant.
