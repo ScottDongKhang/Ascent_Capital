@@ -9,36 +9,6 @@ from pathlib import Path
 import pytest
 
 
-def test_nav_series_reads_holdings_log(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    (tmp_path / "logs").mkdir()
-    entries = [
-        {"date": "2026-04-01", "equity": 100000.0},
-        {"date": "2026-04-02", "equity": 101200.0},
-        {"date": "2026-04-15", "equity": 103500.0},
-    ]
-    with open(tmp_path / "logs" / "holdings_log.jsonl", "w") as f:
-        for e in entries:
-            f.write(json.dumps(e) + "\n")
-    from debate.outcome_tracker import _load_nav_series
-    nav = _load_nav_series()
-    assert "2026-04-01" in nav
-    assert abs(nav["2026-04-01"] - 100000.0) < 0.01
-    assert abs(nav["2026-04-15"] - 103500.0) < 0.01
-
-
-def test_nav_series_falls_back_to_eod_log(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    (tmp_path / "logs").mkdir()
-    # No holdings_log — only eod_log
-    with open(tmp_path / "logs" / "eod_log.jsonl", "w") as f:
-        f.write(json.dumps({"date": "2026-04-01", "nav": 98000.0}) + "\n")
-    from debate.outcome_tracker import _load_nav_series
-    nav = _load_nav_series()
-    assert "2026-04-01" in nav
-    assert abs(nav["2026-04-01"] - 98000.0) < 0.01
-
-
 def test_get_current_sharpe_reads_skill_file(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     (tmp_path / "dashboard").mkdir()

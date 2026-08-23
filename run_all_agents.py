@@ -2,8 +2,13 @@
 run_all_agents.py
 Top-level daily runner for the Ascent Capital multi-agent platform.
 
-Non-rebalance day:  agents → orchestrator → write weights → log (no debate, no execution)
-Rebalance day:      agents → orchestrator → write weights → debate → execute via eod_runner
+Non-rebalance day:  agent -> orchestrator -> write weights -> log (no execution)
+Rebalance day:      agent -> orchestrator -> write weights -> execute via eod_runner
+
+The AI PM / debate / falsifier / earned-authority / dormant-agent layer was removed
+2026-08-23 (noise-layer cut, measured negative-or-insignificant on every axis — see
+CLAUDE.md integrity constraint #5). This is the core-skeleton rewrite: one agent
+(us_equities), one orchestrator pass, one execution path.
 
 Usage:
     python3 run_all_agents.py                # live execution
@@ -25,20 +30,7 @@ from ascent.data.store.parquet import has_data, load_parquet
 from ascent.utils.market_time import market_today
 from ascent.portfolio.optimizer import SectorDataError
 
-from agents.ai_pm_agent import run_ai_pm, run_ai_pm_prethesis, AIPMResult, AIPreThesis
-from ascent.risk.pm_risk_validator import validate as validate_pm_proposal
 from memory.regime_memory import log_episode, update_outcomes
-from ascent.strategy.earned_authority import update_authority, get_state as get_authority_state, rebuild_buffers_from_counterfactual
-from ascent.strategy.thesis_formatter import format_thesis
-from ascent.monitoring.ai_pm_counterfactual import (
-    snapshot_quant_star, snapshot_quant, snapshot_ai_pm,
-    score_daily as cf_score_daily, load_snapshots as cf_load_snapshots,
-    print_cumulative_report as cf_print_report, backfill_track_b as cf_backfill_track_b,
-)
-from ascent.strategy.ai_pm_perf_feedback import (
-    compute_feedback as compute_ai_feedback,
-    derive_overrides,
-)
 
 try:
     from compliance.audit_trail import record_event as _audit
@@ -49,8 +41,9 @@ except Exception:
 
 SECTOR_OVERRIDE_LOG  = Path("logs/sector_override.jsonl")
 HALT_STATE_PATH      = Path("execution/halt_state.json")
-AI_PM_DECISION_LOG   = Path("logs/ai_pm_decision_log.jsonl")
-AI_PM_DAILY_VIEWS    = Path("logs/ai_pm_daily_views.jsonl")
+HALT_OVERRIDE_PATH   = Path("execution/halt_override.json")
+REGIME_SIGNAL_PATH   = Path("dashboard/regime_signal.json")
+REGIME_STALE_DAYS    = 5
 
 # Catch-up guard (W3 item 5): default staleness threshold, in NYSE trading
 # days, beyond which the daily run refuses to auto-execute without an
@@ -59,164 +52,6 @@ AI_PM_DAILY_VIEWS    = Path("logs/ai_pm_daily_views.jsonl")
 # multi_agent_run.jsonl entry accordingly.
 CATCH_UP_STALE_TRADING_DAYS = 3
 _CATCH_UP_STATE = {"active": False, "missed_dates": []}
-
-
-def _fetch_position_returns(symbols: list) -> dict:
-    """Fetch today's price changes for held symbols. Returns {sym: pct_change}."""
-    if not symbols:
-        return {}
-    try:
-        import yfinance as yf
-        df = yf.download(symbols, period="2d", auto_adjust=True,
-                         progress=False, threads=True)
-        if df.empty or len(df) < 2:
-            return {}
-        closes = df["Close"] if hasattr(df.columns, "levels") else df
-        if closes.ndim == 1:
-            closes = closes.to_frame(name=symbols[0])
-        rets = closes.pct_change().iloc[-1].dropna()
-        return {str(sym): round(float(r), 4) for sym, r in rets.items()}
-    except Exception:
-        return {}
-
-
-def _run_daily_haiku_view(today, positions: list, feedback: dict) -> None:
-    """Lightweight Haiku daily conviction update on non-rebalance days. ~$0.005/day."""
-    try:
-        from ascent.llm.client import HAIKU_MODEL
-        import anthropic
-        client = anthropic.Anthropic()
-
-        level = feedback.get("level", 0)
-        worst = feedback.get("worst_call_10d") or {}
-        worst_str = (f"{worst.get('symbol')} ({worst.get('alpha', 0):+.1%} over 10d)"
-                     if worst.get("symbol") else "none")
-
-        # Fetch actual today's returns for held positions
-        syms = [p["symbol"] for p in positions if p.get("symbol")]
-        price_returns = _fetch_position_returns(syms)
-
-        # Build position table with real price moves
-        pos_lines = []
-        for p in sorted(positions, key=lambda x: -x.get("weight", 0)):
-            sym = p.get("symbol", "")
-            w   = p.get("weight", 0)
-            ret = price_returns.get(sym)
-            ret_str = f"{ret:+.2%}" if ret is not None else "N/A"
-            pos_lines.append(f"  {sym:6s} {w:.1%}  today: {ret_str}")
-
-        pos_table = "\n".join(pos_lines) or "none"
-
-        # Macro context
-        spy_ret = price_returns.get("SPY")
-        if not spy_ret:
-            spy_prices = _fetch_position_returns(["SPY"])
-            spy_ret = spy_prices.get("SPY")
-        spy_str = f"{spy_ret:+.2%}" if spy_ret is not None else "N/A"
-
-        prompt = f"""Today: {today.isoformat()} | AI PM Level {level} | SPY: {spy_str}
-Worst recent call: {worst_str}
-
-HELD POSITIONS (symbol | weight | today's return):
-{pos_table}
-
-You have the actual price data above. Give a concise daily update:
-1. Biggest mover today and the most likely reason (sector news, macro, earnings follow-through)
-2. Any position that changed your conviction — bullish, bearish, or watch-closely
-3. One risk to monitor before the next rebalance
-
-Be specific. Cite the return numbers from the table. No vague statements."""
-
-        resp = client.messages.create(
-            model=HAIKU_MODEL, max_tokens=500,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        view_text = resp.content[0].text if resp.content else ""
-
-        AI_PM_DAILY_VIEWS.parent.mkdir(parents=True, exist_ok=True)
-        with open(AI_PM_DAILY_VIEWS, "a") as f:
-            f.write(json.dumps({
-                "date":          today.isoformat(),
-                "level":         level,
-                "price_returns": price_returns,
-                "view":          view_text,
-            }) + "\n")
-        print(f"[Runner] AI PM daily view logged (Haiku, {len(view_text)} chars)")
-        print(f"[Runner] AI PM view: {view_text[:200].strip()}...")
-    except Exception as e:
-        print(f"[Runner] AI PM daily view skipped: {e}")
-
-
-def _write_decision_log(today, ai_pm_result, quant_weights: dict,
-                        blended_weights: dict, authority_state: dict,
-                        phase2_model: str = "claude-sonnet-5") -> None:
-    """Write one entry to ai_pm_decision_log.jsonl per rebalance day."""
-    try:
-        AI_PM_DECISION_LOG.parent.mkdir(parents=True, exist_ok=True)
-        # Derive overrides from the two weight vectors rather than trusting the
-        # model to self-report them. `thesis["quant_overrides"]` came back empty
-        # on all 9 logged decisions, which pinned n_decisions_evaluated at 0 and
-        # made the authority ladder a downward-only ratchet (min_decisions >= 5
-        # is a hard promotion gate; demotion needs one bad day). Both vectors
-        # were already logged here, so the override set is recoverable by
-        # subtraction. `self_reported_overrides` is kept for comparison — the gap
-        # between what the model says it did and what it did is itself a signal.
-        _ai_book = (ai_pm_result.portfolio
-                    if ai_pm_result and not ai_pm_result.fallback else {}) or {}
-        overrides = derive_overrides(quant_weights, _ai_book)
-        _self_reported = []
-        if ai_pm_result and ai_pm_result.thesis:
-            _self_reported = ai_pm_result.thesis.get("quant_overrides", []) or []
-        entry = {
-            "date":                  today.isoformat(),
-            "level":                 authority_state.get("level", 0),
-            "title":                 authority_state.get("title", "Shadow"),
-            "ai_weight":             authority_state.get("ai_weight", 0.0),
-            "phase2_model":          phase2_model,
-            "fallback":              ai_pm_result.fallback if ai_pm_result else True,
-            # A force-sealed run is a designed fallback that submits near the
-            # quant baseline when the tool loop exhausts its budget. It reached
-            # the holdings log and the counterfactual snapshots but NOT here —
-            # so in the file that feeds override scoring and the authority
-            # ladder it was indistinguishable from real judgment.
-            "force_sealed":          bool(getattr(ai_pm_result, "force_sealed", False)),
-            "perf_feedback_injected": Path("data_cache/ai_pm_perf_feedback.json").exists(),
-            "quant_proposed":        {k: round(v, 6) for k, v in quant_weights.items()},
-            "ai_pm_proposed":        {k: round(v, 6) for k, v in (ai_pm_result.portfolio if ai_pm_result and not ai_pm_result.fallback else {}).items()},
-            "overrides_applied":       overrides,
-            "self_reported_overrides": _self_reported,
-            "final_blended":         {k: round(v, 6) for k, v in blended_weights.items()},
-            "thesis_summary":        str((ai_pm_result.thesis or {}).get("market_view", ""))[:200] if ai_pm_result and ai_pm_result.thesis else "",
-            "tool_failures":         list(ai_pm_result.tool_failures) if (ai_pm_result and hasattr(ai_pm_result, "tool_failures")) else [],
-        }
-        with open(AI_PM_DECISION_LOG, "a") as f:
-            f.write(json.dumps(entry) + "\n")
-        print(f"[Runner] AI PM decision logged (Level {entry['level']}, {len(overrides)} overrides)")
-
-        # Record per-ticker decisions for ticker memory
-        try:
-            from memory.ticker_memory import record_decision as _record_ticker
-            ai_portfolio = (ai_pm_result.portfolio
-                            if ai_pm_result and not ai_pm_result.fallback else {})
-            for ov in overrides:
-                sym = ov.get("symbol", "")
-                if not sym:
-                    continue
-                _record_ticker(
-                    symbol=sym,
-                    date_str=today.isoformat(),
-                    ai_w=ai_portfolio.get(sym, quant_weights.get(sym, 0.0)),
-                    quant_w=quant_weights.get(sym, 0.0),
-                    decision_type=ov.get("ai_action", ov.get("override_type", "unknown")),
-                    rationale_snippet=ov.get("reason", "")[:200],
-                )
-        except Exception as _tm_e:
-            print(f"[Runner] Ticker memory record skipped: {_tm_e}")
-    except Exception as e:
-        print(f"[Runner] Decision log skipped: {e}")
-HALT_OVERRIDE_PATH  = Path("execution/halt_override.json")
-REGIME_SIGNAL_PATH  = Path("dashboard/regime_signal.json")
-REGIME_STALE_DAYS   = 5
 
 LONG_SHORT_ENABLED = False  # 130/30 — enable after ≥30 paper rebalances (~August 2026)
 
@@ -502,184 +337,6 @@ def _collect_altdata(portfolio_symbols: list, all_symbols: list) -> None:
             print(f"[AltData] {name} failed (non-fatal): {e}")
 
 
-def _fill_wedge_and_decision_outcomes(as_of_date: str) -> None:
-    """
-    Fetch 21-day cumulative returns for symbols in pending alpha_wedge records,
-    fill wedge_21d in alpha_wedge.jsonl, then propagate wedge to decision_memory.jsonl.
-
-    Only runs for rebalances ≥30 calendar days old (giving market 21 trading days).
-    No-op if alpha_wedge log doesn't exist or yfinance fetch fails.
-    """
-    from datetime import date as _date, timedelta as _td
-    import json as _json
-    from pathlib import Path as _Path
-
-    wedge_log = _Path("logs/alpha_wedge.jsonl")
-    if not wedge_log.exists():
-        return
-
-    rows = [_json.loads(l) for l in wedge_log.read_text().splitlines() if l.strip()]
-    today = _date.fromisoformat(as_of_date)
-
-    # Collect symbols from records ≥30 calendar days old with no wedge yet
-    pending = [r for r in rows
-               if r.get("wedge_21d") is None
-               and (_date.fromisoformat(r["rebalance_date"]) + _td(days=30)) <= today]
-
-    if not pending:
-        return
-
-    # Gather all symbols across pending records
-    all_symbols: set = set()
-    for r in pending:
-        all_symbols.update(r.get("ai_pm_weights", {}).keys())
-        all_symbols.update(r.get("quant_weights", {}).keys())
-
-    if not all_symbols:
-        return
-
-    try:
-        import yfinance as _yf
-        syms = list(all_symbols)
-        raw = _yf.download(syms, period="65d", auto_adjust=True, progress=False)
-        if raw.empty:
-            return
-        import pandas as _pd
-        closes = raw["Close"] if isinstance(raw.columns, _pd.MultiIndex) else raw
-        if not isinstance(closes, _pd.DataFrame):
-            closes = closes.to_frame()
-    except Exception as _e:
-        print(f"[WedgeFill] Price fetch failed: {_e}")
-        return
-
-    # Compute cumulative returns from each rebalance date
-    from ascent.monitoring.alpha_wedge_tracker import update_outcomes as _aw_update
-    from ascent.memory.decision_memory import update_outcomes as _dm_update
-
-    for row in pending:
-        rb_date_str = row["rebalance_date"]
-        rb_date = _date.fromisoformat(rb_date_str)
-
-        try:
-            # Prices on rebalance day and 21 trading days later
-            rb_close = closes[closes.index.date == rb_date]
-            if rb_close.empty:
-                # Try nearest date
-                future = closes[closes.index.date >= rb_date]
-                if future.empty:
-                    continue
-                rb_close = future.iloc[[0]]
-
-            # Price 21+ calendar days after rebalance (use ~31cd as buffer)
-            end_target = rb_date + _td(days=31)
-            end_prices = closes[closes.index.date >= end_target]
-            if end_prices.empty:
-                end_target = rb_date + _td(days=28)
-                end_prices = closes[closes.index.date >= end_target]
-            if end_prices.empty:
-                continue
-            end_close = end_prices.iloc[[0]]
-
-            price_rets = {}
-            for sym in closes.columns:
-                p0 = rb_close[sym].iloc[0] if sym in rb_close.columns else None
-                p1 = end_close[sym].iloc[0] if sym in end_close.columns else None
-                if p0 and p1 and float(p0) != 0:
-                    price_rets[str(sym)] = float((p1 - p0) / p0)
-
-            if not price_rets:
-                continue
-
-            # Fill alpha_wedge entry directly for this rebalance
-            _aw_update(price_rets, as_of_date, lookback_days=60)
-
-            # After fill, read back the wedge for this rebalance and propagate
-            if wedge_log.exists():
-                _updated = [_json.loads(l) for l in wedge_log.read_text().splitlines() if l.strip()]
-                for _r in _updated:
-                    if _r.get("rebalance_date") == rb_date_str and _r.get("wedge_21d") is not None:
-                        _dm_update(rb_date_str, _r["wedge_21d"])
-                        print(f"[WedgeFill] Propagated wedge {_r['wedge_21d']:+.3%} for {rb_date_str}")
-                        break
-
-        except Exception as _re:
-            print(f"[WedgeFill] Could not fill {rb_date_str}: {_re}")
-
-
-def _compute_calibration_returns(today: date) -> dict:
-    """
-    Return {symbol: cumulative_return} for all symbols in calibration log entries
-    that are >= 21 days old and still have unfilled realized_21d.
-    Buy price = first trading-day close on/after the entry date.
-    Sell price = most recent close on/before today.
-    Reads prices_live.parquet. Returns {} on any failure (never raises).
-    """
-    try:
-        import json as _json
-        import pandas as _pd
-        from ascent.strategy.calibration_tracker import CALIBRATION_LOG
-        from ascent.data.store.parquet import load_parquet as _lp
-
-        if not CALIBRATION_LOG.exists():
-            return {}
-
-        entries = []
-        with open(CALIBRATION_LOG) as _f:
-            for _line in _f:
-                _line = _line.strip()
-                if _line:
-                    try:
-                        entries.append(_json.loads(_line))
-                    except Exception:
-                        pass
-
-        symbol_entry_date: dict = {}
-        for _entry in entries:
-            try:
-                _edate = date.fromisoformat(_entry["date"][:10])
-            except Exception:
-                continue
-            if (today - _edate).days < 21:
-                continue
-            _positions = _entry.get("positions", {})
-            if not any(p.get("realized_21d") is None for p in _positions.values()):
-                continue
-            for _sym in _positions:
-                if _sym not in symbol_entry_date or _edate < symbol_entry_date[_sym]:
-                    symbol_entry_date[_sym] = _edate
-
-        if not symbol_entry_date:
-            return {}
-
-        _prices = _lp("prices_live")
-        _prices = _prices[_prices["symbol"].isin(symbol_entry_date)].copy()
-        if _prices.empty:
-            return {}
-
-        if hasattr(_prices["date"].dtype, "tz") and _prices["date"].dtype.tz is not None:
-            _prices["_d"] = _prices["date"].dt.date
-        else:
-            _prices["_d"] = _pd.to_datetime(_prices["date"]).dt.date
-
-        _returns: dict = {}
-        for _sym, _edate in symbol_entry_date.items():
-            _sdf = _prices[_prices["symbol"] == _sym].sort_values("_d")
-            _buy = _sdf[_sdf["_d"] >= _edate]
-            _sell = _sdf[_sdf["_d"] <= today]
-            if _buy.empty or _sell.empty:
-                continue
-            _p0 = float(_buy.iloc[0]["close"])
-            _p1 = float(_sell.iloc[-1]["close"])
-            if _p0 > 0:
-                _returns[_sym] = (_p1 / _p0) - 1
-
-        return _returns
-
-    except Exception as _exc:
-        print(f"[Runner] _compute_calibration_returns failed: {_exc}")
-        return {}
-
-
 def main():
     dry_run             = "--dry-run" in sys.argv
     skip_sector_check   = "--skip-sector-check" in sys.argv
@@ -787,35 +444,6 @@ def main():
         update_outcomes({})
     except Exception:
         pass
-
-    # ── W4: score pending adversarial interventions on the daily path ────────
-    # Previously this was ONLY called from ascent/monitoring/weekend_runner.py,
-    # and the last weekend run was 2026-06-06 — seven weekends missed, so
-    # n_scored stayed 0 for every intervention type and the whole layer's
-    # authority was frozen at the 1pp floor. Fail-soft: never blocks the run.
-    try:
-        from debate.adversarial_authority import score_pending_interventions
-        _n_adv_scored = score_pending_interventions()
-        if _n_adv_scored:
-            print(f"[AdvAuth] Scored {_n_adv_scored} pending adversarial intervention(s)")
-    except Exception as _adv_score_e:
-        print(f"[AdvAuth] score_pending_interventions skipped: {_adv_score_e}")
-
-    # Update calibration outcomes using real price returns (best-effort)
-    try:
-        _cal_returns = _compute_calibration_returns(today)
-        from ascent.strategy.calibration_tracker import update_outcomes as _update_cal
-        n_filled = _update_cal(_cal_returns, str(today))
-        if n_filled:
-            print(f"[Runner] Calibration outcomes filled: {n_filled} entries")
-    except Exception as _cal_e:
-        print(f"[Runner] Calibration outcome fill skipped: {_cal_e}")
-
-    # Fill 21d outcomes for alpha wedge + decision memory (best-effort)
-    try:
-        _fill_wedge_and_decision_outcomes(today.isoformat())
-    except Exception as _fwd_e:
-        print(f"[Runner] Wedge outcome fill failed: {_fwd_e}")
 
     # ── Step 0a: Start event agent background thread (market hours, weekdays) ──
     _event_thread = None
@@ -1013,31 +641,6 @@ def main():
     except Exception as e:
         print(f"[Runner] Skill score update failed: {e} — continuing with stale scores")
 
-    # Score counterfactuals where 10 days have passed
-    try:
-        from ascent.monitoring.counterfactual_tracker import score_pending_counterfactuals
-        n_scored = score_pending_counterfactuals()
-        if n_scored > 0:
-            print(f"[Runner] Scored {n_scored} counterfactual(s)")
-    except Exception as e:
-        print(f"[Runner] Counterfactual scoring failed: {type(e).__name__}: {e}")
-
-    # Score pending verdicts (runs daily, NOP if no verdicts old enough)
-    try:
-        from debate.outcome_tracker import score_pending_verdicts
-        n_scored = score_pending_verdicts()
-        if n_scored:
-            print(f"[OutcomeTracker] Scored {n_scored} verdict(s)")
-    except Exception as _oe:
-        print(f"[OutcomeTracker] Scoring skipped: {_oe}")
-    try:
-        from memory.reflection_agent import reflect_on_new_outcomes
-        n_reflected = reflect_on_new_outcomes()
-        if n_reflected:
-            print(f"[Reflection] Wrote {n_reflected} new lesson(s) to memory/reflections.jsonl")
-    except Exception as _re:
-        print(f"[Reflection] Skipped: {_re}")
-
     # Daily shadow promotion check (only acts on expired shadows)
     try:
         from ascent.research.shadow_promoter import run_shadow_promotion
@@ -1162,20 +765,11 @@ def main():
     except Exception as _ge:
         print(f"[GoogleTrends] Weekly refresh skipped: {_ge}")
 
-    # ── Monthly: investor report + audit integrity + methodology index ─────────
+    # ── Monthly: audit integrity check ────────────────────────────────────────
     try:
         from datetime import date as _mdate
         _today_m = _mdate.today()
         if _today_m.weekday() == 6 and _today_m.day <= 7:  # first Sunday of month
-            # Monthly investor report
-            try:
-                from ascent.reporting.investor_report import schedule_monthly_report
-                schedule_monthly_report()
-                print("[InvestorReport] Monthly report generated.")
-            except Exception as _ir_e:
-                print(f"[InvestorReport] Skipped: {_ir_e}")
-
-            # Audit trail integrity check
             try:
                 import subprocess as _sp, sys as _sys
                 _audit_result = _sp.run(
@@ -1185,23 +779,8 @@ def main():
                 print(f"[AuditIntegrity] {'PASS' if _audit_result.returncode == 0 else 'FAIL'}")
             except Exception as _ai_e:
                 print(f"[AuditIntegrity] Skipped: {_ai_e}")
-
-            # Export methodology index
-            try:
-                from compliance.methodology_index import export_methodology_index
-                export_methodology_index()
-                print("[MethodologyIndex] Exported.")
-            except Exception as _mi_e:
-                print(f"[MethodologyIndex] Skipped: {_mi_e}")
     except Exception as _monthly_e:
-        print(f"[Monthly] Plan 6/7 monthly tasks skipped: {_monthly_e}")
-
-    # ── Daily: methodology index export ────────────────────────────────────────
-    try:
-        from compliance.methodology_index import export_methodology_index as _export_mi
-        _export_mi()
-    except Exception:
-        pass
+        print(f"[Monthly] Monthly tasks skipped: {_monthly_e}")
 
     # NOTE: alert checking (drawdown / factor breach / sleeve IC decay) and the
     # daily "system alive" proof-of-life ping used to be called here with zero
@@ -1245,401 +824,17 @@ def main():
     except Exception as _fe:
         print(f"[FactorExposure] Export skipped: {_fe}")
 
-    # ── Fetch live Exa news (runs daily — feeds pre-thesis + ticker discovery) ──
-    _news_context: dict = {}
+    # ── Daily intelligence / discovery / falsifier / AI-PM synthesis layer
+    # removed 2026-08-23 (noise-layer cut) — see CLAUDE.md constraint 5. The
+    # merged quant weights from the orchestrator above are what gets written
+    # and executed; nothing downstream mutates them anymore.
+
+    # Log episode for regime-aware memory (quant-only; no AI PM layer exists).
     try:
-        from ascent.integrations.exa_news import fetch_news as _fetch_exa_news
-        _universe_syms_for_news = list((merged_weights or {}).keys())[:20]
-        if _universe_syms_for_news:
-            _news_context = _fetch_exa_news(_universe_syms_for_news)
-            _n_news = sum(len(v) for v in _news_context.values())
-            print(f"[Runner] Exa news: {_n_news} headlines fetched for {len(_news_context)} symbols")
-    except Exception as _ne:
-        print(f"[Runner] Exa news fetch skipped: {_ne}")
-
-    # ── Daily intelligence (non-rebalance days — feeds rebalance brief) ──────
-    if not is_rebalance:
-        try:
-            from ascent.monitoring.daily_intelligence import run_daily_intelligence
-            run_daily_intelligence(today.isoformat(), merged_weights, agent_outputs)
-        except Exception as _di_e:
-            print(f"[DailyIntel] Skipped: {_di_e}")
-
-        # Adversarial monitor — lightweight non-rebalance scan
-        try:
-            from debate.adversarial_monitor import run_adversarial_monitor
-            run_adversarial_monitor()
-        except Exception as _am_e:
-            print(f"[AdvMonitor] Skipped: {_am_e}")
-
-        # Gate 4 — falsifier enforcement: evaluate every registered
-        # "what would prove me wrong" condition (prethesis, judge, pre-mortem)
-        # and act on the first fired one with a bounded
-        # 25% trim. Replaces the old shadow-log-only early-exit check.
-        try:
-            from ascent.strategy.falsifier_registry import check_all as _falsifier_check
-            _fired = _falsifier_check(today, news_context=_news_context)
-            if _fired:
-                print(f"[Falsifier] {len(_fired)} falsifier(s) fired: "
-                      f"{[(f.get('symbol'), f.get('source')) for f in _fired]}")
-                _apply_falsifier_trim(_fired, merged_weights, today, dry_run)
-        except Exception as _ce:
-            print(f"[Falsifier] Gate 4 check failed: {_ce}")
-
-        # Ticker discovery — surface a new candidate from today's Exa news
-        try:
-            if _is_near_scheduled_rebalance(today):
-                print("[Discovery] Skipped — within 3 trading days of a scheduled "
-                      "rebalance (it will recompute the book anyway)")
-            else:
-                from ascent.strategy.ticker_discovery import run_discovery as _run_discovery
-                # Filter against the LIVE book, not the freshly recomputed target —
-                # otherwise "don't rediscover what we already hold" can abort on a
-                # name the account doesn't actually hold, or add one it already does.
-                _current_universe = list(_live_book_or(merged_weights).keys())
-                if _news_context and _current_universe:
-                    _discovery = _run_discovery(_news_context, _current_universe)
-                    if _discovery:
-                        print(f"[Discovery] Candidate: {_discovery.symbol} "
-                              f"(conviction={_discovery.conviction_score:.2f})")
-                        if not _check_mini_rebalance_cooldown():
-                            _trigger_mini_rebalance(_discovery, merged_weights, today, dry_run, agent_outputs)
-                        else:
-                            print(f"[Discovery] Cooldown active — {_discovery.symbol} queued for next window")
-                    else:
-                        print("[Discovery] No high-conviction candidate found today")
-        except Exception as _disc_e:
-            print(f"[Discovery] Skipped: {_disc_e}")
-
-    # ── Generate rebalance brief BEFORE AI PM so get_rebalance_brief tool reads current intel ──
-    if is_rebalance:
-        try:
-            from ascent.monitoring.rebalance_brief import generate_rebalance_brief
-            generate_rebalance_brief(today.isoformat())
-            print("[RebalanceBrief] Brief generated for AI PM.")
-        except Exception as _rb_e:
-            print(f"[RebalanceBrief] Generation failed: {_rb_e}")
-
-    # ── AI PM Phase 1: Pre-thesis (before quant agents on rebalance days) ────────
-    # AI reads broadly and forms original investment thesis BEFORE seeing quant rankings.
-    # This makes the fund genuinely AI-native: AI generates the thesis, quant validates it.
-    _ai_prethesis: AIPreThesis | None = None
-    _sentiment_block = ""
-
-    if is_rebalance:
-        # Fetch StockTwits crowd sentiment for the current universe (pre-fetch before pre-thesis)
-        try:
-            from ascent.integrations.stocktwits import get_sentiment, format_sentiment_block
-            _universe_syms = list((merged_weights or {}).keys())[:20]
-            _st_data = get_sentiment(_universe_syms)
-            _sentiment_block = format_sentiment_block(_st_data)
-            if _sentiment_block:
-                _n_live = len([v for v in _st_data.values() if not v["stale"]])
-                print(f"[Runner] StockTwits: {_n_live} non-stale signals fetched")
-            _st_ic_path = Path("logs/stocktwits_ic.jsonl")
-            _st_ic_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(_st_ic_path, "a") as _icf:
-                for _sym, _sd in _st_data.items():
-                    if not _sd["stale"]:
-                        _icf.write(json.dumps({
-                            "date": today.isoformat(),
-                            "symbol": _sym,
-                            "sentiment_ratio": _sd["ratio"],
-                            "band": _sd["band"],
-                        }) + "\n")
-        except Exception as _ste:
-            print(f"[Runner] StockTwits fetch skipped: {_ste}")
-
-        # Inject pattern memory into environment so Phase 1 temporal context picks it up
-        try:
-            from ascent.strategy.ai_pm_learning import get_pattern_summary
-            _pattern_summary = get_pattern_summary()
-            if _pattern_summary:
-                Path("data_cache/ai_pm_pattern_context.txt").write_text(_pattern_summary)
-                print(f"[Runner] Pattern memory injected into Phase 1 context")
-        except Exception:
-            pass
-
-        try:
-            print("[Runner] AI PM Phase 1 — forming original thesis before quant runs...")
-            _ai_prethesis = run_ai_pm_prethesis(
-                sentiment_block=_sentiment_block,
-                news_context_arg=_news_context,
-            )
-            if _ai_prethesis:
-                syms = ", ".join(_ai_prethesis.conviction_symbols[:6])
-                print(f"[Runner] Pre-thesis sealed: {len(_ai_prethesis.high_conviction_names)} "
-                      f"conviction names ({syms}...)")
-                # Write AI regime assessment + sleeve prior for main.py to pick up
-                if _ai_prethesis.regime_assessment or _ai_prethesis.sleeve_weight_prior:
-                    _assess_path = Path("data_cache/ai_regime_assessment.json")
-                    try:
-                        _assess_path.write_text(json.dumps({
-                            **(_ai_prethesis.regime_assessment or {}),
-                            "sleeve_weight_prior": _ai_prethesis.sleeve_weight_prior or {},
-                            "as_of_date": today.isoformat(),
-                        }))
-                        print(f"[Runner] AI regime assessment written: "
-                              f"{(_ai_prethesis.regime_assessment or {}).get('label', 'n/a')} "
-                              f"sleeves={list((_ai_prethesis.sleeve_weight_prior or {}).keys())}")
-                    except Exception as _ae:
-                        print(f"[Runner] AI regime assessment write failed: {_ae}")
-
-                # Write full pre-thesis for main.py portfolio construction hooks
-                # (alpha floor for conviction names, avoid-list zeroing)
-                try:
-                    import dataclasses as _dc
-                    _pt_path = Path("data_cache/ai_prethesis_latest.json")
-                    _pt_payload = {
-                        "high_conviction_names": _ai_prethesis.high_conviction_names or [],
-                        "names_to_avoid":        _ai_prethesis.names_to_avoid or [],
-                        "as_of_date":            today.isoformat(),
-                    }
-                    _pt_path.write_text(json.dumps(_pt_payload))
-                    print(f"[Runner] Pre-thesis cache written: "
-                          f"{len(_pt_payload['high_conviction_names'])} conviction, "
-                          f"{len(_pt_payload['names_to_avoid'])} avoid")
-                except Exception as _pte:
-                    print(f"[Runner] Pre-thesis cache write failed: {_pte}")
-            else:
-                print("[Runner] Pre-thesis returned None — synthesis will use standard mode")
-        except Exception as _pt_e:
-            print(f"[Runner] Pre-thesis failed ({_pt_e}) — continuing in standard mode")
-
-    # ── AI PM Agent integration ────────────────────────────────────────────────
-    # Track A★: snapshot BEFORE Phase 1 sleeve priors — true no-AI-PM baseline
-    _quant_star_weights = dict(merged_weights)
-    if is_rebalance:
-        try:
-            snapshot_quant_star(today, _quant_star_weights)
-        except Exception as _cs_e:
-            print(f"[Runner] Track A★ snapshot skipped: {_cs_e}")
-
-    _quant_weights_snapshot = dict(merged_weights)  # updated after Phase 1 (Track A)
-    _snap_ai_weights = None
-    _phase2_model_used = "claude-sonnet-5"
-
-    if not is_rebalance:
-        # Non-rebalance: lightweight Haiku daily view
-        try:
-            _fb_data = json.loads(Path("data_cache/ai_pm_perf_feedback.json").read_text()) \
-                if Path("data_cache/ai_pm_perf_feedback.json").exists() else {}
-            _cur_pos = []
-            try:
-                from ascent.execution.alpaca_broker import get_positions as _gp
-                _pos_df = _gp()
-                if not _pos_df.empty:
-                    _cur_pos = _pos_df[["symbol", "weight"]].to_dict("records")
-            except Exception:
-                pass
-            # Fetch actual price returns for the intelligence brief
-            _pos_returns = _fetch_position_returns([p["symbol"] for p in _cur_pos if p.get("symbol")])
-
-            # Haiku view (lightweight, non-rebalance)
-            _run_daily_haiku_view(today, _cur_pos, _fb_data)
-
-            # Sonnet daily intelligence brief (richer analysis, thesis health, pattern memory)
-            try:
-                from ascent.strategy.ai_pm_learning import daily_intelligence_brief
-                _brief = daily_intelligence_brief(
-                    today=today,
-                    positions=_cur_pos,
-                    price_returns=_pos_returns,
-                    feedback=_fb_data,
-                )
-                print(f"[Runner] AI PM intelligence brief written ({len(_brief)} chars, Sonnet)")
-            except Exception as _ib_e:
-                print(f"[Runner] Intelligence brief skipped: {_ib_e}")
-        except Exception as _dv_e:
-            print(f"[Runner] Daily view skipped: {_dv_e}")
-    else:
-        # Track A: snapshot AFTER Phase 1 sleeve priors applied, BEFORE Phase 2 blend
-        _quant_weights_snapshot = dict(merged_weights)
-        try:
-            snapshot_quant(today, _quant_weights_snapshot)
-        except Exception as _ca_e:
-            print(f"[Runner] Track A snapshot skipped: {_ca_e}")
-
-        # Smart Opus trigger: upgrade Phase 2 on high-stakes rebalances
-        try:
-            _current_regime = json.loads(Path("dashboard/regime_signal.json").read_text()).get("label", "") \
-                if Path("dashboard/regime_signal.json").exists() else ""
-            _last_regime = get_authority_state().get("last_regime", "")
-            _use_opus = any([
-                str(_current_regime).lower() in ("crisis",),          # always Opus in crisis
-                _current_regime != _last_regime and _last_regime,      # regime change
-                len(getattr(_ai_prethesis, "high_conviction_names", [])) >= 4,  # complex decision
-                get_authority_state().get("in_cooldown") is False and
-                get_authority_state().get("days_at_level", 99) == 0,   # first day post-promotion
-            ])
-            from ascent.llm.client import DEFAULT_MODEL, SONNET_MODEL
-            _phase2_model_used = DEFAULT_MODEL if _use_opus else SONNET_MODEL
-            if _use_opus:
-                print(f"[Runner] Opus trigger: regime={_current_regime}, using {_phase2_model_used}")
-        except Exception:
-            from ascent.llm.client import SONNET_MODEL
-            _phase2_model_used = SONNET_MODEL
-
-        _ai_pm_force_sealed = False
-        try:
-            print("[Runner] AI PM Phase 2 — synthesising pre-thesis with quant validation...")
-            ai_pm_result = run_ai_pm(
-                quant_outputs=agent_outputs,
-                merged_weights=merged_weights,
-                prethesis=_ai_prethesis,
-                sentiment_block=_sentiment_block,
-                news_context_arg=_news_context,
-            )
-
-            ok = False
-            violations = []
-            if ai_pm_result.fallback:
-                print("[Runner] AI PM fallback — using quant portfolio unchanged")
-            else:
-                # Blend-into-merged_weights write path removed: earned_authority scored
-                # CUT (p=0.35, track_d vs track_astar) in the proof audit. merged_weights
-                # stays the quant book unchanged; validate_pm_proposal() still runs so the
-                # compliance record below keeps reporting whether the AI PM's proposal was
-                # book-valid, and update_authority() (below, in the daily learning brief)
-                # keeps advancing the ladder purely for measurement — it no longer gates a
-                # live write.
-                ok, violations = validate_pm_proposal(ai_pm_result.portfolio)
-                if ok:
-                    ai_weight = get_authority_state().get("ai_weight", 0.0)
-                    print(f"[Runner] AI PM blend NOT applied (write path removed; "
-                          f"ai_weight={ai_weight * 100:.0f}% for measurement only)")
-                else:
-                    print(f"[Runner] AI PM proposal failed validation: {violations} — using quant 100% (unchanged; blend already disabled)")
-                _snap_ai_weights = dict(ai_pm_result.portfolio)  # capture for authority snapshot
-
-                # Track D: snapshot pure AI PM portfolio (diagnostic)
-                try:
-                    _ai_pm_force_sealed = ai_pm_result.force_sealed
-                    snapshot_ai_pm(today, dict(ai_pm_result.portfolio), force_sealed=_ai_pm_force_sealed)
-                except Exception as _td_e:
-                    print(f"[Runner] Track D snapshot skipped: {_td_e}")
-
-            # Decision log: record on every rebalance — fallback and non-fallback
-            try:
-                _write_decision_log(
-                    today, ai_pm_result, _quant_weights_snapshot,
-                    merged_weights, get_authority_state(), _phase2_model_used,
-                )
-            except Exception as _dl_e:
-                print(f"[Runner] Decision log skipped: {_dl_e}")
-
-            if not ai_pm_result.fallback:
-                format_thesis({**ai_pm_result.thesis, "ai_pm_portfolio": ai_pm_result.portfolio})
-
-                # Log AI market character prediction for calibration tracking
-                if _ai_prethesis and _ai_prethesis.market_character:
-                    try:
-                        from ascent.strategy.ai_calibration import log_thesis as _log_cal_thesis
-                        _log_cal_thesis(
-                            thesis_date=today.isoformat(),
-                            regime=_get_current_regime(),
-                            market_character=_ai_prethesis.market_character,
-                            sleeve_weight_prior=_ai_prethesis.sleeve_weight_prior or {},
-                        )
-                        print(f"[Runner] Calibration: logged market_character="
-                              f"{_ai_prethesis.market_character}")
-                    except Exception as _cal_e:
-                        print(f"[Runner] Calibration log failed: {_cal_e}")
-
-                # Record AI PM vs quant wedge for feedback loop
-                try:
-                    from ascent.monitoring.alpha_wedge_tracker import record_rebalance as _record_wedge
-                    _override_types = {
-                        o.get("symbol", ""): o.get("override_type", "unknown")
-                        for o in ai_pm_result.thesis.get("quant_overrides", [])
-                        if o.get("symbol")
-                    }
-                    _record_wedge(
-                        rebalance_date=today.isoformat(),
-                        ai_pm_weights=ai_pm_result.portfolio,
-                        quant_weights=_quant_weights_snapshot,
-                        override_types=_override_types,
-                    )
-                    print("[Runner] Alpha wedge recorded")
-                except Exception as _we:
-                    print(f"[Runner] Alpha wedge record failed: {_we}")
-
-                # Ingest each AI PM override into decision memory for future conviction gating
-                try:
-                    from ascent.memory.decision_memory import ingest_override as _ingest_dm
-                    _dm_regime = _get_current_regime()
-                    for _ov in ai_pm_result.thesis.get("quant_overrides", []):
-                        _sym = _ov.get("symbol", "")
-                        _ov_type = _ov.get("override_type", "")
-                        if not _sym or not _ov_type:
-                            continue
-                        _ai_w = ai_pm_result.portfolio.get(_sym, 0.0)
-                        _q_w = _quant_weights_snapshot.get(_sym, 0.0)
-                        _mom = None
-                        try:
-                            from ascent.monitoring.conviction_tracker import get_position_momentum_safe
-                            _mom = get_position_momentum_safe(_sym)
-                        except Exception:
-                            pass
-                        _ingest_dm(
-                            rebalance_date=today.isoformat(),
-                            symbol=_sym,
-                            override_type=_ov_type,
-                            regime=_dm_regime,
-                            ai_action=_ov.get("ai_action", ""),
-                            ai_weight=_ai_w,
-                            quant_weight=_q_w,
-                            momentum_252d=_mom,
-                        )
-                    print("[Runner] Decision memory updated")
-                except Exception as _dm_e:
-                    print(f"[Runner] Decision memory update failed: {_dm_e}")
-
-                try:
-                    from compliance.audit_trail import record_event
-                    record_event("ai_pm_proposal", {
-                        "portfolio_size": len(ai_pm_result.portfolio),
-                        "validated": ok if not ai_pm_result.fallback else False,
-                        "violations": violations if not ai_pm_result.fallback and not ok else [],
-                    })
-                except Exception as ae:
-                    print(f"[Runner] Audit trail write failed: {ae}")
-
-        except Exception as exc:
-            print(f"[Runner] AI PM agent failed: {exc} — using quant portfolio")
-
-    # Build the falsifier registry for this holding period (rebalance only):
-    # prethesis "what would change my mind" + AI PM pre-mortem become daily-
-    # checked conditions. Judge predictions are appended after the verdict.
-    if is_rebalance:
-        try:
-            from ascent.strategy.falsifier_registry import build_registry
-            _fr_prethesis = getattr(_ai_prethesis, "raw", None) if _ai_prethesis else None
-            _fr_thesis = None
-            try:
-                if ai_pm_result and not ai_pm_result.fallback:
-                    _fr_thesis = ai_pm_result.thesis
-            except Exception:
-                pass
-            _n_fals = build_registry(today, prethesis_raw=_fr_prethesis, thesis=_fr_thesis)
-            print(f"[Falsifier] Registry built: {_n_fals} conditions watching this holding period")
-        except Exception as _fr_e:
-            print(f"[Falsifier] Registry build skipped: {_fr_e}")
-
-    # Log episode for regime-aware memory
-    try:
-        _episode_regime = _get_current_regime()
-        _episode_ai_w = None
-        try:
-            if not ai_pm_result.fallback:
-                _episode_ai_w = ai_pm_result.portfolio if ai_pm_result.portfolio else None
-        except Exception:
-            pass
         log_episode(
             run_date=today.isoformat(),
-            regime=_episode_regime,
+            regime=_get_current_regime(),
             quant_weights=merged_weights,
-            ai_weights=_episode_ai_w,
         )
     except Exception as _e:
         print(f"[Memory] Episode log failed: {_e}")
@@ -1660,27 +855,6 @@ def main():
     print(f"\n[Runner] Merged weights written to {weights_path}")
     print(f"[Runner] {len(merged_weights)} positions, total weight: {sum(merged_weights.values()):.4f}")
 
-    # ── Snapshot rebalance baseline for conviction tracker ───────────────────
-    if is_rebalance:
-        try:
-            from ascent.monitoring.conviction_tracker import save_rebalance_alpha_state
-            from ascent.monitoring.signal_health import compute_signal_health
-            from ascent.monitoring.regime_trajectory import compute_regime_trajectory
-            _sleeve_ics = {
-                s: d.get("ic_5d_avg", 0.0)
-                for s, d in compute_signal_health(today.isoformat()).items()
-            }
-            _traj = compute_regime_trajectory(today.isoformat())
-            save_rebalance_alpha_state(
-                date=today.isoformat(),
-                merged_weights=merged_weights,
-                agent_outputs=agent_outputs,
-                sleeve_ics=_sleeve_ics,
-                regime=_traj.get("current_label", "unknown"),
-                regime_stability_10d=_traj.get("stability_10d", 0.5),
-            )
-        except Exception as _rs_e:
-            print(f"[RebalanceState] Snapshot failed: {_rs_e}")
 
     # Audit trail: portfolio construction
     try:
@@ -1702,18 +876,17 @@ def main():
     except Exception:
         pass
 
-    # ── Post-rebalance: update meta-learner and calibration from holding-period sleeve IC ──
+    # ── Post-rebalance: update meta-learner from holding-period sleeve IC ────
+    _ML_SNAP_PATH = Path("data_cache/meta_learner_rebalance_snapshot.json")
     if is_rebalance:
         try:
             from ascent.alpha.meta_learner import SleeveMetaLearner as _SML
-            from ascent.strategy.ai_calibration import update_outcome as _update_cal_outcome
 
             _sleeve_ic_log = Path("logs/sleeve_ic_log.jsonl")
-            _ml_snap_path = Path("data_cache/authority_rebalance_snapshot.json")
             _realized_ic: dict = {}
 
-            if _sleeve_ic_log.exists() and _ml_snap_path.exists():
-                _prev_snap = json.loads(_ml_snap_path.read_text())
+            if _sleeve_ic_log.exists() and _ML_SNAP_PATH.exists():
+                _prev_snap = json.loads(_ML_SNAP_PATH.read_text())
                 _prev_date = _prev_snap.get("rebalance_date", "")
                 if _prev_date:
                     from collections import defaultdict as _dd
@@ -1742,82 +915,19 @@ def main():
                 _ml.update_rebalance(_current_regime, _realized_ic)
                 print(f"[Runner] Meta-learner updated: regime={_current_regime} "
                       f"sleeves={list(_realized_ic.keys())}")
-                _update_cal_outcome(_realized_ic)
-                print("[Runner] Calibration outcome updated")
             else:
                 print("[Runner] Meta-learner: no IC data since prior rebalance — skipping")
-        except Exception as _ml_upd_e:
-            print(f"[Runner] Meta-learner/calibration update failed: {_ml_upd_e}")
 
-    # ── Update earned authority (rebalance days only, full holding-period comparison) ──
-    # Fair comparison: both AI PM and quant measured over the same holding period
-    # on the same full multi-asset portfolio, not daily returns of stale weights.
-    _AUTHORITY_SNAPSHOT = Path("data_cache/authority_rebalance_snapshot.json")
-    if is_rebalance:
-        try:
-            import yfinance as _yf
-
-            # Step 1: compute holding-period return vs previous rebalance snapshot
-            if _AUTHORITY_SNAPSHOT.exists():
-                _prev = json.loads(_AUTHORITY_SNAPSHOT.read_text())
-                _prev_date = _prev["rebalance_date"]
-                _prev_ai   = _prev["ai_weights"]
-                _prev_qt   = _prev["quant_weights"]
-                _all_syms  = list(set(_prev_ai) | set(_prev_qt))
-
-                _px = _yf.download(_all_syms, start=_prev_date,
-                                   end=today.isoformat(), auto_adjust=True, progress=False)
-                if hasattr(_px.columns, "levels"):
-                    _px = _px["Close"]
-
-                if len(_px) >= 2:
-                    _period_rets = (_px.iloc[-1] / _px.iloc[0] - 1).fillna(0)
-                    # Clip per-symbol returns to ±50% to guard against bad price data
-                    _period_rets = _period_rets.clip(-0.50, 0.50)
-
-                    def _port_ret(weights):
-                        tw = sum(weights.values()) or 1.0
-                        return float(sum(
-                            (w / tw) * float(_period_rets.get(s, 0))
-                            for s, w in weights.items()
-                        ))
-
-                    _ai_ret = _port_ret(_prev_ai)
-                    _qt_ret = _port_ret(_prev_qt)
-                    # Diagnostic only — deliberately does NOT call
-                    # update_authority(). It used to, with n_decisions_evaluated
-                    # defaulted to 0 and hit_rate None, which stamped
-                    # last_updated=today; the informed call later in the run then
-                    # early-returned on `last_updated == today`, so on every
-                    # rebalance day the promotion metrics never reached the
-                    # ladder at all. It also appended REBALANCE-PERIOD returns to
-                    # the same buffer the daily path fills with DAILY Track D vs
-                    # A* returns, mixing horizons in the sortino_edge estimate.
-                    # The single informed call now owns the ladder.
-                    print(f"[Runner] Rebalance-period comparison: AI {_ai_ret*100:.2f}% "
-                          f"vs Quant {_qt_ret*100:.2f}% ({_prev_date} → "
-                          f"{today.isoformat()}) [diagnostic, not fed to authority]")
-
-            # Step 2: save snapshot for next rebalance comparison
-            # Use AI PM portfolio if it ran successfully, else fall back to quant
-            _snap = {
+            _ML_SNAP_PATH.write_text(json.dumps({
                 "rebalance_date": today.isoformat(),
-                "ai_weights":    _snap_ai_weights or _quant_weights_snapshot,
-                "quant_weights": _quant_weights_snapshot,
-            }
-            _AUTHORITY_SNAPSHOT.write_text(json.dumps(_snap, indent=2))
-            _ai_src = "AI PM" if _snap_ai_weights else "quant (AI PM unavailable)"
-            print(f"[Runner] Authority snapshot saved — {_ai_src}, "
-                  f"{len(_snap['ai_weights'])} AI / {len(_snap['quant_weights'])} quant positions")
-
-        except Exception as exc:
-            print(f"[Runner] Earned authority update failed: {exc}")
-    else:
-        print("[Runner] Authority update: waiting for next rebalance (rebalance-period comparison only)")
+                "quant_weights":  merged_weights,
+            }, indent=2))
+        except Exception as _ml_upd_e:
+            print(f"[Runner] Meta-learner update failed: {_ml_upd_e}")
 
     # ── Non-rebalance day: stop here ──────────────────────────────────────────
     if not is_rebalance:
-        print("[Runner] Non-rebalance day — weights updated, no debate, no execution.")
+        print("[Runner] Non-rebalance day — weights updated, no execution.")
         try:
             _log_holdings(today)
         except Exception as e:
@@ -1825,88 +935,16 @@ def main():
         _log_run(today, merged_weights, agent_outputs, dry_run)
         return
 
-    # ── Rebalance day: check for active halt before debating ─────────────────
+    # ── Rebalance day: check for active halt before executing ────────────────
     if not check_halt_state(today=today):
         print("[Runner] Halted — agents ran, weights updated, execution skipped.")
         print("[Runner] Create execution/halt_override.json to resume.")
         try:
-            _log_holdings(today, force_sealed=_ai_pm_force_sealed)
+            _log_holdings(today)
         except Exception as e:
             print(f"[Runner] Holdings log skipped: {e}")
         _log_run(today, merged_weights, agent_outputs, dry_run)
         return
-
-    # ── Rebalance day: debate → execute ───────────────────────────────────────
-    print(f"\n[Runner] Rebalance day — running debate layer...")
-    verdict = None
-    try:
-        from debate.debate_runner import run_debate
-        from ascent.execution.debate_gate import should_run_debate
-        import json as _json
-        from pathlib import Path as _Path
-        _regime_path  = _Path("dashboard/regime_signal.json")
-        _saved_regime = "unknown"
-        _regime_entropy = 0.0
-        try:
-            _rdata        = _json.loads(_regime_path.read_text())
-            _sig = (_rdata[-1] if (isinstance(_rdata, list) and _rdata) else _rdata) or {}
-            _saved_regime   = _sig.get("label", "unknown")
-            _regime_entropy = float(_sig.get("entropy", 0.0) or 0.0)
-        except Exception:
-            pass
-        # TODO: wire orchestrator_result.allocation when central_intelligence exposes it
-        # Only us_equities allocates live capital (see Step 1 above).
-        _base_alloc = {"us_equities": 1.0}
-        _orch_alloc = merged_weights.get("allocation") if isinstance(merged_weights, dict) else None
-        portfolio_state = {
-            "date":              today.isoformat(),
-            "us_regime":         next((ao.regime_signal for ao in agent_outputs if ao.agent_id == "us_equities" and ao.regime_signal), _saved_regime),
-            "macro_regime":      next((ao.regime_signal for ao in agent_outputs if ao.agent_id == "macro" and ao.regime_signal), "unknown"),
-            "n_positions":       len(merged_weights),
-            "allocation":        _orch_alloc or {ao.agent_id: round(_base_alloc.get(ao.agent_id, 0.0), 2)
-                                 for ao in agent_outputs},
-            "weights":           merged_weights,
-            "mirofish_sentiment": (
-                ai_pm_result.thesis.get("mirofish_sentiment")
-                if ai_pm_result and hasattr(ai_pm_result, "thesis") and ai_pm_result.thesis
-                else None
-            ),
-        }
-        _regime_dict = {"entropy": _regime_entropy, "label": _saved_regime}
-        if not should_run_debate(portfolio_state, _regime_dict):
-            print("[Runner] Debate gate: no trigger — proceeding to execution without debate")
-            verdict = {}
-        else:
-            verdict = run_debate(portfolio_state, run_date=today) or {}
-
-        if verdict.get("recommendation") == "halt_and_review":
-            print("[Runner] DEBATE VERDICT: halt_and_review — skipping execution")
-            print("[Runner] Review at outputs/debate_log/")
-            try:
-                _log_holdings(today, force_sealed=_ai_pm_force_sealed)
-            except Exception as e:
-                print(f"[Runner] Holdings log skipped: {e}")
-            _log_run(today, merged_weights, agent_outputs, dry_run)
-            return
-
-        # ── Judge position-change write path removed ──────────────────────────
-        # debate_judge_intervention scored CUT (p=0.75, n=47) in the proof audit.
-        # The verdict (including any position_changes) is still fully written to
-        # outputs/debate_log/verdict_<date>.json by run_debate() above — this
-        # block used to additionally apply changes[0] to merged_weights via
-        # apply_judge_position_change -- deleted 2026-08-15 (zero call sites;
-        # see CLAUDE.md constraint #5). Debate stays advisory-only end to end.
-        # The proposal is still RECORDED (applied=False) so the
-        # authority ladder keeps accumulating scoreable evidence — that
-        # bookkeeping used to live inside apply_judge_position_change and died
-        # with its call sites.
-        _record_advisory_judge_proposal(
-            merged_weights, verdict, today,
-            portfolio_state=portfolio_state, tag="AdvInt",
-        )
-
-    except Exception as e:
-        print(f"[Runner] Debate failed ({e}) — proceeding to execution anyway")
 
     # ── Step 5: Execute via eod_runner ────────────────────────────────────────
     if dry_run:
@@ -1920,7 +958,7 @@ def main():
                 merged_weights, today.isoformat()
             )
             from ascent.execution.eod_runner import run_eod_with_weights
-            run_eod_with_weights(merged_weights, run_date=today, dry_run=False, precomputed_verdict=verdict)
+            run_eod_with_weights(merged_weights, run_date=today, dry_run=False)
         except ImportError:
             print("[Runner] WARNING: run_eod_with_weights not yet available — weights file written only")
         except Exception as e:
@@ -1928,7 +966,7 @@ def main():
 
     # ── Step 6: Log the run ───────────────────────────────────────────────────
     try:
-        _log_holdings(today, force_sealed=_ai_pm_force_sealed)
+        _log_holdings(today)
     except Exception as e:
         print(f"[Runner] Holdings log skipped: {e}")
     _log_run(today, merged_weights, agent_outputs, dry_run)
@@ -1984,28 +1022,6 @@ def _log_run(today, merged_weights, agent_outputs, dry_run):
         log_costs(today.isoformat())
     except Exception as e:
         print(f"[Runner] Cost log skipped ({e})")
-
-    # Monthly investor letter — triggers on first trading day of each new month
-    try:
-        from ascent.reporting.investor_letter import generate_monthly_letter
-        letter_path = generate_monthly_letter(today)
-        if letter_path:
-            print(f"[Letter] Monthly investor letter saved → {letter_path}")
-    except Exception as _le:
-        print(f"[Letter] Investor letter skipped: {_le}")
-
-    # ── Post-rebalance post-mortem (fires ~21 days after each rebalance) ──────
-    try:
-        from ascent.strategy.ai_pm_learning import run_post_mortem, update_pattern_memory
-        _fb_for_pm = json.loads(Path("data_cache/ai_pm_perf_feedback.json").read_text()) \
-            if Path("data_cache/ai_pm_perf_feedback.json").exists() else {}
-        _mortem = run_post_mortem(today, _fb_for_pm)
-        if _mortem:
-            print(f"[Runner] AI PM post-mortem written for past rebalance")
-            update_pattern_memory(_mortem, today)
-            print(f"[Runner] AI PM pattern memory updated")
-    except Exception as _pm_e:
-        print(f"[Runner] Post-mortem skipped: {_pm_e}")
 
     print(f"[Runner] Done.\n")
 
@@ -2127,7 +1143,7 @@ def _run_daily_alert_checks(today, equity: float, last_equity: float) -> None:
         log.exception("[Alerts] send_system_alive_ping() failed")
 
 
-def _log_holdings(today, force_sealed: bool = False):
+def _log_holdings(today):
     log_path = Path("logs/holdings_log.jsonl")
     log_path.parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -2189,137 +1205,6 @@ def _log_holdings(today, force_sealed: bool = False):
         # no-arg call site before the orchestrator had even run.
         _run_daily_alert_checks(today, equity, last_equity)
 
-        # ── Counterfactual daily scoring ─────────────────────────────────────
-        _cf_record = None
-        try:
-            _as_w, _a_w, _d_w = cf_load_snapshots()
-            _cf_prices: dict = {}
-            if _as_w:
-                _cf_syms = list(set(_as_w) | set(_a_w or {}) | set(_d_w or {}))
-                try:
-                    import yfinance as _yf
-                    import pandas as pd
-                    _raw = _yf.download(_cf_syms, period="7d", auto_adjust=True, progress=False)
-                    if not _raw.empty and len(_raw) >= 2:
-                        _cls = _raw["Close"] if isinstance(_raw.columns, pd.MultiIndex) else _raw
-                        for _sym in _cf_syms:
-                            if _sym in _cls.columns:
-                                # Use the last two NON-NaN closes — yfinance returns a
-                                # trailing all-NaN row for today's unpublished bar, which
-                                # otherwise makes every track NaN/0.0 and freezes A★/D.
-                                _ser = _cls[_sym].dropna()
-                                if len(_ser) >= 2:
-                                    _cf_prices[_sym] = {
-                                        "prev": float(_ser.iloc[-2]),
-                                        "curr": float(_ser.iloc[-1]),
-                                    }
-                except Exception as _pfe:
-                    print(f"[Runner] Counterfactual price fetch failed: {_pfe}")
-                # Visible warning: empty prices → Track A★/D record None (skipped),
-                # not a fabricated 0.0. Silent freeze here is what produced the
-                # fictional -11.6pp 'AI PM cost'.
-                if _as_w and not _cf_prices:
-                    print(f"[Runner] WARNING: counterfactual priced 0/{len(_cf_syms)} "
-                          f"snapshot symbols — Track A★/D will record None for {today}")
-            _cf_record = cf_score_daily(
-                run_date=today,
-                quant_star_weights=_as_w or None,
-                quant_weights=_a_w or None,
-                ai_pm_weights=_d_w or None,
-                track_b_return=day_ret,
-                spy_return=spy_ret,
-                prices=_cf_prices,
-                force_sealed=force_sealed,
-            )
-            # Replay Alpaca's SETTLED 1D bars over the log so every prior day carries
-            # the real Track B return (the same-day value above is unreliable until the
-            # account is marked ~17:00 PT). Self-heals today's row on the next run.
-            try:
-                from ascent.execution.alpaca_broker import get_portfolio_history as _gph
-                _n_bf = cf_backfill_track_b(_gph())
-                if _n_bf:
-                    print(f"[Runner] Track B backfilled {_n_bf} day(s) from Alpaca settled bars")
-            except Exception as _bfe:
-                print(f"[Runner] Track B backfill skipped: {_bfe}")
-            # Heal any null Track A★/A/D rows from history — the analog of the Track B
-            # backfill above. A★/D were left None by the pre-Jun-19 freeze/NaN bugs and,
-            # unlike Track B, never self-healed → the AI-PM evaluation window was starved.
-            # Recompute from as-of snapshots + ~45d of historical closes (idempotent).
-            try:
-                from ascent.monitoring.ai_pm_counterfactual import (
-                    backfill_astar_d as _cf_backfill_asd,
-                    QUANT_STAR_LOG as _QSL, QUANT_LOG as _QL, AI_PM_LOG as _AIL,
-                )
-                _snap_syms = set()
-                for _sp in (_QSL, _QL, _AIL):
-                    if _sp.exists():
-                        for _ln in _sp.read_text().splitlines():
-                            try: _snap_syms |= set(json.loads(_ln).get("weights", {}))
-                            except Exception: pass
-                if _snap_syms:
-                    import yfinance as _yf2, pandas as _pd2
-                    _hraw = _yf2.download(sorted(_snap_syms), period="45d",
-                                          auto_adjust=True, progress=False)
-                    if not _hraw.empty:
-                        _hcls = _hraw["Close"] if isinstance(_hraw.columns, _pd2.MultiIndex) else _hraw
-                        _hcloses = {}
-                        for _s in _snap_syms:
-                            if _s in _hcls.columns:
-                                _hser = _hcls[_s].dropna()
-                                _hcloses[_s] = {_d.strftime("%Y-%m-%d"): float(_v) for _d, _v in _hser.items()}
-                        _n_asd = _cf_backfill_asd(_hcloses)
-                        if _n_asd:
-                            print(f"[Runner] Track A★/A/D backfilled {_n_asd} cell(s) from history")
-            except Exception as _asde:
-                print(f"[Runner] Track A★/A/D backfill skipped: {_asde}")
-            cf_print_report()
-        except Exception as _cfe:
-            print(f"[Runner] Counterfactual scoring skipped: {_cfe}")
-
-        # ── Daily learning brief ─────────────────────────────────────────────
-        try:
-            _fb = compute_ai_feedback()
-            _auth_state = get_authority_state()
-            # Update authority with today's Track D vs Track A★ returns
-            _d_ret_today  = _cf_record.get("track_d_return")      if _cf_record else None
-            _as_ret_today = _cf_record.get("track_astar_return")   if _cf_record else None
-            if _d_ret_today is not None and _as_ret_today is not None:
-                update_authority(
-                    track_d_return=_d_ret_today,
-                    track_astar_return=_as_ret_today,
-                    n_decisions_evaluated=_fb.get("n_decisions_evaluated", 0),
-                    hit_rate=_fb.get("hit_rate_21d"),
-                    profit_factor=_fb.get("profit_factor"),
-                    fade_rate=_fb.get("fade_rate"),
-                )
-            else:
-                print("[Runner] Authority update skipped — no Track D snapshot yet")
-        except Exception as _fbe:
-            print(f"[Runner] Feedback/authority update skipped: {_fbe}")
-
-        # Reconcile the authority buffer to the counterfactual log — the single
-        # source of truth for the Track D / A★ rolling window. This runs in its OWN
-        # try, INDEPENDENT of the feedback block above: rebuild only reads the
-        # counterfactual log, so a failure in compute_ai_feedback() or
-        # get_authority_state() must NOT prevent the buffers from being populated.
-        # (Bug fixed 2026-06-23: it was nested inside the feedback try, so the
-        # buffers went empty whenever feedback threw — freezing the earned-authority
-        # ladder at Level 1 with empty Track D/A★ buffers despite a healthy log.)
-        try:
-            _n_rb = rebuild_buffers_from_counterfactual()
-            print(f"[Runner] Authority buffer reconciled to counterfactual log ({_n_rb} obs)")
-        except Exception as _rbe:
-            print(f"[Runner] Authority buffer reconcile skipped: {_rbe}")
-
-        # Score any ticker memory entries now old enough (10d+)
-        try:
-            from memory.ticker_memory import score_outcomes as _score_ticker
-            _n_scored = _score_ticker(today)
-            if _n_scored:
-                print(f"[Runner] Ticker memory: scored {_n_scored} outcome(s)")
-        except Exception as _ste:
-            print(f"[Runner] Ticker memory scoring skipped: {_ste}")
-
     except Exception as e:
         print(f"[Runner] Holdings log skipped ({e})")
 
@@ -2377,123 +1262,6 @@ def _is_near_scheduled_rebalance(today, window: int = 3, cal_path=None) -> bool:
         return trading_days <= window
     except Exception:
         return False
-
-
-#: Ceiling on any single position after a judge intervention.
-_JUDGE_MAX_WEIGHT = 0.10
-#: Interventions below this are not worth their transaction cost.
-_JUDGE_MIN_WEIGHT = 0.01
-
-
-def _apply_position_change_to_weights(weights: dict, change) -> tuple:
-    """Apply the judge's single position change to a weight book.
-
-    Pure: returns `(new_weights, applied)` and never mutates the input. The
-    authority clamp has already been applied in debate/judge.py, which bounds
-    `new_weight` to the earned per-intervention limit.
-
-    Returns applied=False (and the book unchanged) when the symbol is not held,
-    the target is below the 1% floor, or the change is malformed.
-    """
-    if not isinstance(change, dict) or not isinstance(weights, dict):
-        return dict(weights or {}), False
-
-    sym = change.get("symbol") or ""
-    if not isinstance(sym, str) or sym not in weights:
-        return dict(weights), False
-    try:
-        new_w = float(change.get("new_weight", 0))
-    except (TypeError, ValueError):
-        return dict(weights), False
-    if new_w < _JUDGE_MIN_WEIGHT:
-        return dict(weights), False
-
-    out = dict(weights)
-    others = {s: w for s, w in out.items() if s != sym}
-    other_total = sum(others.values())
-
-    # Solve directly instead of adjust-then-renormalize. The original code capped
-    # the position at _JUDGE_MAX_WEIGHT and *then* renormalized, so the cap was
-    # not a cap: a request for 40% on a 5% position landed at 14.3%. Setting the
-    # target first and scaling the rest into the remaining (1 - target) gives an
-    # exact sum of 1.0, keeps the others' relative sizing, and makes the cap real.
-    target = min(max(new_w, 0.0), _JUDGE_MAX_WEIGHT)
-
-    if other_total <= 0:
-        out = {s: (1.0 if s == sym else 0.0) for s in out}
-        return out, True
-
-    scale = (1.0 - target) / other_total
-    out = {s: (target if s == sym else max(0.0, w * scale)) for s, w in out.items()}
-    return out, True
-
-
-def _record_advisory_judge_proposal(merged_weights: dict, verdict: dict, today,
-                                    portfolio_state=None, tag: str = "AdvInt") -> None:
-    """RECORD the judge's one proposed position change without applying it.
-
-    The judge's live write path (`apply_judge_position_change`) was removed —
-    `debate_judge_intervention` scored CUT in the proof audit. But
-    `record_intervention()` and `add_judge_falsifier()` lived *inside* that
-    function, so removing its two call sites also silently stopped
-    `debate/adversarial_authority.py`'s ladder from accumulating anything. The
-    design spec explicitly promised the measurement trail would keep running
-    "reporting-only"; this is that trail, re-hoisted.
-
-    Nothing here writes weights, orders, or execution/merged_weights.json. The
-    recorded row carries `applied=False`: it is a proposal that was MADE, with
-    a falsifiable 10-day prediction. Outcome scoring
-    (`score_pending_interventions`) only needs (date, symbol) and prices, so a
-    never-applied proposal scores exactly like an applied one — which is the
-    whole point: it is the evidence a future reinstatement would be judged on.
-
-    Applicability is checked with the same pure helper the removed write path
-    used, on a discarded copy. A proposal for an unheld symbol (or below the
-    floor) was never recorded historically either; recording it now would put
-    rows in the ladder that the existing trail does not contain.
-    """
-    changes = (verdict or {}).get("position_changes") or []
-    if not changes:
-        return
-
-    change = changes[0]  # at most one, exactly as the removed write path did
-    sym    = change.get("symbol", "")
-    itype  = change.get("intervention_type", "adversarial_thesis")
-    old_w  = float(merged_weights.get(sym, 0) or 0)
-
-    _discarded, applicable = _apply_position_change_to_weights(merged_weights, change)
-    if not applicable:
-        print(f"[{tag}] Judge proposal for {sym or '(none)'} not recorded "
-              f"(not in weights or below {_JUDGE_MIN_WEIGHT:.0%} floor)")
-        return
-
-    new_w = float(change.get("new_weight", 0))
-    print(f"[{tag}] Judge proposed a position change (ADVISORY — NOT applied): "
-          f"{sym} {old_w:.1%} → {new_w:.1%} [{itype}]")
-    print(f"[{tag}]   Reason: {change.get('reason', '')[:100]}")
-    print(f"[{tag}]   10d prediction: {change.get('prediction', '')[:100]}")
-
-    try:
-        from debate.adversarial_authority import record_intervention
-        record_intervention(
-            date_str=today.isoformat(),
-            symbol=sym,
-            intervention_type=itype,
-            from_weight=old_w,
-            to_weight=new_w,
-            prediction=change.get("prediction", ""),
-            regime=(portfolio_state or {}).get("us_regime", "unknown"),
-            applied=False,
-        )
-        print(f"[{tag}] Proposal logged for 10-day outcome tracking (not applied)")
-    except Exception as _ai_e:
-        print(f"[{tag}] Authority log failed: {_ai_e}")
-
-    try:
-        from ascent.strategy.falsifier_registry import add_judge_falsifier
-        add_judge_falsifier(sym, change.get("prediction", ""), today)
-    except Exception as _jf_e:
-        print(f"[Falsifier] Judge falsifier registration failed: {_jf_e}")
 
 
 def already_ran_for_session(session_date, log_path=None) -> bool:
@@ -2746,126 +1514,6 @@ def _apply_stop_loss_to_book(target_weights: dict, today: str) -> tuple:
         return target_weights, []
 
 
-def _apply_falsifier_trim(fired: list, current_weights: dict, today, dry_run: bool = False) -> None:
-    """
-    ADVISORY ONLY — computes and records ONE bounded trim for the
-    highest-priority fired falsifier (reduce the position 25%, floor 4%) but
-    does NOT submit it. Nothing here touches live capital.
-
-    History: this used to call
-    `run_eod_with_weights(new_weights, run_date=today, dry_run=False, force=True)`
-    — a real order-submitting write path built entirely on AI PM output
-    (Phase 1 `what_would_change_my_mind`, Phase 2 `pre_mortem`). `falsifier_trim`
-    was never one of the 23 components the proof audit measured
-    (`ascent/analyst/proof_audit/components.py`), so it has no evidence of
-    value-add at all — not even a CUT. This rebuild's policy is that unmeasured
-    or unproven live-write mechanisms go advisory-only until they are actually
-    proven, which is the same treatment the debate judge's position change and
-    the AI PM's earned-authority blend received. Applied here for consistency.
-
-    What survives: detection, the full log of the trim that WOULD have been
-    made, and `record_intervention(..., applied=False)` so the 10-day scoring
-    trail keeps accumulating the evidence a future reinstatement would need.
-
-    `dry_run` is retained for call-site compatibility and is now moot — no path
-    through this function submits an order.
-
-    Gate: skipped while the 'falsifier_trim' intervention type is suspended
-    (win rate < 40% after 30 scored). One record per falsifier entry.
-
-    NOTE: the shared 5-trading-day mini-rebalance cooldown is no longer read or
-    written here. It exists to space out *executions*; this path no longer
-    executes anything, and writing it would let an advisory event suppress the
-    live discovery mini-rebalance.
-    """
-    try:
-
-        from debate.adversarial_authority import get_authority, record_intervention
-        auth = get_authority("falsifier_trim")
-        if auth.get("suspended"):
-            print("[Falsifier] falsifier_trim authority SUSPENDED — alert only, no record")
-            return
-
-        # Base = live book when available, else today's merged weights
-        book = _live_book_or(current_weights)
-        if not book:
-            print("[Falsifier] No book available — no trim")
-            return
-
-        # Priority: hard evidence (price/relative_price/macro) before news
-        ordered = sorted(fired, key=lambda f: f.get("kind") == "news")
-        target = None
-        for f in ordered:
-            sym = f.get("symbol", "")
-            if sym in ("", "__PORTFOLIO__"):
-                print(f"[Falsifier] Portfolio-level falsifier fired ({f.get('source')}): "
-                      f"{f.get('raw_text', '')[:120]} — alert only")
-                continue
-            if f.get("trimmed"):
-                continue
-            w = book.get(sym, 0.0)
-            if w < 0.045:  # already at/near floor or not held
-                continue
-            target = (f, sym, w)
-            break
-        if target is None:
-            print("[Falsifier] No trimmable position among fired falsifiers")
-            return
-
-        f, sym, w = target
-        new_w = max(0.04, round(w * 0.75, 6))
-        if w - new_w < 0.005:
-            print(f"[Falsifier] {sym} trim too small ({w:.1%}→{new_w:.1%}) — skipped")
-            return
-
-        print(f"\n[Falsifier] WOULD TRIM (ADVISORY — not submitted): "
-              f"{sym} {w:.1%} → {new_w:.1%} "
-              f"[source={f.get('source')}, kind={f.get('kind')}]")
-        print(f"[Falsifier] Condition: {f.get('raw_text', '')[:150]}")
-        if f.get("fired_value") is not None:
-            print(f"[Falsifier] Fired value: {f['fired_value']}")
-
-        try:
-            record_intervention(
-                date_str=today.isoformat(),
-                symbol=sym,
-                intervention_type="falsifier_trim",
-                from_weight=w,
-                to_weight=new_w,
-                prediction=f"falsifier fired: {f.get('raw_text', '')[:200]}",
-                regime=_get_current_regime(),
-                applied=False,
-            )
-        except Exception as _ri_e:
-            print(f"[Falsifier] Intervention log failed: {_ri_e}")
-
-        # Still marked: "trimmed" now means "already acted on (advisorily)".
-        # Without it the same falsifier would be re-recorded every day it stays
-        # fired, inflating the ladder with duplicates of one event.
-        try:
-            from ascent.strategy.falsifier_registry import mark_trimmed
-            mark_trimmed(f.get("id", ""))
-        except Exception:
-            pass
-
-        with Path("logs/eod_log.jsonl").open("a") as _elog:
-            _elog.write(json.dumps({
-                "date": today.isoformat(),
-                "trigger": "falsifier_trim_advisory",
-                "applied": False,
-                "symbol": sym,
-                "from_weight": round(w, 6),
-                "to_weight": new_w,
-                "source": f.get("source"),
-                "raw_text": f.get("raw_text", "")[:200],
-            }) + "\n")
-        print(f"[Falsifier] Advisory trim recorded — {sym} scored in 10 trading "
-              f"days; the live book is unchanged")
-
-    except Exception as exc:
-        print(f"[Falsifier] Advisory trim failed: {exc}")
-
-
 def _trigger_mini_rebalance(
     result,
     current_weights: dict,
@@ -2920,51 +1568,6 @@ def _trigger_mini_rebalance(
               f"{new_weights.get(result.symbol, 0.0) * 100:.1f}% — "
               f"{len(new_weights)} positions (was {len(base_book)})")
 
-        # Regime label for the debate context (no agent re-run); read from the
-        # us_equities output already computed this cycle if available.
-        _regime = "unknown"
-        if prior_agent_outputs:
-            for _ao in prior_agent_outputs:
-                if getattr(_ao, "agent_id", "") == "us_equities":
-                    _regime = str(getattr(_ao, "regime_signal", None) or "unknown")
-                    break
-
-        verdict = {}
-        try:
-            from debate.debate_runner import run_debate
-            from ascent.execution.debate_gate import should_run_debate
-            portfolio_state = {
-                "date":        today.isoformat(),
-                "us_regime":   _regime,
-                "n_positions": len(new_weights),
-                "weights":     new_weights,
-                "trigger":     "discovery",
-            }
-            regime_dict = {"entropy": 0.0, "label": portfolio_state["us_regime"]}
-            if should_run_debate(portfolio_state, regime_dict):
-                verdict = run_debate(portfolio_state, run_date=today) or {}
-        except Exception as _de:
-            print(f"[Discovery] Debate skipped: {_de}")
-
-        if verdict.get("recommendation") == "halt_and_review":
-            print("[Discovery] Debate: halt_and_review — mini-rebalance aborted")
-            return
-
-        # ── Judge position-change write path removed ──────────────────────────
-        # debate_judge_intervention scored CUT (p=0.75, n=47) in the proof audit.
-        # This path used to additionally apply changes[0] via the shared
-        # apply_judge_position_change helper after the candidate insert; that
-        # call is gone. The verdict (including position_changes) is still
-        # fully written to outputs/debate_log/verdict_<date>.json by
-        # run_debate() above, so nothing here loses visibility -- it just no
-        # longer mutates new_weights. The proposal is still RECORDED
-        # (applied=False) against the post-insert book the judge actually saw,
-        # so the authority ladder keeps accumulating on this path too.
-        _record_advisory_judge_proposal(
-            new_weights, verdict, today,
-            portfolio_state=portfolio_state, tag="Discovery",
-        )
-
         # ── Safety assertion (fail-safe, not fail-open) ──────────────────────
         # An add-only discovery insert must never produce a complete exit from
         # the base book, and must never introduce more than one new symbol
@@ -3000,7 +1603,6 @@ def _trigger_mini_rebalance(
                 new_weights,
                 run_date=today,
                 dry_run=False,
-                precomputed_verdict=verdict,
                 force=True,  # mini-rebalance is intra-period by definition
             )
 

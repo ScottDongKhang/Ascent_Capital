@@ -4,7 +4,6 @@ from __future__ import annotations
 import pandas as pd
 from scipy.stats import spearmanr
 
-from ascent.analyst.proof_audit.agent_signals import AGENT_SIGNAL_FUNCS
 from ascent.analyst.proof_audit.forward_returns import eligible_dates, forward_return_matrix
 from ascent.analyst.proof_audit.sleeve_signals import SLEEVE_SIGNAL_FUNCS
 from ascent.analyst.proof_audit.stats import ICResult, score_ic_series
@@ -101,8 +100,3 @@ def score_sleeve(
     return score_signal_matrix(signal, prices, dates=dates)
 
 
-def score_agent(name: str, prices: pd.DataFrame, dates: list | None = None) -> ICResult:
-    if name not in AGENT_SIGNAL_FUNCS:
-        raise KeyError(f"unknown agent {name!r}; known: {sorted(AGENT_SIGNAL_FUNCS)}")
-    signal = AGENT_SIGNAL_FUNCS[name](prices)
-    return score_signal_matrix(signal, prices, dates=dates)

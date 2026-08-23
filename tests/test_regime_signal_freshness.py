@@ -166,8 +166,6 @@ class TestWiredIntoReportingCallSites:
             return f.read()
 
     @pytest.mark.parametrize("rel", [
-        "ascent/reporting/investor_report.py",
-        "ascent/reporting/investor_letter.py",
         "ascent/monitoring/weekly_debrief.py",
         "ascent/monitoring/scenario_planner.py",
     ])

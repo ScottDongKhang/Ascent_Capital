@@ -844,8 +844,11 @@ def _counterfactual_chart_html(cfdata: list) -> str:
     # the latter is what produced the fictional "AI PM cost -11.6pp" (A★ data
     # ends 2026-06-04, Track B data only really starts in June, so the full-
     # window difference compares non-overlapping periods).
-    from ascent.monitoring.ai_pm_counterfactual import get_cumulative_returns
-    _cum = get_cumulative_returns() or {}
+    # ai_pm_counterfactual.py was removed 2026-08-23 (AI PM / debate noise-layer
+    # cut) along with the code that wrote fresh rows to counterfactual_daily.jsonl.
+    # The common-window comparison it computed is no longer available; report n/a
+    # rather than resurrecting the module for a frozen, non-updating log.
+    _cum = {}
     sq          = _cum.get("ai_signal_d_vs_astar")
     impact      = _cum.get("ai_value_add_b_vs_astar")
     n_sq        = _cum.get("n_common_d_astar", 0)

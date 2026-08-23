@@ -174,7 +174,6 @@ def test_mini_rebalance_inserts_onto_live_book_not_recomputed_target(tmp_path, m
     # Live book actually held at the broker.
     live_positions = pd.DataFrame({"symbol": ["AAA", "BBB"], "weight": [0.6, 0.4]})
     mocker.patch("ascent.execution.alpaca_broker.get_positions", return_value=live_positions)
-    mocker.patch("ascent.execution.debate_gate.should_run_debate", return_value=False)
     mock_eod = mocker.patch("ascent.execution.eod_runner.run_eod_with_weights")
 
     # Freshly recomputed orchestrator target for today -- deliberately diverges
@@ -200,7 +199,6 @@ def test_mini_rebalance_order_set_has_zero_full_exits(tmp_path, monkeypatch, moc
         "weight": [0.5, 0.3, 0.2],
     })
     mocker.patch("ascent.execution.alpaca_broker.get_positions", return_value=live_positions)
-    mocker.patch("ascent.execution.debate_gate.should_run_debate", return_value=False)
     mock_eod = mocker.patch("ascent.execution.eod_runner.run_eod_with_weights")
 
     ra._trigger_mini_rebalance(_FakeResult("NEW"), {"unused": 1.0}, ra.date(2026, 6, 30))
@@ -215,7 +213,6 @@ def test_mini_rebalance_falls_back_to_current_weights_when_broker_empty(tmp_path
     _isolate_fs(tmp_path, monkeypatch)
 
     mocker.patch("ascent.execution.alpaca_broker.get_positions", return_value=pd.DataFrame())
-    mocker.patch("ascent.execution.debate_gate.should_run_debate", return_value=False)
     mock_eod = mocker.patch("ascent.execution.eod_runner.run_eod_with_weights")
 
     current_weights = {"AAA": 0.5, "BBB": 0.5}
@@ -233,7 +230,6 @@ def test_mini_rebalance_safety_assertion_aborts_on_full_exit(tmp_path, monkeypat
 
     live_positions = pd.DataFrame({"symbol": ["AAA", "BBB"], "weight": [0.6, 0.4]})
     mocker.patch("ascent.execution.alpaca_broker.get_positions", return_value=live_positions)
-    mocker.patch("ascent.execution.debate_gate.should_run_debate", return_value=False)
     mock_eod = mocker.patch("ascent.execution.eod_runner.run_eod_with_weights")
 
     # Force a pathological insertion result that drops BBB entirely -- this is

@@ -45,10 +45,10 @@ COMPONENTS: list[Component] = [
     Component("llm_fundamental", "alpha_sleeve", "deferred"),
     Component("narrative", "alpha_sleeve", "deferred"),
     # -- Specialist agents --
+    # macro_agent / international_agent / alternatives_agent removed 2026-08-23
+    # (noise-layer cut): they were dormant, never invoked by run_all_agents.py,
+    # and their score_agent path is gone with them.
     Component("us_equities_agent", "agent", "covered_by_sleeves"),
-    Component("macro_agent", "agent", "wf_ic"),
-    Component("international_agent", "agent", "wf_ic"),
-    Component("alternatives_agent", "agent", "wf_ic"),
     # -- Named subsystems: scored by counterfactual return delta (Task 6) --
     Component("regime_overlay", "subsystem", "counterfactual"),
     Component("hedge_overlay", "subsystem", "counterfactual"),

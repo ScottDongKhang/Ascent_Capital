@@ -155,7 +155,7 @@ def _source_files() -> List[Path]:
     """Real project sources. Excludes vendored/stale trees."""
     skip = (".venv", ".worktrees", "__pycache__", "graphify-out", ".git")
     files = []
-    for pkg in ("ascent", "agents", "orchestrator", "debate", "scripts"):
+    for pkg in ("ascent", "agents", "orchestrator", "scripts"):
         for p in (ROOT / pkg).rglob("*.py"):
             if not any(s in p.parts for s in skip):
                 files.append(p)
@@ -302,40 +302,28 @@ def check_kill_switches_off() -> Result:
     return True, "all four kill switches are False"
 
 
-def check_judge_change_is_authority_capped() -> Result:
-    """Integrity constraint 5: the one sanctioned debate write must be gated."""
-    txt = _read("debate/judge.py")
-    if "allowed_change_pct" not in txt:
-        return False, "debate/judge.py no longer reads allowed_change_pct"
-    return True, "judge.py gates position change on allowed_change_pct"
+_REMOVED_NOISE_LAYER_PATHS = (
+    "agents/ai_pm_agent.py",
+    "debate",
+    "ascent/strategy/earned_authority.py",
+    "ascent/strategy/falsifier_registry.py",
+    "ascent/monitoring/ai_pm_counterfactual.py",
+    "agents/macro_agent.py",
+    "agents/international_agent.py",
+    "agents/alternatives_agent.py",
+)
 
 
-def check_single_position_change() -> Result:
-    """Constraint 5: at most ONE judge position change is ever applied.
-
-    Asserts the invariant, not a literal spelling: the code must read
-    position_changes, take only its first element, and never iterate over it.
-    Pinning the exact expression made this check fail on a pure refactor.
-    """
-    # _no_comments, not _code_only: "position_changes" is a dict key, so it
-    # lives inside a string literal.
-    lines = _no_comments("run_all_agents.py")
-    src = "\n".join(lines)
-    if "position_changes" not in src:
-        return False, ("run_all_agents.py no longer reads position_changes at all — "
-                       "constraint 5 is stale or the judge write was removed")
-    # Whatever the list is bound to, only index 0 may be taken from it.
-    takes_first = re.search(r"(position_changes|changes)\s*\[\s*0\s*\]", src)
-    if not takes_first:
-        return False, ("run_all_agents.py reads position_changes but never takes "
-                       "[0] — constraint 5 (max one change) is unenforced")
-    # And it must not loop over them.
-    loops = [f"line {i}" for i, ln in enumerate(lines, 1)
-             if re.search(r"for\s+\w+\s+in\s+(position_)?changes\b", ln)]
-    if loops:
-        return False, (f"run_all_agents.py iterates position_changes at {', '.join(loops)} "
-                       f"— constraint 5 allows at most one")
-    return True, "at most one judge position change is applied (takes [0], no loop)"
+def check_noise_layer_removed() -> Result:
+    """Integrity constraint 5 (post-2026-08-23): the AI PM / debate / falsifier /
+    earned-authority / dormant-agent layer was removed outright, not merely gated
+    advisory-only. This asserts absence rather than a gating behavior that no
+    longer exists."""
+    present = [p for p in _REMOVED_NOISE_LAYER_PATHS if (ROOT / p).exists()]
+    if present:
+        return False, ("noise layer not fully removed, still present: "
+                       + ", ".join(present))
+    return True, "AI PM / debate / earned-authority / falsifier / dormant-agent layer is gone"
 
 
 def check_no_loguru() -> Result:
@@ -427,7 +415,6 @@ def check_market_time_used_for_vendor_epochs() -> Result:
     allowed = {
         "ascent/utils/market_time.py",
         "ascent/monitoring/pre_rebalance_checklist.py",  # file mtime, host-local is right
-        "agents/ai_pm_agent.py",                         # news timestamp, display only
         "ascent/reporting/catalyst_scanner.py",          # utcfromtimestamp, host-independent
         "scripts/verify_docs.py",
     }
@@ -516,7 +503,7 @@ def check_claude_md_has_no_numbers() -> Result:
 def check_claude_md_paths_exist() -> Result:
     """Every repo path CLAUDE.md names must exist, or it misdirects every session."""
     txt = _read("CLAUDE.md")
-    top = ("ascent", "agents", "debate", "orchestrator", "scripts", "tests",
+    top = ("ascent", "agents", "orchestrator", "scripts", "tests",
            "docs", "data_cache", "logs", "outputs", "dashboard")
     # Only rooted, repo-relative paths. A bare `main.py` is prose, not a
     # citation, and absolute paths point outside the repo.
@@ -563,7 +550,7 @@ def check_repo_map_pointers_resolve() -> Result:
         txt = _read("docs/REPO_MAP.md")
     except FileNotFoundError:
         return False, "docs/REPO_MAP.md is missing but CLAUDE.md points at it"
-    top = ("ascent", "agents", "debate", "orchestrator", "scripts", "tests",
+    top = ("ascent", "agents", "orchestrator", "scripts", "tests",
            "docs", "data_cache", "logs", "outputs", "dashboard")
     missing = []
     for m in re.finditer(r"`([A-Za-z0-9_./*<>-]+)`", txt):
@@ -688,8 +675,7 @@ CHECKS: List[Tuple[str, str, Callable[[], Result]]] = [
     ("water_fill_cap", "integrity constraint 3", check_water_fill_cap_exists),
     ("point_in_time", "CLAUDE.md: always use as_of_join/as_of_merge", check_point_in_time_helpers),
     ("kill_switches_off", "CLAUDE.md kill switches", check_kill_switches_off),
-    ("judge_authority_cap", "integrity constraint 5", check_judge_change_is_authority_capped),
-    ("single_position_change", "integrity constraint 5", check_single_position_change),
+    ("noise_layer_removed", "integrity constraint 5", check_noise_layer_removed),
     ("no_loguru", "CLAUDE.md: loguru not installed", check_no_loguru),
     ("main_10_tuple", "CLAUDE.md: main.py returns a 10-tuple", check_main_returns_10_tuple),
     ("regime_engine_dict", "CLAUDE.md: RegimeEngine takes a dict", check_regime_engine_takes_dict),

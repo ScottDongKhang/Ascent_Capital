@@ -57,46 +57,12 @@ def test_quant_context_summary_text_has_var():
     assert "VaR" in ctx["summary_text"]
 
 
-def test_build_context_includes_quant_data():
-    from debate.agents import _build_context
-    state = {
-        "date": "2026-04-17", "us_regime": "stressed", "macro_regime": "stressed",
-        "n_positions": 5, "allocation": {"us_equities": 0.45},
-        "weights": {"AAPL": 0.15, "EEM": 0.12},
-        "quant_context": {
-            "portfolio_var_95": -0.0182, "portfolio_var_99": -0.0271,
-            "factor_exposures": {"us_tech": 0.15, "em_equity": 0.12},
-            "top_correlated_pairs": [],
-            "summary_text": "QUANTITATIVE RISK CONTEXT (pre-computed):\n\nPortfolio VaR: -1.82%",
-        },
-    }
-    context = _build_context(state)
-    assert "QUANTITATIVE" in context or "VaR" in context
-
-
-def test_build_context_no_quant_still_works():
-    from debate.agents import _build_context
-    state = {
-        "date": "2026-04-17", "us_regime": "calm_bull",
-        "n_positions": 3, "allocation": {}, "weights": {"AAPL": 0.50, "MSFT": 0.50},
-    }
-    context = _build_context(state)
-    assert "AAPL" in context or len(context) > 0
-
-
 def test_extended_thinking_completion_signature():
     from ascent.llm.client import extended_thinking_completion
     import inspect
     sig = inspect.signature(extended_thinking_completion)
     assert "messages" in sig.parameters
     assert "thinking_budget" in sig.parameters
-
-
-def test_judge_uses_extended_thinking():
-    import inspect
-    import debate.judge as judge_module
-    src = inspect.getsource(judge_module)
-    assert "extended_thinking" in src
 
 
 def test_chat_completion_accepts_use_cache():

@@ -175,30 +175,6 @@ def test_risk_disclosure_contains_required_language():
 
 # ── Task 6: Methodology index ─────────────────────────────────────────────────
 
-def test_methodology_index_has_all_sleeves():
-    """build_methodology_index includes all active sleeve names."""
-    from compliance.methodology_index import build_methodology_index
-
-    idx = build_methodology_index()
-    sleeve_names = {s["name"] for s in idx["alpha_sleeves"]}
-    required = {"trend", "statarb", "ml", "mean_reversion", "fundamental", "earnings", "llm_fundamental"}
-    assert required.issubset(sleeve_names)
-
-
-def test_methodology_index_exported_to_dashboard(tmp_path):
-    """export_methodology_index creates dashboard/methodology_index.json."""
-    from compliance import methodology_index as mi
-
-    export_path = tmp_path / "methodology_index.json"
-    with patch.object(mi, "EXPORT_PATH", export_path):
-        mi.export_methodology_index()
-
-    assert export_path.exists()
-    data = json.loads(export_path.read_text())
-    assert "alpha_sleeves" in data
-    assert "data_sources"  in data
-
-
 # ── Task 2: Audit integrity script ────────────────────────────────────────────
 
 def test_audit_integrity_script_runs_clean(tmp_path):

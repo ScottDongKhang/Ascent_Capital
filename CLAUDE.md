@@ -4,15 +4,17 @@
 
 Modular Python quant research and trading platform. Data → features → alpha (2 sleeves) →
 portfolio → walk-forward → regime → **one** capital-allocating agent (`us_equities`) →
-orchestration → Alpaca paper trading. The AI PM, the debate layer, and the falsifier registry
-all still run, but **advisory only**: they produce theses, verdicts, and proposals that are
-logged and scored, and none of them writes to live weights (see integrity constraint #5). The
-other three specialist agents (`macro`, `international`, `alternatives`) are not invoked
-directly by `run_all_agents.py`, and the AI PM's `run_quant_agent` tool
-(`agents/ai_pm_agent.py`) only requires calling `us_equities` ("Required: run_quant_agent for
-us_equities — it is the only agent whose output feeds live"), with the other three optional /
-context-only — so on a scheduled rebalance day, Phase 2 of the AI PM is not guaranteed to
-execute the three "dormant" agents' full pipelines via that tool.
+orchestration → Alpaca paper trading.
+
+**2026-08-23: the AI PM, debate layer, falsifier registry, earned-authority ladder, causal
+module, and the three dormant specialist agents (`macro`, `international`, `alternatives`)
+were removed outright**, not merely gated advisory-only. They had run advisory-only since
+2026-08-14 and the measured counterfactual was negative-or-insignificant on every axis (see
+`docs/session_log_archive.md` and the archived `CURRENT_VERIFIED_NUMBERS.md` section 3 for the
+numbers this decision was based on) — carrying the complexity forward bought nothing. The goal
+changed at the same time: this system no longer targets beating SPY. It targets steady,
+low-volatility monthly returns with capital preservation as the first priority. See integrity
+constraint #5 for exactly what was removed and why "removed" replaces "advisory."
 
 **Daily command**: `.venv/bin/python run_all_agents.py` (branches on rebalance day)
 
@@ -53,10 +55,13 @@ Python 3.12.13, venv at `.venv/`. Always use `.venv/bin/python`. API keys via
 
 Import constants from here — never redefine locally:
 ```python
-DEFAULT_MODEL = "claude-opus-5"             # AI PM synthesis (Phase 2)
-SONNET_MODEL  = "claude-sonnet-5"           # debate agents, red team, pre-thesis (Phase 1)
+DEFAULT_MODEL = "claude-opus-5"             # reserved for future synthesis use
+SONNET_MODEL  = "claude-sonnet-5"           # reserved for future breadth use
 HAIKU_MODEL   = "claude-haiku-4-5-20251001" # classifiers, weight adjustment
 ```
+DEFAULT_MODEL/SONNET_MODEL have no live caller since the 2026-08-23 noise-layer removal (their
+callers were the AI PM and debate layer). Left defined for whatever uses this system takes on
+next; do not resurrect the old callers without a fresh design.
 
 **Claude 5 rules** (migrated from the 4.6 generation):
 - **Never index `resp.content[0].text` for a Claude 5 model** — thinking is ON by default, so
@@ -89,20 +94,19 @@ HAIKU_MODEL   = "claude-haiku-4-5-20251001" # classifiers, weight adjustment
 ```
 ascent/           core engine: config, data, features, alpha, portfolio, backtest,
                   research, regime, risk, reporting, execution, monitoring, llm,
-                  dashboard, strategy, causal, integrations, memory, utils
-agents/           us_equities_agent, macro_agent, international_agent,
-                  alternatives_agent, ai_pm_agent, red_team_agent, event_agent
+                  dashboard, strategy, integrations, utils
+agents/           us_equities_agent, red_team_agent, event_agent
 orchestrator/     central_intelligence.py
-debate/           debate_runner, agents, judge, adversarial_authority,
-                  adversarial_engine, adversarial_monitor, agent_tools,
-                  disagreement_scorer, outcome_tracker
 run_all_agents.py daily entrypoint
 ascent/main.py    pipeline entrypoint (called by each agent)
-data_cache/       parquet caches, earned_authority.json, active_alpha_config.json,
-                  ai_prethesis_latest.json, ai_regime_assessment.json
-logs/             eod_log.jsonl, multi_agent_run.jsonl, ai_pm_calibration.jsonl
-outputs/debate_log/  verdict_<date>.json, debrief_<date>.json
+data_cache/       parquet caches, active_alpha_config.json
+logs/             eod_log.jsonl, multi_agent_run.jsonl
 ```
+
+The debate package, the causal DAG module, the AI PM agent, the three dormant specialist
+agents, `ascent/memory/`'s decision-memory tracker, the earned-authority ladder, the falsifier
+registry, and their satellite modules no longer exist — removed 2026-08-23. See integrity
+constraint #5 for the full list.
 
 See `docs/REPO_MAP.md` for what to grep for and which files are worth reading whole.
 
@@ -118,26 +122,33 @@ See `docs/REPO_MAP.md` for what to grep for and which files are worth reading wh
    post-condition check.
 4. **Sector constraint**: under 80% coverage → skip caps and warn. Never collapse to a single
    name.
-5. **The three judgment layers are advisory only — none of them writes to live weights.**
-   Named precisely, because "no exceptions" hides what is being excepted:
-   - **The debate judge's position change** (`apply_judge_position_change`). Both call sites
-     removed 2026-08-14; `debate_judge_intervention` scored CUT (p=0.75) in the proof audit.
-   - **The AI PM's earned-authority blend** (`ascent/strategy/earned_authority.py`
-     `authority_blend`/`blend`). Blend call site removed 2026-08-14; `earned_authority` scored
-     CUT (p=0.35, track_d vs track_astar).
-   - **The falsifier trim** (`_apply_falsifier_trim`). Its `run_eod_with_weights(...,
-     dry_run=False, force=True)` — a real order — was removed 2026-08-14. Not because it was
-     measured negative but because it was **never measured at all**: it is not one of the 23
-     components in `ascent/analyst/proof_audit/components.py`, and it was built entirely on
-     unmeasured AI PM output.
-
-   The rule behind all three: **an unproven or unmeasured live-write mechanism goes
-   advisory-only until it is actually proven.** All three keep running, keep producing
-   verdicts / theses / fired falsifiers, and keep recording their proposals
-   (`record_intervention(..., applied=False)`) so the counterfactual evidence for ever
-   reinstating them keeps accumulating. Nothing under `debate/` has ever written to alpha,
-   portfolio, or execution, and now nothing in `run_all_agents.py` does so on their behalf
-   either. Do not reinstate any of the three without an artifact-backed positive result.
+5. **The AI PM / debate / falsifier / earned-authority / dormant-agent layer has been removed
+   outright — not gated, not advisory, gone.** History, for judgment calls later:
+   - Gated advisory-only since 2026-08-14 (debate judge's position change, the earned-authority
+     blend, and the falsifier trim's `run_eod_with_weights(..., dry_run=False, force=True)`
+     call all had their live-write call sites removed that day).
+   - Measured through 2026-08-23: `debate_judge_intervention` and `earned_authority` both
+     scored CUT in the proof audit; actual-book-vs-pure-quant and pure-AI-PM-vs-pure-quant were
+     both negative and not statistically significant (see `CURRENT_VERIFIED_NUMBERS.md`
+     section 3, retained as history); the falsifier trim was never measured at all (not one of
+     the 23 proof-audit components, built entirely on unmeasured AI PM output). No axis showed
+     positive, proven value.
+   - **Removed 2026-08-23**, along with everything that only existed to feed, score, or log
+     it: the AI PM agent module, the entire debate package (runner, judge, adversarial
+     engine/authority/monitor, agent tools, disagreement scorer, outcome tracker), the
+     earned-authority ladder, the falsifier registry, the AI PM counterfactual/learning/
+     guardrails/perf-feedback modules, the conviction gate, the investor-letter and
+     investor-report generators, the three dormant specialist agents (macro/international/
+     alternatives — never invoked by `run_all_agents.py` even before this), the causal DAG
+     module, and about a dozen smaller satellite modules (ticker discovery, calibration
+     tracking, conviction/alpha-wedge tracking, decision/ticker memory, the stocktwits/exa
+     news integrations). See `docs/session_log_archive.md`'s 2026-08-23 entry for the full
+     file list. `run_all_agents.py` and `ascent/execution/eod_runner.py` were rewritten to
+     drop every call site into this layer.
+   - `scripts/verify_docs.py::check_noise_layer_removed` asserts these paths stay gone. If you
+     are tempted to bring any of them back, that check is the thing to update, and it should
+     only change alongside an artifact-backed positive result — the standard this layer never
+     met is exactly why it is gone rather than merely re-gated.
 6. **Alpha sleeve set**: the active sleeves are `meanrev` and `statarb` (2 sleeves). Update
    `DEFAULT_ALPHA_WEIGHTS` in BOTH `ascent/alpha/stack.py` AND `ascent/research/self_improve.py`
    if changing the set. The guard enforces that their key sets match.
@@ -156,16 +167,6 @@ See `docs/REPO_MAP.md` for what to grep for and which files are worth reading wh
   for much of the day. Use `ascent/utils/market_time.py`.
 - **ML sleeve cache** must store `feature_names` — XGBoost crashes on shape mismatch if the
   feature set changes between writes.
-- **AI PM is two-phase**: Phase 1 `run_ai_pm_prethesis()` uses `SONNET_MODEL` (breadth),
-  Phase 2 `run_ai_pm(prethesis=...)` uses `DEFAULT_MODEL` (judgment). Never swap them.
-- **Pre-thesis runs AFTER the quant agents and the orchestrator merge**, despite some stale
-  in-code comments saying otherwise. It writes `data_cache/ai_regime_assessment.json`, which
-  is therefore consumed by the *next* run, not the current one. Failure → `prethesis=None` →
-  graceful single-phase fallback.
-- **`propose_prethesis` vs `propose_portfolio`**: different tools, different result stores.
-  Phase 1 ends with the former, Phase 2 with the latter.
-- **`run_ai_pm(quant_outputs=...)`**: pass the `agent_outputs` list or AI PM re-runs all four
-  agents and wastes minutes.
 - **`ascent/main.py` `run_pipeline` returns a 10-tuple** (last element `_alpha_breakdown`) —
   `eod_runner.py` and `us_equities_agent.py` unpack it positionally.
 - **`_SPARSE_FILL_ZERO`** in the ML sleeve must include ALL sparse panels, or a NaN-drop
@@ -189,44 +190,14 @@ See `docs/REPO_MAP.md` for what to grep for and which files are worth reading wh
   run sees `equity == last_equity` and records a fake 0.0. Use
   `alpaca_broker.get_portfolio_history()` for settled returns.
 - **`loguru` is not installed** — use `import logging`; never `from loguru import logger`.
-- **MiroFish on rebalance days**: the LiteLLM proxy (port 4000 → Haiku) must be running.
-  OpenRouter leaves `max_tokens` unset → 402 if credits are low.
 - **Discovery mini-rebalance is add-only**: `_insert_candidate_weights`, not a full agent
   re-run. Suppressed near a scheduled rebalance via `_is_near_scheduled_rebalance`.
 - **`run_eod_with_weights()` silently no-ops on non-rebalance days** — pass `force=True` on
   discovery / mini-rebalance paths.
-- **The AI PM decision log only gets entries on scheduled rebalances.** Off-calendar discovery
-  days run the daily-view path, not Phase 2 — a missing entry is expected, not a bug.
-- **`reduce_size` cannot reliably reduce size.** When the Haiku adjustment trims too few
-  positions, the fallback force-trims the largest positions and renormalizes to 1.0. Be aware
-  this may trim positions that align with the judge's advisory suggestions. Diagnose
-  transmission before concluding the AI PM's judgment was bad.
-- **Wide-format caches carry their date in a `date` COLUMN, and every consumer restores the
-  index itself.** `prices_macro` / `prices_international` / `prices_alternatives` are wide
-  (one column per symbol, no id column). `save_parquet` now converts a `DatetimeIndex` input
-  into a `date` column up front — reusing the existing `id_cols` / calendar-day-dedup
-  machinery — because its `pd.concat(..., ignore_index=True)` and `to_parquet(index=False)`
-  otherwise dropped all date information on every save. `load_parquet` is deliberately
-  unchanged (it is generic, used by every cache) and returns that `date` column as-is on a
-  `RangeIndex`, so **each caller must do `df.set_index("date")` itself** — and `.sort_index()`
-  too if it slices positionally. Known call sites, all fixed:
-  `agents/macro_agent.py`, `agents/international_agent.py`, `agents/alternatives_agent.py`
-  (two per file: the fresh-cache read and the stale-cache fallback),
-  `ascent/analyst/proof_audit/run.py::_load_agent_price_matrix`, and
-  `ascent/risk/correlation_guard.py::_load_combined_prices` (sorts — its window is
-  `returns.iloc[-63:]`). Add the restore to any new consumer.
-  **Repaired:** the three caches have been deleted and re-fetched; each now loads with a
-  proper `date` column, ~1662 rows, spanning 2020-01-02 onward. Do not describe them as
-  dateless/corrupt going forward.
-
-  `macro_agent`'s proof-audit result is a **positive point estimate that is not proven**, not
-  a negative one — `outputs/analyst/proof_audit_2026-08-13.json` shows IC=+0.0204, two-sided
-  p=0.061, n=1644 (the CUT verdict is the two-sided-significance gate; one-sided p≈0.03 would
-  pass, but its universe is only 12 symbols so treat the significance test as low-powered
-  either way). `alternatives_agent` is **structurally unmeasurable by the current harness**,
-  not evidence of bad data or bad signal: its universe is 7 symbols and the harness requires
-  ≥10 for long-short leg construction, hence `INSUFFICIENT_DATA` — the underlying
-  `prices_alternatives` cache above is valid.
+- **`prices_macro` / `prices_international` / `prices_alternatives` are stale, historical-only
+  caches.** They were the three dormant specialist agents' own price data; nothing writes or
+  reads them since those agent modules were removed 2026-08-23. Leave them on disk (harmless)
+  but do not treat them as live.
 
 ---
 
@@ -277,10 +248,10 @@ After **any** run of `run_all_agents.py` that submits orders, write a four-part 
 unprompted. This is the primary interface to what the system decided; a status line is not
 sufficient.
 
-1. **Reasoning behind the decision.** Read the day's `outputs/debate_log/verdict_<date>.json`
-   (`verdict.reasoning`, `verdict.key_risks`) and the adversarial intervention. Explain why
-   *these* trades, which argument won which exchange. Note that the judge's verdict is advisory
-   only — it does not execute or veto positions. Quote the reasoning; don't paraphrase it away.
+1. **Reasoning behind the decision.** Explain why *these* trades — which alpha sleeve(s) drove
+   which positions, what the regime engine's posture was, what the optimizer's vol-target
+   overlay did to gross exposure. There is no debate verdict to quote anymore (removed
+   2026-08-23); the reasoning is now the quant pipeline's own signal chain, so trace it there.
 2. **Things to watch for.** Live catalysts (FOMC, earnings, ex-div), positions on thin ice,
    guards that nearly fired, data sources that were down, anything that changes the next read.
 3. **Performance since the last rebalance.** Portfolio vs SPY over the window, with
@@ -298,12 +269,11 @@ Ground every number in a real artifact and flag anything reconstructed.
 
 Live state is **not recorded here** — it goes stale faster than this file is edited. Read:
 
-- `CURRENT_VERIFIED_NUMBERS.md` — performance, risk, AI PM authority level, and what is
-  explicitly *not* verifiable. This file wins any disagreement.
+- `CURRENT_VERIFIED_NUMBERS.md` — performance, risk, and what is explicitly *not* verifiable.
+  This file wins any disagreement. Its SYSTEM 2 (AI-native layer) section describes a system
+  that no longer exists as of 2026-08-23 — read it as history, not current state.
 - `dashboard/regime_labels.csv` — the current regime label. Note that
-  `dashboard/regime_signal.json` and `data_cache/ai_regime_assessment.json` can lag it, and
-  `run_all_agents.py` reads its smart-model trigger from the JSON, so a stale label there
-  changes behaviour.
+  `dashboard/regime_signal.json` can lag it.
 - `rebalance_calendar.csv` — the next scheduled rebalance.
 - `logs/eod_log.jsonl` — what actually ran, including `catch_up` runs after an outage.
 

@@ -170,95 +170,6 @@ def test_validate_sector_data_skip_flag_logs_and_returns(tmp_path):
     assert entry["action"] == "sector_check_skipped"
 
 
-def test_debate_runner_writes_halt_state_on_halt_verdict(tmp_path):
-    """
-    run_debate() must write execution/halt_state.json when verdict is halt_and_review.
-    File must contain: halted=True, halt_date, reason, key_risks, verdict_path, requires_override.
-    """
-    import json
-    from debate import debate_runner
-    from datetime import date
-
-    halt_path = tmp_path / "halt_state.json"
-    verdict = {
-        "recommendation": "halt_and_review",
-        "confidence": 0.85,
-        "key_risks": ["Energy concentration at 38%", "Oil shock risk"],
-        "reasoning": "Too much energy exposure in volatile macro environment",
-    }
-    portfolio_state = {
-        "date": "2026-04-15",
-        "us_regime": "stressed",
-        "macro_regime": "unknown",
-        "n_positions": 12,
-        "allocation": {},
-        "weights": {"XLE": 0.20, "MPC": 0.18},
-    }
-
-    with patch.object(debate_runner, "HALT_STATE_PATH", halt_path), \
-         patch("debate.debate_runner.score_pending_verdicts", return_value=0), \
-         patch("debate.debate_runner.run_pending_debriefs", return_value=0), \
-         patch("debate.debate_runner.detect_blind_spots"), \
-         patch("debate.debate_runner.load_blind_spot_context", return_value=""), \
-         patch("debate.debate_runner.run_all_scenarios", return_value=[]), \
-         patch("debate.debate_runner.run_bull_agent", return_value="bull arg"), \
-         patch("debate.debate_runner.run_bear_agent", return_value="bear arg"), \
-         patch("debate.debate_runner.run_devils_advocate", return_value="devil arg"), \
-         patch("debate.debate_runner.run_regime_specialist", return_value="regime arg"), \
-         patch("debate.debate_runner.run_quant_sanity_check", return_value="quant ok"), \
-         patch("debate.debate_runner.run_judge", return_value=verdict), \
-         patch("debate.debate_runner.DEBATE_LOG_DIR", tmp_path):
-        result = debate_runner.run_debate(portfolio_state, run_date=date(2026, 4, 15))
-
-    assert halt_path.exists(), "halt_state.json was not written"
-    state = json.loads(halt_path.read_text())
-    assert state["halted"] is True
-    assert state["halt_date"] == "2026-04-15"
-    assert state["requires_override"] is True
-    assert "key_risks" in state
-    assert len(state["key_risks"]) == 2
-
-
-def test_debate_runner_does_not_write_halt_state_on_proceed(tmp_path):
-    """run_debate() must NOT write halt_state.json when verdict is proceed."""
-    import json
-    from debate import debate_runner
-    from datetime import date
-
-    halt_path = tmp_path / "halt_state.json"
-    verdict = {
-        "recommendation": "proceed",
-        "confidence": 0.70,
-        "key_risks": [],
-        "reasoning": "Portfolio looks fine",
-    }
-    portfolio_state = {
-        "date": "2026-04-15",
-        "us_regime": "calm_bull",
-        "macro_regime": "unknown",
-        "n_positions": 10,
-        "allocation": {},
-        "weights": {"AAPL": 0.10},
-    }
-
-    with patch.object(debate_runner, "HALT_STATE_PATH", halt_path), \
-         patch("debate.debate_runner.score_pending_verdicts", return_value=0), \
-         patch("debate.debate_runner.run_pending_debriefs", return_value=0), \
-         patch("debate.debate_runner.detect_blind_spots"), \
-         patch("debate.debate_runner.load_blind_spot_context", return_value=""), \
-         patch("debate.debate_runner.run_all_scenarios", return_value=[]), \
-         patch("debate.debate_runner.run_bull_agent", return_value="bull arg"), \
-         patch("debate.debate_runner.run_bear_agent", return_value="bear arg"), \
-         patch("debate.debate_runner.run_devils_advocate", return_value="devil arg"), \
-         patch("debate.debate_runner.run_regime_specialist", return_value="regime arg"), \
-         patch("debate.debate_runner.run_quant_sanity_check", return_value="quant ok"), \
-         patch("debate.debate_runner.run_judge", return_value=verdict), \
-         patch("debate.debate_runner.DEBATE_LOG_DIR", tmp_path):
-        debate_runner.run_debate(portfolio_state, run_date=date(2026, 4, 15))
-
-    assert not halt_path.exists(), "halt_state.json should NOT be written for proceed verdict"
-
-
 def test_check_halt_state_returns_true_when_no_halt_file(tmp_path):
     """check_halt_state() returns True (proceed) when halt_state.json does not exist."""
     import run_all_agents
@@ -332,15 +243,14 @@ def test_check_halt_state_clears_files_on_valid_override(tmp_path):
 
 
 def test_daily_run_invokes_only_us_equities_agent():
-    """Regression for target-architecture task 4.
+    """Regression for target-architecture task 4, updated 2026-08-23.
 
     macro_agent/international_agent scored CUT on their real universes;
-    alternatives_agent is still unmeasured (excluded pending re-measurement).
-    run_all_agents.py's daily orchestration must build `agent_tasks` — and
-    therefore `agent_outputs` — with exactly one entry: us_equities. The
-    three excluded agent modules must still exist and be importable (their
-    run_*_agent() functions are not deleted, only uncalled from the daily
-    flow), but main() must not reference them.
+    alternatives_agent was unmeasured. All three were removed outright
+    2026-08-23 along with the rest of the AI PM / debate noise layer (see
+    CLAUDE.md constraint 5) rather than merely left uncalled. run_all_agents.py's
+    daily orchestration must build `agent_tasks` — and therefore
+    `agent_outputs` — with exactly one entry: us_equities.
     """
     import ast
     import inspect
@@ -373,11 +283,16 @@ def test_daily_run_invokes_only_us_equities_agent():
     for banned in ("run_macro_agent", "run_international_agent", "run_alternatives_agent"):
         assert banned not in source, f"{banned} must not be called from run_all_agents.main()"
 
-    # The excluded agent modules must still exist (not deleted) with their
-    # run_*_agent() entry points intact.
-    from agents.macro_agent import run_macro_agent  # noqa: F401
-    from agents.international_agent import run_international_agent  # noqa: F401
-    from agents.alternatives_agent import run_alternatives_agent  # noqa: F401
+    # The three excluded agent modules were removed outright 2026-08-23, not
+    # merely left uncalled — assert they are actually gone.
+    import importlib
+    for banned_module in ("agents.macro_agent", "agents.international_agent",
+                           "agents.alternatives_agent"):
+        try:
+            importlib.import_module(banned_module)
+            assert False, f"{banned_module} should have been removed 2026-08-23"
+        except ModuleNotFoundError:
+            pass
 
 
 def test_check_halt_state_blocks_override_predating_halt(tmp_path):

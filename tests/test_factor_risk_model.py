@@ -273,28 +273,3 @@ def test_attribution_log_includes_factor_fields():
     assert "idiosyncratic_pnl" in result
 
 
-def test_factor_exposure_context_string_for_devil():
-    """_section_factor_exposures returns non-empty string when loadings available."""
-    from debate.agents import _section_factor_exposures
-    from ascent.risk.factor_model import BETA_COLS
-    from ascent.risk import factor_model as fm
-
-    syms = ["AAPL", "MSFT", "GOOGL"]
-    idx = pd.MultiIndex.from_tuples(
-        [(pd.Timestamp("2026-04-30"), s) for s in syms],
-        names=["date", "symbol"],
-    )
-    data = np.array([[0.8, 0.1, -0.2, 0.3, -0.1, 0.6]] * 3)
-    loadings = pd.DataFrame(data, index=idx, columns=BETA_COLS)
-    cache_path = Path("/tmp/test_loadings_debate.parquet")
-    loadings.to_parquet(cache_path)
-
-    ps = {
-        "weights": {"AAPL": 0.4, "MSFT": 0.35, "GOOGL": 0.25},
-        "as_of_date": "2026-04-30",
-    }
-    with patch.object(fm, "LOADINGS_PATH", cache_path):
-        result = _section_factor_exposures(ps)
-
-    # Either returns a useful string or empty string — never raises
-    assert isinstance(result, str)

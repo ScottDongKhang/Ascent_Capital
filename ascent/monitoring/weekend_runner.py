@@ -25,7 +25,6 @@ _ONCE_PER_WEEKEND = {
     "ml_retrain",
     "factor_discovery",
     "self_improve",
-    "ai_pm_research",
 }
 
 
@@ -230,70 +229,6 @@ def _job_self_improve(n_variants: int = 20) -> None:
         self_improve.N_VARIANTS = original_n
 
 
-def _job_conviction_retrain() -> None:
-    """Warm conviction gate model on latest matured decision history."""
-    import json
-    from pathlib import Path as _Path
-    from ascent.strategy.conviction_gate import _get_ml_model
-
-    records_path = _Path("logs/conviction_outcomes.jsonl")
-    if not records_path.exists():
-        print("[ConvictionGate/Weekend] No outcomes log yet — skipping")
-        return
-
-    records = [json.loads(l) for l in records_path.read_text().splitlines() if l.strip()]
-    matured = [r for r in records if r.get("outcome_realized")]
-    model = _get_ml_model(matured)
-    if model is not None:
-        print(f"[ConvictionGate/Weekend] Model warmed on {len(matured)} matured records")
-    else:
-        print(f"[ConvictionGate/Weekend] Insufficient matured data ({len(matured)}/30) — skipping")
-
-
-def _job_adversarial_calibration() -> None:
-    """Score pending adversarial interventions and update earned authority per intervention type."""
-    from debate.adversarial_authority import score_pending_interventions, get_calibration_report
-    n_scored = score_pending_interventions()
-    report   = get_calibration_report()
-    print(f"[AdvAuth/Weekend] Scored {n_scored} intervention(s) against 10-day outcomes")
-    print(f"[AdvAuth/Weekend] {report}")
-
-
-def _job_ai_pm_research(all_symbols: list) -> None:
-    """
-    AI PM weekend deep research session.
-    Runs pre-thesis to form a fresh thesis before Monday's quant run.
-    Result cached so Monday's run_all_agents.py skips Phase 1 if fresh.
-    """
-    import tempfile, os
-    from agents.ai_pm_agent import run_ai_pm_prethesis
-    from dataclasses import asdict
-
-    prethesis = run_ai_pm_prethesis()
-    if prethesis is None:
-        print("[AIPMResearch] Pre-thesis returned None — skipping memo write")
-        return
-
-    memo = {
-        "as_of_date": date.today().isoformat(),
-        "macro_view": prethesis.macro_view,
-        "regime_interpretation": prethesis.regime_interpretation,
-        "high_conviction_names": prethesis.high_conviction_names,
-        "names_to_avoid": prethesis.names_to_avoid,
-        "sector_tilts": prethesis.sector_tilts,
-        "regime_assessment": prethesis.regime_assessment,
-        "sleeve_weight_prior": prethesis.sleeve_weight_prior,
-        "market_character": prethesis.market_character,
-    }
-    out_path = Path("data_cache/weekend_research.json")
-    tmp = Path(tempfile.mktemp(dir=out_path.parent, suffix=".tmp"))
-    tmp.write_text(json.dumps(memo, indent=2))
-    os.replace(tmp, out_path)
-    n = len(prethesis.high_conviction_names)
-    print(f"[AIPMResearch] Pre-thesis written: {n} high-conviction names, "
-          f"regime={prethesis.regime_assessment.get('label','?')}")
-
-
 def _job_weekly_debrief() -> dict:
     from ascent.monitoring.weekly_debrief import run_weekly_debrief
     return run_weekly_debrief()
@@ -365,21 +300,7 @@ def run_weekend(dry_run: bool = False) -> None:
                 once_per_weekend=True):
         completed.append("self_improve")
 
-    # 6. Conviction gate retrain — every run (new matured records may have arrived)
-    if _run_job("conviction_retrain", _job_conviction_retrain, once_per_weekend=False):
-        completed.append("conviction_retrain")
-
-    # 6b. Adversarial intervention calibration — every run
-    if _run_job("adversarial_calibration", _job_adversarial_calibration, once_per_weekend=False):
-        completed.append("adversarial_calibration")
-
-    # 7. AI PM deep research — once per weekend
-    if _run_job("ai_pm_research",
-                lambda: _job_ai_pm_research(all_symbols),
-                once_per_weekend=True):
-        completed.append("ai_pm_research")
-
-    # 8. Weekly debrief — every run (captures any new data from earlier jobs)
+    # 6. Weekly debrief — every run (captures any new data from earlier jobs)
     debrief = None
     if not dry_run:
         ok = _run_job("weekly_debrief",

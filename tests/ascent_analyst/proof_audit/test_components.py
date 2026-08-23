@@ -11,7 +11,7 @@ EXPECTED_SLEEVES = {
     "altdata", "earnings_tone",
 }
 EXPECTED_DEFERRED_SLEEVES = {"ml", "llm_fundamental", "narrative"}
-EXPECTED_AGENTS = {"macro_agent", "international_agent", "alternatives_agent", "us_equities_agent"}
+EXPECTED_AGENTS = {"us_equities_agent"}
 EXPECTED_SUBSYSTEMS = {
     "regime_overlay", "hedge_overlay", "earned_authority", "debate_judge_intervention",
 }
@@ -45,8 +45,6 @@ def test_agents_present():
     for name in EXPECTED_AGENTS:
         assert by_name[name].kind == "agent"
     assert by_name["us_equities_agent"].method == "covered_by_sleeves"
-    for name in EXPECTED_AGENTS - {"us_equities_agent"}:
-        assert by_name[name].method == "wf_ic"
 
 
 def test_subsystems_present_as_counterfactual():
