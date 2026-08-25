@@ -148,7 +148,11 @@ class BacktestConfig:
     slippage_vol_mult: float = 0.1
     # Exposure overlays (shared with WF framework via ascent/portfolio/exposure.py)
     vol_targeting_enabled: bool = True
-    target_vol: float = 0.15
+    # Annualized portfolio-vol target for the vol-targeting overlay
+    # (ascent/portfolio/exposure.py). Retuned 2026-08-23 from 0.15 to 0.12 to
+    # sit mid-band of the owner's stated 10-14% vol / 15-25% return / Sharpe
+    # 1.2-2.0 target profile (back-solve: Sharpe 1.5 x vol 0.12 ~= 18% return).
+    target_vol: float = 0.12
     vol_floor: float = 0.25
     vol_cap: float = 1.0
     # Risk-aware construction

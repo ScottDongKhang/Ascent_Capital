@@ -14,6 +14,7 @@ from ascent.portfolio.exposure import (
     ma_filter_scale,
     vol_target_scale,
     apply_exposure_overlays,
+    VOL_TARGET,
 )
 
 
@@ -144,9 +145,14 @@ class TestResearchProductionParity:
         w = pd.DataFrame(0.1, index=rebal_dates, columns=["AAA"])
 
         strat = AscentPortfolioStrategy.__new__(AscentPortfolioStrategy)  # no __init__ side effects
+        # AscentPortfolioStrategy._apply_vol_target's target_vol default is
+        # None, which resolves internally to the shared VOL_TARGET constant
+        # from ascent/portfolio/exposure.py. Call with NO explicit target_vol
+        # here so this test actually verifies that default resolution — not
+        # two independently-supplied literals happening to agree.
         wf_out = strat._apply_vol_target(self._long_data(spy), w)
 
-        expected_scale = vol_target_scale(spy, rebal_dates)
+        expected_scale = vol_target_scale(spy, rebal_dates, target_vol=VOL_TARGET)
         expected = w.mul(expected_scale, axis=0)
         pd.testing.assert_frame_equal(wf_out, expected)
 

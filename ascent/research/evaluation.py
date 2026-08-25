@@ -12,8 +12,22 @@ def annualized_return(returns: pd.Series, periods_per_year: int = 252) -> float:
     """Compound annual growth rate."""
     total = (1 + returns).prod()
     n_periods = len(returns)
-    if n_periods == 0 or total <= 0:
+    if n_periods == 0:
         return 0.0
+    if total <= 0:
+        # total <= 0 means the compounded portfolio value hit zero or went
+        # negative -- i.e. at least one period had a return of exactly -100%
+        # (total wipeout / delisting-style event). That is the worst
+        # possible outcome, not a neutral "no return": clamping to 0.0 here
+        # made a wipeout indistinguishable from (and in downstream ratios
+        # like calmar_ratio, rank ABOVE) a genuinely flat, zero-return
+        # series. Return -1.0 (-100% annualized) instead, since the
+        # portfolio's value floor is 0 and cannot recover within this
+        # window -- this is the mathematically honest annualized return for
+        # a fully wiped-out position, and it propagates correctly through
+        # sharpe_ratio / sortino_ratio / calmar_ratio without any special
+        # casing needed in those functions.
+        return -1.0
     return total ** (periods_per_year / n_periods) - 1
 
 

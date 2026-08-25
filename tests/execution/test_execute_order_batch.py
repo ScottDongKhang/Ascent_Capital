@@ -99,6 +99,55 @@ class TestDivergence2_KillSwitchTriggerAlwaysAudited:
         assert payload["date"] == "2026-08-20"
 
 
+class TestKillSwitchAuditLogsCorrectThreshold:
+    """Bug fix: the audit call used to log kill_switch.HARD_STOP_PCT
+    unconditionally, even when the monthly circuit breaker (not the
+    peak-to-trough hard stop) was what actually tripped. The audit trail
+    is a permanent, hash-chained compliance artifact -- it must record the
+    threshold that actually fired, read back from the persisted
+    trip_reason_kind state."""
+
+    def test_monthly_trip_logs_monthly_threshold(self, monkeypatch):
+        def _trip(current_nav=None):
+            raise kill_switch.KillSwitchTriggered("monthly circuit breaker")
+
+        monkeypatch.setattr(kill_switch, "check", _trip)
+        monkeypatch.setattr(
+            kill_switch, "_load_state", lambda: {"trip_reason_kind": "monthly"}
+        )
+        audit_calls = []
+        monkeypatch.setattr(runner, "_audit", lambda event_type, payload: audit_calls.append((event_type, payload)))
+
+        with pytest.raises(kill_switch.KillSwitchTriggered):
+            runner._execute_order_batch(
+                [_order()], pd.DataFrame(), 100_000.0, "2026-08-20",
+            )
+
+        assert len(audit_calls) == 1
+        _, payload = audit_calls[0]
+        assert payload["threshold"] == kill_switch.MONTHLY_SOFT_HALT_PCT
+
+    def test_peak_trip_logs_peak_threshold(self, monkeypatch):
+        def _trip(current_nav=None):
+            raise kill_switch.KillSwitchTriggered("peak-to-trough hard stop")
+
+        monkeypatch.setattr(kill_switch, "check", _trip)
+        monkeypatch.setattr(
+            kill_switch, "_load_state", lambda: {"trip_reason_kind": "peak"}
+        )
+        audit_calls = []
+        monkeypatch.setattr(runner, "_audit", lambda event_type, payload: audit_calls.append((event_type, payload)))
+
+        with pytest.raises(kill_switch.KillSwitchTriggered):
+            runner._execute_order_batch(
+                [_order()], pd.DataFrame(), 100_000.0, "2026-08-20",
+            )
+
+        assert len(audit_calls) == 1
+        _, payload = audit_calls[0]
+        assert payload["threshold"] == kill_switch.HARD_STOP_PCT
+
+
 class TestDivergence3_CloseVsSubmitForFullLiquidation:
     """Step-1 divergence #3: run_eod_with_weights() used close_position() for
     full-liquidation sells (target_weight == 0.0); run_eod() always used

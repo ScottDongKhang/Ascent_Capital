@@ -36,16 +36,25 @@ def was_previously_rejected(variant_config: dict) -> dict | None:
 
 
 def record_verdict(variant_config: dict, variant_id: str, oos_sharpe: float,
-                    edge: float, promoted: bool, reason: str = "") -> None:
+                    edge: float, promoted: bool, reason: str = "",
+                    oos_calmar: float = None) -> None:
     """Append one hypothesis verdict. Called once per variant from inside
     evaluate_variant()'s existing logging block (self_improve.py:296-309),
-    not as a separate pass -- keep the two logs in sync by construction."""
+    not as a separate pass -- keep the two logs in sync by construction.
+
+    `oos_calmar` (added 2026-08-23, alongside the Calmar-based rework of
+    self_improve.py's ranking objective) is optional and defaults to None so
+    older callers/tests that only pass oos_sharpe keep working. Entries
+    written before this change have no `oos_calmar` key at all; callers
+    reading this field back must treat a missing key as "no real Calmar
+    on record", never substitute oos_sharpe for it (different scale)."""
     REGISTRY_PATH.parent.mkdir(exist_ok=True)
     entry = {
         "config_hash": _config_hash(variant_config),
         "variant_id":  variant_id,
         "config":      variant_config,
         "oos_sharpe":  oos_sharpe,
+        "oos_calmar":  oos_calmar,
         "edge":        edge,
         "promoted":    promoted,
         "reason":      reason,
