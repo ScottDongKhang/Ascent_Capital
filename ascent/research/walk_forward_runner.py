@@ -24,6 +24,172 @@ from ascent.data.universe import build_historical_universe, get_universe_on_date
 
 TARGET_HORIZON = 21
 
+# Cap used when folding an infinite (zero-variance, all-positive) Sharpe into
+# the WFE ratio, so one degenerate fold can't blow up the aggregate. Matches
+# the convention in the retired ascent/research/wf_framework/metrics.py
+# (PerformanceAnalyzer.walk_forward_efficiency's _INF_CAP).
+_WFE_SHARPE_CAP = 3.0
+
+
+def _in_sample_fold_sharpe(
+    hist_alpha: pd.DataFrame,
+    tradeable_symbols: list,
+    close_full: pd.DataFrame,
+    train_start: pd.Timestamp,
+    train_end: pd.Timestamp,
+    rebal_dates_set: set,
+    top_n,
+    max_weight,
+    max_per_sector,
+    sector_map: dict,
+) -> float:
+    """In-sample Sharpe for one walk-forward fold.
+
+    Replays the SAME weighting logic used for the fold's OOS decision
+    (sector_constrained_weighted with the same top_n/max_weight/max_per_sector)
+    over the fold's own training window, using the alpha already computed for
+    that window in `hist_alpha` (no second call to build_alpha_stack, no
+    re-fetch of features). Weights are generated on the training window's own
+    rebalance-cadence dates (the same cadence the OOS side trades on),
+    forward-filled to daily, and multiplied by realized next-day training-
+    window returns to get a daily-return series whose Sharpe is the fold's
+    in-sample Sharpe.
+
+    This is deliberately in-sample -- that's the entire point of WFE (asking
+    "how did this exact signal do on the data it was fit on"). It does not
+    touch the OOS test_alpha/test_weights computed for this fold, and it does
+    not call build_alpha_stack a second time or bypass the IC gate -- the
+    alpha values it replays through the optimizer are the same ones that came
+    out of the single build_alpha_stack(hist_features, ...) call already made
+    for this fold's OOS decision.
+
+    Returns float('nan') if there isn't enough training-window data to form a
+    return series (e.g. very early folds with a short training window).
+    """
+    is_cols = [c for c in tradeable_symbols if c in hist_alpha.columns]
+    if not is_cols:
+        return float("nan")
+
+    is_dates = [
+        d for d in hist_alpha.index
+        if train_start <= d <= train_end and d in rebal_dates_set
+    ]
+    if not is_dates:
+        return float("nan")
+
+    weight_rows = []
+    for d in is_dates:
+        try:
+            d_weights = sector_constrained_weighted(
+                hist_alpha.loc[[d], is_cols],
+                n=top_n,
+                max_weight=max_weight,
+                max_per_sector=max_per_sector,
+                sector_map=sector_map,
+                regime_signal=None,  # in-sample replay: no per-day regime refit
+            )
+        except Exception:
+            continue
+        weight_rows.append(
+            d_weights.reindex(columns=close_full.columns, fill_value=0.0)
+        )
+
+    if not weight_rows:
+        return float("nan")
+
+    is_weights = pd.concat(weight_rows).sort_index()
+    is_weights = is_weights[~is_weights.index.duplicated(keep="first")]
+
+    is_days = close_full.index[
+        (close_full.index >= is_weights.index[0]) & (close_full.index <= train_end)
+    ]
+    if len(is_days) < 6:
+        return float("nan")
+
+    is_weights_ff = is_weights.reindex(is_days).ffill().fillna(0.0)
+    fwd_ret = close_full.loc[is_days].pct_change().shift(-1).reindex(columns=is_weights_ff.columns)
+
+    # Do NOT fillna(0.0) on fwd_ret directly: a NaN forward return means the price
+    # is genuinely missing that day (trading halt, late listing, data gap), not
+    # that the symbol was flat. Filling it with 0.0 there would fabricate a real
+    # observation and bias this in-sample Sharpe (and therefore WFE) toward zero
+    # whenever data is merely missing.
+    #
+    # Fix: zero the WEIGHT for that (day, symbol) cell wherever the forward
+    # return is missing, then redistribute the freed weight, proportionally,
+    # among the OTHER symbols that do have a valid return that day -- so a
+    # halted/missing name doesn't just silently shrink that day's invested
+    # weight (which would itself understate volatility) and doesn't get
+    # counted as flat. If every held symbol is missing data on a given day
+    # (nothing to redistribute onto), that day's contribution is left at zero
+    # -- equivalent to excluding the day, since there is no valid signal left
+    # to measure it with.
+    valid_ret = fwd_ret.notna()
+    masked_weights = is_weights_ff.where(valid_ret, 0.0)
+    orig_total = is_weights_ff.sum(axis=1)
+    masked_total = masked_weights.sum(axis=1)
+    # Rescale factor per day so total invested weight is preserved wherever
+    # possible; 0/0 and x/0 both safely become 0 (nothing to redistribute
+    # onto), not fabricated exposure.
+    rescale = (orig_total / masked_total).replace([np.inf, -np.inf], np.nan).fillna(0.0)
+    redistributed_weights = masked_weights.mul(rescale, axis=0)
+
+    # `.fillna(0.0)` on the returns here is inert numerically (it only avoids
+    # 0 * NaN = NaN propagating into the sum) since the paired weight is
+    # already zero everywhere a return is missing.
+    daily_rets = (redistributed_weights * fwd_ret.fillna(0.0)).sum(axis=1)
+    daily_rets = daily_rets.iloc[:-1]  # last row has no forward return to pair with
+
+    if len(daily_rets) < 5:
+        return float("nan")
+
+    return float(sharpe_ratio(daily_rets, periods_per_year=252))
+
+
+def _compute_wfe(oos_sharpe: float, fold_is_sharpes: list) -> float | None:
+    """Walk-Forward Efficiency = OOS Sharpe / mean(in-sample fold Sharpe).
+
+    Convention note: the retired ascent/research/wf_framework/metrics.py
+    defined WFE as mean(OOS_Sharpe_fold / IS_Sharpe_fold) -- a ratio computed
+    per fold and then averaged, because that framework refit an optimizer
+    per fold and had a distinct OOS return series per fold to pair with it.
+    walk_forward_runner.py only computes ONE OOS Sharpe (on the single
+    stitched multi-fold backtest via BacktestEngine), so there is no
+    per-fold OOS Sharpe to pair against each per-fold IS Sharpe. This uses
+    the algebraically simpler, equally standard form instead: aggregate the
+    per-fold IS Sharpes first (mean), then take one ratio against the
+    overall stitched OOS Sharpe.
+
+    Edge cases (never produce a nonsensical ratio):
+      - no fold produced a finite, positive IS Sharpe -> None (can't measure
+        "in-sample skill" at all, so WFE is undefined, not zero or infinite).
+      - mean IS Sharpe <= 0 -> None, for the same reason (dividing by a
+        non-positive in-sample Sharpe produces a sign-flipped or blown-up
+        ratio that doesn't mean what WFE is supposed to mean).
+      - non-finite OOS Sharpe -> None.
+      - a finite but very large OOS Sharpe is capped at +/-_WFE_SHARPE_CAP
+        before the division, matching the retired framework's handling of
+        zero-variance (infinite) Sharpe folds.
+    """
+    valid_is = [s for s in fold_is_sharpes if s is not None and np.isfinite(s) and s > 0]
+    if not valid_is:
+        return None
+
+    mean_is_sharpe = float(np.mean(valid_is))
+    if mean_is_sharpe <= 0:
+        return None
+
+    if oos_sharpe is None or not np.isfinite(oos_sharpe):
+        return None
+
+    oos = oos_sharpe
+    if oos > _WFE_SHARPE_CAP:
+        oos = _WFE_SHARPE_CAP
+    elif oos < -_WFE_SHARPE_CAP:
+        oos = -_WFE_SHARPE_CAP
+
+    return float(oos / mean_is_sharpe)
+
 
 def _pit_macro(macro_df: pd.DataFrame, as_of_date: pd.Timestamp):
     if macro_df is None:
@@ -162,6 +328,15 @@ def walk_forward_pipeline(
     # Option B (full S&P 400 constituent history) will fix this properly.
     historical_universe_df = build_historical_universe(strict=True, sp500_only=True)
 
+    # Resolve the alpha sleeve weights actually used for this run, once, up front --
+    # both build_alpha_stack() call sites below pass this explicitly (instead of
+    # leaving alpha_weights=None and letting build_alpha_stack re-resolve internally
+    # per fold) so the resolved dict is guaranteed to be what every fold used, and so
+    # the wf_report JSON's _meta.alpha_overrides below reflects ground truth instead
+    # of a hardcoded {"meanrev": 0.5, "statarb": 0.5} guess.
+    from ascent.alpha.stack import _load_active_alpha_weights, _get_gated_weights
+    resolved_alpha_weights = _get_gated_weights(_load_active_alpha_weights())
+
     def _alpha_kwargs(as_of: pd.Timestamp) -> dict:
         """Return point-in-time sliced alpha data kwargs for FeatureBuilder."""
         df_f,  col_f  = _alpha_data["fundamentals"]
@@ -200,6 +375,7 @@ def walk_forward_pipeline(
     fold_results       = []
     folds_skipped_thin = []  # (date, n_symbols) — folds skipped due to thin universe
     universe_sizes     = []  # tradeable symbol count per non-skipped fold
+    fold_is_sharpes    = []  # per-fold in-sample Sharpe, for Walk-Forward Efficiency
 
     for i, test_date in enumerate(all_dates):
         # FIX #4: skip non-rebalance dates entirely
@@ -249,7 +425,7 @@ def walk_forward_pipeline(
                 except Exception:
                     pass
                 hist_alpha = build_alpha_stack(hist_features,
-        agent_id="us_equities")
+        agent_id="us_equities", alpha_weights=resolved_alpha_weights)
 
                 if test_date in hist_alpha.index:
                     tradeable_cols = [c for c in tradeable_symbols if c in hist_alpha.columns]
@@ -352,7 +528,7 @@ def walk_forward_pipeline(
             print(f"[WF] targets error: {e}")
 
         hist_alpha = build_alpha_stack(hist_features,
-        agent_id="us_equities")
+        agent_id="us_equities", alpha_weights=resolved_alpha_weights)
 
         if test_date not in hist_alpha.index:
             zero_weights = pd.DataFrame(
@@ -368,6 +544,17 @@ def walk_forward_pipeline(
 
         tradeable_cols = [c for c in tradeable_symbols if c in hist_alpha.columns]
         test_alpha     = hist_alpha.loc[[test_date], tradeable_cols]
+
+        # WFE: in-sample Sharpe for this fold, replaying the same weighting
+        # logic over the training window using the alpha already computed
+        # above. See _in_sample_fold_sharpe docstring — deliberately
+        # in-sample, does not affect test_alpha/test_weights below.
+        fold_is_sharpe = _in_sample_fold_sharpe(
+            hist_alpha, tradeable_symbols, close_full,
+            train_start, train_end, rebal_dates_set,
+            top_n, max_weight, max_per_sector, sector_map,
+        )
+        fold_is_sharpes.append(fold_is_sharpe)
 
         # FIX #1: fit a fresh regime engine on this fold's training data only.
         # The full-sample engine passed in from run_pipeline() is intentionally
@@ -447,13 +634,14 @@ def walk_forward_pipeline(
             "daily_ret": daily_ret,
         })
 
-        print("  Date %s | Train: %s to %s | Tradeable: %2d | Positions: %2d | Regime: %s" % (
+        print("  Date %s | Train: %s to %s | Tradeable: %2d | Positions: %2d | Regime: %s | IS_Sh: %s" % (
             test_date.strftime("%Y-%m-%d"),
             train_start.strftime("%Y-%m-%d"),
             train_end.strftime("%Y-%m-%d"),
             len(tradeable_symbols),
             int((test_weights.iloc[0] != 0).sum()),
             fold_regime_signal.label.value if fold_regime_signal else "none",
+            ("%.2f" % fold_is_sharpe) if np.isfinite(fold_is_sharpe) else "n/a",
         ))
 
     print("-" * 70)
@@ -539,7 +727,32 @@ def walk_forward_pipeline(
         benchmark_prices=bm_data,
     )
 
-    print("\n" + format_metrics(result.summary()))
+    wf_summary = result.summary()
+    print("\n" + format_metrics(wf_summary))
+
+    # --- Walk-Forward Efficiency -------------------------------------------
+    # WFE = OOS Sharpe (this stitched multi-fold backtest) / mean(per-fold
+    # in-sample Sharpe collected during the loop above). See _compute_wfe's
+    # docstring for the edge-case handling and how this differs from the
+    # retired wf_framework's per-fold-ratio-then-mean convention.
+    valid_fold_is_sharpes = [s for s in fold_is_sharpes if np.isfinite(s)]
+    mean_is_sharpe = float(np.mean([s for s in valid_fold_is_sharpes if s > 0])) \
+        if any(s > 0 for s in valid_fold_is_sharpes) else float("nan")
+    wfe = _compute_wfe(wf_summary.get("sharpe"), fold_is_sharpes)
+
+    print("")
+    print("[WFE] Folds with a computable IS Sharpe: %d / %d" % (
+        len(valid_fold_is_sharpes), len(fold_is_sharpes)))
+    if np.isfinite(mean_is_sharpe):
+        print("[WFE] Mean in-sample Sharpe: %.3f" % mean_is_sharpe)
+    else:
+        print("[WFE] Mean in-sample Sharpe: n/a (no fold produced a positive, finite IS Sharpe)")
+    if wfe is not None:
+        label = "acceptable" if wfe >= 0.5 else "OVERFIT"
+        print("[WFE] Walk-Forward Efficiency: %.3f  (%s)" % (wfe, label))
+    else:
+        print("[WFE] Walk-Forward Efficiency: n/a (see edge-case handling in _compute_wfe)")
+
     try:
         # NOTE: pre-existing bug found while testing the persistence patch
         # below -- ascent/dashboard/export_dashboard_data.py was deleted in
@@ -598,6 +811,53 @@ def walk_forward_pipeline(
     except Exception as _pe:
         print(f"[WF] WARNING: failed to persist daily returns series: {_pe}")
 
+    # --- Persistence: wf_report_<date>.json, matching the schema
+    # ascent/reporting/verified_numbers.py::load_wf_report() reads (the same
+    # shape scripts/generate_wf_report_from_runner.py hand-packages from a
+    # log file for the CANONICAL_WF_ARTIFACT pointer). Writing it here closes
+    # the gap that script's docstring calls out: "wfe": null because this
+    # runner didn't track per-fold in-sample Sharpe. It now does, so this
+    # artifact carries a real "wfe" value end-to-end to canonical_wf() if a
+    # run of this pipeline is ever repointed to as the canonical artifact.
+    # This does NOT touch CANONICAL_WF_ARTIFACT or CURRENT_VERIFIED_NUMBERS.md
+    # -- promoting a run to "canonical" remains a deliberate, separate act.
+    wf_report_path = os.path.join("outputs", "wf_results", f"wf_report_{_run_date}.json")
+    try:
+        os.makedirs(os.path.dirname(wf_report_path), exist_ok=True)
+        wf_report = {
+            "cagr":         wf_summary.get("cagr"),
+            "volatility":   wf_summary.get("volatility"),
+            "sharpe":       wf_summary.get("sharpe"),
+            "sortino":      wf_summary.get("sortino"),
+            "max_drawdown": wf_summary.get("max_drawdown"),
+            "win_rate":     wf_summary.get("hit_rate"),
+            "wfe":          wfe,
+            "alpha":        wf_summary.get("alpha"),
+            "beta":         wf_summary.get("beta"),
+            "n_folds":      succeeded_count,
+            "n_oos_days":   wf_summary.get("n_days", len(result.portfolio_returns)),
+            "_meta": {
+                "framework": "ascent/research/walk_forward_runner.py (walk_forward_pipeline)",
+                "oos_window": "%s -> %s" % (
+                    combined_weights.index[0].date(), combined_weights.index[-1].date()
+                ),
+                "mean_is_sharpe": mean_is_sharpe if np.isfinite(mean_is_sharpe) else None,
+                "n_folds_with_is_sharpe": len(valid_fold_is_sharpes),
+                "wfe_definition": (
+                    "OOS Sharpe (stitched multi-fold backtest) / mean(per-fold "
+                    "in-sample Sharpe), capped OOS Sharpe at +/-3.0. See "
+                    "_compute_wfe() in walk_forward_runner.py."
+                ),
+                "alpha_overrides": resolved_alpha_weights,
+            },
+        }
+        with open(wf_report_path, "w") as f:
+            import json
+            json.dump(wf_report, f, indent=2, default=float)
+        print(f"[Saved] {wf_report_path}")
+    except Exception as _we:
+        print(f"[WF] WARNING: failed to persist wf_report JSON: {_we}")
+
     print("")
     print("=" * 70)
     print("  DAILY SUMMARY")
@@ -610,6 +870,11 @@ def walk_forward_pipeline(
         print("  Avg rebal-day return: %.4f%%" % (np.mean(daily_rets) * 100))
         print("  Rebal-day std:        %.4f%%" % (np.std(daily_rets) * 100))
         print("  Positive days:        %.1f%%" % (100 * np.mean(daily_rets > 0)))
+
+    if wfe is not None:
+        print("  Walk-Forward Efficiency: %.3f" % wfe)
+    else:
+        print("  Walk-Forward Efficiency: n/a")
 
     elapsed = time.time() - t0
     print("\n  Walk-forward pipeline completed in %.1fs\n" % elapsed)

@@ -13,7 +13,7 @@ from __future__ import annotations
 import pandas as pd
 import numpy as np
 from typing import Optional
-from ascent.backtest.costs import flat_cost_model
+from ascent.backtest.costs import flat_cost_model, liquidity_scaled_cost_model
 
 
 class BacktestEngine:
@@ -24,11 +24,21 @@ class BacktestEngine:
         impact_bps: float = 5.0,
         rebalance_freq_days: int = 21,
         execution_delay: int = 1,
+        adv_lookback_days: int = 21,
+        impact_floor_mult: float = 0.1,
+        impact_ceil_mult: float = 10.0,
     ):
         self.initial_capital = initial_capital
-        self.cost_bps = spread_bps + impact_bps
+        self.spread_bps = spread_bps
+        self.impact_bps = impact_bps
+        self.cost_bps = spread_bps + impact_bps  # kept for back-compat / flat fallback
         self.rebalance_freq_days = rebalance_freq_days
         self.execution_delay = execution_delay
+        # ADV-scaled impact cost model — only engages when `volume` is passed
+        # to run(). See liquidity_scaled_cost_model() in ascent/backtest/costs.py.
+        self.adv_lookback_days = adv_lookback_days
+        self.impact_floor_mult = impact_floor_mult
+        self.impact_ceil_mult = impact_ceil_mult
 
     def run(
         self,
@@ -36,6 +46,7 @@ class BacktestEngine:
         close_prices: pd.DataFrame,
         open_prices: pd.DataFrame,
         benchmark_prices: pd.Series | None = None,
+        volume: pd.DataFrame | None = None,
     ) -> "BacktestResult":
         # Align all data
         common_dates = target_weights.index.intersection(close_prices.index)
@@ -52,6 +63,22 @@ class BacktestEngine:
         prev_close        = close.shift(1)
         overnight_returns = (open_ / prev_close - 1).fillna(0)
         intraday_returns  = (close / open_ - 1).fillna(0)
+
+        # Average daily dollar volume, for liquidity-scaled impact cost.
+        # Rolling mean of close * volume, shifted 1 day so the ADV used on
+        # any given date is known as of the prior close (no look-ahead) —
+        # same discipline as the execution-delayed signal below. None when
+        # the caller doesn't supply volume, which keeps costs byte-identical
+        # to the flat model (see liquidity_scaled_cost_model's fallback).
+        adv_dollar = None
+        if volume is not None:
+            vol = volume.reindex(index=common_dates, columns=symbols)
+            dollar_vol = (close * vol)
+            adv_dollar = (
+                dollar_vol.rolling(self.adv_lookback_days, min_periods=1)
+                .mean()
+                .shift(1)
+            )
 
         rebal_dates = self._get_rebalance_dates(common_dates)
 
@@ -113,8 +140,21 @@ class BacktestEngine:
                     signal_date   = common_dates[delay_idx]
                     new_target    = tw.loc[signal_date]
 
-                    turn      = float((new_target - current_weights).abs().sum() / 2)
-                    cost_rate = float(flat_cost_model(turn, self.cost_bps))
+                    delta_weights = new_target - current_weights
+                    turn          = float(delta_weights.abs().sum() / 2)
+                    if adv_dollar is not None:
+                        adv_at_signal = adv_dollar.loc[signal_date]
+                        cost_rate = float(liquidity_scaled_cost_model(
+                            delta_weights,
+                            start_value,
+                            adv_at_signal,
+                            spread_bps=self.spread_bps,
+                            impact_bps=self.impact_bps,
+                            impact_floor_mult=self.impact_floor_mult,
+                            impact_ceil_mult=self.impact_ceil_mult,
+                        ))
+                    else:
+                        cost_rate = float(flat_cost_model(turn, self.cost_bps))
                     turnover_series.loc[dt] = turn
                     cost_series.loc[dt]     = cost_rate
 

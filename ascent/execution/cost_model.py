@@ -20,6 +20,24 @@ Participation rate flags:
     > max_participation_rate   → HIGH_IMPACT (order blocked by order_engine)
     > split_participation_rate → SPLIT_RECOMMENDED (warning only)
     missing volume data         → IMPACT_UNKNOWN (warning only, order not blocked)
+
+Relationship to ascent/backtest/costs.py::liquidity_scaled_cost_model():
+This is the live-facing pre-trade estimate (called from order_engine.py to
+flag/block real orders before they reach the broker, and from eod_runner.py's
+extract_cost_features()). costs.py's liquidity_scaled_cost_model() is a
+separate, simpler sqrt-impact formula used only inside BacktestEngine.run()
+to estimate historical trading costs for the walk-forward Sharpe figure. They
+are not consolidated into one function: this model needs a per-symbol
+volatility feature (vol_21d) that isn't currently plumbed through the
+backtest engine or its walk-forward callers, and adds a permanent-impact term
+the backtest model doesn't have. A scratch comparison (2026-08-24) across
+0.2%-15% participation showed the backtest-side estimate consistently running
+LOWER than this live estimate — e.g. ~6.6bps here vs ~5.5bps in costs.py at
+0.2% participation, widening to ~19.6bps here vs ~6.9bps in costs.py at 15%
+participation — so a walk-forward backtest that turns the ADV-scaled cost
+model on should be read as a lower bound on real trading cost, not a match
+to what order_engine.py would actually charge for the same trade. See
+liquidity_scaled_cost_model()'s docstring for the reverse cross-reference.
 """
 import json
 import logging

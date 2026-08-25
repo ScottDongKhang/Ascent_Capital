@@ -13,7 +13,24 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 
 
-TURNOVER_PENALTY = 0.10   # subtract 0.10 * avg_turnover from Sharpe
+# Turnover penalty for the Calmar-based fitness score (2026-08-23 rework).
+# This constant predates the rework and was calibrated for the old formula
+# `sharpe - TURNOVER_PENALTY * turnover` (Sharpe-scale). The rework changed
+# the formula to `calmar - TURNOVER_PENALTY * turnover` (see self_improve.py
+# score_variant()) but left this constant at its old Sharpe-scale value,
+# unlike MIN_CALMAR_EDGE in self_improve.py, which WAS rescaled at the same
+# time using the same ratio derived below. Same citation as that comment:
+# CLAUDE.md / CURRENT_VERIFIED_NUMBERS.md's canonical walk-forward artifact
+# gives calmar_ratio=0.223 against Sharpe ~0.415-0.42 for this book
+# (docs/session_log_archive.md: "Sharpe 0.415 ... now"), i.e. a Calmar/Sharpe
+# ratio of roughly 0.223/0.415 ~= 0.54. Scaling the old 0.10 by that ratio:
+# 0.10 * 0.54 ~= 0.054. Unlike MIN_CALMAR_EDGE -- a promotion bar where
+# rounding up keeps promotion at least as hard as before, i.e. conservative
+# -- this is a penalty magnitude, and rounding it up further would
+# reintroduce the exact over-penalization bug being fixed here. So this
+# rounds to the nearest hundredth (0.054 -> 0.05) instead of rounding
+# further in the "conservative" direction.
+TURNOVER_PENALTY = 0.05   # subtract 0.05 * avg_turnover from Calmar (was 0.10, Sharpe-scale; see comment above)
 
 
 def _load_prices(prices_cache: str) -> Optional[pd.DataFrame]:
@@ -83,6 +100,51 @@ def _to_wide_close(df: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame()
 
 
+def zero_fill_fold_gaps(fold_records: list) -> list:
+    """
+    Reconstruct a single, temporally continuous daily-return series from
+    multiple walk-forward OOS folds whose test windows are separated by a
+    purge+embargo gap of untested trading days.
+
+    Consecutive fold test windows are NOT contiguous by design (the gap is
+    correct/intentional -- it prevents leakage between folds). Concatenating
+    each fold's returns directly, with no representation of that gap, breaks
+    any downstream metric that is order/continuity-sensitive (e.g.
+    ``ascent.research.evaluation.calmar_ratio``, which does a running
+    ``(1+r).cumprod()`` + peak/drawdown walk): it would either hide a real
+    drawdown that happened during the untested gap, or fabricate an instant
+    "recovery" by implying zero time passed between one fold's last OOS day
+    and the next fold's first OOS day.
+
+    This function fills each gap with explicit ``0.0`` ("assume no change")
+    placeholder days -- the most honest statement available for a period that
+    was never OOS-tested, since there is no real signal about what happened
+    there. The gap length is the actual number of trading-day bar positions
+    between folds (not a nominal config value), so it stays correct even if
+    folds were skipped.
+
+    Args:
+        fold_records: list of (test_start_i, test_end_i, returns) tuples, in
+            chronological order, where test_start_i/test_end_i are integer
+            bar positions into the same price index the folds were built
+            from, and returns is that fold's list of per-day OOS returns.
+
+    Returns:
+        Flat list of floats: fold returns interleaved with zero-fill gap
+        days, in chronological order.
+    """
+    out: list = []
+    last_test_end_i = None
+    for test_start_i, test_end_i, returns in fold_records:
+        if last_test_end_i is not None:
+            gap_days = test_start_i - last_test_end_i - 1
+            if gap_days > 0:
+                out.extend([0.0] * gap_days)
+        out.extend(returns)
+        last_test_end_i = test_end_i
+    return out
+
+
 def run_lightweight_oos(
     config_overrides: Dict[str, Any],
     n_days: int = 63,
@@ -93,6 +155,7 @@ def run_lightweight_oos(
     purge_days: int = 5,
     embargo_days: int = 5,
     filter_universe_by_date: bool = True,
+    universe_df: Optional[pd.DataFrame] = None,
 ) -> Dict[str, Any]:
     """
     Multi-fold expanding walk-forward OOS evaluation.
@@ -110,6 +173,17 @@ def run_lightweight_oos(
         purge_days:             Gap between train end and test start (prevents leakage).
         embargo_days:           Gap between test end and next fold's train end.
         filter_universe_by_date: When True, call get_universe_on_date() per fold.
+        universe_df:            Historical universe table to filter against (same shape as
+                                 `build_historical_universe()`'s return). When None and
+                                 filter_universe_by_date is True, built via
+                                 `build_historical_universe(strict=True, sp500_only=True)` --
+                                 the same survivorship-correct S&P 500 + tracked-removals
+                                 universe that eod_runner.py and walk_forward_runner.py use,
+                                 so a variant promoted from this OOS path can't be scored on
+                                 non-S&P500 symbols with fabricated pre-2020 histories that
+                                 live trading could never actually hold. Callers that already
+                                 have a universe_df (e.g. an outer walk-forward loop) should
+                                 pass it through to avoid rebuilding it per variant.
 
     Returns:
         {"sharpe": float, "turnover": float, "n_folds": int}
@@ -134,6 +208,17 @@ def run_lightweight_oos(
             "trend": 0.65, "meanrev": 0.05, "statarb": 0.15, "ml": 0.10, "volatility": 0.05
         })
 
+        # Resolve the survivorship-correct universe once, up front, so every fold below
+        # filters against the same restricted (strict=True, sp500_only=True) universe that
+        # eod_runner.py and walk_forward_runner.py use -- matching the promotion path to what
+        # live trading can actually hold (see docstring above).
+        if filter_universe_by_date and universe_df is None:
+            try:
+                from ascent.data.universe import build_historical_universe
+                universe_df = build_historical_universe(strict=True, sp500_only=True)
+            except Exception:
+                universe_df = None
+
         # Build fold positions: expanding window, working backwards from end
         fold_positions = []
         pos = len(price_wide) - 1
@@ -147,10 +232,14 @@ def run_lightweight_oos(
             pos = test_start_i - embargo_days - n_days
         fold_positions = list(reversed(fold_positions))  # chronological order
 
-        all_fold_returns = []
+        sharpe_fold_returns = []   # pure fold returns only (no gap padding), for Sharpe
+        fold_records = []          # [(test_start_i, test_end_i, fold_rets), ...] -- see
+                                    # zero_fill_fold_gaps() for why the "returns" field below
+                                    # is reconstructed from this instead of a naive concat.
         prev_weights: Dict[str, float] = {}
         fold_turnovers = []
         n_folds = 0
+        fold_date_ranges = []  # additive metadata: [(start_date, end_date), ...] per accepted fold
 
         # Cross-sectional normalizer
         def _cs_normalize(df: pd.DataFrame) -> pd.DataFrame:
@@ -172,12 +261,12 @@ def run_lightweight_oos(
             if filter_universe_by_date:
                 try:
                     from ascent.data.universe import get_universe_on_date
-                    universe_df = get_universe_on_date(fold_date)
-                    if universe_df is not None and not universe_df.empty:
-                        if "symbol" in universe_df.columns:
-                            valid_set = set(universe_df["symbol"].tolist())
+                    fold_universe_df = get_universe_on_date(fold_date, universe_df)
+                    if fold_universe_df is not None and not fold_universe_df.empty:
+                        if "symbol" in fold_universe_df.columns:
+                            valid_set = set(fold_universe_df["symbol"].tolist())
                         else:
-                            valid_set = set(universe_df.index.tolist())
+                            valid_set = set(fold_universe_df.index.tolist())
                         filtered = [s for s in price_wide.columns if s in valid_set or s == "SPY"]
                         if len(filtered) >= 5:
                             valid_symbols = filtered
@@ -353,7 +442,13 @@ def run_lightweight_oos(
                 continue
 
             fold_rets = (oos_px.pct_change().dropna().values @ w_arr).tolist()
-            all_fold_returns.extend(fold_rets)
+
+            sharpe_fold_returns.extend(fold_rets)
+            fold_records.append((test_start_i, test_end_i, fold_rets))
+            fold_date_ranges.append((
+                str(price_wide.index[test_start_i].date()),
+                str(price_wide.index[test_end_i].date()),
+            ))
 
             if prev_weights:
                 common = set(weights_dict) | set(prev_weights)
@@ -364,19 +459,38 @@ def run_lightweight_oos(
             prev_weights = weights_dict
             n_folds += 1
 
-        if n_folds == 0 or len(all_fold_returns) < 5:
+        if n_folds == 0 or len(sharpe_fold_returns) < 5:
             return {"sharpe": 0.0, "turnover": 0.0, "n_folds": n_folds}
 
-        port_rets = np.array(all_fold_returns)
+        # Sharpe is order-independent (mean/std of the return distribution), so
+        # it is computed from the pure fold returns only -- gap-fill zeros must
+        # NOT be mixed in here, since they would dilute both mean and std and
+        # bias Sharpe toward 0 for variants with wide embargo gaps.
+        port_rets = np.array(sharpe_fold_returns)
         mean_r = np.mean(port_rets)
         std_r  = np.std(port_rets)
         sharpe = float(mean_r / std_r * np.sqrt(252)) if std_r > 0 else 0.0
         avg_turnover = float(np.mean(fold_turnovers)) if fold_turnovers else 0.20
+        all_fold_returns = zero_fill_fold_gaps(fold_records)
 
         return {
             "sharpe":   round(sharpe, 4),
             "turnover": round(avg_turnover, 4),
             "n_folds":  n_folds,
+            # Per-day OOS portfolio returns across all folds, reconstructed into
+            # one temporally continuous series: the purge+embargo gap between
+            # consecutive folds' test windows is filled with explicit 0.0
+            # ("assume no change" -- the most honest statement for a period that
+            # was never OOS-tested) rather than concatenated directly, which
+            # would feed calmar_ratio()'s cumprod/drawdown walk a series that
+            # either hides a real drawdown spanning the gap or fabricates an
+            # instant "recovery" across it. Do NOT use this field for Sharpe
+            # (see `sharpe` above, computed from the undiluted fold returns).
+            "returns": all_fold_returns,
+            # Additive: (start_date, end_date) per accepted fold's OOS test
+            # window, chronological order -- lets a caller verify/reconstruct
+            # the gap structure above instead of trusting it blindly.
+            "fold_date_ranges": fold_date_ranges,
         }
 
     except Exception as e:

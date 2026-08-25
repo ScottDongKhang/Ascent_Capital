@@ -45,6 +45,34 @@ except Exception:
     check_alerts = None  # type: ignore[assignment]
 
 
+def filter_to_tradeable_universe(
+    target_weights: pd.Series,
+    tradeable: set,
+    max_weight: float,
+) -> pd.Series:
+    """
+    Restrict target_weights to the currently tradeable universe and renormalize
+    to sum to 1.0.
+
+    Integrity constraint #3 (max-weight hard cap, `_water_fill_cap()` in
+    `ascent/portfolio/optimizer.py`) is enforced on the optimizer's own output,
+    before this filter runs. But dropping symbols here and renormalizing the
+    survivors can push a remaining name's weight back above max_weight -- the
+    weight that belonged to dropped names lands on whoever is left. Re-running
+    `_water_fill_cap()` after the filter+renormalize step keeps the post-condition
+    (no weight above max_weight) true on what actually gets submitted to Alpaca,
+    not just on the optimizer's pre-filter output.
+    """
+    target_weights = target_weights[target_weights.index.isin(tradeable)]
+    target_weights = target_weights[target_weights > 0].dropna()
+    if target_weights.sum() > 0:
+        target_weights = target_weights / target_weights.sum()
+        if target_weights.max() > max_weight + 1e-9:
+            from ascent.portfolio.optimizer import _water_fill_cap
+            target_weights = _water_fill_cap(target_weights, max_weight)
+    return target_weights
+
+
 def run_intraday_trigger_check(portfolio_state: dict = None, market_data: dict = None) -> list:
     """
     Evaluate and execute intraday triggers. Called at 12:00 PM and 14:30 PM ET.
@@ -138,12 +166,11 @@ def run_eod(dry_run: bool = False, as_of_date: str = None):
 
         # Filter to only currently tradeable symbols
         from ascent.data.universe import get_universe_on_date, build_historical_universe
-        universe_df = build_historical_universe(strict=False)
+        universe_df = build_historical_universe(strict=True, sp500_only=True)
         tradeable = set(get_universe_on_date(today, universe_df))
-        target_weights = target_weights[target_weights.index.isin(tradeable)]
-        target_weights = target_weights[target_weights > 0].dropna()
-        if target_weights.sum() > 0:
-            target_weights = target_weights / target_weights.sum()
+        target_weights = filter_to_tradeable_universe(
+            target_weights, tradeable, cfg.backtest.max_weight
+        )
 
         print(f"[EOD] Latest signal date: {latest_date.date()}")
         print(f"[EOD] Target positions: {len(target_weights)}")
@@ -487,9 +514,19 @@ def _execute_order_batch(
         # _audit() is a log-only side effect (compliance/audit_trail.py) --
         # calling it uniformly cannot change what gets submitted, so this is
         # unified to "always audit" rather than kept as a per-caller gap.
+        # BUG FIX: the audit trail unconditionally logged HARD_STOP_PCT even
+        # when the monthly circuit breaker (MONTHLY_SOFT_HALT_PCT) was what
+        # actually tripped -- read trip_reason_kind back from persisted
+        # kill-switch state (set by kill_switch.check() just before it
+        # raised) and log whichever threshold actually fired.
+        _trip_kind = kill_switch._load_state().get("trip_reason_kind")
+        _trip_threshold = (
+            kill_switch.MONTHLY_SOFT_HALT_PCT if _trip_kind == "monthly"
+            else kill_switch.HARD_STOP_PCT
+        )
         _audit("kill_switch_triggered", {
             "nav": portfolio_value, "date": today_str,
-            "threshold": kill_switch.HARD_STOP_PCT,
+            "threshold": _trip_threshold,
         })
         raise
 

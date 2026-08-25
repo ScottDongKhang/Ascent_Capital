@@ -194,6 +194,14 @@ See `docs/REPO_MAP.md` for what to grep for and which files are worth reading wh
   re-run. Suppressed near a scheduled rebalance via `_is_near_scheduled_rebalance`.
 - **`run_eod_with_weights()` silently no-ops on non-rebalance days** — pass `force=True` on
   discovery / mini-rebalance paths.
+- **Live trading and the walk-forward backtest must draw from the same universe.**
+  `eod_runner.py`'s tradeable-symbol filter calls `build_historical_universe(strict=True,
+  sp500_only=True)`, matching `walk_forward_runner.py` exactly — both restricted to the
+  survivorship-correct S&P 500 + tracked removals, all with real addition dates. Do not
+  loosen the live call back to `strict=False` / `sp500_only=False`: that pulls in
+  non-S&P500 symbols with no recorded addition date, which silently default their
+  `start_date` to `UNIVERSE_START`, so live trading would select from and backdate symbols
+  the backtest never validated on.
 - **`prices_macro` / `prices_international` / `prices_alternatives` are stale, historical-only
   caches.** They were the three dormant specialist agents' own price data; nothing writes or
   reads them since those agent modules were removed 2026-08-23. Leave them on disk (harmless)

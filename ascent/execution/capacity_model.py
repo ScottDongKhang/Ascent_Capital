@@ -3,6 +3,16 @@
 Strategy capacity model — max AUM before signal decay from market impact.
 Informational only: does not block trades or modify weights.
 Output logged weekly to logs/capacity_log.jsonl.
+
+Not a duplicate of ascent/execution/cost_model.py or
+ascent/backtest/costs.py::liquidity_scaled_cost_model, despite also containing
+an Almgren-Chriss-style impact formula (estimate_market_impact(), its own eta
+and exponent). Those two answer "what does this trade cost"; this module
+answers a different question — "at what AUM does a sleeve's signal IC stop
+covering its own impact cost" (compute_signal_breakeven_adv /
+compute_strategy_capacity) — a strategic capacity ceiling, not a per-trade
+cost estimate, and it has no live callers outside its own test. Left as its
+own formula rather than force-merged.
 """
 from __future__ import annotations
 import json

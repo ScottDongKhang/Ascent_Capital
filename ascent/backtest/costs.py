@@ -125,3 +125,92 @@ def flat_cost_model(turnover_fraction: float, cost_bps: float = 10.0) -> float:
     Returns cost as a fraction of portfolio.
     """
     return turnover_fraction * (cost_bps / 10_000)
+
+
+def liquidity_scaled_cost_model(
+    delta_weights: pd.Series,
+    portfolio_value: float,
+    adv_dollar: "pd.Series | None",
+    spread_bps: float = 5.0,
+    impact_bps: float = 5.0,
+    impact_floor_mult: float = 0.1,
+    impact_ceil_mult: float = 10.0,
+) -> float:
+    """
+    Per-symbol, ADV-scaled generalization of flat_cost_model.
+
+    Relationship to ascent/execution/cost_model.py::estimate() (Almgren-Chriss,
+    live pre-trade order sizing/blocking): these are deliberately two separate
+    formulas, not a bug. This function is a fast, vectorized, whole-book
+    backtest approximation — it runs once per rebalance across every symbol at
+    once inside BacktestEngine.run(), and only needs a spread/impact bps rate
+    and an ADV series (no volatility series is currently plumbed through the
+    engine or the walk-forward runners that call it). cost_model.estimate()
+    is a precise, single-order, live pre-trade estimate that additionally
+    requires a per-symbol annualized-volatility feature and a permanent-impact
+    term, and is used to actually block/flag orders in order_engine.py before
+    they hit the broker. Consolidating them for real would mean plumbing a
+    volatility panel through BacktestEngine.run() and every walk-forward
+    caller — out of scope here. Because of the different inputs (this model
+    has no volatility term) the two produce different bps estimates for the
+    same hypothetical trade; a scratch comparison across 0.2%-15% participation
+    (2026-08-24) showed this backtest model consistently *understating* cost
+    vs. the live Almgren-Chriss estimate — roughly 5.5 vs 6.6bps round-trip at
+    0.2% participation, widening to ~6.9 vs ~19.6bps at 15% participation.
+    That gap is a real, measured limitation of the backtest cost estimate
+    (it will not fully capture impact cost at high participation), not a
+    silent one — see ascent/execution/cost_model.py's module docstring for
+    the reverse cross-reference.
+
+    Spread cost stays flat per CLAUDE.md guidance (less size-dependent).
+    Impact cost scales with sqrt(trade_notional / adv_dollar) — a standard
+    square-root impact model — per symbol, then the whole book's cost is the
+    turnover-weighted average, exactly like flat_cost_model:
+
+        cost_rate = sum_sym(|delta_w_sym| * (spread_bps + impact_bps_eff_sym)) / 2 / 10_000
+
+    which collapses to `flat_cost_model(turnover, spread_bps + impact_bps)`
+    when impact_bps_eff_sym == impact_bps for every symbol — i.e. when
+    `adv_dollar` is None, or a symbol's ADV entry is missing/NaN/<=0, that
+    symbol falls back to the flat impact_bps untouched. This is what keeps
+    callers that don't pass volume data byte-identical to today's behavior.
+
+    Args:
+        delta_weights: new_weight - old_weight per symbol for this rebalance.
+        portfolio_value: portfolio value in dollars, to size the trade notional.
+        adv_dollar: average daily dollar volume per symbol (already lagged /
+            point-in-time by the caller — this function does no shifting).
+            None disables scaling entirely (flat behavior).
+        spread_bps: half-spread, applied flat (unscaled).
+        impact_bps: base impact rate; scaled per symbol by sqrt(participation).
+        impact_floor_mult / impact_ceil_mult: clip the *effective* impact_bps
+            to [impact_bps * floor, impact_bps * ceil] so a near-zero ADV
+            can't blow the cost up to infinity, and a tiny trade can't drive
+            it to (numerically) zero.
+
+    Returns:
+        Cost as a fraction of portfolio value (same units as flat_cost_model).
+    """
+    abs_delta = delta_weights.abs()
+
+    if adv_dollar is None:
+        total_bps = spread_bps + impact_bps
+        return float(abs_delta.sum() / 2 * (total_bps / 10_000))
+
+    adv = adv_dollar.reindex(delta_weights.index)
+    trade_notional = abs_delta * float(portfolio_value)
+
+    no_adv = adv.isna() | (adv <= 0)
+    # Avoid 0/0 and negative-ADV warnings; overwritten by the flat fallback below.
+    safe_adv = adv.where(~no_adv, 1.0)
+    participation = (trade_notional / safe_adv).clip(lower=0.0)
+    impact_eff = impact_bps * np.sqrt(participation)
+    impact_eff = impact_eff.clip(
+        lower=impact_bps * impact_floor_mult,
+        upper=impact_bps * impact_ceil_mult,
+    )
+    impact_eff = impact_eff.where(~no_adv, impact_bps)  # flat fallback per symbol
+
+    cost_bps_per_symbol = spread_bps + impact_eff
+    cost_rate = float((abs_delta * cost_bps_per_symbol).sum() / 2 / 10_000)
+    return cost_rate
