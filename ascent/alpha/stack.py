@@ -19,6 +19,12 @@ DEFAULT_ALPHA_WEIGHTS = {
 }
 
 IC_GATE_THRESHOLD = -0.005  # tightened from -0.010: fundamental IC=-0.008 recently evaded the gate
+# NOTE: this gates on raw mean IC magnitude, not the ic_t t-statistic also logged to
+# logs/sleeve_ic_log.jsonl by ascent/main.py -- it does not test against the conventional
+# (t>2.0) or Harvey/Liu/Zhu (2016) data-mining-adjusted (t>3.0) significance bar. See
+# CURRENT_VERIFIED_NUMBERS.md section 1's "Deflated Sharpe Ratio / selection-bias correction"
+# note for the current status of that cross-reference (not currently computable -- no
+# sleeve_ic_log.jsonl on disk in this worktree).
 
 
 def _load_active_alpha_weights(regime: str = None, ai_prior: dict = None) -> dict:

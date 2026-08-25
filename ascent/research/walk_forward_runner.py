@@ -17,7 +17,8 @@ from ascent.features.build_features import FeatureBuilder
 from ascent.alpha.stack import build_alpha_stack
 from ascent.portfolio.optimizer import sector_constrained_weighted
 from ascent.research.splits import walk_forward_splits
-from ascent.research.evaluation import sharpe_ratio, annualized_return, max_drawdown
+from ascent.research.evaluation import sharpe_ratio, annualized_return, max_drawdown, lo_adjusted_sharpe_ratio
+from ascent.research.deflated_sharpe import deflated_sharpe_ratio, KNOWN_TRIAL_COUNT
 from ascent.backtest.engine import BacktestEngine
 from ascent.research.evaluation import format_metrics
 from ascent.data.universe import build_historical_universe, get_universe_on_date
@@ -740,6 +741,38 @@ def walk_forward_pipeline(
         if any(s > 0 for s in valid_fold_is_sharpes) else float("nan")
     wfe = _compute_wfe(wf_summary.get("sharpe"), fold_is_sharpes)
 
+    # --- Lo (2002) autocorrelation-adjusted Sharpe -------------------------
+    # ADDITIONAL metric alongside (never replacing) wf_summary["sharpe"]. The
+    # q-day rebalance cadence (weights forward-filled daily between
+    # rebalances) mechanically induces positive serial correlation in the
+    # daily OOS return series, which the naive annualized Sharpe does not
+    # correct for. See lo_adjusted_sharpe_ratio()'s docstring in
+    # ascent/research/evaluation.py for the formula and edge-case handling.
+    lo_sharpe = lo_adjusted_sharpe_ratio(
+        result.portfolio_returns, q=cfg.backtest.rebalance_freq_days
+    )
+    print("[Lo-2002] Autocorrelation-adjusted Sharpe (q=%d): %.3f  (naive: %.3f)" % (
+        cfg.backtest.rebalance_freq_days, lo_sharpe, wf_summary.get("sharpe", float("nan"))
+    ))
+
+    # --- Deflated Sharpe Ratio (Bailey & Lopez de Prado, 2014) --------------
+    # ADDITIONAL metric alongside (never replacing) wf_summary["sharpe"].
+    # Corrects for selection bias across KNOWN_TRIAL_COUNT distinct
+    # strategy/config trials this project has run (curated list + citations
+    # in ascent/research/deflated_sharpe.py) and for non-normal returns
+    # (skew/kurtosis, already computed by compute_all_metrics() above and
+    # reused here rather than recomputed). See deflated_sharpe_ratio()'s
+    # docstring for the SR-variance-across-trials fallback this uses since
+    # per-trial Sharpe values aren't logged anywhere in this codebase.
+    dsr = deflated_sharpe_ratio(
+        sharpe_observed=wf_summary.get("sharpe", 0.0),
+        n_trials=KNOWN_TRIAL_COUNT,
+        skew=wf_summary.get("skewness", 0.0),
+        kurtosis=wf_summary.get("kurtosis", 0.0),
+        n_obs=wf_summary.get("n_days", len(result.portfolio_returns)),
+    )
+    print("[DSR] Deflated Sharpe Ratio (n_trials=%d): %.3f" % (KNOWN_TRIAL_COUNT, dsr))
+
     print("")
     print("[WFE] Folds with a computable IS Sharpe: %d / %d" % (
         len(valid_fold_is_sharpes), len(fold_is_sharpes)))
@@ -828,6 +861,8 @@ def walk_forward_pipeline(
             "cagr":         wf_summary.get("cagr"),
             "volatility":   wf_summary.get("volatility"),
             "sharpe":       wf_summary.get("sharpe"),
+            "sharpe_lo_adjusted": lo_sharpe,
+            "deflated_sharpe_ratio": dsr,
             "sortino":      wf_summary.get("sortino"),
             "max_drawdown": wf_summary.get("max_drawdown"),
             "win_rate":     wf_summary.get("hit_rate"),
@@ -849,6 +884,23 @@ def walk_forward_pipeline(
                     "_compute_wfe() in walk_forward_runner.py."
                 ),
                 "alpha_overrides": resolved_alpha_weights,
+                "sharpe_lo_adjusted_q": cfg.backtest.rebalance_freq_days,
+                "sharpe_lo_adjusted_definition": (
+                    "Lo (2002) autocorrelation-adjusted annualized Sharpe on "
+                    "result.portfolio_returns, q=cfg.backtest.rebalance_freq_days. "
+                    "See lo_adjusted_sharpe_ratio() in ascent/research/evaluation.py."
+                ),
+                "deflated_sharpe_ratio_n_trials": KNOWN_TRIAL_COUNT,
+                "deflated_sharpe_ratio_definition": (
+                    "Bailey & Lopez de Prado (2014) Deflated Sharpe Ratio: "
+                    "probability true Sharpe > 0 after correcting for "
+                    "selection bias across KNOWN_TRIAL_COUNT trials (curated, "
+                    "see ascent/research/deflated_sharpe.py) and non-normal "
+                    "returns (skew/kurtosis of result.portfolio_returns, "
+                    "n_obs=wf_summary['n_days']). SR-variance-across-trials "
+                    "input uses the documented Mertens (2002) fallback -- see "
+                    "deflated_sharpe_ratio() docstring."
+                ),
             },
         }
         with open(wf_report_path, "w") as f:
@@ -875,6 +927,10 @@ def walk_forward_pipeline(
         print("  Walk-Forward Efficiency: %.3f" % wfe)
     else:
         print("  Walk-Forward Efficiency: n/a")
+    print("  Lo-adjusted Sharpe (q=%d): %.3f  (naive: %.3f)" % (
+        cfg.backtest.rebalance_freq_days, lo_sharpe, wf_summary.get("sharpe", float("nan"))
+    ))
+    print("  Deflated Sharpe Ratio (n_trials=%d): %.3f" % (KNOWN_TRIAL_COUNT, dsr))
 
     elapsed = time.time() - t0
     print("\n  Walk-forward pipeline completed in %.1fs\n" % elapsed)

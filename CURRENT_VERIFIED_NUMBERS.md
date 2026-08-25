@@ -50,6 +50,44 @@ pipeline that produced the superseded 2026-06-22 number. `wfe` is `null` in the 
 `canonical_wf().wfe` returns `None`. Do not invent or carry forward a WFE figure for this run;
 report the gap, not a number.
 
+**Deflated Sharpe Ratio / selection-bias correction (added 2026-08-24, code only — not yet
+re-run against a fresh artifact):** `ascent/research/walk_forward_runner.py` now also computes
+and persists `deflated_sharpe_ratio` (Bailey & López de Prado, "The Deflated Sharpe Ratio...",
+JPM 2014, SSRN 2460551) and `sharpe_lo_adjusted` (Lo, "The Statistics of Sharpe Ratios," FAJ
+2002) alongside the plain `sharpe` field on every future run — see
+`ascent/research/deflated_sharpe.py` and `lo_adjusted_sharpe_ratio()` in
+`ascent/research/evaluation.py`. **Neither has a value in the table above**: this canonical
+2026-08-15 artifact (`wf_report_clean_2026-08-15.json`) predates this code and was not produced
+by it, so it carries no `deflated_sharpe_ratio`/`sharpe_lo_adjusted` fields, no daily-returns
+series (`outputs/wf_results/wf_daily_returns_*.csv` does not exist for this run), and no
+skew/kurtosis. Computing DSR against Sharpe 0.415 above would require re-running the full
+walk-forward pipeline (multi-minute, not done in this session per the grounding rule — a
+reconstructed number is worse than an acknowledged gap). The next run of
+`walk_forward_pipeline()` will populate both fields; cite them from that fresh artifact, not by
+back-computing them from this table.
+- DSR is evaluated against `KNOWN_TRIAL_COUNT = 8` (a curated, human-reviewed count of distinct
+  strategy/config trials this project has run — see the inline citation list at the top of
+  `ascent/research/deflated_sharpe.py`), not a mechanically derived count: neither
+  `ascent/research/hypothesis_registry.py`'s registry nor the self-improve log currently holds
+  enough entries to auto-derive N (checked directly: `logs/hypothesis_registry.jsonl` does not
+  exist on disk in this worktree, and `logs/self_improve_log.jsonl` covers only a handful of
+  self-improve variant runs, not the broader trial history the count enumerates).
+- **Harvey, Liu & Zhu (2016), "...and the Cross-Section of Expected Returns," RFS** — data-
+  mining-adjusted significance bar of **t > 3.0**, vs. the conventional t > 2.0, to account for
+  the same multiple-testing problem DSR corrects for at the Sharpe-ratio level, applied instead
+  to a signal's IC t-statistic. `ascent/main.py`'s `run_pipeline()` already computes a per-
+  sleeve IC t-stat (`t_stat = mean_ic / (std_ic / sqrt(n))`, written to
+  `logs/sleeve_ic_log.jsonl` as `sleeve_ics[name]["ic_t"]`) and `ascent/alpha/stack.py`'s
+  `_get_gated_weights()` reads that log's `mean_ic` field for its IC gate — but **the gate
+  compares raw mean IC against `IC_GATE_THRESHOLD = -0.005` (an IC-magnitude bar), never the
+  `ic_t` t-statistic field against either the conventional (2.0) or HLZ-adjusted (3.0) bar.**
+  `logs/sleeve_ic_log.jsonl` does not exist on disk in this worktree (it is written only when
+  the live daily pipeline runs), so **no live `ic_t` value is currently computable from logged
+  data to report here** — this is a gap being disclosed, not a number being estimated. The
+  mechanism to compute it already exists; wiring `ic_t` into a Harvey/Liu/Zhu pass/fail check is
+  a documentation cross-reference only in this pass (see the comment near `IC_GATE_THRESHOLD`),
+  not a new code path — no new significance-testing logic was added.
+
 **Methodology notes / caveats — read before citing:**
 - This is a **modest** edge (Sharpe ~0.42) and the strategy now trails SPY over the full window
   (**−3.62pp** CAGR spread) at a beta close to 1 (0.95) — a materially different risk profile
@@ -82,6 +120,40 @@ to a *staging* file (`prices_live_clean_refetch.parquet`), **not** swapped into 
 change live momentum signals right before the June 24 rebalance. The corrupted cache is backed
 up (`data_cache/_corrupt_backup_20260622-222216/`) and the live pipeline dedupes on read.
 Swapping production is a separate, deliberate decision (flagged for the user).
+
+**Known limitation — static sector map is not point-in-time (measured 2026-08-24):**
+`walk_forward_runner.py` builds its `sector_map` dict ONCE from the CURRENT `profiles` cache
+(each symbol's 2026 sector classification) and reuses that same static map across every fold of
+the 6-year backtest above, including 2020/2021 folds — the sector-constrained position cap
+(`max_per_sector`, `sector_constrained_weighted()` in `ascent/portfolio/optimizer.py`) therefore
+applies each company's *current* sector to trades made years earlier. This is a look-ahead-flavored
+bias in the sector-cap machinery, distinct from the price/return look-ahead bias already guarded
+against elsewhere via `ascent/data/store/point_in_time.py`. Measured via
+`scripts/measure_sector_pit_gap.py` (run 2026-08-24), using `ascent/data/universe.py`'s
+`REMOVED_STOCKS` (260 tracked S&P 500 removals, 2013-2026) as the best available proxy for
+"companies whose business identity plausibly changed":
+- **142 of 260** tracked removals have a reason string indicating a corporate-action-driven
+  business-identity change (acquisition, merger, or spin-off) rather than a routine index
+  reshuffle or failure/receivership — these are the cases where the static sector_map is most
+  likely wrong for early folds.
+- **21 of those 142** still resolve to a sector in the current `profiles` cache (e.g. `FHN`,
+  `SLM`, `ATI`, `AA`, `MAT`, `JEF`, `FLR`, `BHF`, `FTI`, `GME`, `GT`, plus several `"Unknown"`
+  entries) — meaning the static map silently supplies a sector label for them in every fold,
+  including folds years before the corporate action occurred.
+- Using a simplified date-range-overlap approximation (per-symbol `start_date`/`end_date` from
+  `build_historical_universe(strict=True, sp500_only=True)` against an approximate 10-trading-day
+  rebalance grid, rather than exact `get_universe_on_date()` per fold), roughly **164 of ~171**
+  approximate rebalance dates (~96%) could plausibly have held at least one of the 142 flagged
+  symbols — i.e. this plausibly touches most of the backtest, not a rare edge case.
+- **Documented blind spot, not counted above:** this method only catches reclassification that
+  coincided with a tracked S&P 500 *removal* event. A company that stayed in the index the whole
+  time but had its sector silently revised (pure business-mix shift, no acquisition/merger/
+  spin-off) is invisible to this measurement — the `profiles` cache has no historical snapshots or
+  `known_time` column to detect that case. **The 142/21/164 figures above are a lower bound on the
+  true gap, not a complete count.**
+- **Not fixed in this pass.** A real point-in-time fix requires sourcing historical sector
+  classification data with a `known_time` column, which this project does not currently have —
+  out of scope here. This paragraph is a disclosure of a measured limitation, not a resolution.
 
 ---
 <!-- BEGIN GENERATED live-book: reconcile_numbers.py -->

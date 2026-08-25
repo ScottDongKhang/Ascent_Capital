@@ -45,6 +45,86 @@ def sharpe_ratio(returns: pd.Series, rf_annual: float = 0.0, periods_per_year: i
     return (ret - rf_annual) / vol
 
 
+def lo_adjusted_sharpe_ratio(
+    returns: pd.Series,
+    periods_per_year: int = 252,
+    q: int = None,
+) -> float:
+    """Autocorrelation-adjusted (Lo, 2002) annualized Sharpe ratio.
+
+    ADDITIONAL metric — never a replacement for `sharpe_ratio()`. Lo's "The
+    Statistics of Sharpe Ratios" (Financial Analysts Journal, 2002) shows that
+    naively annualizing a Sharpe ratio computed on serially correlated returns
+    (sqrt(periods_per_year) scaling of the per-period Sharpe) can overstate the
+    true annualized Sharpe by as much as ~65% under positive autocorrelation.
+    This strategy rebalances every `rebalance_freq_days` (10) trading days with
+    weights forward-filled daily in between, which mechanically induces
+    positive serial correlation in the daily return series (the same position
+    repeats for ~10 days), so the correction is directly relevant here.
+
+    Formula:
+        sharpe_naive = sharpe_ratio(returns, periods_per_year=periods_per_year)
+        rho_k = sample autocorrelation of `returns` at lag k, k = 1..q-1
+        sharpe_corrected = sharpe_naive / sqrt(1 + 2 * sum_{k=1}^{q-1} (1 - k/q) * rho_k)
+
+    This is the standard Lo (2002) correction for the case of a q-period
+    (here: q trading day) return-generating/holding horizon under an assumed
+    stationary AR-type return process; it is applied here to correct the
+    *annualization* of a Sharpe computed on daily returns whose serial
+    dependence arises from a q-day rebalance cadence.
+
+    Args:
+        returns: per-period (daily) returns, NOT annualized.
+        periods_per_year: trading periods per year, passed through to the
+            underlying naive Sharpe computation.
+        q: number of lags to include in the correction (rho_1..rho_{q-1}).
+            Callers SHOULD pass `cfg.backtest.rebalance_freq_days` explicitly,
+            since the caller knows the true rebalance cadence driving the
+            autocorrelation. If omitted, defaults to 10 as a holding-period
+            proxy matching this strategy's current `rebalance_freq_days`
+            default — this default will silently become wrong if the
+            rebalance cadence changes, so passing `q` explicitly is strongly
+            preferred.
+
+    Edge cases:
+        - Zero-variance returns: falls through to `sharpe_ratio()`'s own
+          `vol == 0 -> 0.0` handling (no divide-by-zero).
+        - Too few observations for the requested lag count (`len(returns) <=
+          q`, or `q < 2` so there is nothing to correct): returns the naive
+          annualized Sharpe unadjusted (documented fallback, not NaN) — a
+          short window shouldn't make the metric disappear, it just means the
+          correction term is untrustworthy and is skipped.
+        - If the correction factor `1 + 2*sum(...)` would be <= 0 (possible
+          with strong negative autocorrelation estimates on a short/noisy
+          sample), falls back to the naive Sharpe rather than taking sqrt of a
+          negative number.
+    """
+    if q is None:
+        q = 10
+
+    sharpe_naive = sharpe_ratio(returns, periods_per_year=periods_per_year)
+
+    n = len(returns)
+    if q < 2 or n <= q:
+        return sharpe_naive
+    if returns.std() == 0:
+        return sharpe_naive
+
+    r = returns.values
+    correction_sum = 0.0
+    for k in range(1, q):
+        rho_k = pd.Series(r).autocorr(lag=k)
+        if rho_k is None or np.isnan(rho_k):
+            continue
+        correction_sum += (1 - k / q) * rho_k
+
+    factor = 1 + 2 * correction_sum
+    if factor <= 0:
+        return sharpe_naive
+
+    return sharpe_naive / np.sqrt(factor)
+
+
 def sortino_ratio(returns: pd.Series, rf_annual: float = 0.0, periods_per_year: int = 252) -> float:
     """Sortino ratio using downside deviation."""
     downside = returns[returns < 0]
@@ -111,6 +191,7 @@ def compute_all_metrics(
         "cagr": annualized_return(returns),
         "volatility": annualized_volatility(returns),
         "sharpe": sharpe_ratio(returns),
+        "sharpe_lo_adjusted": lo_adjusted_sharpe_ratio(returns),
         "sortino": sortino_ratio(returns),
         "max_drawdown": max_drawdown(returns),
         "calmar": calmar_ratio(returns),
