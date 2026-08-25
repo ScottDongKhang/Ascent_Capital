@@ -435,7 +435,7 @@ class AscentPortfolioStrategy(PortfolioBaseStrategy):
         self,
         data: pd.DataFrame,
         weights: pd.DataFrame,
-        target_vol: float = 0.15,
+        target_vol: Optional[float] = None,
         lookback: int = 21,
         floor: float = 0.25,
         cap: float = 1.00,
@@ -448,12 +448,17 @@ class AscentPortfolioStrategy(PortfolioBaseStrategy):
         scale = clip(target_vol / realized_spy_vol, floor, cap)
 
         Delegates to ascent/portfolio/exposure.py — single source of truth
-        shared with production.
+        shared with production. `target_vol` defaults to the shared
+        `VOL_TARGET` constant so this tracks any future retuning instead of
+        drifting from production (see CLAUDE.md history on this divergence).
         """
         try:
             from ascent.portfolio.exposure import (
                 vol_target_scale, realized_vol_scale, strategy_return_proxy,
+                VOL_TARGET,
             )
+            if target_vol is None:
+                target_vol = VOL_TARGET
 
             spy = (
                 data[data["symbol"] == "SPY"]

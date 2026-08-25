@@ -120,10 +120,14 @@ def test_shadow_promoter_promotes_expired_winner(tmp_path, monkeypatch):
     shadow_file = tmp_path / "data_cache" / "shadow_configs" / "v1_20260318.json"
     shadow_file.write_text(json.dumps(shadow))
 
-    # Mock _re_evaluate to return a Sharpe that beats baseline + MIN_EDGE (0.518 + 0.05 = 0.568)
-    with patch("ascent.research.shadow_promoter._re_evaluate", return_value=0.65):
+    # Mock _re_evaluate to return a Calmar-based score that beats baseline + MIN_EDGE
+    # (0.518 + 0.05 = 0.568)
+    with patch(
+        "ascent.research.shadow_promoter._re_evaluate",
+        return_value={"score": 0.65, "calmar": 0.65, "sharpe": 0.70},
+    ):
         from ascent.research.shadow_promoter import run_shadow_promotion
-        run_shadow_promotion(baseline_sharpe=0.518)
+        run_shadow_promotion(baseline_calmar=0.518)
 
     active_path = tmp_path / "data_cache" / "active_alpha_config.json"
     assert active_path.exists(), "active_alpha_config.json must be written after promotion"
@@ -161,7 +165,7 @@ def test_shadow_promoter_skips_unexpired(tmp_path, monkeypatch):
     shadow_file.write_text(json.dumps(shadow))
 
     from ascent.research.shadow_promoter import run_shadow_promotion
-    run_shadow_promotion(baseline_sharpe=0.518)
+    run_shadow_promotion(baseline_calmar=0.518)
 
     active_path = tmp_path / "data_cache" / "active_alpha_config.json"
     assert not active_path.exists(), "must NOT promote a config that hasn't expired yet"
@@ -187,14 +191,46 @@ def test_shadow_promoter_archives_weak_expired(tmp_path, monkeypatch):
     shadow_file = tmp_path / "data_cache" / "shadow_configs" / "v3_20260318.json"
     shadow_file.write_text(json.dumps(shadow))
 
-    # No price cache — OOS returns 0.0 sharpe → below baseline 0.518
+    # No price cache — OOS returns a fail-closed eval (score/calmar = -inf) → below baseline 0.518
     from ascent.research.shadow_promoter import run_shadow_promotion
-    run_shadow_promotion(baseline_sharpe=0.518)
+    run_shadow_promotion(baseline_calmar=0.518)
 
     active_path = tmp_path / "data_cache" / "active_alpha_config.json"
     assert not active_path.exists(), "weak expired config must not become live"
     archived = list((tmp_path / "data_cache" / "archived_configs").glob("*.json"))
     assert len(archived) >= 1, "expired weak config must be moved to archived_configs"
+
+
+def test_shadow_promoter_skips_when_no_real_baseline(tmp_path, monkeypatch):
+    """When no explicit baseline is passed and get_baseline_calmar() can't produce a
+    real number, the promotion cycle must be skipped entirely -- never fall back to a
+    fabricated hardcoded baseline (the old 0.518 Sharpe magic number)."""
+    import json
+    from datetime import timedelta, date
+    from unittest.mock import patch
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "data_cache" / "shadow_configs").mkdir(parents=True)
+    (tmp_path / "logs").mkdir()
+
+    shadow = {
+        "variant_id":     "v4_20260318",
+        "alpha_weights":  {"meanrev": 0.55, "statarb": 0.45},
+        "shadow_expires": (date.today() - timedelta(days=1)).isoformat(),
+        "promoted_at":    "2026-03-18T06:00:00",
+    }
+    shadow_file = tmp_path / "data_cache" / "shadow_configs" / "v4_20260318.json"
+    shadow_file.write_text(json.dumps(shadow))
+
+    with patch("ascent.research.self_improve.get_baseline_calmar", return_value=None):
+        from ascent.research.shadow_promoter import run_shadow_promotion
+        promoted = run_shadow_promotion()  # no explicit baseline_calmar
+
+    assert promoted == 0
+    active_path = tmp_path / "data_cache" / "active_alpha_config.json"
+    assert not active_path.exists(), "must not promote against a fabricated baseline"
+    # The shadow config must be left untouched -- not archived either, since the
+    # whole cycle was skipped before any config was even examined.
+    assert shadow_file.exists()
 
 
 # ── Task 3 tests ───────────────────────────────────────────────────────────────
@@ -254,3 +290,169 @@ def test_promote_regime_variant_writes_by_regime(tmp_path, monkeypatch):
     assert "by_regime" in config
     assert "stressed" in config["by_regime"]
     assert abs(config["by_regime"]["stressed"].get("trend", 0) - 0.50) < 0.001
+
+
+# ── Shared scoring helper tests (2026-08-23 review: Bugs 1-3) ──────────────────
+# self_improve._evaluate_variant_full and shadow_promoter._re_evaluate used to
+# independently reimplement the same Calmar-scoring math, which let their
+# missing-data fallback behaviors (Bug 1) and promotion thresholds (Bug 2)
+# drift apart. Fixed by extracting one shared helper, self_improve.score_variant.
+# These tests cover the shared helper once rather than duplicating the same
+# assertion per file.
+
+def test_score_variant_fails_closed_on_missing_returns():
+    """When no per-day return series is available, score_variant must return
+    score=None/calmar=None -- never substitute the Sharpe-scale number for
+    Calmar. This is the fail-closed contract both _evaluate_variant_full and
+    shadow_promoter._re_evaluate now rely on."""
+    from ascent.research.self_improve import score_variant
+
+    result = score_variant(sharpe=0.9, turnover=0.1, returns=None)
+    assert result["score"] is None
+    assert result["calmar"] is None
+    assert result["sharpe"] == 0.9, "sharpe is still real and reported even when Calmar isn't computable"
+
+    # Also fails closed on an empty list, not just None
+    result2 = score_variant(sharpe=0.42, turnover=0.0, returns=[])
+    assert result2["score"] is None
+    assert result2["calmar"] is None
+
+
+def test_score_variant_computes_real_calmar_from_returns():
+    """With a real return series present, score_variant must compute an
+    actual Calmar (not just echo Sharpe) and apply the turnover penalty."""
+    from ascent.research.self_improve import score_variant
+
+    returns = [0.01, -0.02, 0.015, 0.005, -0.01] * 10
+    result = score_variant(sharpe=0.9, turnover=0.1, returns=returns)
+    assert result["score"] is not None
+    assert result["calmar"] is not None
+    assert result["sharpe"] == 0.9
+    # score is calmar minus the turnover penalty, not Sharpe echoed back
+    assert result["score"] != result["sharpe"]
+
+
+def test_re_evaluate_fails_closed_without_returns(tmp_path, monkeypatch):
+    """Bug 1 regression: shadow_promoter._re_evaluate used to fall back to
+    `calmar = sharpe` when the OOS result had no 'returns' series -- the
+    exact Sharpe-as-Calmar unit-mismatch bug self_improve.py was fixed to
+    avoid. It must now fail closed (to a guaranteed loss), matching
+    self_improve.py's own fail-closed contract, instead of substituting the
+    Sharpe value (0.9 below) for Calmar."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "data_cache").mkdir()
+    (tmp_path / "data_cache" / "prices_live.parquet").write_bytes(b"x")
+
+    import ascent.research.walk_forward_lightweight as wfl
+    from ascent.research import shadow_promoter
+
+    def fake_oos(config, n_days=63):
+        return {"n_folds": 5, "sharpe": 0.9, "turnover": 0.1}  # no "returns" key
+
+    monkeypatch.setattr(wfl, "run_lightweight_oos", fake_oos)
+
+    result = shadow_promoter._re_evaluate({"alpha_weights": {"meanrev": 0.5, "statarb": 0.5}})
+    assert result == {"score": float("-inf"), "calmar": float("-inf"), "sharpe": 0.0}, \
+        "must fail closed to a loss, not substitute Sharpe (0.9) for Calmar"
+
+
+def test_re_evaluate_failure_does_not_promote_against_negative_baseline(tmp_path, monkeypatch):
+    """Regression (2026-08-23 review): _ZERO_EVAL used to be {"score": 0.0, ...},
+    which is only a "loss" when baseline_calmar > 0. If the live book is itself
+    in a drawdown, get_baseline_calmar() can legitimately return a NEGATIVE
+    Calmar (e.g. -0.05). A shadow variant whose re-evaluation fails for an
+    unrelated reason (missing data, an exception, insufficient OOS folds) used
+    to return _ZERO_EVAL (0.0), giving edge = 0.0 - (-0.05) = +0.05, which
+    clears MIN_EDGE_FOR_PROMOTION (0.03) and promotes an untested/failed
+    variant. The sentinel must fail closed to float('-inf') instead, so it
+    stays a loss against ANY real baseline, positive or negative."""
+    import json
+    from datetime import timedelta, date
+    from unittest.mock import patch
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "data_cache" / "shadow_configs").mkdir(parents=True)
+    (tmp_path / "logs").mkdir()
+    (tmp_path / "data_cache" / "archived_configs").mkdir()
+
+    shadow = {
+        "variant_id":     "v5_20260318",
+        "alpha_weights":  {"meanrev": 0.55, "statarb": 0.45},
+        "shadow_expires": (date.today() - timedelta(days=1)).isoformat(),
+        "promoted_at":    "2026-03-18T06:00:00",
+    }
+    shadow_file = tmp_path / "data_cache" / "shadow_configs" / "v5_20260318.json"
+    shadow_file.write_text(json.dumps(shadow))
+
+    # Live book is in a real drawdown: baseline Calmar is negative.
+    negative_baseline = -0.05
+
+    # Re-evaluation fails for an unrelated reason (e.g. an exception inside
+    # run_lightweight_oos) and returns the fail-closed sentinel.
+    from ascent.research import shadow_promoter
+    with patch(
+        "ascent.research.shadow_promoter._re_evaluate",
+        return_value=dict(shadow_promoter._ZERO_EVAL),
+    ):
+        from ascent.research.shadow_promoter import run_shadow_promotion
+        promoted = run_shadow_promotion(baseline_calmar=negative_baseline)
+
+    assert promoted == 0, (
+        "a failed re-evaluation must never be promoted just because the live "
+        "baseline is itself in a drawdown -- edge must stay a loss, not flip "
+        "positive against a negative baseline"
+    )
+    active_path = tmp_path / "data_cache" / "active_alpha_config.json"
+    assert not active_path.exists(), "failed variant must not reach active_alpha_config.json"
+    archived = list((tmp_path / "data_cache" / "archived_configs").glob("*.json"))
+    assert len(archived) == 1, "failed variant must be archived, not promoted"
+
+
+def test_min_edge_for_promotion_matches_min_calmar_edge():
+    """Bug 2 regression: shadow_promoter.MIN_EDGE_FOR_PROMOTION was a
+    leftover 0.05 Sharpe-scale bar never rescaled for the Calmar-based edge
+    it's compared against, while self_improve.MIN_CALMAR_EDGE *was*
+    deliberately rescaled (0.05 -> 0.03) for exactly that reason. The two
+    gates score the same Calmar-based quantity, so they must share one
+    value -- shadow_promoter now imports MIN_CALMAR_EDGE directly rather
+    than defining an independently-tunable second constant."""
+    from ascent.research.self_improve import MIN_CALMAR_EDGE
+    from ascent.research.shadow_promoter import MIN_EDGE_FOR_PROMOTION
+
+    assert MIN_EDGE_FOR_PROMOTION == MIN_CALMAR_EDGE, (
+        "shadow graduation bar and shadow entry bar must not drift apart again"
+    )
+
+
+def test_turnover_penalty_rescaled_to_calmar_scale():
+    """Bug regression: TURNOVER_PENALTY was calibrated for the pre-rework
+    `sharpe - TURNOVER_PENALTY * turnover` formula (Sharpe-scale) and was
+    left at its old value 0.10 when the formula changed to
+    `calmar - TURNOVER_PENALTY * turnover` (Calmar-scale), even though
+    MIN_CALMAR_EDGE *was* rescaled at the same time using the same
+    Calmar/Sharpe ratio (~0.223/0.415 ~= 0.54, see self_improve.py's
+    MIN_CALMAR_EDGE comment). Leaving TURNOVER_PENALTY un-rescaled made the
+    same absolute deduction proportionally ~2x harsher than intended on the
+    Calmar scale, biasing variant selection against higher-turnover variants.
+
+    This locks in the corrected, golden value (0.10 * 0.54 ~= 0.054, rounded
+    to 0.05) and checks it is calibrated on the same ratio as MIN_CALMAR_EDGE
+    so the two constants can't silently drift back out of consistency."""
+    from ascent.research.walk_forward_lightweight import TURNOVER_PENALTY
+    from ascent.research.self_improve import MIN_CALMAR_EDGE
+
+    # Golden value: catches an accidental revert to the old Sharpe-scale 0.10.
+    assert TURNOVER_PENALTY == 0.05
+
+    # Both constants were derived from the same ~0.54 Calmar/Sharpe ratio
+    # applied to their pre-rework, Sharpe-scale originals (0.10 and 0.05
+    # respectively). Their post-rework ratio should therefore still be close
+    # to their pre-rework ratio (0.10 / 0.05 == 2.0) -- if one constant is
+    # rescaled and the other is not, this ratio drifts away from 2.0.
+    pre_rework_ratio = 0.10 / 0.05
+    post_rework_ratio = TURNOVER_PENALTY / MIN_CALMAR_EDGE
+    assert abs(post_rework_ratio - pre_rework_ratio) < 0.35, (
+        f"TURNOVER_PENALTY ({TURNOVER_PENALTY}) and MIN_CALMAR_EDGE "
+        f"({MIN_CALMAR_EDGE}) look like they drifted out of consistent "
+        f"Calmar-scale calibration (ratio {post_rework_ratio:.2f} vs "
+        f"pre-rework {pre_rework_ratio:.2f})"
+    )

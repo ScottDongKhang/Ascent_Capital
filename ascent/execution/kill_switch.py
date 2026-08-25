@@ -11,8 +11,12 @@ Logic:
   - A separate --reset-kill-switch flag manually re-enables trading after review.
 
 Thresholds (configurable at top of file):
-  SOFT_WARN_PCT  = 0.08   -> logs a warning, trades still go through
-  HARD_STOP_PCT  = 0.15   -> halts all order submission, logs reason
+  SOFT_WARN_PCT           = 0.05   -> logs a warning, trades still go through
+  HARD_STOP_PCT           = 0.12   -> halts all order submission (peak-to-trough), logs reason
+  MONTHLY_SOFT_HALT_PCT   = 0.06   -> halts all order submission if the CURRENT
+                                       calendar month is down this much from its
+                                       month-start NAV, independent of the
+                                       whole-book peak-to-trough check above.
 
 Kill switch state is persisted in logs/kill_switch_state.json so it
 survives process restarts. Once tripped, it stays tripped until you
@@ -26,9 +30,17 @@ from datetime import datetime, date
 from pathlib import Path
 from typing import Optional
 
+from ascent.utils.market_time import market_today
+
 # ── Configurable thresholds ──────────────────────────────────────────────────
-SOFT_WARN_PCT = 0.08   # 8%  drawdown → warning only
-HARD_STOP_PCT = 0.15   # 15% drawdown → full halt
+SOFT_WARN_PCT = 0.05   # 5%  peak-to-trough drawdown → warning only
+HARD_STOP_PCT = 0.12   # 12% peak-to-trough drawdown → full halt
+
+# Monthly circuit breaker: independent of the peak-to-trough check above.
+# Halts trading if the CURRENT calendar month's NAV is down this much from
+# its month-start NAV (first NAV on/after the 1st of the current trading
+# month, per _read_nav_history()).
+MONTHLY_SOFT_HALT_PCT = 0.06   # 6% month-to-date drawdown → full halt
 
 # ── Paths ────────────────────────────────────────────────────────────────────
 LOG_DIR        = Path("logs")
@@ -57,7 +69,13 @@ def _load_state() -> dict:
         "tripped_reason": None,
         "peak_nav": None,
         "drawdown_at_trip": None,
+        "trip_reason_kind": None,
         "reset_at": None,
+        # Monthly circuit breaker baseline (informational persistence; the
+        # value is always recomputed from eod_log.jsonl, this just records
+        # what the last check used so `status()` / debugging can see it).
+        "month_start_key": None,
+        "month_start_nav": None,
     }
 
 
@@ -126,8 +144,50 @@ def _read_nav_history() -> list[dict]:
     return entries
 
 
+def _month_key(date_str: str) -> str:
+    """'2026-08-23' -> '2026-08'."""
+    return date_str[:7]
+
+
+def _get_month_start_nav(
+    history: list[dict], now: Optional[datetime] = None
+) -> tuple[Optional[str], Optional[float]]:
+    """
+    Determine the current trading month (from the actual current date, via
+    ascent.utils.market_time.market_today() -- NOT from the tail of `history`)
+    and the month-start NAV baseline: the first available NAV in `history` on
+    or after the 1st of that month.
+
+    `history` is derived from eod_log.jsonl, which check() calls BEFORE
+    today's own entry is appended -- so history[-1] is always a prior day's
+    NAV and must never be used to decide what "current month" means (that
+    was the bug: on the first trading day of a new month, history[-1] is
+    still last month's final entry, misattributing the monthly baseline).
+    `current_nav` (today's actual latest point) is handled separately by the
+    caller; this function only locates the month-start baseline within the
+    historical log.
+
+    Returns (month_key, month_start_nav). month_start_nav is None when there
+    is no NAV history at all yet for the current trading month (e.g. the
+    very first trading day of a new month, before any EOD run has logged a
+    NAV) -- callers must treat that as "not enough data, skip the check",
+    not as a trigger.
+    """
+    current_month = _month_key(market_today(now).isoformat())
+
+    if not history:
+        return current_month, None
+
+    month_entries = [e for e in history if _month_key(e["date"]) == current_month]
+    if not month_entries:
+        return current_month, None
+
+    month_entries.sort(key=lambda e: e["date"])
+    return current_month, month_entries[0]["nav"]
+
+
 # ── Core check ───────────────────────────────────────────────────────────────
-def check(current_nav: Optional[float] = None) -> dict:
+def check(current_nav: Optional[float] = None, now: Optional[datetime] = None) -> dict:
     """
     Run the kill switch check.
 
@@ -137,20 +197,32 @@ def check(current_nav: Optional[float] = None) -> dict:
         Pass the live NAV if you already have it (e.g. from the Alpaca
         account fetch in eod_runner). If None, the function uses the
         most recent entry in eod_log.jsonl.
+    now : datetime, optional
+        Injectable "current instant" for the monthly circuit breaker's
+        month determination (see _get_month_start_nav). Tests use this;
+        production leaves it None so ascent.utils.market_time.market_today()
+        reads the real current market date.
 
     Returns
     -------
     dict with keys:
-        status        : "ok" | "warn" | "halted"
-        drawdown      : float (0.0 → 1.0, e.g. 0.12 = 12% drawdown)
-        peak_nav      : float
-        current_nav   : float
-        message       : str (human-readable summary)
+        status            : "ok" | "warn" | "halted"
+        drawdown          : float, peak-to-trough (0.0 → 1.0, e.g. 0.12 = 12%)
+        peak_nav          : float
+        current_nav       : float
+        month_start_nav   : float or None (month-start NAV baseline, None if
+                             no NAV logged yet this trading month)
+        monthly_drawdown  : float or None, month-to-date (same units as above)
+        message           : str (human-readable summary)
 
     Raises
     ------
     KillSwitchTriggered
-        If drawdown >= HARD_STOP_PCT or if the switch is already tripped.
+        If the switch is already tripped, or on this call either:
+          - peak-to-trough drawdown >= HARD_STOP_PCT, or
+          - month-to-date drawdown from the month-start NAV baseline >=
+            MONTHLY_SOFT_HALT_PCT (independent check; does not require the
+            peak-to-trough condition to also be true).
     """
     LOG_DIR.mkdir(exist_ok=True)
     state = _load_state()
@@ -215,6 +287,7 @@ def check(current_nav: Optional[float] = None) -> dict:
         state["tripped_reason"]   = reason
         state["peak_nav"]         = peak_nav
         state["drawdown_at_trip"] = round(drawdown, 4)
+        state["trip_reason_kind"] = "peak"
         _save_state(state)
 
         msg = f"[KILL SWITCH] HALTED — {reason} Run --reset-kill-switch to resume."
@@ -222,6 +295,62 @@ def check(current_nav: Optional[float] = None) -> dict:
         result["status"]  = "halted"
         result["message"] = msg
         raise KillSwitchTriggered(msg)
+
+    # ── Monthly circuit breaker (independent of peak-to-trough above) ───────
+    # Tracks month-to-date drawdown from the month-start NAV, not the
+    # whole-book peak. A book can be well within its all-time peak-to-trough
+    # budget while still having a bad month -- this catches that case
+    # separately so it doesn't get masked by an all-time-high peak.
+    month_key, month_start_nav = _get_month_start_nav(history, now=now)
+    result["month_start_nav"] = (
+        round(month_start_nav, 2) if month_start_nav is not None else None
+    )
+    result["monthly_drawdown"] = None
+
+    if month_start_nav is not None and month_start_nav > 0:
+        state["month_start_key"] = month_key
+        state["month_start_nav"] = round(month_start_nav, 2)
+
+        monthly_drawdown = (month_start_nav - current_nav) / month_start_nav
+        result["monthly_drawdown"] = round(monthly_drawdown, 4)
+
+        if monthly_drawdown >= MONTHLY_SOFT_HALT_PCT:
+            reason = (
+                f"Month-to-date drawdown {monthly_drawdown:.1%} exceeded monthly "
+                f"circuit breaker {MONTHLY_SOFT_HALT_PCT:.0%} for {month_key}. "
+                f"NAV ${current_nav:,.0f} vs month-start NAV ${month_start_nav:,.0f}."
+            )
+            state["tripped"]          = True
+            state["tripped_at"]       = datetime.utcnow().isoformat()
+            state["tripped_reason"]   = reason
+            state["peak_nav"]         = peak_nav
+            # BUG FIX: this trip is caused by the monthly check, so record
+            # the monthly drawdown that actually triggered it -- NOT the
+            # whole-book peak-to-trough `drawdown` computed earlier, which
+            # can be small (e.g. a book near its all-time peak having a bad
+            # month) and would otherwise misreport the real MTD loss.
+            state["drawdown_at_trip"] = round(monthly_drawdown, 4)
+            state["trip_reason_kind"] = "monthly"
+            _save_state(state)
+
+            msg = (
+                f"[KILL SWITCH] HALTED (monthly circuit breaker) — {reason} "
+                f"Run --reset-kill-switch to resume."
+            )
+            print(msg, file=sys.stderr)
+            result["status"]  = "halted"
+            result["message"] = msg
+            raise KillSwitchTriggered(msg)
+    else:
+        # No NAV recorded yet for the current trading month (e.g. the very
+        # first trading day of a new month, before any EOD run has logged a
+        # NAV) -- not enough data, do not trigger.
+        print(
+            "[KILL SWITCH] No NAV history for the current month yet — "
+            "skipping monthly circuit breaker check."
+        )
+
+    _save_state(state)
 
     if not result["message"]:
         result["message"] = (
@@ -270,11 +399,14 @@ def status() -> None:
         print(f"  Tripped at       : {state['tripped_at']}")
         print(f"  Reason           : {state['tripped_reason']}")
         if state["drawdown_at_trip"]:
-            print(f"  DD at trip       : {state['drawdown_at_trip']:.1%}")
+            kind = state.get("trip_reason_kind") or "peak"
+            label = "monthly" if kind == "monthly" else "peak-to-trough"
+            print(f"  DD at trip ({label}) : {state['drawdown_at_trip']:.1%}")
     if state["reset_at"]:
         print(f"  Last reset       : {state['reset_at']}")
     print(f"  Soft warn        : {SOFT_WARN_PCT:.0%}")
     print(f"  Hard stop        : {HARD_STOP_PCT:.0%}")
+    print(f"  Monthly halt     : {MONTHLY_SOFT_HALT_PCT:.0%}")
     if history:
         navs    = [e["nav"] for e in history]
         peak    = max(navs)
@@ -283,6 +415,12 @@ def status() -> None:
         print(f"  Peak NAV         : ${peak:,.2f}")
         print(f"  Current NAV      : ${current:,.2f}")
         print(f"  Current drawdown : {dd:.1%}")
+
+        month_key, month_start_nav = _get_month_start_nav(history)
+        if month_start_nav is not None and month_start_nav > 0:
+            mdd = (month_start_nav - current) / month_start_nav
+            print(f"  Month ({month_key}) start NAV : ${month_start_nav:,.2f}")
+            print(f"  Month-to-date drawdown        : {mdd:.1%}")
     print("=" * 50)
 
 

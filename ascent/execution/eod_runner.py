@@ -487,9 +487,14 @@ def _execute_order_batch(
         # _audit() is a log-only side effect (compliance/audit_trail.py) --
         # calling it uniformly cannot change what gets submitted, so this is
         # unified to "always audit" rather than kept as a per-caller gap.
+        _trip_kind = kill_switch._load_state().get("trip_reason_kind")
+        _trip_threshold = (
+            kill_switch.MONTHLY_SOFT_HALT_PCT if _trip_kind == "monthly"
+            else kill_switch.HARD_STOP_PCT
+        )
         _audit("kill_switch_triggered", {
             "nav": portfolio_value, "date": today_str,
-            "threshold": kill_switch.HARD_STOP_PCT,
+            "threshold": _trip_threshold,
         })
         raise
 
