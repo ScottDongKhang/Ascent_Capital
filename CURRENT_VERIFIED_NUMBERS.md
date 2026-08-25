@@ -155,6 +155,31 @@ against elsewhere via `ascent/data/store/point_in_time.py`. Measured via
   classification data with a `known_time` column, which this project does not currently have —
   out of scope here. This paragraph is a disclosure of a measured limitation, not a resolution.
 
+**Candidate finding — total-return (split/dividend) adjustment (measured 2026-08-25, NOT
+promoted to canonical):** re-ran `walk_forward_pipeline(prices_cache_name=
+"prices_live_clean_refetch")` — the total-return-adjusted staging cache built 2026-06-22, WF-only
+per the existing `prices_cache_name=` override, live `prices_live` and live momentum signals
+untouched. Coverage caveat: the staging cache only extends to 2026-06-22, so this run's OOS
+window is truncated to **2020-01-02 → 2026-06-15** (163 folds, 1621 days) versus the canonical
+artifact's 2020-01-02 → 2026-07-15 (165 folds, 1641 days) — a ~1-month-shorter comparison, not
+apples-to-apples on window length. Artifact: `outputs/wf_results/wf_report_2026-08-25.json`.
+
+| Metric | Canonical (unadjusted, longer window) | Total-return (adjusted, truncated window) |
+|---|---|---|
+| Sharpe | 0.415 | **0.477** |
+| Sharpe, Lo-adjusted | 0.422 | 0.520 |
+| CAGR | +10.2% | **+13.5%** |
+| Max drawdown | −45.65% | −47.80% (worse) |
+| Beta vs SPY | 0.947 | 0.975 |
+| Win rate | 52.3% | 52.9% |
+| WFE | not computable (old framework) | 0.356 |
+
+Directionally, total-return adjustment raises both Sharpe and CAGR, but also worsens max
+drawdown and pushes beta slightly closer to 1 — not a free improvement, a different risk/return
+point. Given the shorter, non-matching window, this is not a clean causal read of the adjustment
+alone. **Not promoted to `CANONICAL_WF_ARTIFACT`** — that decision, including whether to first
+regenerate the staging cache to match the full canonical window, is left to the user.
+
 ---
 <!-- BEGIN GENERATED live-book: reconcile_numbers.py -->
 

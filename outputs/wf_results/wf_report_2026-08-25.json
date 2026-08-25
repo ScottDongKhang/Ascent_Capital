@@ -1,0 +1,30 @@
+{
+  "cagr": 0.134855441762205,
+  "volatility": 0.2827334700227245,
+  "sharpe": 0.47697020714019495,
+  "sharpe_lo_adjusted": 0.5195674181797131,
+  "deflated_sharpe_ratio": 1.0,
+  "sortino": 0.6433712570740826,
+  "max_drawdown": -0.47802176806177016,
+  "win_rate": 0.5293028994447871,
+  "wfe": 0.3559435650753116,
+  "alpha": -0.021259396027191402,
+  "beta": 0.9747740079690981,
+  "n_folds": 163,
+  "n_oos_days": 1621,
+  "_meta": {
+    "framework": "ascent/research/walk_forward_runner.py (walk_forward_pipeline)",
+    "oos_window": "2020-01-02 -> 2026-06-15",
+    "mean_is_sharpe": 1.3400163788303805,
+    "n_folds_with_is_sharpe": 160,
+    "wfe_definition": "OOS Sharpe (stitched multi-fold backtest) / mean(per-fold in-sample Sharpe), capped OOS Sharpe at +/-3.0. See _compute_wfe() in walk_forward_runner.py.",
+    "alpha_overrides": {
+      "meanrev": 0.5,
+      "statarb": 0.5
+    },
+    "sharpe_lo_adjusted_q": 10,
+    "sharpe_lo_adjusted_definition": "Lo (2002) autocorrelation-adjusted annualized Sharpe on result.portfolio_returns, q=cfg.backtest.rebalance_freq_days. See lo_adjusted_sharpe_ratio() in ascent/research/evaluation.py.",
+    "deflated_sharpe_ratio_n_trials": 8,
+    "deflated_sharpe_ratio_definition": "Bailey & Lopez de Prado (2014) Deflated Sharpe Ratio: probability true Sharpe > 0 after correcting for selection bias across KNOWN_TRIAL_COUNT trials (curated, see ascent/research/deflated_sharpe.py) and non-normal returns (skew/kurtosis of result.portfolio_returns, n_obs=wf_summary['n_days']). SR-variance-across-trials input uses the documented Mertens (2002) fallback -- see deflated_sharpe_ratio() docstring."
+  }
+}
