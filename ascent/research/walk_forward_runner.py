@@ -21,7 +21,7 @@ from ascent.research.evaluation import sharpe_ratio, annualized_return, max_draw
 from ascent.research.deflated_sharpe import deflated_sharpe_ratio, KNOWN_TRIAL_COUNT
 from ascent.backtest.engine import BacktestEngine
 from ascent.research.evaluation import format_metrics
-from ascent.data.universe import build_historical_universe, get_universe_on_date
+from ascent.data.universe import build_historical_universe, get_universe_on_date, DELISTING_TERMINAL_TERMS
 
 TARGET_HORIZON = 21
 
@@ -208,6 +208,133 @@ def _pit_slice(df, date_col: str, as_of_date: pd.Timestamp):
     return df[col <= as_of_date].copy()
 
 
+def _nearest_prior_index_date(index: pd.DatetimeIndex, target: pd.Timestamp):
+    """Latest date in `index` that is <= target, or None if none exists."""
+    avail = index[index <= target]
+    if len(avail) == 0:
+        return None
+    return avail.max()
+
+
+def apply_delisting_terminal_credit(
+    close_full: pd.DataFrame,
+    open_full: pd.DataFrame | None = None,
+):
+    """
+    Credit real terminal (deal-close) values for the bounded, already-sourced
+    set of delisted symbols in ascent.data.universe.DELISTING_TERMINAL_TERMS,
+    instead of letting a departing symbol's price simply go NaN on its real
+    closure date -- which is what happens today: close_full has no more rows
+    for a delisted symbol past its last traded date, so pct_change() on that
+    column is NaN forever after, and the return calc's own .fillna(0) (see
+    ascent/backtest/engine.py's `daily_returns = close.pct_change().fillna(0)`
+    and this module's per-fold diagnostic `day_ret`) silently turns "position
+    got acquired for real money" into "position earned exactly 0% forever,"
+    inflating OOS performance whenever a held name happens to get acquired.
+
+    Mechanics: for each symbol in DELISTING_TERMINAL_TERMS that has price
+    history in close_full, find the nearest trading day <= its REMOVED_STOCKS
+    closure date (`removed_date`) and, if that day doesn't already have a
+    real price (nothing here overrides real market data), inject the implied
+    terminal per-share value there:
+      - "cash": the flat cash_amount.
+      - "stock" / "cash_and_stock": exchange_ratio * the acquirer's own close
+        price, looked up from close_full itself (falling back to the nearest
+        prior trading day if the acquirer has no price exactly on the deal's
+        close_date), plus cash_amount for cash_and_stock. The acquirer price
+        is NEVER hardcoded -- it comes from whatever price data this run is
+        actually using, so the credited value stays internally consistent.
+    Only that single day's price is touched. Every day after it is left as
+    whatever close_full already had there (typically still NaN, since the
+    symbol really did stop trading) -- pct_change() from the injected
+    terminal price to NaN the following day is itself NaN and gets
+    fillna(0)'d, which is correct: the position is gone, no more price
+    movement to attribute to it. Because build_historical_universe() ends
+    the symbol's tradeable window at that same REMOVED_STOCKS date, no later
+    fold's optimizer can select it again -- the credited position cannot
+    carry forward or double-count.
+
+    Look-ahead reasoning (CLAUDE.md integrity constraint #1 -- this must not
+    reopen it): this is not a new form of look-ahead. The deal terms are
+    real, public facts that were knowable as of their announcement/close,
+    and the only thing injected here is the single terminal price implied by
+    those already-public terms, placed AT the real historical date it
+    actually took effect -- never earlier. Every fold whose test_date +
+    holding window falls entirely before a symbol's closure date sees
+    exactly what it saw before this function existed: real market data (or
+    a genuine absence of it), untouched. Only a fold whose test/next-test
+    window actually straddles the real closure date is affected. This is
+    also not a change in what kind of thing this backtest models: a live
+    Alpaca paper account holding one of these names would have been
+    force-closed by the broker at real-world deal-close (cash-for-shares
+    settles to cash automatically; stock-for-stock converts to the acquirer's
+    shares) -- crediting the terminal value here just models that mechanic
+    more faithfully instead of pretending the position quietly evaporates.
+    """
+    if not DELISTING_TERMINAL_TERMS:
+        return close_full, open_full
+
+    close_full = close_full.copy()
+    if open_full is not None:
+        open_full = open_full.copy()
+
+    for sym, terms in DELISTING_TERMINAL_TERMS.items():
+        if sym not in close_full.columns:
+            continue  # no price history for this symbol at all -- nothing to credit
+
+        removed_date = pd.Timestamp(terms["removed_date"])
+        closure_day  = _nearest_prior_index_date(close_full.index, removed_date)
+        if closure_day is None:
+            continue
+
+        existing = close_full.loc[closure_day, sym]
+        if pd.notna(existing):
+            # Real data already covers the closure date -- never override real data.
+            continue
+
+        sym_series   = close_full[sym]
+        valid_before = sym_series.loc[sym_series.index <= closure_day].dropna()
+        if valid_before.empty:
+            continue  # never had real data for this symbol -- no "held at" price to anchor to
+
+        deal_type = terms["deal_type"]
+        if deal_type == "cash":
+            terminal_value = terms["cash_amount"]
+        elif deal_type in ("stock", "cash_and_stock"):
+            acquirer = terms["acquirer_symbol"]
+            close_lookup_day = _nearest_prior_index_date(
+                close_full.index, pd.Timestamp(terms["close_date"])
+            )
+            acquirer_price = None
+            if acquirer in close_full.columns and close_lookup_day is not None:
+                acq_series = close_full[acquirer]
+                acq_valid  = acq_series.loc[acq_series.index <= close_lookup_day].dropna()
+                if not acq_valid.empty:
+                    acquirer_price = float(acq_valid.iloc[-1])
+            if acquirer_price is None:
+                print(
+                    f"[WF] delisting credit: {sym} -- no acquirer ({acquirer}) price "
+                    f"available near {terms['close_date']}, skipping credit "
+                    "(falls back to the pre-existing silent-drop behavior)"
+                )
+                continue
+            terminal_value = terms["exchange_ratio"] * acquirer_price
+            if deal_type == "cash_and_stock":
+                terminal_value += terms["cash_amount"]
+        else:
+            continue
+
+        close_full.loc[closure_day, sym] = terminal_value
+        if open_full is not None and sym in open_full.columns:
+            # Keep open/close consistent on the closure day so this credit fires
+            # correctly regardless of whether closure_day happens to land on a
+            # rebalance date (engine.py uses open-vs-close for rebalance days,
+            # close-vs-close drift otherwise -- see BacktestEngine.run()).
+            open_full.loc[closure_day, sym] = terminal_value
+
+    return close_full, open_full
+
+
 def walk_forward_pipeline(
     train_days=None,
     purge_days=None,
@@ -321,6 +448,13 @@ def walk_forward_pipeline(
     full_builder = FeatureBuilder(price_df, macro_df)
     close_full   = full_builder.close
     open_full    = full_builder.open
+
+    # Credit real terminal (deal-close) values for the bounded set of delisted
+    # symbols in DELISTING_TERMINAL_TERMS instead of letting their price series
+    # just go NaN on closure -- see apply_delisting_terminal_credit()'s
+    # docstring for the mechanics and the look-ahead reasoning.
+    close_full, open_full = apply_delisting_terminal_credit(close_full, open_full)
+
     all_dates    = close_full.index
 
     # sp500_only=True: restricts to S&P 500 members + REMOVED_STOCKS.

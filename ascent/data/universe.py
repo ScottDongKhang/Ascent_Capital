@@ -225,6 +225,10 @@ REMOVED_STOCKS = [
     ("MAC", "Unknown", "2019-12-23", "Market capitalization change."),
     ("TRIP", "Unknown", "2019-12-23", "Market capitalization change."),
     ("WCG", "Unknown", "2020-01-28", "Centene Corp. acquired Wellcare Health Plans."),
+    # KNOWN DATA-QUALITY ISSUE (not fixed here, out of scope for this pass): XEC's reason
+    # string below describes the Gardner Denver / Ingersoll Rand industrial-businesses deal,
+    # which has nothing to do with XEC (Cimarex Energy) — a ticker/reason-string mismatch
+    # inherited from the Wikipedia scrape. Left untouched intentionally; flag for a future pass.
     ("XEC", "Unknown", "2020-03-02", "Gardner Denver acquired Ingersoll Rand's industrial businesses."),
     ("ARNC", "Unknown", "2020-04-01", "Arconic separated into 2 companies."),
     ("RTN", "Unknown", "2020-04-06", "United Technologies acquired Raytheon Company."),
@@ -336,6 +340,172 @@ REMOVED_STOCKS = [
     ("LW", "Unknown", "2026-03-23", "Market capitalization change."),
     ("HOLX", "Unknown", "2026-04-09", "Blackstone Inc. and TPG Inc. acquired Hologic."),
 ]
+
+# ---------------------------------------------------------------------------
+# DELISTING_TERMINAL_TERMS — real terminal-value deal terms for a bounded,
+# already-sourced subset of REMOVED_STOCKS entries.
+#
+# Why this exists: without it, a delisted name simply vanishes from the
+# walk-forward return calc the day its price data stops (ascent/main.py's
+# "likely delisted" path / ascent/research/walk_forward_runner.py's
+# close_full NaN -> fillna(0) behavior) instead of being credited the real
+# cash/stock consideration shareholders actually received. That silently
+# inflates OOS performance whenever a held position happens to be a name
+# that got acquired. This dict lets walk_forward_runner.py credit the real
+# terminal return, for exactly these 12 names, instead of the silent drop.
+#
+# Deliberately a SEPARATE dict, not a change to REMOVED_STOCKS: multiple call
+# sites unpack REMOVED_STOCKS positionally as
+#   `for sym, sector, removed, reason in REMOVED_STOCKS:`
+# so changing that tuple's shape would break them. Keying a parallel dict by
+# symbol avoids touching that contract at all.
+#
+# Date handling: `close_date` on each entry is the deal-close date verified
+# against SEC filings / acquirer press releases (per-entry `source` note).
+# `removed_date` mirrors the REMOVED_STOCKS date for the same symbol above —
+# used as the actual "position closure" date so this stays consistent with
+# build_historical_universe()'s existing end_date machinery (removed-status
+# rows there use the REMOVED_STOCKS date verbatim as end_date; see
+# build_historical_universe()). The two dates usually differ by a few
+# trading days (REMOVED_STOCKS records when Wikipedia's S&P 500 changes
+# table reflects the index removal, a few days after or around the actual
+# deal close) — that gap is intentional and documented per-entry below, not
+# silently collapsed to one date. K's close_date additionally carries a
+# reported source discrepancy (12-11 vs 12-15/12-18 across outlets); the
+# file's own REMOVED_STOCKS date (12-11) is used as the operational date.
+#
+# Deal types:
+#   "cash"          — cash_amount is the flat per-share consideration.
+#   "stock"         — acquirer_symbol + exchange_ratio; per-share value is
+#                      ratio * acquirer's close price on/near close_date,
+#                      looked up from actual price data at runtime (never
+#                      hardcoded here) so the credited value stays internally
+#                      consistent with whatever price series is in use.
+#   "cash_and_stock" — both of the above, summed.
+#
+# Any non-tradable contingent-value-right upside (WBA's VillageMD right,
+# HOLX's CVR) is explicitly NOT modeled — excluded from cash_amount below —
+# because its payout is uncertain/unbounded and crediting it would itself be
+# a form of look-ahead-flavored optimism. See CLAUDE.md integrity constraint
+# #1 and the look-ahead reasoning note beside the walk_forward_runner.py
+# credit logic for why this is a same-scope extension of that constraint,
+# not a departure from it.
+DELISTING_TERMINAL_TERMS = {
+    "PXD": {
+        "deal_type":       "stock",
+        "acquirer_symbol": "XOM",
+        "exchange_ratio":  2.3234,
+        "cash_amount":     0.0,
+        "close_date":      "2024-05-03",
+        "removed_date":    "2024-05-08",
+        "source":          "ExxonMobil press release; CNBC; SEC 424B3",
+    },
+    "MRO": {
+        "deal_type":       "stock",
+        "acquirer_symbol": "COP",
+        "exchange_ratio":  0.2550,
+        "cash_amount":     0.0,
+        "close_date":      "2024-11-22",
+        "removed_date":    "2024-11-26",
+        "source":          "ConocoPhillips press release; SEC 8-K",
+    },
+    "CTLT": {
+        "deal_type":       "cash",
+        "acquirer_symbol": None,
+        "exchange_ratio":  0.0,
+        "cash_amount":     63.50,
+        "close_date":      "2024-12-18",
+        "removed_date":    "2024-12-23",
+        "source":          "Novo Holdings press release; SEC 8-K",
+    },
+    "DFS": {
+        "deal_type":       "stock",
+        "acquirer_symbol": "COF",
+        "exchange_ratio":  1.0192,
+        "cash_amount":     0.0,
+        "close_date":      "2025-05-18",
+        "removed_date":    "2025-05-19",
+        "source":          "Capital One press release; SEC S-4/A",
+    },
+    "JNPR": {
+        "deal_type":       "cash",
+        "acquirer_symbol": None,
+        "exchange_ratio":  0.0,
+        "cash_amount":     40.00,
+        "close_date":      "2025-07-02",
+        "removed_date":    "2025-07-09",
+        "source":          "HPE press release",
+    },
+    "ANSS": {
+        "deal_type":       "cash_and_stock",
+        "acquirer_symbol": "SNPS",
+        "exchange_ratio":  0.3399,
+        "cash_amount":     199.91,
+        "close_date":      "2025-07-17",
+        "removed_date":    "2025-07-18",
+        "source":          "Synopsys investor relations",
+    },
+    "HES": {
+        "deal_type":       "stock",
+        "acquirer_symbol": "CVX",
+        "exchange_ratio":  1.025,
+        "cash_amount":     0.0,
+        "close_date":      "2025-07-18",
+        "removed_date":    "2025-07-23",
+        "source":          "Chevron press release",
+    },
+    "WBA": {
+        "deal_type":       "cash",
+        "acquirer_symbol": None,
+        "exchange_ratio":  0.0,
+        "cash_amount":     11.45,
+        "close_date":      "2025-08-28",
+        "removed_date":    "2025-08-28",
+        "source":          "Sycamore Partners; Walgreens 8-K. Excludes non-tradable "
+                            "contingent VillageMD right (up to $3 more) — not modeled, "
+                            "too uncertain.",
+    },
+    "IPG": {
+        "deal_type":       "stock",
+        "acquirer_symbol": "OMC",
+        "exchange_ratio":  0.344,
+        "cash_amount":     0.0,
+        "close_date":      "2025-11-26",
+        "removed_date":    "2025-11-28",
+        "source":          "Omnicom press release",
+    },
+    "K": {
+        "deal_type":       "cash",
+        "acquirer_symbol": None,
+        "exchange_ratio":  0.0,
+        "cash_amount":     83.50,
+        "close_date":      "2025-12-11",
+        "removed_date":    "2025-12-11",
+        "source":          "Mars press release; multiple financial news sources. Some "
+                            "sources report close as 12-15/12-18 instead — minor "
+                            "discrepancy, the file's own REMOVED_STOCKS date (12-11) is "
+                            "used as the operational date.",
+    },
+    "DAY": {
+        "deal_type":       "cash",
+        "acquirer_symbol": None,
+        "exchange_ratio":  0.0,
+        "cash_amount":     70.00,
+        "close_date":      "2026-02-04",
+        "removed_date":    "2026-02-09",
+        "source":          "Thoma Bravo press release; SEC 8-K",
+    },
+    "HOLX": {
+        "deal_type":       "cash",
+        "acquirer_symbol": None,
+        "exchange_ratio":  0.0,
+        "cash_amount":     76.00,
+        "close_date":      "2026-04-07",
+        "removed_date":    "2026-04-09",
+        "source":          "Blackstone press release; Hologic press release. Excludes "
+                            "non-tradable CVR (up to $3 more) — not modeled, too uncertain.",
+    },
+}
 
 # Real S&P 500 addition dates for symbols added after 2020-01-01.
 # Source: Wikipedia List_of_S&P_500_companies (scraped Option B, 2026-05-02).

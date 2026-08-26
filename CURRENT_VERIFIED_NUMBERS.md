@@ -180,6 +180,39 @@ point. Given the shorter, non-matching window, this is not a clean causal read o
 alone. **Not promoted to `CANONICAL_WF_ARTIFACT`** — that decision, including whether to first
 regenerate the staging cache to match the full canonical window, is left to the user.
 
+**Candidate finding — delisting-return credit (measured 2026-08-25, made NO measurable
+difference — root cause identified):** implemented `apply_delisting_terminal_credit()` in
+`ascent/research/walk_forward_runner.py`, fed by `ascent/data/universe.py`'s
+`DELISTING_TERMINAL_TERMS` — real, cited deal terms (cash and/or exchange ratio, sourced via web
+search) for 12 S&P 500 acquisitions/mergers that closed inside the canonical WF window
+(2020-01-02 → 2026-07-15): `PXD`, `MRO`, `CTLT`, `DFS`, `JNPR`, `ANSS`, `HES`, `WBA`, `IPG`, `K`,
+`DAY`, `HOLX`. Credits the real terminal per-share value at the symbol's actual historical
+closure date instead of letting the position silently vanish — unit-tested and verified correct
+in isolation (cash credit, stock-swap credit via the acquirer's own price, no double-count, no
+look-ahead).
+
+Re-ran the full canonical walk-forward with this active: **the result was byte-identical to the
+current canonical artifact** (Sharpe 0.4151360630302395 both runs, same CAGR, same max drawdown,
+same 165 folds / 1641 days). Root cause, confirmed directly against the cache: **0 of the 12
+symbols have ANY rows in `prices_live`** — the price-fetch pipeline only pulls tickers currently
+in `cfg.universe.symbols`, so once a name is removed from the live S&P 500 list, its historical
+price data is never backfilled or retained. The credit logic never got a chance to fire because
+the symbols it targets aren't in the price data at all, not because the strategy never held them.
+
+This is a more fundamental gap than originally scoped: it means the walk-forward backtest
+currently **cannot** test survivorship/delisting effects for any acquired/removed name, at the
+data layer, regardless of any return-crediting logic — a real fix needs the price-fetch pipeline
+to retain historical data for symbols after they leave the current universe list (a data-sourcing
+project, out of scope here). The credit mechanism itself (code + tests) is in place and ready to
+use once that data gap is closed. **Not promoted to `CANONICAL_WF_ARTIFACT`** — there is nothing
+to promote yet; this is a documented negative/inert result, not a positive finding.
+
+Separately, an unrelated data-quality issue was found and flagged but not fixed while sourcing
+this batch: `ascent/data/universe.py`'s `REMOVED_STOCKS` has a `XEC` entry paired with a reason
+string ("Gardner Denver acquired Ingersoll Rand's industrial businesses") that does not match
+the real-world company behind that ticker (historically Cimarex Energy) — the reason/ticker
+pairing for that row looks wrong and should be audited separately.
+
 ---
 <!-- BEGIN GENERATED live-book: reconcile_numbers.py -->
 
