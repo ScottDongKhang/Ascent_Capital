@@ -213,6 +213,50 @@ string ("Gardner Denver acquired Ingersoll Rand's industrial businesses") that d
 the real-world company behind that ticker (historically Cimarex Energy) — the reason/ticker
 pairing for that row looks wrong and should be audited separately.
 
+**Candidate finding — liquidity-scaled costs now wired into production (measured 2026-08-25,
+NOT promoted to canonical):** a code review found `liquidity_scaled_cost_model()`
+(`ascent/backtest/costs.py`), `BacktestEngine`'s `volume=` parameter, and
+`BacktestConfig.adv_lookback_days` / `impact_floor_mult` / `impact_ceil_mult` were dead code —
+added in an earlier session but never wired to either production `BacktestEngine.run()` call
+site, so the flat-cost fallback always fired and the ADV-scaled model had only ever run inside
+its own unit tests. Fixed by wiring `FeatureBuilder.volume` (already computed in the pipeline,
+same shape/index as `close`/`open`) into both call sites: `ascent/main.py` (daily pipeline) and
+`ascent/research/walk_forward_runner.py` (canonical walk-forward) now both pass `volume=` to
+`engine.run(...)`. This is a real methodology change, not a bug fix — costs now scale with
+per-symbol participation (`sqrt(trade_notional / ADV_dollar)`) instead of a flat
+spread+impact bps rate, so it changes the canonical Sharpe/CAGR/drawdown numbers.
+
+Re-ran the full canonical `walk_forward_pipeline()` (same 2020-01-02 → 2026-07-15 window, same
+165 folds / 1641 OOS days as the canonical artifact — an apples-to-apples comparison). Artifact:
+`outputs/wf_results/wf_report_liquidity_costs_2026-08-25.json`.
+
+| Metric | Canonical (flat cost, `wf_report_clean_2026-08-15.json`) | Liquidity-scaled cost (this run) |
+|---|---|---|
+| Sharpe | 0.415 | **0.464** |
+| Sharpe, Lo-adjusted (q=10) | 0.422 | 0.471 |
+| Sortino | 0.551 | 0.614 |
+| CAGR | +10.2% | **+11.4%** |
+| Excess CAGR vs SPY (`alpha`) | −3.62pp | −2.43pp |
+| Max drawdown | −45.65% | −45.60% (marginally better) |
+| Win rate | 52.3% | 52.7% |
+| Beta vs SPY | 0.947 | 0.947 |
+| Deflated Sharpe Ratio (n_trials=8) | not recorded on canonical artifact | 1.000 |
+| WFE | not computable (old framework) | 0.374 (still flagged OVERFIT) |
+
+Every headline metric moves in the favorable direction, which needs an honest explanation
+rather than just being taken as a free win: this backtest's rebalances are concentrated in
+large-cap, liquid S&P 500 names (avg ~10.9 positions, ~10% avg daily turnover), so per-symbol
+participation against ADV is usually low. `liquidity_scaled_cost_model()`'s
+`impact_floor_mult=0.1` lets the *effective* impact rate fall to 10% of the flat `impact_bps`
+whenever participation is small — so for this specific universe/turnover profile, realized
+costs came out *lower* than the flat 5bps+5bps assumption, not higher. That is a real
+consequence of the model (see its docstring's own caveat that it can *understate* cost at low
+participation relative to the live Almgren-Chriss estimate in
+`ascent/execution/cost_model.py`), not an artifact of a broken wiring — the wiring itself is
+tested directly in `tests/backtest/test_liquidity_cost_wiring.py`. **Not promoted to
+`CANONICAL_WF_ARTIFACT`** — that promotion decision, including whether this backtest cost
+model's low-participation behavior is realistic enough for this universe, is left to the user.
+
 ---
 <!-- BEGIN GENERATED live-book: reconcile_numbers.py -->
 

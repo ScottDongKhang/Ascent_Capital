@@ -448,6 +448,7 @@ def walk_forward_pipeline(
     full_builder = FeatureBuilder(price_df, macro_df)
     close_full   = full_builder.close
     open_full    = full_builder.open
+    volume_full  = full_builder.volume
 
     # Credit real terminal (deal-close) values for the bounded set of delisted
     # symbols in DELISTING_TERMINAL_TERMS instead of letting their price series
@@ -859,6 +860,7 @@ def walk_forward_pipeline(
         target_weights=combined_weights,
         close_prices=close_full,
         open_prices=open_full,
+        volume=volume_full,
         benchmark_prices=bm_data,
     )
 
@@ -905,7 +907,16 @@ def walk_forward_pipeline(
         kurtosis=wf_summary.get("kurtosis", 0.0),
         n_obs=wf_summary.get("n_days", len(result.portfolio_returns)),
     )
-    print("[DSR] Deflated Sharpe Ratio (n_trials=%d): %.3f" % (KNOWN_TRIAL_COUNT, dsr))
+    if dsr is not None:
+        print("[DSR] Deflated Sharpe Ratio (n_trials=%d): %.3f" % (KNOWN_TRIAL_COUNT, dsr))
+    else:
+        print(
+            "[DSR] Deflated Sharpe Ratio (n_trials=%d): n/a (PSR formula "
+            "degenerated -- Mertens denominator went non-positive for this "
+            "skew/kurtosis/Sharpe combination; see "
+            "ascent/research/deflated_sharpe.py::probabilistic_sharpe_ratio)"
+            % KNOWN_TRIAL_COUNT
+        )
 
     print("")
     print("[WFE] Folds with a computable IS Sharpe: %d / %d" % (
@@ -1035,6 +1046,22 @@ def walk_forward_pipeline(
                     "input uses the documented Mertens (2002) fallback -- see "
                     "deflated_sharpe_ratio() docstring."
                 ),
+                **(
+                    {
+                        "deflated_sharpe_ratio_degenerate": (
+                            "deflated_sharpe_ratio() returned None: the "
+                            "Mertens (2002) PSR denominator went non-positive "
+                            "for this run's observed skew/kurtosis/Sharpe "
+                            "combination. This is a formula breakdown, NOT "
+                            "evidence of a neutral/no-skill result -- do not "
+                            "read a missing deflated_sharpe_ratio as 0.5. See "
+                            "ascent/research/deflated_sharpe.py::"
+                            "probabilistic_sharpe_ratio()'s docstring."
+                        )
+                    }
+                    if dsr is None
+                    else {}
+                ),
             },
         }
         with open(wf_report_path, "w") as f:
@@ -1064,7 +1091,11 @@ def walk_forward_pipeline(
     print("  Lo-adjusted Sharpe (q=%d): %.3f  (naive: %.3f)" % (
         cfg.backtest.rebalance_freq_days, lo_sharpe, wf_summary.get("sharpe", float("nan"))
     ))
-    print("  Deflated Sharpe Ratio (n_trials=%d): %.3f" % (KNOWN_TRIAL_COUNT, dsr))
+    if dsr is not None:
+        print("  Deflated Sharpe Ratio (n_trials=%d): %.3f" % (KNOWN_TRIAL_COUNT, dsr))
+    else:
+        print("  Deflated Sharpe Ratio (n_trials=%d): n/a (formula degenerated)"
+              % KNOWN_TRIAL_COUNT)
 
     elapsed = time.time() - t0
     print("\n  Walk-forward pipeline completed in %.1fs\n" % elapsed)

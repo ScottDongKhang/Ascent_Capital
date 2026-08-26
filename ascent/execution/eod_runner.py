@@ -63,8 +63,29 @@ def filter_to_tradeable_universe(
     (no weight above max_weight) true on what actually gets submitted to Alpaca,
     not just on the optimizer's pre-filter output.
     """
+    before_symbols = set(target_weights[target_weights > 0].dropna().index)
+    before_count   = len(before_symbols)
+
     target_weights = target_weights[target_weights.index.isin(tradeable)]
     target_weights = target_weights[target_weights > 0].dropna()
+
+    dropped = sorted(before_symbols - set(target_weights.index))
+    if dropped:
+        _SAMPLE = 25
+        sample = dropped if len(dropped) <= _SAMPLE else dropped[:_SAMPLE]
+        suffix = "" if len(dropped) <= _SAMPLE else f" ... (+{len(dropped) - _SAMPLE} more)"
+        print(
+            f"[filter_to_tradeable_universe] Universe filter: {before_count} -> "
+            f"{len(target_weights)} symbols ({len(dropped)} dropped, not in "
+            f"build_historical_universe(strict=True, sp500_only=True)): "
+            f"{sample}{suffix}"
+        )
+    else:
+        print(
+            f"[filter_to_tradeable_universe] Universe filter: {before_count} -> "
+            f"{len(target_weights)} symbols (0 dropped)"
+        )
+
     if target_weights.sum() > 0:
         target_weights = target_weights / target_weights.sum()
         if target_weights.max() > max_weight + 1e-9:
@@ -720,6 +741,22 @@ def run_eod_with_weights(merged_weights: dict, run_date=None, dry_run: bool = Fa
 
     # 3. Convert merged_weights dict to Series for order engine
     target_weights = _pd.Series(merged_weights)
+
+    # 3b. Filter to only currently tradeable symbols and re-cap max weight —
+    # same integrity constraint #3 / "live trading and the walk-forward
+    # backtest must draw from the same universe" gate run_eod() applies.
+    # This path (discovery / mini-rebalance / orchestrator-merged weights)
+    # was previously skipping both the universe filter and the max-weight
+    # re-cap entirely — see filter_to_tradeable_universe()'s docstring for
+    # why the re-cap has to run again after the filter+renormalize step.
+    from ascent.config.settings import get_config
+    from ascent.data.universe import get_universe_on_date, build_historical_universe
+    cfg = get_config()
+    universe_df = build_historical_universe(strict=True, sp500_only=True)
+    tradeable = set(get_universe_on_date(today, universe_df))
+    target_weights = filter_to_tradeable_universe(
+        target_weights, tradeable, cfg.backtest.max_weight
+    )
 
     # 4. Compute orders — wire cost model features from price cache
     from ascent.execution.order_engine import compute_orders, summarise_orders

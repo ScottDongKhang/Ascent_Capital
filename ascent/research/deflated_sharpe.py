@@ -211,7 +211,7 @@ def probabilistic_sharpe_ratio(
     skew: float,
     kurtosis: float,
     n_obs: int,
-) -> float:
+) -> float | None:
     """Probabilistic Sharpe Ratio (PSR): P(true SR > sharpe_benchmark),
     correcting for non-normal returns (skew, excess kurtosis) and finite
     sample size. Bailey & Lopez de Prado / Mertens (2002):
@@ -243,19 +243,44 @@ def probabilistic_sharpe_ratio(
         n_obs: number of return observations.
 
     Returns:
-        PSR in [0, 1]. Degenerate cases (n_obs <= 1, or a negative
-        denominator under the sqrt from an extreme skew/kurtosis/SR
-        combination on a short sample) return 0.5 (maximally uninformative
-        -- "no evidence either way"), documented rather than raising, since
-        a walk-forward report should degrade gracefully rather than crash
-        on a short or NaN-moment fold.
+        PSR in [0, 1] normally. Two DISTINCT degenerate cases are handled
+        differently on purpose -- collapsing them to the same sentinel was
+        the bug this docstring now documents:
+
+        - `n_obs <= 1`: there is genuinely no defensible test statistic
+          (can't take sqrt(n_obs - 1) meaningfully), so this returns the
+          documented `0.5` sentinel -- "uninformative, no evidence either
+          way." This is a real, if boring, answer and is safe to persist
+          as-is.
+        - The Mertens (2002) denominator
+          (`1 - skew*SR + ((kurtosis-1)/4)*SR**2`) going non-positive (or
+          NaN): this is NOT the same as "uninformative." It means the PSR
+          formula itself has broken down for this particular
+          skew/kurtosis/sharpe_observed combination -- which happens for
+          plausible real inputs, not just contrived ones (e.g.
+          skew=+2.0, sharpe_observed=+3.0 already drives it negative) --
+          and can occur even with a strategy that has genuinely strong,
+          measurable skill. Silently returning `0.5` here would misreport
+          a formula breakdown as a neutral "no skill detected" result, and
+          that number can then get persisted into an artifact (e.g.
+          `wf_report.json`'s `deflated_sharpe_ratio` field) with no way
+          for a reader to tell the two cases apart. So this case returns
+          `None` instead -- a value a caller cannot mistake for a real
+          probability, and that a JSON writer will happily serialize as
+          `null` rather than a plausible-looking `0.5`. Callers (see
+          `deflated_sharpe_ratio()` below and
+          `ascent/research/walk_forward_runner.py`'s `wf_report` write)
+          must propagate `None` rather than coercing it back to a number.
     """
     if n_obs <= 1:
         return 0.5
 
     denom_inside = 1 - skew * sharpe_observed + ((kurtosis - 1) / 4.0) * sharpe_observed ** 2
     if denom_inside <= 0 or math.isnan(denom_inside):
-        return 0.5
+        # Formula breakdown, NOT "uninformative" -- see docstring. Do not
+        # collapse this to 0.5; that would misreport a possibly-strong
+        # result as a neutral one.
+        return None
 
     denom = math.sqrt(denom_inside)
     z = (sharpe_observed - sharpe_benchmark) * math.sqrt(n_obs - 1) / denom
@@ -269,7 +294,7 @@ def deflated_sharpe_ratio(
     kurtosis: float,
     n_obs: int,
     sr_variance_estimate: float | None = None,
-) -> float:
+) -> float | None:
     """Deflated Sharpe Ratio (DSR): probability the true Sharpe ratio of
     the SELECTED (best-of-n_trials, i.e. survivorship-biased) configuration
     exceeds zero, after correcting for (a) selection bias across
@@ -302,13 +327,29 @@ def deflated_sharpe_ratio(
             `np.var(trial_sharpes, ddof=1)` explicitly.
 
     Returns:
-        DSR in [0, 1]. Interpretation: probability the true Sharpe ratio
-        exceeds the expected maximum Sharpe achievable by pure luck across
-        `n_trials` trials, given the observed return distribution's
+        DSR in [0, 1] normally. Interpretation: probability the true Sharpe
+        ratio exceeds the expected maximum Sharpe achievable by pure luck
+        across `n_trials` trials, given the observed return distribution's
         non-normality. DSR near 1.0 = strong evidence of genuine,
         non-overfit, non-normality-adjusted skill. DSR near 0.5 = the
         result is statistically indistinguishable from what `n_trials` of
         random search would produce.
+
+        Can also return `None` -- see `probabilistic_sharpe_ratio()`'s
+        docstring for the two degenerate cases it distinguishes. `n_obs <=
+        1` still returns the real `0.5` sentinel (genuinely uninformative,
+        safe to persist). But if the Mertens (2002) denominator this
+        function derives its default `sr_variance_estimate` from -- and
+        the one `probabilistic_sharpe_ratio()` independently recomputes
+        using `sharpe_benchmark` instead of 0 -- goes non-positive for the
+        given skew/kurtosis/sharpe_observed combination, this propagates
+        `None` straight through rather than silently returning `0.5`.
+        `None` is NOT "no skill detected"; it means the PSR formula
+        degenerated for these inputs and no probability was computed.
+        Callers (notably `ascent/research/walk_forward_runner.py`'s
+        `wf_report_<date>.json` writer) must check for `None` explicitly
+        and record it as such (e.g. JSON `null` plus a `_meta` note) rather
+        than defaulting it back to a number.
 
     Edge cases:
         - `n_trials <= 1`: no selection-bias correction is applied
@@ -323,6 +364,8 @@ def deflated_sharpe_ratio(
           term does not vanish at kurtosis=3 unless SR itself is small;
           this is the actual Mertens (2002) formula, not the further-
           simplified textbook special case, and is the one the paper cites.
+        - Denominator degeneration (extreme skew/kurtosis/SR combination):
+          returns `None`. See `probabilistic_sharpe_ratio()` docstring.
     """
     if sr_variance_estimate is None:
         raw_kurtosis_default = kurtosis + 3.0

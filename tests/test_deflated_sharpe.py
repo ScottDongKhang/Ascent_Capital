@@ -91,13 +91,55 @@ def test_psr_degenerate_n_obs_returns_uninformative_half():
     assert probabilistic_sharpe_ratio(1.0, 0.0, 0.0, 3.0, n_obs=0) == 0.5
 
 
-def test_psr_negative_denominator_returns_uninformative_half():
-    """Extreme skew/kurtosis/SR combination can drive the denominator
-    non-positive -- documented graceful fallback, not a crash."""
+def test_psr_negative_denominator_returns_none_not_half():
+    """Extreme skew/kurtosis/SR combination can drive the Mertens
+    denominator non-positive. This is a FORMULA BREAKDOWN, not the same
+    thing as the genuinely uninformative n_obs<=1 case -- it must NOT be
+    silently reported as 0.5 (which would misreport a possibly-strong
+    result as neutral). The fix returns None instead, verified here by
+    first confirming the denominator really is negative for these inputs:
+        denom_inside = 1 - skew*SR + ((kurtosis-1)/4)*SR**2
+                     = 1 - 5*5   + ((3-1)/4)*25
+                     = 1 - 25 + 12.5 = -11.5  (< 0)
+    """
+    skew, kurtosis, sharpe = 5.0, 3.0, 5.0
+    denom_inside = 1 - skew * sharpe + ((kurtosis - 1) / 4.0) * sharpe ** 2
+    assert denom_inside < 0  # sanity-check this really is the degenerate case
+
     psr = probabilistic_sharpe_ratio(
-        sharpe_observed=5.0, sharpe_benchmark=0.0, skew=5.0, kurtosis=3.0, n_obs=30
+        sharpe_observed=sharpe, sharpe_benchmark=0.0, skew=skew, kurtosis=kurtosis, n_obs=30
     )
-    assert psr == 0.5
+    assert psr is None
+
+
+def test_psr_plausible_positive_skill_denominator_negative_returns_none():
+    """Reviewer's own example: skew=+2, SR=3 is not a contrived edge case
+    -- it's a plausible real skew/Sharpe combination for a strategy with
+    genuinely strong measurable skill, and it still drives the Mertens
+    denominator negative. Must return None, never a silently-neutral 0.5.
+        denom_inside = 1 - 2*3 + ((3-1)/4)*3**2 = 1 - 6 + 4.5 = -0.5 (< 0)
+    """
+    skew, kurtosis, sharpe = 2.0, 3.0, 3.0
+    denom_inside = 1 - skew * sharpe + ((kurtosis - 1) / 4.0) * sharpe ** 2
+    assert denom_inside < 0
+
+    psr = probabilistic_sharpe_ratio(
+        sharpe_observed=sharpe, sharpe_benchmark=0.0, skew=skew, kurtosis=kurtosis, n_obs=252
+    )
+    assert psr is None
+
+
+def test_psr_n_obs_le_1_still_returns_real_half_not_none():
+    """Regression safety: the genuinely uninformative n_obs<=1 case is
+    UNCHANGED by this fix -- it is a real, defensible sentinel (there is
+    no test statistic to compute at all), distinct from the denominator-
+    breakdown case above, and must keep returning exactly 0.5, not None."""
+    assert probabilistic_sharpe_ratio(1.0, 0.0, 0.0, 3.0, n_obs=1) == 0.5
+    assert probabilistic_sharpe_ratio(1.0, 0.0, 0.0, 3.0, n_obs=0) == 0.5
+    # Also confirm a case that would have both n_obs<=1 AND an extreme
+    # skew/kurtosis/SR combination still resolves via the n_obs<=1 branch
+    # (checked first) and returns 0.5, not None.
+    assert probabilistic_sharpe_ratio(5.0, 0.0, 5.0, 3.0, n_obs=1) == 0.5
 
 
 # ---------------------------------------------------------------------------
@@ -157,6 +199,53 @@ def test_dsr_more_trials_deflates_more():
     dsr_few = deflated_sharpe_ratio(n_trials=2, **kwargs)
     dsr_many = deflated_sharpe_ratio(n_trials=200, **kwargs)
     assert dsr_many <= dsr_few
+
+
+def test_dsr_propagates_none_for_degenerate_psr():
+    """deflated_sharpe_ratio() must propagate probabilistic_sharpe_ratio()'s
+    None sentinel verbatim rather than coercing a formula breakdown back
+    into a number. skew=+2.0, sharpe_observed=+3.0 (pandas-excess
+    kurtosis=0.0 -> raw kurtosis 3.0 after the internal +3 conversion) is
+    the reviewer's own plausible-real-inputs example that drives the
+    Mertens denominator negative:
+        denom_inside = 1 - 2*3 + ((3-1)/4)*3**2 = 1 - 6 + 4.5 = -0.5 (< 0)
+    This must surface as None end-to-end, not 0.5 -- the whole point of
+    this fix is that a genuinely strong result never gets silently
+    reported as a neutral one.
+    """
+    dsr = deflated_sharpe_ratio(
+        sharpe_observed=3.0, n_trials=10, skew=2.0, kurtosis=0.0, n_obs=252
+    )
+    assert dsr is None
+
+
+def test_dsr_none_does_not_crash_caller_style_formatting():
+    """Mirrors the guard added at the ascent/research/walk_forward_runner.py
+    call site (the same `is not None` idiom already used there for `wfe`):
+    a None DSR must be safely distinguishable and printable/JSON-
+    serializable without the walk-forward run crashing over a degenerate
+    PSR for one fold's moments."""
+    import json
+
+    dsr = deflated_sharpe_ratio(
+        sharpe_observed=3.0, n_trials=10, skew=2.0, kurtosis=0.0, n_obs=252
+    )
+    assert dsr is None
+
+    # The runner's print guard: `dsr is not None` -> %.3f, else an "n/a"
+    # message. Confirm both branches are safely reachable without a
+    # TypeError from feeding None into %.3f.
+    if dsr is not None:
+        message = "%.3f" % dsr
+    else:
+        message = "n/a (PSR formula degenerated)"
+    assert message == "n/a (PSR formula degenerated)"
+
+    # The runner's JSON write: plain `json.dump` (not `default=float`
+    # coercion for this field) must serialize None as `null`, not crash
+    # or silently reinterpret it as 0.5.
+    serialized = json.dumps({"deflated_sharpe_ratio": dsr})
+    assert serialized == '{"deflated_sharpe_ratio": null}'
 
 
 def test_dsr_le_psr_against_zero():

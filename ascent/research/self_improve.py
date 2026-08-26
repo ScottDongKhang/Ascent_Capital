@@ -15,6 +15,7 @@ Usage:
 
 import json
 import logging
+import math
 import os
 import copy
 import random
@@ -617,8 +618,14 @@ def run_self_improve(current_regime: str = None):
             promoted=edge > MIN_CALMAR_EDGE,
         )
 
-    # Per-regime promotion: if a regime is specified and best variant exceeds MIN_CALMAR_EDGE
-    if current_regime and results:
+    # Per-regime promotion: if a regime is specified and best variant exceeds MIN_CALMAR_EDGE.
+    # Guard: current_calmar can be the float("-inf") fail-closed sentinel set above when no
+    # valid baseline (live or OOS) was available. Without this guard,
+    # `live_calmar - (-inf) == +inf` for ANY live_calmar, which always exceeds MIN_CALMAR_EDGE
+    # and would promote a per-regime variant with zero valid baseline comparison -- exactly
+    # the outcome the fail-closed sentinel above is meant to prevent. Skip the whole block
+    # when there's no finite baseline, mirroring the main promotion path's fail-closed edge.
+    if current_regime and results and math.isfinite(current_calmar):
         best_regime = max(results, key=lambda r: r.get("oos_calmar", float("-inf")))
         live_calmar = best_regime.get("oos_calmar", 0)
         regime_edge = live_calmar - current_calmar  # reuse already-computed baseline

@@ -199,6 +199,25 @@ def run_lightweight_oos(
         if price_wide.empty:
             return {"sharpe": 0.0, "turnover": 0.0, "n_folds": 0}
 
+        # BUG 2 fix: apply the same delisting-terminal-value credit that
+        # walk_forward_pipeline() applies in walk_forward_runner.py, so a
+        # shadow/variant config scored through this lightweight path isn't
+        # silently favoring names that quietly went NaN on a real deal-close
+        # instead of being credited their real terminal value (see
+        # apply_delisting_terminal_credit()'s docstring for the full
+        # no-look-ahead reasoning -- it only injects a price AT the real
+        # historical closure date, never earlier). This is a code-path-parity
+        # fix, not a numbers fix: as of this session, 0 of the 12 sourced
+        # DELISTING_TERMINAL_TERMS symbols have any rows in prices_live, so
+        # the credit is currently inert here exactly as it is everywhere else
+        # in production -- it will only start mattering once that underlying
+        # data gap is closed.
+        try:
+            from ascent.research.walk_forward_runner import apply_delisting_terminal_credit
+            price_wide, _ = apply_delisting_terminal_credit(price_wide, None)
+        except Exception:
+            pass  # graceful fallback: score without the credit rather than fail the whole run
+
         min_required = train_days + purge_days + n_days + embargo_days
         if len(price_wide) < min_required:
             print(f"[LightweightOOS] Insufficient data ({len(price_wide)} rows, need {min_required})")
@@ -256,22 +275,25 @@ def run_lightweight_oos(
 
             fold_date = price_wide.index[test_start_i]
 
-            # Survivorship bias fix: filter to symbols valid on fold date
+            # Survivorship bias fix: filter to symbols valid on fold date.
+            # get_universe_on_date() returns a plain list of symbol strings
+            # (see ascent/data/universe.py) -- not a DataFrame -- so there is
+            # no .empty/.columns to inspect here (BUG 1 fix: the old
+            # DataFrame-shape branching raised AttributeError on the list
+            # every single call, was swallowed by the except below, and left
+            # valid_symbols as the full unfiltered universe unconditionally).
             valid_symbols = list(price_wide.columns)
             if filter_universe_by_date:
                 try:
                     from ascent.data.universe import get_universe_on_date
-                    fold_universe_df = get_universe_on_date(fold_date, universe_df)
-                    if fold_universe_df is not None and not fold_universe_df.empty:
-                        if "symbol" in fold_universe_df.columns:
-                            valid_set = set(fold_universe_df["symbol"].tolist())
-                        else:
-                            valid_set = set(fold_universe_df.index.tolist())
+                    fold_universe = get_universe_on_date(fold_date, universe_df)
+                    if fold_universe:
+                        valid_set = set(fold_universe)
                         filtered = [s for s in price_wide.columns if s in valid_set or s == "SPY"]
                         if len(filtered) >= 5:
                             valid_symbols = filtered
                 except Exception:
-                    pass  # graceful fallback: use all symbols
+                    pass  # graceful fallback: e.g. get_universe_on_date raising on bad input
 
             train_filtered = train_slice[valid_symbols]
             oos_filtered   = oos_slice[valid_symbols]
@@ -441,7 +463,28 @@ def run_lightweight_oos(
             if len(oos_px) < 3:
                 continue
 
-            fold_rets = (oos_px.pct_change().dropna().values @ w_arr).tolist()
+            # BUG 3 fix: pct_change() produces a NaN for the first row of
+            # oos_px, which .dropna() then dropped -- so fold_rets had one
+            # FEWER observation than the fold's actual day-span
+            # (test_start_i..test_end_i), even though fold_records /
+            # fold_date_ranges below still record the full un-shifted span
+            # and zero_fill_fold_gaps() stitches folds together purely by
+            # bar-position gap. Prepend the real close from the bar
+            # immediately before the fold's test window (test_start_i - 1,
+            # from the full price_wide -- not look-ahead, it's the day
+            # before the fold even starts) so pct_change() has a reference
+            # point for the fold's own first day instead of discarding it.
+            pre_i = test_start_i - 1
+            if pre_i >= 0:
+                pre_row  = price_wide[oos_syms].iloc[[pre_i]]
+                pct_input = pd.concat([pre_row, oos_px])
+            else:
+                # No prior bar exists (fold starts at index 0) -- can't
+                # recover a true first-day return; fall back to the
+                # historical (one-shorter) series rather than fabricate one.
+                pct_input = oos_px
+
+            fold_rets = (pct_input.pct_change().dropna().values @ w_arr).tolist()
 
             sharpe_fold_returns.extend(fold_rets)
             fold_records.append((test_start_i, test_end_i, fold_rets))

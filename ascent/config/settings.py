@@ -137,10 +137,13 @@ class BacktestConfig:
     spread_bps: float = 5.0
     impact_bps: float = 5.0
     # Liquidity-scaled impact cost (ascent/backtest/costs.py::liquidity_scaled_cost_model).
-    # Only engages in BacktestEngine.run() when a `volume` panel is passed in —
-    # no current caller does, so these are inert / additive-only for now, and
-    # the engine falls back byte-identical to the flat spread_bps+impact_bps
-    # model whenever ADV data is unavailable for a symbol.
+    # Engages in BacktestEngine.run() when a `volume` panel is passed in — both
+    # production call sites (ascent/main.py and
+    # ascent/research/walk_forward_runner.py) now pass FeatureBuilder's
+    # `.volume` panel, so this is live in both the daily pipeline and the
+    # canonical walk-forward. The engine still falls back byte-identical to
+    # the flat spread_bps+impact_bps model whenever ADV data is unavailable
+    # for a symbol (missing/NaN/<=0 ADV on that symbol only).
     adv_lookback_days: int = 21
     impact_floor_mult: float = 0.1
     impact_ceil_mult: float = 10.0

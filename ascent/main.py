@@ -929,6 +929,7 @@ def run_pipeline(
 
     close    = builder.close
     open_    = builder.open
+    volume   = builder.volume
     bm_close = benchmark_df.set_index("date")["close"].sort_index()
     bm_close = bm_close[~bm_close.index.duplicated(keep="last")]
 
@@ -936,6 +937,7 @@ def run_pipeline(
         target_weights=target_weights,
         close_prices=close,
         open_prices=open_,
+        volume=volume,
         benchmark_prices=bm_close,
     )
 

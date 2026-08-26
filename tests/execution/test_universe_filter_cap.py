@@ -135,3 +135,48 @@ def test_filter_to_tradeable_universe_empty_result_when_nothing_tradeable():
     result = filter_to_tradeable_universe(target_weights, tradeable, MAX_WEIGHT)
 
     assert result.empty
+
+
+class TestDroppedSymbolLogging:
+    """
+    Regression test for a second review finding: filter_to_tradeable_universe()
+    silently dropped ~400 of ~901 configured symbols (cfg.universe.symbols vs.
+    SP500_MEMBERS' 503 under strict=True, sp500_only=True) with no logging of
+    what was removed -- only a post-hoc position count. The filter must log
+    before/after counts and which symbols were dropped so this is visible in
+    EOD run logs.
+    """
+
+    def test_logs_before_after_counts_and_dropped_symbols(self, capsys):
+        target_weights, tradeable = _survivors_and_dropped()
+
+        filter_to_tradeable_universe(target_weights, tradeable, MAX_WEIGHT)
+
+        out = capsys.readouterr().out
+        assert "12 -> 11" in out, "expected before/after symbol counts in the log line"
+        assert "ZZZ" in out, "dropped symbol must be named in the log output"
+        assert "1 dropped" in out
+
+    def test_logs_zero_dropped_when_nothing_removed(self, capsys):
+        target_weights = pd.Series({f"S{i}": 0.10 for i in range(10)})
+        tradeable = set(target_weights.index)
+
+        filter_to_tradeable_universe(target_weights, tradeable, MAX_WEIGHT)
+
+        out = capsys.readouterr().out
+        assert "10 -> 10" in out
+        assert "0 dropped" in out
+
+    def test_truncates_long_dropped_list_with_a_count_of_the_remainder(self, capsys):
+        # 50 tradeable + 60 dropped -- enough to exceed the sample cap.
+        tradeable_syms = {f"T{i}": 0.01 for i in range(50)}
+        dropped_syms = {f"D{i}": 0.01 for i in range(60)}
+        target_weights = pd.Series({**tradeable_syms, **dropped_syms})
+        tradeable = set(tradeable_syms)
+
+        filter_to_tradeable_universe(target_weights, tradeable, MAX_WEIGHT)
+
+        out = capsys.readouterr().out
+        assert "110 -> 50" in out
+        assert "60 dropped" in out
+        assert "more)" in out
