@@ -298,3 +298,14 @@ daily run, which means an unretracted wrong number there is published, not just 
 ## Session log
 
 Session history lives in `docs/session_log_archive.md`, newest first. Append there, not here.
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- graphify-out/obsidian/ is a standalone code-knowledge vault (one note per node, plus graph.canvas), separate from the user's main Obsidian second-brain vault. It answers "how does the code connect" questions; the main vault answers "what did we decide and why." Consult both when a question touches project history as well as code structure — the second-brain instructions in the user's global CLAUDE.md still apply on top of this.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
