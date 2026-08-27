@@ -288,7 +288,13 @@ def _evaluate_variant_full(variant_config: dict) -> dict:
     Returns {"score": <Calmar-based fitness, the ranking key, or None if
                         unavailable -- see below>,
              "calmar": <raw Calmar, before the turnover penalty, or None>,
-             "sharpe": <raw Sharpe, secondary/reported only>}.
+             "sharpe": <raw Sharpe, secondary/reported only>,
+             "returns": <per-day OOS return series (list/array) used to
+                         compute calmar, or None if unavailable -- added
+                         2026-08-26 so callers (run_self_improve's DSR gate)
+                         can recompute skew/kurtosis/n_obs for the winning
+                         variant without re-running OOS. Additive field;
+                         existing score/calmar/sharpe keys are unchanged>}.
 
     Bug fix (2026-08-23 review): the OOS-failure and exception fallback paths
     used to reuse ONE baseline Sharpe value for all three of score/calmar/
@@ -319,9 +325,10 @@ def _evaluate_variant_full(variant_config: dict) -> dict:
             if baseline is None:
                 baseline = _artifact_baseline_sharpe()
             baseline = round(float(baseline), 4)
-            return {"score": None, "calmar": None, "sharpe": baseline}
+            return {"score": None, "calmar": None, "sharpe": baseline, "returns": None}
 
         metrics = score_variant(result["sharpe"], result["turnover"], result.get("returns"))
+        metrics["returns"] = result.get("returns")
         if metrics["score"] is None:
             # No per-day OOS return series available (e.g. an older/mocked
             # run_lightweight_oos in a test that doesn't return "returns").
@@ -334,7 +341,7 @@ def _evaluate_variant_full(variant_config: dict) -> dict:
         if baseline is None:
             baseline = _artifact_baseline_sharpe()
         baseline = round(float(baseline), 4)
-        return {"score": None, "calmar": None, "sharpe": baseline}
+        return {"score": None, "calmar": None, "sharpe": baseline, "returns": None}
 
 
 def evaluate_variant(variant_config: dict) -> float:
@@ -368,7 +375,24 @@ def evaluate_variant(variant_config: dict) -> float:
 # ── Shadow promotion ───────────────────────────────────────────────────────────
 
 def _promote_to_shadow(variant: dict, edge: float):
-    """Save a winning variant to shadow for 30-day monitoring."""
+    """Save a winning variant to shadow for 30-day monitoring.
+
+    Bug 4 fix (2026-08-26 review): this used to dump the winner's full
+    per-day oos_returns series verbatim into the shadow JSON file. Nothing
+    downstream reads it back -- shadow_promoter.py's _re_evaluate() re-runs
+    OOS fresh from the variant's alpha_weights rather than reading a stored
+    return series -- so it was pure unbounded-growth dead weight (up to
+    N_VARIANTS full arrays/week, 20 on weekend runs per
+    ascent/monitoring/weekend_runner.py). Persist only summary stats
+    (skew/kurtosis/n_obs, already computed once for the DSR gate) instead of
+    the raw series. Operates on a shallow copy so the caller's in-memory
+    dict (shared with `results`/`best`, still needed for the log step's
+    audit-trail copy of the raw series) is left untouched.
+    """
+    variant = dict(variant)
+    raw_returns = variant.pop("oos_returns", None)
+    variant["oos_returns_summary"] = _returns_summary(raw_returns)
+
     os.makedirs(SHADOW_DIR, exist_ok=True)
     variant["promoted_at"]       = datetime.now().isoformat()
     variant["edge_over_current"] = round(edge, 4)
@@ -456,6 +480,89 @@ def _json_safe(x):
     return None if x == float("-inf") else x
 
 
+def _returns_summary(returns) -> dict:
+    """Summary stats (skew/kurtosis/n_obs) for a per-day OOS return series, or
+    None if too short to summarize. Used by run_self_improve's log/shadow
+    persistence (2026-08-26 bug fix, "Bug 4") to avoid writing the full raw
+    series to disk for variants nothing downstream re-reads.
+    """
+    if returns is None or len(returns) < 2:
+        return None
+    s = pd.Series(returns)
+    return {
+        "skew":     round(float(s.skew()), 4),
+        "kurtosis": round(float(s.kurtosis()), 4),
+        "n_obs":    len(s),
+    }
+
+
+def _compute_dsr(candidate: dict, results: list) -> tuple:
+    """Shared Deflated Sharpe Ratio significance check (2026-08-26 bug fix,
+    "Bug 1"). Single source of truth for the DSR gate so the top-level
+    shadow-promotion path and the per-regime promotion path apply IDENTICAL
+    statistical rigor -- prior to this fix, the per-regime path wrote live
+    weights into active_alpha_config.json's by_regime section gated only on
+    a Calmar edge, with no significance check and no 30-day shadow window,
+    even though `candidate` there could be the exact same variant the
+    top-level DSR gate had just rejected as noise.
+
+    `results` supplies the trial pool: n_trials = len(results) (see the
+    comment on this constant in run_self_improve -- deliberately includes
+    registry-skipped variants, not just freshly-evaluated ones this run) and
+    the per-trial Sharpe dispersion used for sr_variance_estimate.
+
+    Bug 2 fix: sharpe_observed is recomputed FRESH from `candidate`'s own
+    oos_returns series instead of reusing candidate["oos_sharpe"].
+    walk_forward_lightweight.run_lightweight_oos computes "sharpe" from an
+    undiluted, no-gap-padding fold-return array that is never exposed to
+    callers outside that module -- only its OWN "returns" field (the
+    gap-filled all_fold_returns series, explicitly documented there as
+    "Do NOT use this field for Sharpe") reaches this file. Since this file
+    is restricted to editing self_improve.py only, recovering the undiluted
+    array isn't possible here; mixing candidate["oos_sharpe"] (undiluted)
+    with skew/kurtosis/n_obs computed from oos_returns (gap-filled) is an
+    internally-inconsistent PSR input and biases the z-score. The fix
+    available within scope is full self-consistency: every one of
+    sharpe_observed/skew/kurtosis/n_obs is computed from the SAME
+    (gap-filled) series.
+
+    Returns (dsr, dsr_significant). dsr is None when no usable return series
+    is available or the PSR formula degenerated (see deflated_sharpe_ratio's
+    docstring -- that means "cannot assess", not "no skill"); dsr_significant
+    is False in both of those cases.
+    """
+    from ascent.research.deflated_sharpe import deflated_sharpe_ratio
+
+    trial_sharpes = [
+        r["oos_sharpe"] for r in results
+        if isinstance(r.get("oos_sharpe"), (int, float)) and math.isfinite(r["oos_sharpe"])
+    ]
+    sr_variance_estimate = (
+        float(np.var(trial_sharpes, ddof=1)) if len(trial_sharpes) >= 2 else None
+    )
+
+    candidate_returns = candidate.get("oos_returns")
+    if candidate_returns is None or len(candidate_returns) <= 1:
+        return None, False
+
+    returns_series = pd.Series(candidate_returns)
+    std_r = float(returns_series.std())
+    sharpe_observed = (
+        float(returns_series.mean() / std_r * math.sqrt(252)) if std_r > 0 else 0.0
+    )
+
+    dsr = deflated_sharpe_ratio(
+        sharpe_observed=sharpe_observed,
+        n_trials=len(results),
+        skew=float(returns_series.skew()),
+        kurtosis=float(returns_series.kurtosis()),  # pandas excess kurtosis, passed as-is
+        n_obs=len(returns_series),
+        sr_variance_estimate=sr_variance_estimate,
+    )
+    dsr_significant = dsr is not None and dsr > 0.95
+    return dsr, dsr_significant
+
+
 # ── Main loop ──────────────────────────────────────────────────────────────────
 
 def run_self_improve(current_regime: str = None):
@@ -502,6 +609,11 @@ def run_self_improve(current_regime: str = None):
             v["oos_sharpe"] = prior.get("oos_sharpe")
             if v["oos_sharpe"] is None:
                 v["oos_sharpe"] = float("-inf")
+            # A previously-rejected variant is not re-evaluated this run, so
+            # there is no fresh per-day return series for it -- the DSR gate
+            # below treats a missing "oos_returns" as "cannot assess" rather
+            # than crashing on it.
+            v["oos_returns"] = None
             results.append(v)
             continue
         metrics = _evaluate_variant_full(v)
@@ -512,6 +624,7 @@ def run_self_improve(current_regime: str = None):
         # branch above.
         v["oos_calmar"] = metrics["score"] if metrics["score"] is not None else float("-inf")
         v["oos_sharpe"] = metrics["sharpe"]  # secondary, reported only
+        v["oos_returns"] = metrics.get("returns")  # per-day OOS series, for the DSR gate below
         results.append(v)
         calmar_str = f"{metrics['score']:.3f}" if metrics["score"] is not None else "N/A"
         # Print the sleeve keys actually present in this variant's alpha_weights
@@ -564,8 +677,74 @@ def run_self_improve(current_regime: str = None):
           f"(Sharpe={best['oos_sharpe']:.3f})")
     print(f"[SelfImprove] Edge (Calmar):                     {edge:+.3f}")
 
-    if edge > MIN_CALMAR_EDGE:
-        print(f"\n[SelfImprove] PROMOTING {best['variant_id']} to shadow (edge +{edge:.3f})")
+    # ── Deflated Sharpe Ratio gate (2026-08-26) ─────────────────────────────
+    # Additional statistical-significance gate on TOP of the existing
+    # Calmar-edge check, not a replacement for it. MIN_CALMAR_EDGE alone can
+    # be cleared by a variant whose apparent edge is just noise from picking
+    # the best of N_VARIANTS candidates -- deflated_sharpe_ratio() (Bailey &
+    # Lopez de Prado 2014) corrects for exactly that selection effect, plus
+    # non-normal returns.
+    #
+    # n_trials = len(results): the number of variants in this run's full
+    # selection pool -- i.e. every candidate `best = max(results, ...)`
+    # (above) was chosen from, INCLUDING variants that hit the
+    # `was_previously_rejected` branch and were `continue`d without a fresh
+    # OOS evaluation (Bug 3, 2026-08-26 review -- an earlier version of this
+    # comment claimed only freshly-evaluated variants were counted, which
+    # was never what the code did). That inclusion is deliberate, not an
+    # oversight: the DSR's multiple-testing correction exists to penalize
+    # "we picked the best of however many candidates were compared," and
+    # registry-skipped variants (with their real, on-record oos_calmar/
+    # oos_sharpe from a prior run) sit in that same max() comparison pool
+    # alongside freshly-evaluated ones -- excluding them would UNDER-count
+    # the trials that actually competed for `best` and under-correct the
+    # significance bar, which is the wrong direction for a safety gate.
+    # This is deliberately NOT deflated_sharpe.KNOWN_TRIAL_COUNT -- that
+    # constant is a curated, PROJECT-WIDE count of distinct strategy/config
+    # trials across this project's whole history (fundamental sleeve, trend
+    # sleeve, IC-gate retune, the AI-PM/debate build-and-removal, ...; see
+    # that module's docstring). The selection effect corrected for here is a
+    # different, narrower one: "we picked the best of this run's candidate
+    # pool." Conflating the two would either over- or under-penalize this
+    # run's selection with an unrelated denominator.
+    dsr, dsr_significant = _compute_dsr(best, results)
+    if best.get("oos_returns") is None or len(best.get("oos_returns") or []) <= 1:
+        print(f"[SelfImprove] DSR gate: no per-day OOS return series available for "
+              f"{best['variant_id']} (previously-rejected variant reused from the "
+              f"registry, or an OOS failure) -- cannot assess statistical "
+              f"significance. Treating as do-not-promote.")
+    elif dsr is None:
+        # Per deflated_sharpe_ratio's docstring: None means the Mertens
+        # denominator degenerated for this skew/kurtosis/Sharpe combination
+        # -- a formula breakdown, NOT "no skill detected." Treat as "cannot
+        # assess" and do not promote, but say so explicitly rather than
+        # silently coercing to a rejection that looks like a real low-DSR
+        # failure.
+        print("[SelfImprove] DSR gate: PSR formula degenerated for this "
+              "skew/kurtosis/Sharpe combination (see deflated_sharpe_ratio "
+              "docstring) -- this means 'cannot assess', NOT 'no skill'. "
+              "Treating as do-not-promote pending a better-conditioned run.")
+    else:
+        print(f"[SelfImprove] DSR (best variant {best['variant_id']}, "
+              f"n_trials={len(results)}): "
+              f"{dsr:.4f} ({'>' if dsr_significant else '<='} 0.95 significance bar)")
+
+    promoted = edge > MIN_CALMAR_EDGE and dsr_significant
+
+    if edge > MIN_CALMAR_EDGE and not dsr_significant:
+        # This is the entire point of the DSR gate: a variant that clears
+        # the Calmar-edge bar alone -- and would have been promoted under
+        # the pre-2026-08-26 logic -- gets correctly rejected here because
+        # its Calmar edge is not statistically distinguishable from the
+        # noise of picking the best of N_VARIANTS trials.
+        print(f"\n[SelfImprove] Calmar edge +{edge:.3f} clears MIN_CALMAR_EDGE "
+              f"({MIN_CALMAR_EDGE:.2f}), but the DSR gate rejected "
+              f"{best['variant_id']} "
+              f"(DSR={f'{dsr:.4f}' if dsr is not None else 'N/A (degenerate)'}, "
+              f"need > 0.95) -- NOT promoting.")
+    elif promoted:
+        print(f"\n[SelfImprove] PROMOTING {best['variant_id']} to shadow "
+              f"(edge +{edge:.3f}, DSR={dsr:.4f})")
         _promote_to_shadow(best, edge)
     else:
         print(f"\n[SelfImprove] No variant beat current by >{MIN_CALMAR_EDGE:.2f}. Keeping current config.")
@@ -577,10 +756,27 @@ def run_self_improve(current_regime: str = None):
     # swap it for None only in what gets persisted -- the in-memory `results`
     # list (still used below, by the record_verdict loop and the per-regime
     # promotion block) keeps its real -inf values for comparisons.
-    logged_variants = [
-        {**v, "oos_calmar": _json_safe(v.get("oos_calmar")), "oos_sharpe": _json_safe(v.get("oos_sharpe"))}
-        for v in results
-    ]
+    #
+    # Bug 4 fix (2026-08-26 review): every variant's full per-day oos_returns
+    # series used to get persisted verbatim here -- not just the winner's,
+    # ALL of them, with no downstream consumer reading any but the winner's
+    # back (only run_self_improve itself, in-memory, needs it, for the DSR
+    # gate above). Weekend runs override N_VARIANTS to 20 (see
+    # ascent/monitoring/weekend_runner.py), so this was unbounded log growth
+    # for data nothing reads. Keep the raw series only for `best` (the
+    # variant the DSR gate actually scored, kept as an audit trail); replace
+    # it with a skew/kurtosis/n_obs summary for every other variant.
+    logged_variants = []
+    for v in results:
+        entry = {
+            **v,
+            "oos_calmar": _json_safe(v.get("oos_calmar")),
+            "oos_sharpe": _json_safe(v.get("oos_sharpe")),
+        }
+        if v.get("variant_id") != best.get("variant_id"):
+            raw_returns = entry.pop("oos_returns", None)
+            entry["oos_returns_summary"] = _returns_summary(raw_returns)
+        logged_variants.append(entry)
     log_entry = {
         "date":               date.today().isoformat(),
         "timestamp":          datetime.now().isoformat(),
@@ -590,7 +786,10 @@ def run_self_improve(current_regime: str = None):
         "best_calmar":        _json_safe(best["oos_calmar"]),
         "best_sharpe":        _json_safe(best["oos_sharpe"]),
         "edge":               _json_safe(edge),
-        "promoted":           edge > MIN_CALMAR_EDGE,
+        "calmar_edge_passed": edge > MIN_CALMAR_EDGE,
+        "dsr":                dsr,
+        "dsr_significant":    dsr_significant,
+        "promoted":           promoted,
         "n_variants_tested":  len(results),
         "variants":           logged_variants,
     }
@@ -615,7 +814,7 @@ def run_self_improve(current_regime: str = None):
             oos_sharpe=_json_safe(v["oos_sharpe"]),
             oos_calmar=_json_safe(v["oos_calmar"]),
             edge=_json_safe(edge),
-            promoted=edge > MIN_CALMAR_EDGE,
+            promoted=promoted,
         )
 
     # Per-regime promotion: if a regime is specified and best variant exceeds MIN_CALMAR_EDGE.
@@ -629,11 +828,33 @@ def run_self_improve(current_regime: str = None):
         best_regime = max(results, key=lambda r: r.get("oos_calmar", float("-inf")))
         live_calmar = best_regime.get("oos_calmar", 0)
         regime_edge = live_calmar - current_calmar  # reuse already-computed baseline
-        if regime_edge > MIN_CALMAR_EDGE:
+
+        # Bug 1 fix (2026-08-26 review): this block used to write live weights
+        # straight into active_alpha_config.json's by_regime section gated
+        # ONLY on regime_edge > MIN_CALMAR_EDGE -- completely bypassing the
+        # DSR significance gate applied to the top-level shadow-promotion
+        # path above, and with no 30-day shadow monitoring window either.
+        # best_regime is independently selected by oos_calmar and can be
+        # (and often is) the SAME variant the DSR gate above just rejected
+        # as statistically indistinguishable from noise. Apply the identical
+        # DSR check here via the shared _compute_dsr() helper -- there must
+        # not be two different promotion decisions with two different
+        # rigor levels in the same function.
+        regime_dsr, regime_dsr_significant = _compute_dsr(best_regime, results)
+        regime_calmar_passed = regime_edge > MIN_CALMAR_EDGE
+
+        if regime_calmar_passed and not regime_dsr_significant:
+            print(f"[SelfImprove] Per-regime Calmar edge +{regime_edge:.3f} clears "
+                  f"MIN_CALMAR_EDGE for regime={current_regime}, but the DSR gate "
+                  f"rejected {best_regime['variant_id']} "
+                  f"(DSR={f'{regime_dsr:.4f}' if regime_dsr is not None else 'N/A (cannot assess)'}, "
+                  f"need > 0.95) -- NOT writing per-regime weights.")
+        elif regime_calmar_passed and regime_dsr_significant:
             regime_weights = best_regime.get("alpha_weights", {})
             _promote_regime_variant(regime_weights, current_regime, live_calmar, regime_edge,
                                      oos_sharpe_raw=best_regime.get("oos_sharpe"))
-            print(f"[SelfImprove] Per-regime weights promoted: {current_regime}")
+            print(f"[SelfImprove] Per-regime weights promoted: {current_regime} "
+                  f"(DSR={regime_dsr:.4f})")
 
     return results
 

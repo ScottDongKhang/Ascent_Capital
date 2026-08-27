@@ -35,10 +35,43 @@ _SLEEVE_FLOORS: Dict[str, float] = {
     "llm_fundamental": 0.01,
 }
 
+# Sleeves that are not part of the currently-live weight set but are explicit,
+# already-identified re-testable candidates (see docs/target_architecture/
+# 27_trend_insider_reconciliation.md). The proposer/guided-variant path is
+# allowed to reference these even when they are absent from current_weights;
+# generate_guided_variants() lazily seeds them at 0.0 only when a hypothesis
+# actually proposes touching one, so hypotheses that don't mention them leave
+# the default 2-sleeve behavior untouched.
+# NOTE: "trend" is deliberately excluded -- the same doc found it has a
+# statistically significant *negative* IC and it must not be revived here.
+_ELIGIBLE_CANDIDATE_SLEEVES = {"insider"}
+
+# Hypotheses whose resolved universe has fewer than this many symbols are
+# rejected outright -- mirrors the N_LEGS*2 == 10 minimum tradeable-symbol
+# floor used by the proof-audit long/short construction
+# (ascent/analyst/proof_audit/wf_scorer.py::MIN_SYMBOLS_PER_DATE); the
+# dormant alternatives_agent's own long/short-leg floor no longer exists in
+# the codebase (removed 2026-08-23) so this is the closest live precedent.
+MIN_UNIVERSE_SYMBOLS = 10
+
+_REQUIRED_HYPOTHESIS_FIELDS = (
+    "signal_id",
+    "universe",
+    "expected_ic_sign",
+    "uncorrelation_rationale",
+    "weight_biases",
+)
+
 _SYSTEM_PROMPT = (
     "You are a quantitative researcher at Ascent Capital. "
     "You propose alpha weight hypotheses for a multi-sleeve trading system. "
-    "Each hypothesis must have a clear economic narrative and concrete weight biases. "
+    "Each hypothesis must have a clear economic thesis, a concrete symbol universe, "
+    "an expected IC sign, concrete weight biases, and -- critically -- an explicit "
+    "explanation of why the idea would be uncorrelated with the existing meanrev/statarb "
+    "sleeves. Breadth only helps risk-adjusted return (Fundamental Law of Active "
+    "Management: IR ~= IC * sqrt(breadth)) when the added signals are genuinely "
+    "uncorrelated with what is already live, so every hypothesis must justify that "
+    "explicitly, not just assert a return edge. "
     "Respond ONLY with a valid JSON array. No other text."
 )
 
@@ -51,11 +84,16 @@ Propose {n} diverse hypotheses for sleeve weight adjustments that might outperfo
 Each hypothesis should reflect a different economic reasoning about what works in a {regime} environment.
 
 The available sleeves are: {sleeves}
+{candidate_sleeve_note}
 
 Respond with a JSON array of exactly {n} hypothesis objects:
 [
   {{
-    "narrative": "One-sentence economic rationale",
+    "signal_id": "short_slug_no_spaces",
+    "thesis": "One-sentence economic rationale",
+    "universe": ["AAPL", "MSFT", ...]  // MUST be an explicit list of ticker symbols -- named universe strings (e.g. "sp500") are not resolvable and will be rejected
+    "expected_ic_sign": 1,  // +1 or -1
+    "uncorrelation_rationale": "Why this idea would be uncorrelated with the existing meanrev/statarb sleeves",
     "weight_biases": {{"sleeve_name": delta_float, ...}}
   }},
   ...
@@ -65,7 +103,12 @@ Rules:
 - Each bias is a delta (positive = increase, negative = decrease), typically between -0.15 and +0.15
 - Biases for a single hypothesis must sum to approximately 0.0 (weight-neutral)
 - Only include sleeves you want to change; unlisted sleeves are unchanged
-- Hypotheses must be meaningfully different from each other"""
+- Hypotheses must be meaningfully different from each other
+- "universe" must be an explicit list with at least {min_universe} symbols -- named universe
+  strings cannot be resolved and are rejected outright; hypotheses concentrated in fewer
+  names than the floor will also be rejected
+- "uncorrelation_rationale" is required and must be a substantive reason (mechanism,
+  horizon, or data source difference), not a restatement of the thesis"""
 
 
 def _call_llm(system_prompt: str, user_prompt: str) -> Optional[str]:
@@ -82,6 +125,60 @@ def _call_llm(system_prompt: str, user_prompt: str) -> Optional[str]:
     except Exception as exc:
         log.warning("[FactorProposer] LLM call failed: %s", exc)
         return None
+
+
+def _resolve_universe_size(universe) -> int:
+    """
+    Resolve a hypothesis's "universe" field to a symbol count.
+
+    A list of symbols is counted directly. A named-universe string (e.g.
+    "sp500") CANNOT be resolved to a real symbol count here: this module has
+    no live name->universe lookup for arbitrary strings (ascent/data/universe.py
+    only exposes get_universe_on_date(date, ...) and build_historical_universe(),
+    neither of which maps an LLM-invented name like "my_3_favorite_biotech_names"
+    to anything). Since the LLM is free to invent any string, silently assuming
+    a string is "broad enough" lets a narrow or fabricated named universe sail
+    past the concentration floor. An unresolvable string is therefore treated
+    as size 0 -- it fails the floor check by default. Only an explicit symbol
+    list can clear the floor.
+    """
+    if isinstance(universe, (list, tuple, set)):
+        # de-dupe defensively; a hypothesis listing the same symbol twice
+        # should not appear to clear the floor
+        return len({str(s).strip().upper() for s in universe if str(s).strip()})
+    return 0
+
+
+def _validate_hypothesis(h: dict) -> bool:
+    """
+    Structural + rejection-rule validation for one raw hypothesis dict.
+
+    Rejects (returns False) when:
+    - any required field is missing (signal_id, universe, expected_ic_sign,
+      uncorrelation_rationale, weight_biases), or a thesis/narrative is absent
+    - expected_ic_sign is not exactly +1 or -1 (0 or any other value is invalid --
+      it is not a meaningful sign, not a valid "missing field" sentinel either)
+    - the resolved universe has fewer than MIN_UNIVERSE_SYMBOLS symbols
+    """
+    if not isinstance(h, dict):
+        return False
+    if "thesis" not in h and "narrative" not in h:
+        return False
+    for field in _REQUIRED_HYPOTHESIS_FIELDS:
+        if field not in h or h[field] in (None, ""):
+            return False
+    # expected_ic_sign must be exactly +1 or -1. A JSON parse of an int literal
+    # produces a Python int; guard against a float form (1.0/-1.0) too in case
+    # the LLM emits one. bool is an int subclass in Python -- exclude it
+    # explicitly so True/False can't slip through as 1/-1's numeric equivalent.
+    sign = h.get("expected_ic_sign")
+    if isinstance(sign, bool) or not isinstance(sign, (int, float)) or sign not in (1, -1):
+        return False
+    if not isinstance(h.get("weight_biases"), dict):
+        return False
+    if _resolve_universe_size(h.get("universe")) < MIN_UNIVERSE_SYMBOLS:
+        return False
+    return True
 
 
 def _bias_vector(hypothesis: dict, sleeves: List[str]) -> np.ndarray:
@@ -144,11 +241,21 @@ def propose_hypotheses(
     sleeves = sorted(current_weights.keys())
     weights_str = "\n".join(f"  {s}: {w:.2f}" for s, w in sorted(current_weights.items()))
 
+    candidates = sorted(_ELIGIBLE_CANDIDATE_SLEEVES - set(current_weights.keys()))
+    candidate_sleeve_note = (
+        f"You may also propose upweighting these dormant, zero-weighted, "
+        f"re-testable candidate sleeves (not part of the live set above): "
+        f"{', '.join(candidates)}."
+        if candidates else ""
+    )
+
     user_prompt = _USER_TEMPLATE.format(
         regime=regime,
         weights_str=weights_str,
         n=n,
         sleeves=", ".join(sleeves),
+        candidate_sleeve_note=candidate_sleeve_note,
+        min_universe=MIN_UNIVERSE_SYMBOLS,
     )
 
     raw = _call_llm(_SYSTEM_PROMPT, user_prompt)
@@ -163,10 +270,7 @@ def propose_hypotheses(
         parsed = json.loads(raw[start:end])
         if not isinstance(parsed, list):
             return []
-        hypotheses = [
-            h for h in parsed
-            if isinstance(h, dict) and "narrative" in h and "weight_biases" in h
-        ]
+        hypotheses = [h for h in parsed if _validate_hypothesis(h)]
         return deduplicate_hypotheses(hypotheses)
     except Exception as exc:
         log.warning("[FactorProposer] Parse failed: %s", exc)
@@ -195,6 +299,12 @@ def generate_guided_variants(
         weights = dict(current_weights)
 
         for sleeve, bias in biases.items():
+            if sleeve not in weights and sleeve in _ELIGIBLE_CANDIDATE_SLEEVES:
+                # Lazily admit an explicit re-testable candidate (e.g. "insider")
+                # only when a hypothesis actually proposes touching it -- this
+                # keeps the default weight set's behavior unchanged for every
+                # hypothesis that doesn't reference a candidate sleeve.
+                weights[sleeve] = 0.0
             if sleeve in weights:
                 noise = float(np.random.uniform(-perturb_range, perturb_range))
                 weights[sleeve] = weights[sleeve] + bias + noise
@@ -219,7 +329,7 @@ def generate_guided_variants(
         variants.append({
             "variant_id":    f"guided_{i+1}_{datetime.now().strftime('%Y%m%d')}",
             "alpha_weights": weights,
-            "hypothesis":    hyp.get("narrative", ""),
+            "hypothesis":    hyp.get("thesis", hyp.get("narrative", "")),
         })
 
     return variants

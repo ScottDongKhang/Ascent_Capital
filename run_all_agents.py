@@ -18,7 +18,7 @@ Usage:
 import subprocess
 import sys
 import json
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FuturesTimeoutError
 from datetime import date, datetime
 from pathlib import Path
 from typing import Optional
@@ -649,6 +649,31 @@ def main():
             print(f"[Runner] Shadow promoter: {n_promoted} config(s) promoted to live")
     except Exception as e:
         print(f"[Runner] Shadow promotion failed: {type(e).__name__}: {e}")
+
+    # Live-vs-backtest parity check (dashboard export; non-critical).
+    # export_live_vs_backtest() now hits a local cache and skips the Alpaca
+    # network call entirely when there's no backtest ledger (see
+    # ascent/monitoring/live_vs_backtest.py Issues 1-2), so the common day is
+    # cheap. But a bounded few-day Alpaca fetch can still block (the client's
+    # own timeout is 15s), and this step is explicitly non-critical to the
+    # trading path -- so it still runs behind a hard timeout, using the same
+    # ThreadPoolExecutor already imported at the top of this file for
+    # backgrounding, rather than leaving it fully unbounded on the
+    # sequential critical path.
+    try:
+        from ascent.monitoring.live_vs_backtest import export_live_vs_backtest
+        _lvb_executor = ThreadPoolExecutor(max_workers=1)
+        _lvb_future = _lvb_executor.submit(export_live_vs_backtest)
+        try:
+            _lvb_future.result(timeout=5)
+        except FuturesTimeoutError:
+            print("[Runner] Live-vs-backtest export skipped: exceeded 5s timeout")
+        finally:
+            # wait=False: don't let a still-running (slow) export block the
+            # pipeline any further than the 5s we already waited above.
+            _lvb_executor.shutdown(wait=False)
+    except Exception as e:
+        print(f"[Runner] Live-vs-backtest export failed: {type(e).__name__}: {e}")
 
     # Self-improve: runs on Sundays with current regime
     try:

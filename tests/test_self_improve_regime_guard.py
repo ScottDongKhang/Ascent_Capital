@@ -23,12 +23,13 @@ import pytest
 import ascent.research.self_improve as si
 
 
-def _variant(variant_id, oos_calmar, oos_sharpe=0.5, weights=None):
+def _variant(variant_id, oos_calmar, oos_sharpe=0.5, weights=None, oos_returns=None):
     return {
         "variant_id": variant_id,
         "alpha_weights": weights or {"meanrev": 0.5, "statarb": 0.5},
         "oos_calmar": oos_calmar,
         "oos_sharpe": oos_sharpe,
+        "oos_returns": oos_returns,
     }
 
 
@@ -54,7 +55,11 @@ def _patch_common(monkeypatch, tmp_path, variants, current_calmar, current_sharp
     # no-baseline scenario) -- `active` has no oos_calmar/oos_sharpe keys, so
     # fall back to None there (which is what drives the -inf sentinel path).
     def _fake_evaluate(v):
-        return {"score": v.get("oos_calmar"), "sharpe": v.get("oos_sharpe")}
+        return {
+            "score": v.get("oos_calmar"),
+            "sharpe": v.get("oos_sharpe"),
+            "returns": v.get("oos_returns"),
+        }
     monkeypatch.setattr(si, "_evaluate_variant_full", _fake_evaluate)
 
     monkeypatch.setattr(si, "get_baseline_calmar", lambda: current_calmar)
@@ -82,9 +87,18 @@ def test_no_baseline_blocks_per_regime_promotion(monkeypatch, tmp_path):
 
 def test_valid_baseline_still_promotes_per_regime(monkeypatch, tmp_path):
     """Regression safety: a genuine finite baseline with a real edge above
-    MIN_CALMAR_EDGE must still promote via the per-regime path."""
+    MIN_CALMAR_EDGE, AND a per-day return series that clears the DSR
+    significance gate (2026-08-26 Bug 1 fix -- the per-regime path is no
+    longer gated on Calmar edge alone), must still promote via the
+    per-regime path."""
     current_calmar = 0.10
-    variants = [_variant("v0", oos_calmar=current_calmar + si.MIN_CALMAR_EDGE + 0.05, oos_sharpe=0.6)]
+    # Low-noise, consistently positive daily returns -> high observed Sharpe
+    # with enough n_obs to clear the DSR > 0.95 bar even at n_trials=1.
+    good_returns = [0.004, 0.003, 0.0035, 0.0038, 0.0042, 0.0031, 0.0036,
+                     0.0039, 0.0033, 0.0037, 0.0041, 0.0034, 0.0038, 0.0032,
+                     0.0036, 0.0040, 0.0035, 0.0037, 0.0039, 0.0033] * 2
+    variants = [_variant("v0", oos_calmar=current_calmar + si.MIN_CALMAR_EDGE + 0.05,
+                          oos_sharpe=0.6, oos_returns=good_returns)]
     _patch_common(monkeypatch, tmp_path, variants, current_calmar=current_calmar)
 
     promote_calls = []
@@ -93,7 +107,37 @@ def test_valid_baseline_still_promotes_per_regime(monkeypatch, tmp_path):
     results = si.run_self_improve(current_regime="bull")
 
     assert results
-    assert len(promote_calls) == 1, "expected per-regime promotion with a genuine positive edge"
+    assert len(promote_calls) == 1, "expected per-regime promotion with a genuine positive edge and a significant DSR"
+
+
+def test_good_calmar_edge_but_insignificant_dsr_blocks_per_regime_promotion(monkeypatch, tmp_path):
+    """Bug 1 regression (2026-08-26 review): a per-regime candidate can clear
+    MIN_CALMAR_EDGE on a good Calmar figure while its DSR is not
+    statistically significant (e.g. no return series at all, or one too
+    noisy/short to clear the bar) -- this must NOT be written to
+    active_alpha_config.json's by_regime section. Before this fix, the
+    per-regime block bypassed the DSR gate entirely and would have promoted
+    here."""
+    current_calmar = 0.10
+    variants = [_variant("v0", oos_calmar=current_calmar + si.MIN_CALMAR_EDGE + 0.05,
+                          oos_sharpe=0.6, oos_returns=None)]
+    _patch_common(monkeypatch, tmp_path, variants, current_calmar=current_calmar)
+
+    promote_calls = []
+    monkeypatch.setattr(si, "_promote_regime_variant", lambda *a, **kw: promote_calls.append((a, kw)))
+
+    results = si.run_self_improve(current_regime="bull")
+
+    assert results
+    assert promote_calls == [], (
+        "per-regime promotion fired despite no DSR-significant evidence -- "
+        "the Calmar-edge-only bypass of the DSR gate is back"
+    )
+
+    config_path = tmp_path / "data_cache" / "active_alpha_config.json"
+    assert not config_path.exists() or "by_regime" not in json.loads(config_path.read_text()), (
+        "no per-regime weights should have been written to active_alpha_config.json"
+    )
 
 
 def test_no_regime_specified_skips_block_regardless_of_baseline(monkeypatch, tmp_path):
